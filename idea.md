@@ -1,21 +1,21 @@
 # Scalable Commerce Platform
 
 **Định hướng:** web-first, backend-heavy, production-minded, long-term portfolio project  
-**Stack target:** .NET, React, PostgreSQL, Go workers  
+**Stack target:** .NET, React, PostgreSQL, .NET background services  
 **Tỷ trọng học tập:** backend khoảng 70%, frontend khoảng 30%  
 **AI:** chỉ là lớp phụ trợ, không phải core sản phẩm
 
 ## 1. Project purpose
 Đây không phải pet project, không phải demo CRUD, và cũng không phải đồ án đại học kiểu làm cho đủ tính năng rồi kết thúc.
 
-Đây là một **advanced portfolio platform** được thiết kế để:
+Đây là một advanced portfolio platform được thiết kế để:
 - học backend sâu theo hướng software engineering thực tế
 - luyện cách thiết kế và triển khai một commerce system có độ phức tạp đủ thật
 - build một sản phẩm có thể mở rộng và tiếp tục refine lâu dài
 - tạo một project anchor đủ mạnh để nổi bật trên CV junior backend
 - thể hiện tư duy product engineering, architecture, operations, testing và delivery
 
-Mục tiêu chính không phải là làm nhanh. Mục tiêu chính là làm **đúng hướng, đủ sâu, và có chỗ để trưởng thành theo thời gian**.
+Mục tiêu chính không phải là làm nhanh. Mục tiêu chính là làm đúng hướng, đủ sâu, và có chỗ để trưởng thành theo thời gian.
 
 ## 2. Product shape
 Dạng sản phẩm nên chốt là:
@@ -27,7 +27,7 @@ Tức là không bắt đầu bằng marketplace nhiều merchant vì như vậy
 Thay vào đó, hệ thống tập trung vào một merchant hoặc brand lớn nhưng có nhu cầu vận hành nghiêm túc:
 - storefront cho customer
 - backoffice cho merchant staff
-- admin / operator tools cho governance và vận hành
+- admin và operator tools cho governance và vận hành
 - inventory, fulfillment, refund, audit, approval như một hệ thống thật
 
 Lợi ích của hướng này:
@@ -58,17 +58,17 @@ Scope được mở rộng có chủ đích để chứa các vấn đề softwa
 - background jobs, queue, scheduler
 - module boundary rõ ràng để có thể tiến hóa thành distributed architecture
 
-Scope lớn không phải để khoe nhiều tính năng. Scope lớn là để tạo ra **nhiều vùng học sâu có giá trị thật cho backend engineering**.
+Scope lớn không phải để khoe nhiều tính năng. Scope lớn là để tạo ra nhiều vùng học sâu có giá trị thật cho backend engineering.
 
 ## 4. Product vision
 Dự án là một nền tảng thương mại điện tử nhiều vai trò, không chỉ là storefront bán hàng.
 
 Nó bao gồm các lớp sản phẩm chính:
-- **Customer commerce experience**
-- **Merchant backoffice**
-- **Operational control layer**
-- **Admin governance layer**
-- **Future supplier / restock extension**
+- Customer commerce experience
+- Merchant backoffice
+- Operational control layer
+- Admin governance layer
+- Future supplier and restock extension
 
 Vision cuối cùng là một commerce platform có thể bao phủ toàn bộ lifecycle:
 - catalog lifecycle
@@ -105,7 +105,7 @@ Vision cuối cùng là một commerce platform có thể bao phủ toàn bộ l
 Đây là phần mở rộng sau khi core đã vững:
 - dedicated operator portal tách riêng
 - supplier portal
-- purchase order / inbound receiving
+- purchase order và inbound receiving
 - multi-merchant support
 - service extraction từ modular monolith
 - advanced AI layer
@@ -136,7 +136,7 @@ Nó không cần giả vờ là startup unicorn, nhưng phải đủ thật đ�
 - thêm vào cart
 - checkout
 - theo dõi đơn
-- yêu cầu refund / return
+- yêu cầu refund và return
 - đánh giá sản phẩm
 - wishlist nếu còn thời gian
 
@@ -148,10 +148,10 @@ Nó không cần giả vờ là startup unicorn, nhưng phải đủ thật đ�
 - xử lý đơn
 - chuẩn bị fulfillment
 - theo dõi customer history
-- cấu hình coupon / promotion
+- cấu hình coupon và promotion
 - review refund request
 
-#### Admin / Operator backoffice
+#### Admin và Operator backoffice
 - xử lý fulfillment queue
 - review shipment exception
 - approve inventory adjustment
@@ -195,7 +195,7 @@ Mỗi state cần rule chuyển trạng thái, validation, audit, và error hand
 - support inventory adjustment có approval
 
 ### 8.3 Payment webhook and idempotency
-Phần này nên làm **cụ thể với Stripe**:
+Phần này nên làm cụ thể với Stripe:
 - Stripe Checkout Session hoặc Payment Intent
 - webhook signature verification
 - duplicate webhook handling
@@ -233,44 +233,80 @@ Các hành động quan trọng phải có trail:
 Dự án phải được thiết kế sao cho có thể đi từ:
 - modular monolith rõ ràng
 đến
-- service extraction có chủ đích ở phase sau
+- .NET microservices có chủ đích ở phase sau
 
 Điểm này thể hiện mày hiểu rằng scale không phải lúc nào cũng bắt đầu từ quá nhiều microservices.
 
 ## 9. Architecture direction
-### 9.1 Current recommended architecture
-Ở phase đầu, core backend nên là **.NET modular monolith** với module boundary rõ ràng.
+### 9.1 Recommended path
+Hướng phù hợp nhất cho project này là:
+1. bắt đầu bằng .NET modular monolith với module boundary rõ ràng
+2. dùng message broker và background services từ sớm
+3. khi module nào đủ chín và đủ phức tạp thì extract thành .NET microservice riêng
 
-Lý do:
-- giữ được business logic tập trung
-- dễ debug
-- dễ test
-- giảm chi phí distributed complexity quá sớm
-- vẫn đủ chỗ để thể hiện architecture discipline
+Cách đi này tốt hơn việc tách quá nhiều service ngay từ đầu vì:
+- business logic vẫn tập trung, dễ debug
+- học được boundary design trước khi học distributed pain
+- có chỗ để tiến hóa thật sự sang microservices
+- vẫn đủ mạnh cho CV nếu document rõ migration path
 
-### 9.2 Go usage
-Go nên được dùng cho **2 worker rõ ràng** ở phase đầu:
+### 9.2 .NET-only microservice strategy
+Khi tiến hóa sang microservices, toàn bộ stack backend vẫn có thể giữ trong hệ .NET.
 
-#### Notification Worker
-- consume event từ order và refund
-- gửi email hoặc in-app notification
-- retry khi gửi lỗi
-- support delayed jobs cơ bản
+Các thành phần phù hợp:
+- ASP.NET Core Web API cho synchronous services
+- ASP.NET Core Worker Service cho background processing
+- MassTransit cho event-driven communication
+- RabbitMQ cho message broker
+- EF Core + Npgsql cho PostgreSQL
+- YARP cho API gateway
+- OpenTelemetry cho tracing và metrics
+- Hangfire hoặc Quartz.NET cho scheduled jobs nếu cần
 
-#### Inventory / Shipment Event Worker
-- consume stock và shipment events
-- release reservation khi payment timeout
-- sync shipment status
-- tạo low-stock alert hoặc operational event
+### 9.3 Practical service split
+Không nên tách quá vụn ngay từ đầu. Split hợp lý nhất là:
 
-Go vẫn thể hiện được polyglot backend và async processing mà không phá scope bằng quá nhiều service ngay từ đầu.
+#### Phase đầu, một deployable chính
+- Modular Monolith
+  - Identity module
+  - Catalog module
+  - Checkout module
+  - Payments module
+  - Orders module
+  - Inventory module
+  - Fulfillment module
+  - Governance module
 
-### 9.3 Frontend direction
+- Background Worker
+  - Notification processing
+  - Reservation timeout handling
+  - Shipment sync jobs
+  - Low stock alert jobs
+
+#### Phase sau, extract dần thành services
+- Gateway Service bằng YARP
+- Identity Service
+- Catalog Service
+- Commerce Core Service
+  - checkout
+  - orders
+  - payments
+  - inventory reservation
+  - fulfillment
+- Notification Worker Service
+
+Nếu cần tách tiếp, Commerce Core có thể chia sâu hơn thành:
+- Orders Service
+- Payments Service
+- Inventory Service
+- Fulfillment Service
+
+### 9.4 Frontend direction
 React frontend phải đủ mạnh để chứng minh mày làm được end-to-end product, nhưng không được nuốt mất trọng tâm backend.
 
 Frontend nên tập trung vào 2 vùng chính ở giai đoạn đầu:
 - customer storefront
-- merchant / admin backoffice
+- merchant và admin backoffice
 
 Để giữ frontend trong mức 30%:
 - dùng UI library như shadcn/ui, Mantine hoặc MUI
@@ -323,7 +359,7 @@ Frontend nên tập trung vào 2 vùng chính ở giai đoạn đầu:
 - low stock rule
 
 ### 10.7 Fulfillment
-- pick / pack queue
+- pick and pack queue
 - shipment creation
 - tracking event sync
 - exception handling
@@ -382,7 +418,7 @@ Frontend nên tập trung vào 2 vùng chính ở giai đoạn đầu:
 - Coupons nâng cao
 
 ### 11.3 Database boundary
-Nên dùng **một PostgreSQL database** nhưng tách schema theo module để giữ boundary rõ ràng:
+Ở phase đầu có thể dùng một PostgreSQL database nhưng tách schema theo module để giữ boundary rõ ràng:
 - `identity.*`
 - `catalog.*`
 - `checkout.*`
@@ -399,19 +435,22 @@ Cách này giúp:
 - thể hiện rõ bounded context
 - chuẩn bị sẵn cho service extraction về sau
 
+Khi đã extract thành microservice thật, mỗi service nên sở hữu database hoặc schema boundary của riêng nó, và không được truy cập trực tiếp dữ liệu của service khác.
+
 ## 12. Infrastructure and platform concerns
 Để project nhìn production-minded, nên có:
 - PostgreSQL làm source of truth
 - Redis nếu cần cache và coordination nhẹ
-- message broker như RabbitMQ hoặc Redis Streams
-- API gateway như YARP nếu muốn route rõ ràng giữa frontend và backend
-- OpenTelemetry cho tracing
+- RabbitMQ làm message broker
+- YARP làm API gateway
+- OpenTelemetry cho tracing và metrics
 - structured logging
 - correlation ID
 - health checks
-- retry policy cho worker
+- retry policy cho worker và external calls
 - idempotency key cho checkout và webhook handling
 - outbox pattern hoặc event table cho integration event
+- Polly cho resiliency ở HTTP client nếu cần
 
 ## 13. Testing strategy
 Đây là phần nên làm rõ vì rất có giá trị cho CV backend.
@@ -431,7 +470,7 @@ Cách này giúp:
 - test audit log write
 
 ### 13.3 Tooling
-Nên dùng **Testcontainers** để spin up:
+Nên dùng Testcontainers để spin up:
 - PostgreSQL
 - Redis
 - RabbitMQ
@@ -441,7 +480,7 @@ Như vậy test sẽ gần production hơn rất nhiều so với chỉ mock in-
 ## 14. Delivery and DevOps baseline
 Để project không bị dừng ở mức code local:
 - Dockerfile cho .NET app
-- Dockerfile cho Go workers
+- Dockerfile cho .NET Worker Service
 - docker-compose cho local development
 - GitHub Actions để build và test tự động
 - environment config rõ ràng
@@ -495,7 +534,8 @@ Không làm:
 - refund workflow
 - audit log
 - approval flow
-- Go workers cơ bản
+- .NET background worker cơ bản
+- RabbitMQ event flow
 
 ### Phase 3. Platform maturity
 - admin governance
@@ -503,14 +543,21 @@ Không làm:
 - low stock alert
 - reporting snapshots
 - observability
-- retry / resiliency improvements
+- retry và resiliency improvements
 - integration tests bằng Testcontainers
 - Docker + CI
 
-### Phase 4. Advanced expansion
+### Phase 4. .NET microservice evolution
+- introduce YARP gateway
+- extract Identity Service nếu cần
+- extract Catalog Service nếu cần
+- extract Commerce Core hoặc Orders/Payments/Inventory/Fulfillment theo bounded context chín nhất
+- keep event contracts stable
+- enforce service-owned data
+
+### Phase 5. Advanced expansion
 - dedicated operator workflows
-- supplier / procurement flow
-- service extraction từ modular monolith
+- supplier và procurement flow
 - AI enhancement layer
 - deeper search and recommendation
 - multi-merchant evolution nếu muốn
@@ -524,11 +571,11 @@ Không làm:
 - shipment event cập nhật order timeline
 - customer tạo refund request
 - admin hoặc merchant approve refund
-- low-stock alert được tạo bởi worker
+- low-stock alert được tạo bởi background worker
 - audit log ghi lại các action quan trọng
 
 ## 18. Why this is not a school project
-Nó không phải school project vì nó không chỉ nhắm tới “có đủ tính năng”.
+Nó không phải school project vì nó không chỉ nhắm tới có đủ tính năng.
 
 Nó nhắm tới:
 - domain modeling có chiều sâu
@@ -540,7 +587,7 @@ Nó nhắm tới:
 - test strategy nghiêm túc
 - nhiều vòng refine, không làm một lần rồi bỏ
 
-Một school project thường dừng ở chức năng. Project này nhắm tới **engineering quality và system thinking**.
+Một school project thường dừng ở chức năng. Project này nhắm tới engineering quality và system thinking.
 
 ## 19. CV value
 Nếu làm tốt, project này cho thấy:
@@ -551,6 +598,7 @@ Nếu làm tốt, project này cho thấy:
 - mày biết auth, RBAC, audit, approval
 - mày biết payment webhook và idempotency
 - mày biết testing với infra thật
+- mày biết architecture evolution từ modular monolith sang microservices
 - mày biết cân bằng giữa product feature và engineering quality
 - mày biết xây một hệ thống có roadmap phát triển thật
 
