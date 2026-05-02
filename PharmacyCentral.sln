@@ -1,8 +1,8 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PharmacyCentral.AppHost", "PharmacyCentral.AppHost\PharmacyCentral.AppHost.csproj", "{7D96E16B-EEE4-4090-97B2-46F4D929D57B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PharmacyCentral.AppHost", "src/PharmacyCentral.AppHost\PharmacyCentral.AppHost.csproj", "{7D96E16B-EEE4-4090-97B2-46F4D929D57B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PharmacyCentral.Server", "PharmacyCentral.Server\PharmacyCentral.Server.csproj", "{0F87C3B6-CB46-47A6-8DE3-100D0905DB6D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PharmacyCentral.Server", "src/PharmacyCentral.Server\PharmacyCentral.Server.csproj", "{0F87C3B6-CB46-47A6-8DE3-100D0905DB6D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

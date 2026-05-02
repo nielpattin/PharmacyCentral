@@ -74,12 +74,15 @@ RiderLink/
 *.sdf
 # Solution Files
 *.sln
-# VSCode Cache Directory
-.vscode
+
 # VSCode History Files
 **/.history
 
-#################################
-# Miscellaneous Generated Files #
-#################################
-# ADD AS NEED BE
+# Ignore files for fd
+.fdignore
+
+# Temporary files
+.tmp/
+docs/
+!docs/Architecture.md
+!docs/ProjectInfo.md
