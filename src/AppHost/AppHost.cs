@@ -1,17 +1,17 @@
 IDistributedApplicationBuilder builder = DistributedApplication.CreateBuilder(args);
 
-IResourceBuilder<ProjectResource> server = builder.AddProject<Projects.PharmacyCentral_Server>("server")
+IResourceBuilder<ProjectResource> api = builder.AddProject<Projects.Web_Api>("api")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints();
 
 IResourceBuilder<Aspire.Hosting.JavaScript.ViteAppResource> frontend = builder.AddViteApp("frontend", "../Frontend")
     .WithEndpoint("http", endpoint =>
     {
-        endpoint.TargetHost = "app.dentalclinic.dev.localhost";
+        endpoint.TargetHost = "app.pharmacy.dev.localhost";
     })
-    .WithReference(server)
-    .WaitFor(server);
+    .WithReference(api)
+    .WaitFor(api);
 
-server.PublishWithContainerFiles(frontend, "wwwroot");
+api.PublishWithContainerFiles(frontend, "wwwroot");
 
 builder.Build().Run();

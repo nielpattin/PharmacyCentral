@@ -1,7 +1,7 @@
-using PharmacyCentral.JiraSheetSync;
+using JiraSheetSync;
 using Xunit;
 
-namespace PharmacyCentral.JiraSheetSync.Tests;
+namespace JiraSheetSync.Tests;
 
 public sealed class GoogleSheetsSyncTests
 {

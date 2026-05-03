@@ -1,9 +1,9 @@
 using System.Net;
 using System.Text;
-using PharmacyCentral.JiraSheetSync;
+using JiraSheetSync;
 using Xunit;
 
-namespace PharmacyCentral.JiraSheetSync.Tests;
+namespace JiraSheetSync.Tests;
 
 public sealed class JiraClientTests
 {

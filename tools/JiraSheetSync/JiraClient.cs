@@ -2,7 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
-namespace PharmacyCentral.JiraSheetSync;
+namespace JiraSheetSync;
 
 internal sealed class JiraClient
 {

@@ -1,4 +1,4 @@
-namespace PharmacyCentral.JiraSheetSync;
+namespace JiraSheetSync;
 
 public sealed record JiraIssue
 {

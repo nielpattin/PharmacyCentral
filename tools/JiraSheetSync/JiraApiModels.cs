@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace PharmacyCentral.JiraSheetSync;
+namespace JiraSheetSync;
 
 internal sealed record JiraSearchResponse
 {

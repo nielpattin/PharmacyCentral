@@ -1,5 +1,5 @@
 {
   "appHost": {
-    "path": "src/PharmacyCentral.AppHost/PharmacyCentral.AppHost.csproj"
+    "path": "src/AppHost/AppHost.csproj"
   }
 }
