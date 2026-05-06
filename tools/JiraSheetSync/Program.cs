@@ -45,7 +45,7 @@ public static class Program
         Console.WriteLine("Jira -> Google Sheets sync");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  dotnet run --project tools/PharmacyCentral.JiraSheetSync -- [options]");
+        Console.WriteLine("  dotnet run --project tools/JiraSheetSync -- [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --spreadsheet-id <id>   Google Sheet id");

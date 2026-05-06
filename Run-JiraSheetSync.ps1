@@ -50,7 +50,7 @@ foreach ($name in $requiredVariables) {
 $arguments = @(
     'run'
     '--project'
-    'tools/PharmacyCentral.JiraSheetSync'
+    'tools/JiraSheetSync'
     '--'
     '--spreadsheet-id'
     $env:GWS_SPREADSHEET_ID
