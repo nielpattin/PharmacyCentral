@@ -1,16 +1,22 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
-// https://vite.dev/config/
+const apiProxyTarget =
+   process.env.services__api__https__0 ||
+   process.env.services__api__http__0 ||
+   process.env.API_HTTPS ||
+   process.env.API_HTTP ||
+   process.env.SERVER_HTTPS ||
+   process.env.SERVER_HTTP;
+
 export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      // Proxy API calls to the app service
-      '/api': {
-        target: process.env.SERVER_HTTPS || process.env.SERVER_HTTP,
-        changeOrigin: true,
+   plugins: [react()],
+   server: {
+      proxy: {
+         "/api": {
+            target: apiProxyTarget,
+            changeOrigin: true,
+         },
       },
-    },
-  },
-})
+   },
+});
