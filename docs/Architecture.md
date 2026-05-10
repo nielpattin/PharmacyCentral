@@ -117,7 +117,7 @@ Why this shape:
 
 Suggested internal modules:
 - Identity and Access Control
-- Organization and Site Management
+- Site and Storage Location Management
 - Master Data and Catalog
 - Supplier and Procurement
 - Receiving and QC
@@ -135,7 +135,7 @@ Suggested internal modules:
 #### PostgreSQL
 `PostgreSQL` is the transactional source of truth for:
 - users, roles, scopes, and sessions
-- organizations, sites, and storage locations
+- sites and storage locations
 - products, suppliers, and price books
 - purchase orders, receipts, QC decisions, and batches
 - stock ledger, reservations, transfers, and stocktakes
@@ -155,6 +155,13 @@ A distributed cache such as `Redis` is used for:
 - idempotency support where useful
 
 The system must not depend on cache as the system of record.
+
+#### Environment seam
+The Infrastructure layer must only read the connection string from configuration.
+- shared key: `ConnectionStrings:PharmacyCentral`
+- local development: Aspire AppHost supplies the PostgreSQL container connection string
+- production: AWS supplies the same key from environment variables or a secret store
+- the app code must not branch on local versus AWS database providers
 
 ### 5. Authentication and Authorization
 Baseline authentication model:
@@ -265,6 +272,18 @@ Expected logical containers or services:
 - `postgres`
 - `redis` or equivalent distributed cache
 - monitoring stack components
+
+### Development versus production shape
+#### Development
+- Aspire AppHost is the composition root
+- AppHost starts the API, frontend, and PostgreSQL container
+- local persistence uses a Docker volume or bind mount
+
+#### Production
+- frontend can be hosted separately from the API
+- API runs on AWS compute
+- PostgreSQL runs outside the app host, usually as managed AWS PostgreSQL
+- the same `ConnectionStrings:PharmacyCentral` key is supplied at deploy time
 
 ### CI/CD
 `GitHub Actions` should:

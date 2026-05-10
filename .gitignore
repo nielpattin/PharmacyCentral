@@ -84,6 +84,8 @@ RiderLink/
 
 # Temporary files
 .tmp/
-docs/
+docs/*
+!docs/
 !docs/Architecture.md
 !docs/ProjectInfo.md
+bin-build

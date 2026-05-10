@@ -18,7 +18,7 @@ These assumptions are already locked from `docs/Research.md` and should be treat
 - multi-country compliance baseline with per-country overlay later
 - target business shape of 2500+ stores
 - design target of 5000+ peak concurrent users
-- one company / one legal entity in phase 1 assumptions
+- single-company retail operation in phase 1 assumptions
 - operating hours roughly 8AM to 9PM
 - cloud deployment
 - containers as runtime model
@@ -116,7 +116,7 @@ The system should help the company:
 
 ## 7. Core Feature Areas
 - identity, RBAC, and site scope
-- organization, site, and storage location management
+- site and storage location management
 - product, supplier, and price master data
 - purchase orders and supplier coordination
 - goods receipt with batch and expiry capture
@@ -209,7 +209,7 @@ Not in baseline:
 
 ## 12. Main Modules
 - Identity & Access Control
-- Organization & Site Management
+- Site & Storage Location Management
 - Catalog & Master Data
 - Supplier & Procurement
 - Receiving & QC
@@ -223,7 +223,6 @@ Not in baseline:
 - Audit & Governance
 
 ## 13. Main Data Entities
-- Organizations
 - Sites
 - StorageLocations
 - UserAccounts
