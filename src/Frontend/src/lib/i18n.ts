@@ -1,0 +1,590 @@
+import { useCallback, useSyncExternalStore } from "react";
+
+export type Language = "en" | "vi";
+
+type TranslationParams = Record<string, string | number>;
+
+const storageKey = "pharmacy-central:language";
+const listeners = new Set<() => void>();
+
+const translations: Record<Language, Record<string, string>> = {
+   en: {
+      "app.brand": "Pharmacy Central",
+      "app.operationsAdmin": "Operations admin",
+      "app.localDev": "Local dev",
+      "app.apiProxy": "API via `/api` proxy",
+      "app.admin": "Admin",
+
+      "account.name": "An Pham",
+      "account.role": "Pharmacy administrator",
+      "account.email": "an.pham@pharmacy.local",
+      "account.settings": "Settings",
+      "account.language": "Language",
+      "account.signOut": "Sign out",
+
+      "language.switch": "Switch language",
+      "language.vi": "VN",
+      "language.en": "EN",
+
+      "nav.operations": "Operations",
+      "nav.masterData": "Master data",
+      "nav.governance": "Governance",
+      "nav.dashboard": "Dashboard",
+      "nav.prescription": "Prescription",
+      "nav.transfer": "Transfer",
+      "nav.sites": "Sites",
+      "nav.catalog": "Catalog",
+      "nav.supplier": "Supplier",
+      "nav.receiving": "Receiving",
+      "nav.inventory": "Inventory",
+      "nav.returns": "Returns",
+      "nav.reporting": "Reporting",
+      "nav.audit": "Audit",
+
+      "status.active": "Active",
+      "status.inactive": "Inactive",
+      "status.ready": "Ready",
+      "status.planned": "Planned",
+      "status.live": "Live",
+      "status.structure": "Structure",
+      "status.loading": "Loading",
+      "status.create": "Create",
+      "status.editing": "Editing",
+      "status.new": "New",
+      "status.selected": "Selected",
+
+      "common.open": "Open",
+      "common.actions": "Actions",
+      "common.locations": "Locations",
+      "common.refresh": "Refresh",
+      "common.backToDashboard": "Back to dashboard",
+      "common.backToSites": "Back to sites",
+      "common.manageSites": "Manage sites",
+      "common.openMasterData": "Open master data",
+      "common.newSite": "New site",
+      "common.newLocation": "New location",
+      "common.create": "Create",
+      "common.edit": "Edit",
+      "common.reset": "Reset",
+      "common.delete": "Delete",
+      "common.saving": "Saving...",
+      "common.loading": "Loading...",
+      "common.records": "records",
+      "common.active": "active",
+      "common.mode": "Mode",
+      "common.site": "Site",
+      "common.noData": "No data",
+
+      "landing.eyebrow": "Pharmacy Central",
+      "landing.title": "Retail operations control center",
+      "landing.description":
+         "Start at the dashboard, then move into operations, prescriptions, transfers, and master data as the product grows.",
+      "landing.openDashboard": "Open dashboard",
+      "landing.manageSites": "Manage sites",
+      "landing.operations": "Operations",
+      "landing.planned": "Planned",
+      "landing.dashboardName": "Dashboard",
+      "landing.dashboardDesc": "Daily view, alerts, and key metrics.",
+      "landing.prescriptionName": "Prescription",
+      "landing.prescriptionDesc": "Fill, verify, and dispense workflows.",
+      "landing.transferName": "Transfer",
+      "landing.transferDesc": "Move stock between sites and storage locations.",
+      "landing.masterData": "Master data",
+      "landing.ready": "Ready",
+      "landing.sitesName": "Sites",
+      "landing.sitesDesc": "Root structure for every branch and warehouse.",
+      "landing.storageLocationsName": "Storage locations",
+      "landing.storageLocationsDesc": "Nested under each site for bins, rooms, and shelves.",
+
+      "dashboard.title": "Dashboard",
+      "dashboard.description": "Operations hub for the modules we will add later.",
+      "dashboard.manageSites": "Manage sites",
+      "dashboard.openMasterData": "Open master data",
+      "dashboard.totalSites": "Total sites",
+      "dashboard.activeSites": "Active sites",
+      "dashboard.storageLocations": "Storage locations",
+      "dashboard.activeLocations": "Active locations",
+      "dashboard.operationsBoard": "Operations board",
+      "dashboard.operationsBoardDesc": "The next modules for pharmacy work live here.",
+      "dashboard.snapshot": "Snapshot of store health, alerts, and daily work.",
+      "dashboard.prescription": "Prescription",
+      "dashboard.prescriptionDesc": "Fill, verify, and dispense flows for pharmacy work.",
+      "dashboard.transfer": "Transfer",
+      "dashboard.transferDesc": "Move inventory between sites and their storage locations.",
+      "dashboard.masterData": "Master data",
+      "dashboard.structure": "Structure",
+      "dashboard.structureDesc": "Sites stay at the root. Storage locations live under each site.",
+      "dashboard.sites": "Sites",
+      "dashboard.sitesDesc": "Maintain the root site records and jump into nested storage locations.",
+      "dashboard.openSites": "Open sites",
+      "dashboard.noSitesTitle": "No sites yet",
+      "dashboard.noSitesDesc": "The API returned no site data.",
+
+      "sites.title": "Sites",
+      "sites.description":
+         "Manage the site root records here. Storage locations are nested under each site instead of living on their own top-level screen.",
+      "sites.registry": "Registry",
+      "sites.registryDesc": "All sites in the system. Select a row to load it into the editor.",
+      "sites.searchPlaceholder": "Search sites...",
+      "sites.records": "records",
+      "sites.loading": "Loading sites",
+      "sites.fetching": "Fetching live data from the API.",
+      "sites.emptyTitle": "No sites yet",
+      "sites.emptyDesc": "The API returned an empty site list.",
+      "sites.editor": "Record editor",
+      "sites.editorDesc": "Create a new site or update the selected one.",
+      "sites.createSite": "Create site",
+      "sites.editSite": "Edit site",
+      "sites.maintain": "Maintain the site master record used by storage locations.",
+      "sites.confirmDelete": "Delete site {code}? This removes all linked storage locations.",
+      "sites.loadingState": "Loading",
+      "sites.createMode": "Create mode",
+      "sites.editingState": "Editing {code}",
+      "sites.siteCount": "{count} site{suffix}",
+      "sites.activeCount": "{count} active",
+      "sites.refresh": "Refresh",
+      "sites.code": "Code",
+      "sites.name": "Name",
+      "sites.type": "Type",
+      "sites.status": "Status",
+      "sites.address": "Address",
+      "sites.notes": "Notes",
+      "sites.active": "Active",
+      "sites.new": "New",
+      "sites.selected": "Selected",
+      "sites.saving": "Saving...",
+      "sites.createButton": "Create site",
+      "sites.saveButton": "Save changes",
+      "sites.reset": "Reset",
+      "sites.deleteButton": "Delete site",
+
+      "storage.title": "Storage locations",
+      "storage.missingSiteDescription": "This site could not be found.",
+      "storage.description":
+         "{code} · {name}. Storage locations are nested here as an inner page, not as a separate top-level screen.",
+      "storage.backToSites": "Back to sites",
+      "storage.refresh": "Refresh",
+      "storage.newLocation": "New location",
+      "storage.site": "Site",
+      "storage.storageLocations": "Storage locations",
+      "storage.activeLocations": "Active locations",
+      "storage.mode": "Mode",
+      "storage.siteNotFound": "Site not found",
+      "storage.useBackToSites": "Use Back to sites to choose a valid site.",
+      "storage.linked": "Linked storage locations",
+      "storage.linkedDesc": "All locations under {code}.",
+      "storage.name": "Name",
+      "storage.type": "Type",
+      "storage.address": "Address",
+      "storage.active": "Active",
+      "storage.loading": "Loading storage locations",
+      "storage.fetching": "Fetching live data from the API.",
+      "storage.emptyTitle": "No storage locations",
+      "storage.emptyDesc": "This site has no linked storage locations yet.",
+      "storage.create": "Create storage location",
+      "storage.edit": "Edit storage location",
+      "storage.link": "Link the storage location to a site and keep the operational details current.",
+      "storage.selectSite": "Select a site",
+      "storage.capacity": "Capacity",
+      "storage.confirmDelete": "Delete storage location {code}?",
+      "storage.createButton": "Create location",
+      "storage.saveButton": "Save changes",
+      "storage.reset": "Reset",
+      "storage.deleteButton": "Delete location",
+      "storage.saving": "Saving...",
+      "storage.loadingState": "Loading",
+      "storage.createMode": "Create",
+      "storage.editingState": "Edit",
+      "storage.siteDetailsName": "Name",
+      "storage.siteDetailsType": "Type",
+      "storage.siteDetailsAddress": "Address",
+      "storage.siteDetailsActive": "Active",
+
+      "forms.code": "Code",
+      "forms.name": "Name",
+      "forms.type": "Type",
+      "forms.status": "Status",
+      "forms.address": "Address",
+      "forms.notes": "Notes",
+      "forms.site": "Site",
+      "forms.capacity": "Capacity",
+      "forms.active": "Active",
+      "forms.selectSite": "Select a site",
+      "forms.selectType": "Select type",
+      "forms.capacityInvalid": "Capacity must be a valid number.",
+      "forms.activeOption": "Active",
+      "forms.inactiveOption": "Inactive",
+
+      "types.site.headOffice": "Head office",
+      "types.site.warehouse": "Warehouse",
+      "types.site.regionalHub": "Regional hub",
+      "types.site.retailStore": "Retail store",
+      "types.location.receiving": "Receiving",
+      "types.location.storage": "Storage",
+      "types.location.picking": "Picking",
+      "types.location.dispatch": "Dispatch",
+      "types.location.service": "Service",
+      "types.location.office": "Office",
+
+      "placeholder.backToDashboard": "Back to dashboard",
+      "placeholder.openSites": "Open sites",
+      "placeholder.subtitle": "Placeholder screen for the next build step.",
+      "placeholder.nothingWiredYet": "Nothing wired yet",
+
+      "notFound.title": "Page not found",
+      "notFound.description": "That route does not exist in this build.",
+      "notFound.goHome": "Go home",
+      "notFound.goDashboard": "Go to dashboard",
+
+      "errors.loadDashboard": "Failed to load dashboard data.",
+      "errors.loadSites": "Failed to load sites.",
+      "errors.saveSite": "Failed to save site.",
+      "errors.deleteSite": "Failed to delete site.",
+      "errors.loadStorageLocations": "Failed to load storage locations.",
+      "errors.saveStorageLocation": "Failed to save storage location.",
+      "errors.deleteStorageLocation": "Failed to delete storage location.",
+      "errors.requestFailed": "Request failed with status {status}",
+   },
+   vi: {
+      "app.brand": "Pharmacy Central",
+      "app.operationsAdmin": "Quản trị vận hành",
+      "app.localDev": "Môi trường dev",
+      "app.apiProxy": "API qua proxy `/api`",
+      "app.admin": "Quản trị viên",
+
+      "account.name": "An Phạm",
+      "account.role": "Quản trị dược",
+      "account.email": "an.pham@pharmacy.local",
+      "account.settings": "Cài đặt",
+      "account.language": "Ngôn ngữ",
+      "account.signOut": "Đăng xuất",
+
+      "language.switch": "Đổi ngôn ngữ",
+      "language.vi": "VN",
+      "language.en": "EN",
+
+      "nav.operations": "Vận hành",
+      "nav.masterData": "Dữ liệu nền",
+      "nav.governance": "Kiểm soát",
+      "nav.dashboard": "Bảng điều khiển",
+      "nav.prescription": "Đơn thuốc",
+      "nav.transfer": "Điều chuyển",
+      "nav.sites": "Cơ sở",
+      "nav.catalog": "Danh mục",
+      "nav.supplier": "Nhà cung cấp",
+      "nav.receiving": "Tiếp nhận",
+      "nav.inventory": "Tồn kho",
+      "nav.returns": "Trả hàng",
+      "nav.reporting": "Báo cáo",
+      "nav.audit": "Kiểm toán",
+
+      "status.active": "Hoạt động",
+      "status.inactive": "Ngừng",
+      "status.ready": "Sẵn sàng",
+      "status.planned": "Dự kiến",
+      "status.live": "Đang chạy",
+      "status.structure": "Cấu trúc",
+      "status.loading": "Đang tải",
+      "status.create": "Tạo mới",
+      "status.editing": "Đang sửa",
+      "status.new": "Mới",
+      "status.selected": "Đã chọn",
+
+      "common.open": "Mở",
+      "common.actions": "Thao tác",
+      "common.locations": "Vị trí lưu trữ",
+      "common.refresh": "Làm mới",
+      "common.backToDashboard": "Quay lại bảng điều khiển",
+      "common.backToSites": "Quay lại cơ sở",
+      "common.manageSites": "Quản lý cơ sở",
+      "common.openMasterData": "Mở dữ liệu nền",
+      "common.newSite": "Tạo cơ sở mới",
+      "common.newLocation": "Tạo vị trí mới",
+      "common.create": "Tạo",
+      "common.edit": "Sửa",
+      "common.reset": "Đặt lại",
+      "common.delete": "Xóa",
+      "common.saving": "Đang lưu...",
+      "common.loading": "Đang tải...",
+      "common.records": "bản ghi",
+      "common.active": "đang hoạt động",
+      "common.mode": "Chế độ",
+      "common.site": "Cơ sở",
+      "common.noData": "Không có dữ liệu",
+
+      "landing.eyebrow": "Pharmacy Central",
+      "landing.title": "Trung tâm điều hành bán lẻ",
+      "landing.description":
+         "Bắt đầu từ bảng điều khiển, rồi đi vào vận hành, đơn thuốc, điều chuyển và dữ liệu nền khi sản phẩm mở rộng.",
+      "landing.openDashboard": "Mở bảng điều khiển",
+      "landing.manageSites": "Quản lý cơ sở",
+      "landing.operations": "Vận hành",
+      "landing.planned": "Dự kiến",
+      "landing.dashboardName": "Bảng điều khiển",
+      "landing.dashboardDesc": "Chế độ xem hằng ngày, cảnh báo và chỉ số chính.",
+      "landing.prescriptionName": "Đơn thuốc",
+      "landing.prescriptionDesc": "Quy trình nhận, kiểm tra và xuất thuốc.",
+      "landing.transferName": "Điều chuyển",
+      "landing.transferDesc": "Chuyển tồn kho giữa các cơ sở và vị trí lưu trữ.",
+      "landing.masterData": "Dữ liệu nền",
+      "landing.ready": "Sẵn sàng",
+      "landing.sitesName": "Cơ sở",
+      "landing.sitesDesc": "Cấu trúc gốc cho mọi chi nhánh và kho.",
+      "landing.storageLocationsName": "Vị trí lưu trữ",
+      "landing.storageLocationsDesc": "Nằm dưới từng cơ sở cho kệ, phòng và ngăn chứa.",
+
+      "dashboard.title": "Bảng điều khiển",
+      "dashboard.description": "Trung tâm vận hành cho các phân hệ sẽ bổ sung sau.",
+      "dashboard.manageSites": "Quản lý cơ sở",
+      "dashboard.openMasterData": "Mở dữ liệu nền",
+      "dashboard.totalSites": "Tổng cơ sở",
+      "dashboard.activeSites": "Cơ sở đang hoạt động",
+      "dashboard.storageLocations": "Vị trí lưu trữ",
+      "dashboard.activeLocations": "Vị trí đang hoạt động",
+      "dashboard.operationsBoard": "Bảng vận hành",
+      "dashboard.operationsBoardDesc": "Các phân hệ tiếp theo của công việc dược sẽ nằm ở đây.",
+      "dashboard.snapshot": "Ảnh chụp nhanh về tình trạng cửa hàng, cảnh báo và công việc hằng ngày.",
+      "dashboard.prescription": "Đơn thuốc",
+      "dashboard.prescriptionDesc": "Luồng nhận, kiểm tra và xuất thuốc cho công việc dược.",
+      "dashboard.transfer": "Điều chuyển",
+      "dashboard.transferDesc": "Di chuyển tồn kho giữa các cơ sở và vị trí lưu trữ.",
+      "dashboard.masterData": "Dữ liệu nền",
+      "dashboard.structure": "Cấu trúc",
+      "dashboard.structureDesc": "Cơ sở là cấp gốc. Vị trí lưu trữ nằm bên dưới từng cơ sở.",
+      "dashboard.sites": "Cơ sở",
+      "dashboard.sitesDesc": "Quản lý bản ghi cơ sở gốc và đi vào các vị trí lưu trữ con.",
+      "dashboard.openSites": "Mở cơ sở",
+      "dashboard.noSitesTitle": "Chưa có cơ sở nào",
+      "dashboard.noSitesDesc": "API chưa trả dữ liệu cơ sở.",
+
+      "sites.title": "Cơ sở",
+      "sites.description":
+         "Quản lý các bản ghi cơ sở gốc tại đây. Vị trí lưu trữ nằm bên dưới từng cơ sở, không phải là một màn hình cấp cao riêng.",
+      "sites.registry": "Danh sách",
+      "sites.registryDesc": "Tất cả cơ sở trong hệ thống. Chọn một dòng để nạp vào trình sửa.",
+      "sites.searchPlaceholder": "Tìm cơ sở...",
+      "sites.records": "bản ghi",
+      "sites.loading": "Đang tải cơ sở",
+      "sites.fetching": "Đang lấy dữ liệu trực tiếp từ API.",
+      "sites.emptyTitle": "Chưa có cơ sở nào",
+      "sites.emptyDesc": "API trả về danh sách cơ sở rỗng.",
+      "sites.editor": "Trình sửa bản ghi",
+      "sites.editorDesc": "Tạo cơ sở mới hoặc cập nhật cơ sở đã chọn.",
+      "sites.createSite": "Tạo cơ sở",
+      "sites.editSite": "Sửa cơ sở",
+      "sites.maintain": "Duy trì bản ghi cơ sở gốc được dùng cho các vị trí lưu trữ.",
+      "sites.confirmDelete": "Xóa cơ sở {code}? Hành động này sẽ xóa toàn bộ vị trí lưu trữ liên kết.",
+      "sites.loadingState": "Đang tải",
+      "sites.createMode": "Chế độ tạo",
+      "sites.editingState": "Đang sửa {code}",
+      "sites.siteCount": "{count} cơ sở{suffix}",
+      "sites.activeCount": "{count} đang hoạt động",
+      "sites.refresh": "Làm mới",
+      "sites.code": "Mã",
+      "sites.name": "Tên",
+      "sites.type": "Loại",
+      "sites.status": "Trạng thái",
+      "sites.address": "Địa chỉ",
+      "sites.notes": "Ghi chú",
+      "sites.active": "Hoạt động",
+      "sites.new": "Mới",
+      "sites.selected": "Đã chọn",
+      "sites.saving": "Đang lưu...",
+      "sites.createButton": "Tạo cơ sở",
+      "sites.saveButton": "Lưu thay đổi",
+      "sites.reset": "Đặt lại",
+      "sites.deleteButton": "Xóa cơ sở",
+
+      "storage.title": "Vị trí lưu trữ",
+      "storage.missingSiteDescription": "Không tìm thấy cơ sở này.",
+      "storage.description": "{code} · {name}.",
+      "storage.backToSites": "Quay lại cơ sở",
+      "storage.refresh": "Làm mới",
+      "storage.newLocation": "Tạo vị trí mới",
+      "storage.site": "Cơ sở",
+      "storage.storageLocations": "Vị trí lưu trữ",
+      "storage.activeLocations": "Vị trí đang hoạt động",
+      "storage.mode": "Chế độ",
+      "storage.siteNotFound": "Không tìm thấy cơ sở",
+      "storage.useBackToSites": "Dùng Quay lại cơ sở để chọn một cơ sở hợp lệ.",
+      "storage.linked": "Vị trí lưu trữ liên kết",
+      "storage.linkedDesc": "Tất cả vị trí dưới {code}.",
+      "storage.name": "Tên",
+      "storage.type": "Loại",
+      "storage.address": "Địa chỉ",
+      "storage.active": "Hoạt động",
+      "storage.loading": "Đang tải vị trí lưu trữ",
+      "storage.fetching": "Đang lấy dữ liệu trực tiếp từ API.",
+      "storage.emptyTitle": "Chưa có vị trí lưu trữ",
+      "storage.emptyDesc": "Cơ sở này chưa có vị trí lưu trữ liên kết.",
+      "storage.create": "Tạo vị trí lưu trữ",
+      "storage.edit": "Sửa vị trí lưu trữ",
+      "storage.link": "Liên kết vị trí lưu trữ với cơ sở và giữ chi tiết vận hành luôn cập nhật.",
+      "storage.selectSite": "Chọn cơ sở",
+      "storage.capacity": "Sức chứa",
+      "storage.confirmDelete": "Xóa vị trí lưu trữ {code}?",
+      "storage.createButton": "Tạo vị trí",
+      "storage.saveButton": "Lưu thay đổi",
+      "storage.reset": "Đặt lại",
+      "storage.deleteButton": "Xóa vị trí",
+      "storage.saving": "Đang lưu...",
+      "storage.loadingState": "Đang tải",
+      "storage.createMode": "Tạo mới",
+      "storage.editingState": "Đang sửa",
+      "storage.siteDetailsName": "Tên",
+      "storage.siteDetailsType": "Loại",
+      "storage.siteDetailsAddress": "Địa chỉ",
+      "storage.siteDetailsActive": "Hoạt động",
+
+      "forms.code": "Mã",
+      "forms.name": "Tên",
+      "forms.type": "Loại",
+      "forms.status": "Trạng thái",
+      "forms.address": "Địa chỉ",
+      "forms.notes": "Ghi chú",
+      "forms.site": "Cơ sở",
+      "forms.capacity": "Sức chứa",
+      "forms.active": "Hoạt động",
+      "forms.selectSite": "Chọn cơ sở",
+      "forms.selectType": "Chọn loại",
+      "forms.capacityInvalid": "Sức chứa phải là số hợp lệ.",
+      "forms.activeOption": "Hoạt động",
+      "forms.inactiveOption": "Ngưng hoạt động",
+
+      "types.site.headOffice": "Trụ sở chính",
+      "types.site.warehouse": "Kho",
+      "types.site.regionalHub": "Trung tâm vùng",
+      "types.site.retailStore": "Cửa hàng bán lẻ",
+      "types.location.receiving": "Nhận hàng",
+      "types.location.storage": "Lưu trữ",
+      "types.location.picking": "Soạn hàng",
+      "types.location.dispatch": "Xuất kho",
+      "types.location.service": "Dịch vụ",
+      "types.location.office": "Văn phòng",
+
+      "placeholder.backToDashboard": "Quay lại bảng điều khiển",
+      "placeholder.openSites": "Mở cơ sở",
+      "placeholder.subtitle": "Màn hình giữ chỗ cho bước xây tiếp theo.",
+      "placeholder.nothingWiredYet": "Chưa có chức năng nào",
+
+      "notFound.title": "Không tìm thấy trang",
+      "notFound.description": "Đường dẫn này chưa tồn tại trong bản dựng hiện tại.",
+      "notFound.goHome": "Về trang chủ",
+      "notFound.goDashboard": "Vào bảng điều khiển",
+
+      "errors.loadDashboard": "Không tải được dữ liệu bảng điều khiển.",
+      "errors.loadSites": "Không tải được danh sách cơ sở.",
+      "errors.saveSite": "Không lưu được cơ sở.",
+      "errors.deleteSite": "Không xóa được cơ sở.",
+      "errors.loadStorageLocations": "Không tải được danh sách vị trí lưu trữ.",
+      "errors.saveStorageLocation": "Không lưu được vị trí lưu trữ.",
+      "errors.deleteStorageLocation": "Không xóa được vị trí lưu trữ.",
+      "errors.requestFailed": "Yêu cầu thất bại với trạng thái {status}",
+   },
+};
+
+let currentLanguage: Language = resolveInitialLanguage();
+
+function resolveInitialLanguage(): Language {
+   const stored = readStoredLanguage();
+   if (stored !== null) {
+      return stored;
+   }
+
+   if (typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("vi")) {
+      return "vi";
+   }
+
+   return "en";
+}
+
+function readStoredLanguage(): Language | null {
+   if (typeof window === "undefined") {
+      return null;
+   }
+
+   const stored = window.localStorage.getItem(storageKey);
+   return stored === "vi" || stored === "en" ? stored : null;
+}
+
+function persistLanguage(language: Language) {
+   if (typeof window === "undefined") {
+      return;
+   }
+
+   window.localStorage.setItem(storageKey, language);
+   window.document.documentElement.lang = language;
+}
+
+function emitChange() {
+   for (const listener of listeners) {
+      listener();
+   }
+}
+
+if (typeof window !== "undefined") {
+   window.document.documentElement.lang = currentLanguage;
+   window.addEventListener("storage", (event) => {
+      if (event.key !== storageKey) {
+         return;
+      }
+
+      if (event.newValue === "vi" || event.newValue === "en") {
+         currentLanguage = event.newValue;
+         window.document.documentElement.lang = currentLanguage;
+         emitChange();
+      }
+   });
+}
+
+export function getLanguage() {
+   return currentLanguage;
+}
+
+export function setLanguage(language: Language) {
+   if (currentLanguage === language) {
+      return;
+   }
+
+   currentLanguage = language;
+   persistLanguage(language);
+   emitChange();
+}
+
+export function toggleLanguage() {
+   setLanguage(currentLanguage === "en" ? "vi" : "en");
+}
+
+export function useLanguage() {
+   return useSyncExternalStore(subscribe, getLanguage, getLanguage);
+}
+
+export function useT() {
+   const language = useLanguage();
+
+   return useCallback((key: string, params?: TranslationParams) => translate(language, key, params), [language]);
+}
+
+export function translate(language: Language, key: string, params?: TranslationParams) {
+   const template = translations[language][key] ?? translations.en[key] ?? key;
+
+   if (params === undefined) {
+      return template;
+   }
+
+   return template.replace(/\{(\w+)\}/g, (_, token: string) => {
+      const value = params[token];
+      return value === undefined ? `{${token}}` : String(value);
+   });
+}
+
+export function statusLabel(status: string) {
+   return status === "Active"
+      ? translate(currentLanguage, "status.active")
+      : translate(currentLanguage, "status.inactive");
+}
+
+export function subscribe(listener: () => void) {
+   listeners.add(listener);
+   return () => listeners.delete(listener);
+}
