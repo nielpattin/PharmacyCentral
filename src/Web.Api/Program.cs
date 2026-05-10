@@ -1,13 +1,24 @@
+using System.Reflection;
+using System.Text.Json.Serialization;
+using PharmacyCentral.Infrastructure;
+using Web.Api.Extensions;
+
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 
 // Add services to the container.
+builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddEndpoints(Assembly.GetExecutingAssembly());
 
 WebApplication app = builder.Build();
 
@@ -19,7 +30,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-RouteGroupBuilder api = app.MapGroup("/api");
+app.MapEndpoints(app.MapGroup("/api"));
 
 app.MapDefaultEndpoints();
 
