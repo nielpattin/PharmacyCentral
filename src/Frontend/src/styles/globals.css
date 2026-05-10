@@ -984,6 +984,65 @@ tbody tr:nth-child(even):hover {
    line-height: 1.45;
 }
 
+.login-page {
+   display: grid;
+   place-items: center;
+   min-height: 100%;
+   padding: 24px 0;
+}
+
+.login-card {
+   width: min(100%, 460px);
+}
+
+.login-card .section {
+   padding: 20px;
+}
+
+.login-header {
+   margin-bottom: 16px;
+}
+
+.login-brand {
+   display: flex;
+   align-items: center;
+   gap: 12px;
+}
+
+.login-brand .brand-mark {
+   flex: 0 0 auto;
+}
+
+.login-brand h1 {
+   margin: 0;
+   font-size: 1.5rem;
+   line-height: 1.15;
+}
+
+.login-form {
+   display: grid;
+   gap: 14px;
+}
+
+.login-password-row {
+   display: flex;
+   gap: 8px;
+   align-items: stretch;
+}
+
+.login-password-row .field-input {
+   flex: 1 1 auto;
+}
+
+.login-password-toggle {
+   flex: 0 0 auto;
+   white-space: nowrap;
+}
+
+.login-actions {
+   justify-content: flex-start;
+}
+
 .dashboard-section {
    margin-top: 14px;
 }
@@ -1102,6 +1161,12 @@ tbody tr:nth-child(even):hover {
 
 .field-hint {
    color: var(--muted-soft);
+   font-size: 0.75rem;
+   line-height: 1.4;
+}
+
+.field-error {
+   color: var(--danger);
    font-size: 0.75rem;
    line-height: 1.4;
 }

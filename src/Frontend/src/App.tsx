@@ -2,9 +2,11 @@ import { useCallback, type MouseEvent, type ReactNode } from "react";
 import { Breadcrumbs } from "./components/layout/Breadcrumbs";
 import { useT } from "./lib/i18n";
 import { navigate, usePathname } from "./lib/router";
+import { getPostLoginRedirectPath, isProtectedPath, setPostLoginRedirectPath, useAuth } from "./lib/auth";
 import type { SidebarActiveKey } from "./lib/sidebar";
 import DashboardPage from "./pages/DashboardPage";
 import LandingPage from "./pages/LandingPage";
+import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import OperationPlaceholderPage from "./pages/OperationPlaceholderPage";
 import SitesPage from "./pages/SitesPage";
@@ -36,9 +38,24 @@ function normalizePathname(pathname: string) {
    return pathname;
 }
 
+function resolveRoutePathname(pathname: string, isAuthenticated: boolean) {
+   if (isProtectedPath(pathname) && !isAuthenticated) {
+      setPostLoginRedirectPath(pathname);
+      return "/login";
+   }
+
+   if (pathname === "/login" && isAuthenticated) {
+      return getPostLoginRedirectPath();
+   }
+
+   return pathname;
+}
+
 export default function App() {
    const t = useT();
    const pathname = normalizePathname(usePathname());
+   const authUser = useAuth();
+   const isAuthenticated = authUser !== null;
 
    const handleRootClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
       const link = (event.target as HTMLElement).closest("a");
@@ -61,11 +78,20 @@ export default function App() {
       navigate(href);
    }, []);
 
+   const routePathname = resolveRoutePathname(pathname, isAuthenticated);
+
+   if (pathname !== routePathname) {
+      navigate(routePathname);
+   }
+
    let page: ReactNode;
 
-   switch (pathname) {
+   switch (routePathname) {
       case "/":
          page = <LandingPage />;
+         break;
+      case "/login":
+         page = <LoginPage />;
          break;
       case "/dashboard":
          page = <DashboardPage />;
@@ -74,13 +100,13 @@ export default function App() {
          page = <SitesPage />;
          break;
       default: {
-         const storageLocationMatch = pathname.match(STORAGE_LOCATIONS_PATH);
+         const storageLocationMatch = routePathname.match(STORAGE_LOCATIONS_PATH);
          if (storageLocationMatch !== null) {
             page = <StorageLocationsPage siteId={decodeURIComponent(storageLocationMatch[1])} />;
             break;
          }
 
-         const placeholderRoute = PLACEHOLDER_ROUTES.find((route) => route.path === pathname);
+         const placeholderRoute = PLACEHOLDER_ROUTES.find((route) => route.path === routePathname);
          if (placeholderRoute === undefined) {
             page = <NotFoundPage />;
             break;

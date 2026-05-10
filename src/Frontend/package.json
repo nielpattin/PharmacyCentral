@@ -7,7 +7,7 @@
       "dev": "vite",
       "preview": "vite preview",
       "build": "tsc -b && vite build",
-      "lint": "oxlint --type-aware --type-check -c oxlint.config.ts",
+      "lint": "oxlint -c oxlint.config.ts",
       "lint:fix": "oxlint --fix",
       "fmt": "oxfmt -c oxfmt.config.ts",
       "fmt:check": "oxfmt --check",

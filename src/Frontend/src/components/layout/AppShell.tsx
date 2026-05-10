@@ -14,6 +14,8 @@ import {
    Warehouse,
 } from "lucide-react";
 import { setLanguage, useLanguage, useT } from "../../lib/i18n";
+import { navigate } from "../../lib/router";
+import { signOut, useAuth } from "../../lib/auth";
 import type { SidebarActiveKey } from "../../lib/sidebar";
 
 type AppShellProps = {
@@ -25,6 +27,7 @@ type AppShellProps = {
 const accountAvatarUrl = "https://api.dicebear.com/9.x/notionists/svg?seed=pharmacy-staff&backgroundColor=b6e3f4";
 
 export function AppShell({ active, breadcrumb, children }: AppShellProps) {
+   const authUser = useAuth();
    const language = useLanguage();
    const t = useT();
    const nextLanguage = language === "vi" ? "en" : "vi";
@@ -75,6 +78,9 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
       },
    ];
 
+   const isLoggedIn = authUser !== null;
+   const accountName = authUser?.username ?? t("account.name");
+
    return (
       <div className="app-shell">
          <div className="app">
@@ -87,21 +93,27 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
                   </div>
                </div>
 
-               {sidebarSections.map((section) => (
-                  <section key={section.id} className="sidebar-section">
-                     <div className="sidebar-group-label">{section.label}</div>
-                     <nav className="sidebar-nav" aria-label={section.label}>
-                        {section.items.map((item) => (
-                           <a key={item.href} className={active === item.key ? "active" : undefined} href={item.href}>
-                              <span className="sidebar-nav-icon" aria-hidden="true">
-                                 {navIcons[item.key]}
-                              </span>
-                              <span>{item.label}</span>
-                           </a>
-                        ))}
-                     </nav>
-                  </section>
-               ))}
+               {isLoggedIn
+                  ? sidebarSections.map((section) => (
+                       <section key={section.id} className="sidebar-section">
+                          <div className="sidebar-group-label">{section.label}</div>
+                          <nav className="sidebar-nav" aria-label={section.label}>
+                             {section.items.map((item) => (
+                                <a
+                                   key={item.href}
+                                   className={active === item.key ? "active" : undefined}
+                                   href={item.href}
+                                >
+                                   <span className="sidebar-nav-icon" aria-hidden="true">
+                                      {navIcons[item.key]}
+                                   </span>
+                                   <span>{item.label}</span>
+                                </a>
+                             ))}
+                          </nav>
+                       </section>
+                    ))
+                  : null}
             </aside>
 
             <main className="main">
@@ -112,20 +124,28 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
                      <summary className="profile-trigger">
                         <img className="profile-photo" src={accountAvatarUrl} alt="" />
                         <span className="profile-copy">
-                           <strong>{t("account.name")}</strong>
+                           <strong>{accountName}</strong>
                            <span>{t("account.role")}</span>
                         </span>
                         <ChevronDown className="profile-chevron" size={16} strokeWidth={2} aria-hidden="true" />
                      </summary>
 
-                     <div className="profile-dropdown" role="menu" aria-label={t("account.name")}>
+                     <div className="profile-dropdown" role="menu" aria-label={accountName}>
                         <button type="button" className="profile-menu-item" disabled>
                            {t("account.settings")}
                         </button>
                         <button type="button" className="profile-menu-item" onClick={() => setLanguage(nextLanguage)}>
                            {t("account.language")}: {t(`language.${nextLanguage}`)}
                         </button>
-                        <button type="button" className="profile-menu-item" disabled>
+                        <button
+                           type="button"
+                           className="profile-menu-item"
+                           onClick={() => {
+                              signOut();
+                              navigate("/login");
+                           }}
+                           disabled={!isLoggedIn}
+                        >
                            {t("account.signOut")}
                         </button>
                      </div>

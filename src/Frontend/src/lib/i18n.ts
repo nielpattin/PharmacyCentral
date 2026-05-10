@@ -22,6 +22,15 @@ const translations: Record<Language, Record<string, string>> = {
       "account.language": "Language",
       "account.signOut": "Sign out",
 
+      "auth.title": "Sign in",
+      "auth.subtitle": "Frontend frame only. Backend auth comes later.",
+      "auth.username": "Username",
+      "auth.password": "Password",
+      "auth.showPassword": "Show password",
+      "auth.hidePassword": "Hide password",
+      "auth.signIn": "Sign in",
+      "auth.formError": "Fix the highlighted fields.",
+
       "language.switch": "Switch language",
       "language.vi": "VN",
       "language.en": "EN",
@@ -258,6 +267,15 @@ const translations: Record<Language, Record<string, string>> = {
       "account.settings": "Cài đặt",
       "account.language": "Ngôn ngữ",
       "account.signOut": "Đăng xuất",
+
+      "auth.title": "Đăng nhập",
+      "auth.subtitle": "Chỉ là giao diện frontend. Backend auth sẽ nối sau.",
+      "auth.username": "Tên đăng nhập",
+      "auth.password": "Mật khẩu",
+      "auth.showPassword": "Hiện mật khẩu",
+      "auth.hidePassword": "Ẩn mật khẩu",
+      "auth.signIn": "Đăng nhập",
+      "auth.formError": "Hãy sửa các trường được đánh dấu.",
 
       "language.switch": "Đổi ngôn ngữ",
       "language.vi": "VN",
