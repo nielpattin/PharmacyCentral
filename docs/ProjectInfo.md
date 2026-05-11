@@ -98,13 +98,7 @@ The system should help the company:
 - **Pharmacy Manager:** manages store operations, approvals, and local KPIs
 - **Pharmacist:** enters prescriptions, dispenses medicine, records exceptions, handles returns
 - **Warehouse Staff:** receives goods, records batch and expiry, handles dispatch and transfer tasks
-- **Inventory Controller:** manages stock moves, counts, recounts, and adjustment workflows
-- **Procurement Officer:** manages supplier terms, purchase orders, and inbound supply coordination
-- **QA or Compliance:** manages QC release or reject decisions, recall governance, and destruction approval
-- **Finance User:** manages reconciliation, posting, invoice matching, and valuation checks
-- **Operations Manager:** monitors chain-wide dashboards and operational exceptions
-- **Integration Admin:** monitors and retries integration traffic
-- **Internal Auditor:** reviews audit trails and exception evidence
+- These are the only roles in v1.
 
 ### Main Workspaces
 - **Head Office Console:** master data, dashboards, approvals, chain-wide operations

@@ -25,6 +25,7 @@ internal sealed class GetById : IEndpoint
             return Results.Ok(result.Value);
         })
         .WithName("GetSiteById")
-        .WithTags(Tags.Sites);
+        .WithTags(Tags.Sites)
+        .RequireAuthorization();
     }
 }

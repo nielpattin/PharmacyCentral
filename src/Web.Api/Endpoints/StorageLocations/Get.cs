@@ -16,6 +16,7 @@ internal sealed class Get : IEndpoint
             Result<IReadOnlyList<StorageLocationDetails>> result = await handler.HandleAsync(new ListStorageLocationsQuery(), cancellationToken);
             return Results.Ok(result.Value);
         })
-        .WithTags(Tags.StorageLocations);
+        .WithTags(Tags.StorageLocations)
+        .RequireAuthorization();
     }
 }

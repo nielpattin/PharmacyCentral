@@ -17,6 +17,7 @@ internal sealed class Get : IEndpoint
             Result<IReadOnlyList<SiteDetails>> result = await handler.HandleAsync(new ListSitesQuery(), cancellationToken);
             return Results.Ok(result.Value);
         })
-        .WithTags(Tags.Sites);
+        .WithTags(Tags.Sites)
+        .RequireAuthorization();
     }
 }

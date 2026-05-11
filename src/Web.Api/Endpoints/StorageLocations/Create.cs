@@ -64,7 +64,8 @@ internal sealed class Create : IEndpoint
 
             return Results.CreatedAtRoute("GetStorageLocationById", new { id = result.Value.Id }, result.Value);
         })
-        .WithTags(Tags.StorageLocations);
+        .WithTags(Tags.StorageLocations)
+        .RequireAuthorization();
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

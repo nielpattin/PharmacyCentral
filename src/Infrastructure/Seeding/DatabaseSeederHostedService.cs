@@ -1,31 +1,104 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.StorageLocations;
+using PharmacyCentral.Infrastructure.Identity;
 using PharmacyCentral.Infrastructure.Persistence;
 
 namespace PharmacyCentral.Infrastructure.Seeding;
 
 internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFactory) : IHostedService
 {
+    private static readonly string[] RoleNames =
+    [
+        "Platform Admin",
+        "Pharmacy Manager",
+        "Pharmacist",
+        "Warehouse Staff"
+    ];
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         using IServiceScope scope = scopeFactory.CreateScope();
         PharmacyCentralDbContext dbContext = scope.ServiceProvider.GetRequiredService<PharmacyCentralDbContext>();
+        RoleManager<IdentityRole<Guid>> roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+        UserManager<UserAccount> userManager = scope.ServiceProvider.GetRequiredService<UserManager<UserAccount>>();
 
-        await dbContext.Database.MigrateAsync(cancellationToken);
+        await EnsureTablesExistAsync(dbContext, cancellationToken);
 
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "TRUNCATE TABLE storage_locations, sites RESTART IDENTITY CASCADE;",
-            cancellationToken);
+        await SeedRolesAsync(roleManager);
+        await SeedBusinessDataAsync(dbContext, cancellationToken);
+        await SeedAdminUserAsync(userManager, dbContext, cancellationToken);
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private static async Task SeedRolesAsync(RoleManager<IdentityRole<Guid>> roleManager)
+    {
+        foreach (string roleName in RoleNames)
+        {
+            if (await roleManager.RoleExistsAsync(roleName))
+            {
+                continue;
+            }
+
+            await roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
+        }
+    }
+
+    private static async Task SeedAdminUserAsync(
+        UserManager<UserAccount> userManager,
+        PharmacyCentralDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        UserAccount? admin = await userManager.FindByEmailAsync("admin@pharmacy.local");
+        if (admin is not null)
+        {
+            return;
+        }
+
+        admin = new UserAccount
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin@pharmacy.local",
+            UserName = "admin@pharmacy.local",
+            DisplayName = "Platform Admin",
+            EmailConfirmed = true,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+            UpdatedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        await userManager.CreateAsync(admin, "Admin@123!");
+        await userManager.AddToRoleAsync(admin, "Platform Admin");
+
+        List<Site> sites = await dbContext.Sites.OrderBy(s => s.Code).ToListAsync(cancellationToken);
+        foreach (Site site in sites)
+        {
+            dbContext.UserSiteScopes.Add(new UserSiteScope
+            {
+                Id = Guid.NewGuid(),
+                UserId = admin.Id,
+                SiteId = site.Id
+            });
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedBusinessDataAsync(PharmacyCentralDbContext dbContext, CancellationToken cancellationToken)
+    {
+        bool hasSites = await dbContext.Sites.AnyAsync(cancellationToken);
+        if (hasSites)
+        {
+            return;
+        }
 
         List<Site> sites = CreateSites();
         await dbContext.AddRangeAsync(sites, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     private static List<Site> CreateSites()
     {
@@ -283,5 +356,147 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
             "Office" => StorageLocationType.Office,
             _ => throw new InvalidOperationException($"Unknown storage location type '{value}'.")
         };
+    }
+
+    private static async Task EnsureTablesExistAsync(
+        PharmacyCentralDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        string sql = """
+            CREATE TABLE IF NOT EXISTS "sites" (
+                "id" uuid NOT NULL,
+                "code" character varying(50) NOT NULL,
+                "name" character varying(200) NOT NULL,
+                "site_type" character varying(50) NOT NULL,
+                "status" character varying(30) NOT NULL,
+                "address" character varying(300),
+                "notes" character varying(1000),
+                "is_active" boolean NOT NULL,
+                "created_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                "updated_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                CONSTRAINT "pk_sites" PRIMARY KEY ("id")
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "ix_sites_code" ON "sites" ("code");
+
+            CREATE TABLE IF NOT EXISTS "storage_locations" (
+                "id" uuid NOT NULL,
+                "site_id" uuid NOT NULL,
+                "code" character varying(50) NOT NULL,
+                "name" character varying(200) NOT NULL,
+                "location_type" character varying(50) NOT NULL,
+                "status" character varying(30) NOT NULL,
+                "capacity" numeric(18,3),
+                "is_active" boolean NOT NULL,
+                "created_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                "updated_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                CONSTRAINT "pk_storage_locations" PRIMARY KEY ("id"),
+                CONSTRAINT "fk_storage_locations_sites_site_id" FOREIGN KEY ("site_id") REFERENCES "sites" ("id") ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS "ix_storage_locations_site_id" ON "storage_locations" ("site_id");
+            CREATE UNIQUE INDEX IF NOT EXISTS "ix_storage_locations_site_id_code" ON "storage_locations" ("site_id", "code");
+
+            CREATE TABLE IF NOT EXISTS "AspNetRoles" (
+                "Id" uuid NOT NULL,
+                "Name" character varying(256),
+                "NormalizedName" character varying(256),
+                "ConcurrencyStamp" text,
+                CONSTRAINT "PK_AspNetRoles" PRIMARY KEY ("Id")
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "RoleNameIndex" ON "AspNetRoles" ("NormalizedName");
+
+            CREATE TABLE IF NOT EXISTS "AspNetUsers" (
+                "Id" uuid NOT NULL,
+                "DisplayName" character varying(200) NOT NULL DEFAULT '',
+                "CreatedAtUtc" timestamp with time zone NOT NULL DEFAULT now(),
+                "UpdatedAtUtc" timestamp with time zone NOT NULL DEFAULT now(),
+                "UserName" character varying(256),
+                "NormalizedUserName" character varying(256),
+                "Email" character varying(256),
+                "NormalizedEmail" character varying(256),
+                "EmailConfirmed" boolean NOT NULL,
+                "PasswordHash" text,
+                "SecurityStamp" text,
+                "ConcurrencyStamp" text,
+                "PhoneNumber" text,
+                "PhoneNumberConfirmed" boolean NOT NULL,
+                "TwoFactorEnabled" boolean NOT NULL,
+                "LockoutEnd" timestamp with time zone,
+                "LockoutEnabled" boolean NOT NULL,
+                "AccessFailedCount" integer NOT NULL,
+                CONSTRAINT "PK_AspNetUsers" PRIMARY KEY ("Id")
+            );
+
+            CREATE INDEX IF NOT EXISTS "EmailIndex" ON "AspNetUsers" ("NormalizedEmail");
+            CREATE UNIQUE INDEX IF NOT EXISTS "UserNameIndex" ON "AspNetUsers" ("NormalizedUserName");
+
+            CREATE TABLE IF NOT EXISTS "AspNetRoleClaims" (
+                "Id" integer NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+                "RoleId" uuid NOT NULL,
+                "ClaimType" text,
+                "ClaimValue" text,
+                CONSTRAINT "PK_AspNetRoleClaims" PRIMARY KEY ("Id"),
+                CONSTRAINT "FK_AspNetRoleClaims_AspNetRoles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "AspNetRoles" ("Id") ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS "IX_AspNetRoleClaims_RoleId" ON "AspNetRoleClaims" ("RoleId");
+
+            CREATE TABLE IF NOT EXISTS "AspNetUserClaims" (
+                "Id" integer NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+                "UserId" uuid NOT NULL,
+                "ClaimType" text,
+                "ClaimValue" text,
+                CONSTRAINT "PK_AspNetUserClaims" PRIMARY KEY ("Id"),
+                CONSTRAINT "FK_AspNetUserClaims_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS "IX_AspNetUserClaims_UserId" ON "AspNetUserClaims" ("UserId");
+
+            CREATE TABLE IF NOT EXISTS "AspNetUserLogins" (
+                "LoginProvider" text NOT NULL,
+                "ProviderKey" text NOT NULL,
+                "ProviderDisplayName" text,
+                "UserId" uuid NOT NULL,
+                CONSTRAINT "PK_AspNetUserLogins" PRIMARY KEY ("LoginProvider", "ProviderKey"),
+                CONSTRAINT "FK_AspNetUserLogins_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS "IX_AspNetUserLogins_UserId" ON "AspNetUserLogins" ("UserId");
+
+            CREATE TABLE IF NOT EXISTS "AspNetUserRoles" (
+                "UserId" uuid NOT NULL,
+                "RoleId" uuid NOT NULL,
+                CONSTRAINT "PK_AspNetUserRoles" PRIMARY KEY ("UserId", "RoleId"),
+                CONSTRAINT "FK_AspNetUserRoles_AspNetRoles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "AspNetRoles" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_AspNetUserRoles_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS "IX_AspNetUserRoles_RoleId" ON "AspNetUserRoles" ("RoleId");
+
+            CREATE TABLE IF NOT EXISTS "AspNetUserTokens" (
+                "UserId" uuid NOT NULL,
+                "LoginProvider" text NOT NULL,
+                "Name" text NOT NULL,
+                "Value" text,
+                CONSTRAINT "PK_AspNetUserTokens" PRIMARY KEY ("UserId", "LoginProvider", "Name"),
+                CONSTRAINT "FK_AspNetUserTokens_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS "user_site_scopes" (
+                "id" uuid NOT NULL,
+                "user_id" uuid NOT NULL,
+                "site_id" uuid NOT NULL,
+                CONSTRAINT "pk_user_site_scopes" PRIMARY KEY ("id"),
+                CONSTRAINT "fk_user_site_scopes_asp_net_users_user_id" FOREIGN KEY ("user_id") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "fk_user_site_scopes_sites_site_id" FOREIGN KEY ("site_id") REFERENCES "sites" ("id") ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS "ix_user_site_scopes_site_id" ON "user_site_scopes" ("site_id");
+            CREATE UNIQUE INDEX IF NOT EXISTS "ix_user_site_scopes_user_id_site_id" ON "user_site_scopes" ("user_id", "site_id");
+            """;
+
+        await dbContext.Database.ExecuteSqlRawAsync(sql, cancellationToken);
     }
 }

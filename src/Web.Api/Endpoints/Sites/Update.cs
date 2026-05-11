@@ -66,7 +66,8 @@ internal sealed class Update : IEndpoint
 
             return Results.Ok(result.Value);
         })
-        .WithTags(Tags.Sites);
+        .WithTags(Tags.Sites)
+        .RequireAuthorization();
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

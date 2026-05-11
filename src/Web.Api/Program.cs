@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Antiforgery;
 using PharmacyCentral.Infrastructure;
 using Web.Api.Extensions;
 
@@ -29,6 +30,32 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.Use(async (context, next) =>
+{
+    if (HttpMethods.IsPost(context.Request.Method) ||
+        HttpMethods.IsPut(context.Request.Method) ||
+        HttpMethods.IsPatch(context.Request.Method) ||
+        HttpMethods.IsDelete(context.Request.Method))
+    {
+        IAntiforgery antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
+        try
+        {
+            await antiforgery.ValidateRequestAsync(context);
+        }
+        catch (AntiforgeryValidationException)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { error = "Invalid CSRF token." });
+            return;
+        }
+    }
+
+    await next();
+});
 
 app.MapEndpoints(app.MapGroup("/api"));
 

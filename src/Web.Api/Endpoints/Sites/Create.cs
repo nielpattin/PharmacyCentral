@@ -65,7 +65,8 @@ internal sealed class Create : IEndpoint
 
             return Results.CreatedAtRoute("GetSiteById", new { id = result.Value.Id }, result.Value);
         })
-        .WithTags(Tags.Sites);
+        .WithTags(Tags.Sites)
+        .RequireAuthorization();
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

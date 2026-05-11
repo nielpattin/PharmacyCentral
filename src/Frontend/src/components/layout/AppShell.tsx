@@ -81,8 +81,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
    const isLoggedIn = authUser !== null;
    const accountName = authUser?.displayName ?? "";
    const accountEmail = authUser?.email ?? "";
-   const accountRole =
-      authUser?.roles !== undefined && authUser.roles.length > 0 ? authUser.roles[0] : "";
+   const accountRole = authUser?.roles !== undefined && authUser.roles.length > 0 ? authUser.roles[0] : "";
 
    async function handleSignOut() {
       await logout();
@@ -148,11 +147,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
                         <button type="button" className="profile-menu-item" onClick={() => setLanguage(nextLanguage)}>
                            {t("account.language")}: {t(`language.${nextLanguage}`)}
                         </button>
-                        <button
-                           type="button"
-                           className="profile-menu-item"
-                           onClick={() => void handleSignOut()}
-                        >
+                        <button type="button" className="profile-menu-item" onClick={() => void handleSignOut()}>
                            {t("account.signOut")}
                         </button>
                      </div>

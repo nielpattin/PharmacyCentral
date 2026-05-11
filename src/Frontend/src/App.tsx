@@ -3,13 +3,7 @@ import { Breadcrumbs } from "./components/layout/Breadcrumbs";
 import { useMountEffect } from "./hooks/useMountEffect";
 import { useT } from "./lib/i18n";
 import { navigate, usePathname } from "./lib/router";
-import {
-   getPostLoginRedirectPath,
-   initializeAuth,
-   isProtectedPath,
-   useAuth,
-   useAuthLoading,
-} from "./lib/auth";
+import { getPostLoginRedirectPath, initializeAuth, isProtectedPath, useAuth, useAuthLoading } from "./lib/auth";
 import type { SidebarActiveKey } from "./lib/sidebar";
 import DashboardPage from "./pages/DashboardPage";
 import LandingPage from "./pages/LandingPage";
@@ -57,6 +51,14 @@ function resolveRoutePathname(pathname: string, isAuthenticated: boolean) {
    return pathname;
 }
 
+function RouteRedirect({ to }: { to: string }) {
+   useMountEffect(() => {
+      navigate(to);
+   });
+
+   return null;
+}
+
 export default function App() {
    const t = useT();
    const pathname = normalizePathname(usePathname());
@@ -90,6 +92,10 @@ export default function App() {
    }, []);
 
    const routePathname = isAuthLoading ? pathname : resolveRoutePathname(pathname, isAuthenticated);
+
+   if (!isAuthLoading && pathname !== routePathname) {
+      return <RouteRedirect to={routePathname} />;
+   }
 
    if (isAuthLoading) {
       return (

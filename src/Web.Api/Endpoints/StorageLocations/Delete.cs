@@ -21,6 +21,7 @@ internal sealed class Delete : IEndpoint
 
             return Results.NoContent();
         })
-        .WithTags(Tags.StorageLocations);
+        .WithTags(Tags.StorageLocations)
+        .RequireAuthorization();
     }
 }

@@ -14,6 +14,10 @@ export type LoginRequest = {
    password: string;
 };
 
+type CsrfTokenResponse = {
+   token: string;
+};
+
 export type SiteDto = {
    id: string;
    code: string;
@@ -60,6 +64,9 @@ export type StorageLocationUpsertRequest = {
    isActive: boolean;
 };
 
+let csrfToken: string | null = null;
+let csrfTokenPromise: Promise<string> | null = null;
+
 async function readErrorMessage(response: Response) {
    const contentType = response.headers.get("content-type") ?? "";
 
@@ -102,15 +109,87 @@ async function readErrorMessage(response: Response) {
    return text || translate(getLanguage(), "errors.requestFailed", { status: response.status });
 }
 
+function isUnsafeMethod(method: string) {
+   return method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
+}
+
+async function getCsrfToken() {
+   if (csrfToken !== null) {
+      return csrfToken;
+   }
+
+   if (csrfTokenPromise !== null) {
+      return await csrfTokenPromise;
+   }
+
+   csrfTokenPromise = (async () => {
+      const response = await fetch("/api/auth/csrf", {
+         method: "GET",
+         credentials: "include",
+      });
+
+      if (!response.ok) {
+         throw new Error(await readErrorMessage(response));
+      }
+
+      const payload = (await response.json()) as CsrfTokenResponse;
+      csrfToken = payload.token;
+      return payload.token;
+   })();
+
+   try {
+      return await csrfTokenPromise;
+   } finally {
+      csrfTokenPromise = null;
+   }
+}
+
+async function isCsrfTokenFailure(response: Response) {
+   const contentType = response.headers.get("content-type") ?? "";
+   if (!contentType.includes("application/json") && !contentType.includes("application/problem+json")) {
+      return false;
+   }
+
+   const payload = (await response
+      .clone()
+      .json()
+      .catch(() => null)) as { error?: string; detail?: string; title?: string } | null;
+   const message = payload?.error ?? payload?.detail ?? payload?.title;
+   return message === "Invalid CSRF token.";
+}
+
+export function resetCsrfToken() {
+   csrfToken = null;
+}
+
+async function fetchWithCsrfRetry(path: string, init: RequestInit, canRetry = true) {
+   const response = await fetch(path, {
+      ...init,
+      credentials: "include",
+   });
+
+   const method = (init.method ?? "GET").toUpperCase();
+   if (canRetry && isUnsafeMethod(method) && response.status === 403 && (await isCsrfTokenFailure(response))) {
+      resetCsrfToken();
+      return await fetchWithCsrfRetry(path, init, false);
+   }
+
+   return response;
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-   const { headers: requestHeaders, ...requestInit } = init ?? {};
+   const { headers: requestHeaders, method, ...requestInit } = init ?? {};
    const headers = new Headers(requestHeaders);
    headers.set("Content-Type", "application/json");
 
-   const response = await fetch(path, {
+   if (isUnsafeMethod((method ?? "GET").toUpperCase())) {
+      headers.set("X-CSRF-TOKEN", await getCsrfToken());
+   }
+
+   const response = await fetchWithCsrfRetry(path, {
       ...requestInit,
+      method,
       headers,
-      credentials: "include",
    });
 
    if (!response.ok) {
@@ -121,13 +200,17 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function requestVoid(path: string, init?: RequestInit): Promise<void> {
-   const { headers: requestHeaders, ...requestInit } = init ?? {};
+   const { headers: requestHeaders, method, ...requestInit } = init ?? {};
    const headers = new Headers(requestHeaders);
 
-   const response = await fetch(path, {
+   if (isUnsafeMethod((method ?? "GET").toUpperCase())) {
+      headers.set("X-CSRF-TOKEN", await getCsrfToken());
+   }
+
+   const response = await fetchWithCsrfRetry(path, {
       ...requestInit,
+      method,
       headers,
-      credentials: "include",
    });
 
    if (!response.ok) {
@@ -189,16 +272,21 @@ export async function deleteStorageLocation(id: string) {
 }
 
 export async function login(request: LoginRequest) {
-   return await requestJson<AuthUserDetails>("/api/auth/login", {
+   const user = await requestJson<AuthUserDetails>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify(request),
    });
+
+   resetCsrfToken();
+   return user;
 }
 
 export async function logout() {
    await requestVoid("/api/auth/logout", {
       method: "POST",
    });
+
+   resetCsrfToken();
 }
 
 export async function fetchMe() {

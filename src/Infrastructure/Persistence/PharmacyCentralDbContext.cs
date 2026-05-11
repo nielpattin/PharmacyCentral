@@ -1,17 +1,23 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.StorageLocations;
+using PharmacyCentral.Infrastructure.Identity;
 
 namespace PharmacyCentral.Infrastructure.Persistence;
 
-public sealed class PharmacyCentralDbContext : DbContext, IApplicationDbContext
+public sealed class PharmacyCentralDbContext
+    : IdentityDbContext<UserAccount, IdentityRole<Guid>, Guid>, IApplicationDbContext
 {
     public PharmacyCentralDbContext(DbContextOptions<PharmacyCentralDbContext> options)
         : base(options)
     {
     }
+
+    public DbSet<UserSiteScope> UserSiteScopes => Set<UserSiteScope>();
 
     public IQueryable<Site> Sites => Set<Site>();
 
@@ -99,6 +105,19 @@ public sealed class PharmacyCentralDbContext : DbContext, IApplicationDbContext
             ChangeTracker.Entries<StorageLocation>(),
             location => location.CreatedAtUtc = now,
             location => location.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<UserAccount>(),
+            user =>
+            {
+                if (user.CreatedAtUtc == default)
+                {
+                    user.CreatedAtUtc = now;
+                }
+
+                user.UpdatedAtUtc = now;
+            },
+            user => user.UpdatedAtUtc = now);
     }
 
     private static void ApplyTimestamps<TEntity>(
