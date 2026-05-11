@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { setLanguage, useLanguage, useT } from "../../lib/i18n";
 import { navigate } from "../../lib/router";
-import { signOut, useAuth } from "../../lib/auth";
+import { logout, useAuth } from "../../lib/auth";
 import type { SidebarActiveKey } from "../../lib/sidebar";
 
 type AppShellProps = {
@@ -79,7 +79,15 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
    ];
 
    const isLoggedIn = authUser !== null;
-   const accountName = authUser?.username ?? t("account.name");
+   const accountName = authUser?.displayName ?? "";
+   const accountEmail = authUser?.email ?? "";
+   const accountRole =
+      authUser?.roles !== undefined && authUser.roles.length > 0 ? authUser.roles[0] : "";
+
+   async function handleSignOut() {
+      await logout();
+      navigate("/login");
+   }
 
    return (
       <div className="app-shell">
@@ -125,12 +133,15 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
                         <img className="profile-photo" src={accountAvatarUrl} alt="" />
                         <span className="profile-copy">
                            <strong>{accountName}</strong>
-                           <span>{t("account.role")}</span>
+                           <span>{accountRole}</span>
                         </span>
                         <ChevronDown className="profile-chevron" size={16} strokeWidth={2} aria-hidden="true" />
                      </summary>
 
                      <div className="profile-dropdown" role="menu" aria-label={accountName}>
+                        <div className="profile-menu-section">
+                           <span className="profile-menu-label">{accountEmail}</span>
+                        </div>
                         <button type="button" className="profile-menu-item" disabled>
                            {t("account.settings")}
                         </button>
@@ -140,11 +151,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
                         <button
                            type="button"
                            className="profile-menu-item"
-                           onClick={() => {
-                              signOut();
-                              navigate("/login");
-                           }}
-                           disabled={!isLoggedIn}
+                           onClick={() => void handleSignOut()}
                         >
                            {t("account.signOut")}
                         </button>

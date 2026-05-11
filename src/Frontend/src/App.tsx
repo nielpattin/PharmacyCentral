@@ -1,8 +1,15 @@
 import { useCallback, type MouseEvent, type ReactNode } from "react";
 import { Breadcrumbs } from "./components/layout/Breadcrumbs";
+import { useMountEffect } from "./hooks/useMountEffect";
 import { useT } from "./lib/i18n";
 import { navigate, usePathname } from "./lib/router";
-import { getPostLoginRedirectPath, isProtectedPath, setPostLoginRedirectPath, useAuth } from "./lib/auth";
+import {
+   getPostLoginRedirectPath,
+   initializeAuth,
+   isProtectedPath,
+   useAuth,
+   useAuthLoading,
+} from "./lib/auth";
 import type { SidebarActiveKey } from "./lib/sidebar";
 import DashboardPage from "./pages/DashboardPage";
 import LandingPage from "./pages/LandingPage";
@@ -40,7 +47,6 @@ function normalizePathname(pathname: string) {
 
 function resolveRoutePathname(pathname: string, isAuthenticated: boolean) {
    if (isProtectedPath(pathname) && !isAuthenticated) {
-      setPostLoginRedirectPath(pathname);
       return "/login";
    }
 
@@ -56,6 +62,11 @@ export default function App() {
    const pathname = normalizePathname(usePathname());
    const authUser = useAuth();
    const isAuthenticated = authUser !== null;
+   const isAuthLoading = useAuthLoading();
+
+   useMountEffect(() => {
+      void initializeAuth();
+   });
 
    const handleRootClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
       const link = (event.target as HTMLElement).closest("a");
@@ -78,10 +89,18 @@ export default function App() {
       navigate(href);
    }, []);
 
-   const routePathname = resolveRoutePathname(pathname, isAuthenticated);
+   const routePathname = isAuthLoading ? pathname : resolveRoutePathname(pathname, isAuthenticated);
 
-   if (pathname !== routePathname) {
-      navigate(routePathname);
+   if (isAuthLoading) {
+      return (
+         <main className="login-page">
+            <section className="login-card card">
+               <div className="section" style={{ textAlign: "center", padding: "48px 24px" }}>
+                  <p>{t("common.loading")}</p>
+               </div>
+            </section>
+         </main>
+      );
    }
 
    let page: ReactNode;

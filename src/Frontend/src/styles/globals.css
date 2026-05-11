@@ -1269,3 +1269,14 @@ tbody tr:nth-child(even):hover {
       align-items: stretch;
    }
 }
+
+/* Profile menu */
+.profile-menu-section {
+   padding: 8px 12px 4px;
+}
+
+.profile-menu-label {
+   font-size: 0.8rem;
+   color: var(--muted);
+   word-break: break-all;
+}

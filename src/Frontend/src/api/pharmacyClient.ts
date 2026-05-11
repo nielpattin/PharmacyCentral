@@ -1,6 +1,19 @@
 import { getLanguage, translate } from "../lib/i18n";
 import type { SiteTypeValue, StorageLocationTypeValue } from "../pages/shared/pharmacyTypes";
 
+export type AuthUserDetails = {
+   displayName: string;
+   email: string;
+   roles: string[];
+   siteIds: string[];
+   isPlatformAdmin: boolean;
+};
+
+export type LoginRequest = {
+   email: string;
+   password: string;
+};
+
 export type SiteDto = {
    id: string;
    code: string;
@@ -97,6 +110,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
    const response = await fetch(path, {
       ...requestInit,
       headers,
+      credentials: "include",
    });
 
    if (!response.ok) {
@@ -113,6 +127,7 @@ async function requestVoid(path: string, init?: RequestInit): Promise<void> {
    const response = await fetch(path, {
       ...requestInit,
       headers,
+      credentials: "include",
    });
 
    if (!response.ok) {
@@ -171,4 +186,21 @@ export async function deleteStorageLocation(id: string) {
    await requestVoid(`/api/storage-locations/${id}`, {
       method: "DELETE",
    });
+}
+
+export async function login(request: LoginRequest) {
+   return await requestJson<AuthUserDetails>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function logout() {
+   await requestVoid("/api/auth/logout", {
+      method: "POST",
+   });
+}
+
+export async function fetchMe() {
+   return await requestJson<AuthUserDetails>("/api/auth/me");
 }

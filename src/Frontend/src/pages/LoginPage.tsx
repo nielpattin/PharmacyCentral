@@ -1,18 +1,26 @@
 import { useState, type FormEvent } from "react";
-import { navigate } from "../lib/router";
-import { getPostLoginRedirectPath, setPostLoginRedirectPath, signIn } from "../lib/auth";
+import { login, validateLoginCredentials, getPostLoginRedirectPath, setPostLoginRedirectPath } from "../lib/auth";
+import { navigate, usePathname } from "../lib/router";
+import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
 
 export default function LoginPage() {
    const t = useT();
-   const [username, setUsername] = useState("");
+   const pathname = usePathname();
+   const [email, setEmail] = useState("");
    const [password, setPassword] = useState("");
    const [showPassword, setShowPassword] = useState(false);
    const [isSubmitting, setIsSubmitting] = useState(false);
    const [formError, setFormError] = useState<string | null>(null);
-   const [fieldErrors, setFieldErrors] = useState<{ username?: string; password?: string }>({});
+   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
 
-   function clearFieldError(field: "username" | "password") {
+   useMountEffect(() => {
+      if (pathname !== "/login") {
+         setPostLoginRedirectPath(pathname);
+      }
+   });
+
+   function clearFieldError(field: "email" | "password") {
       setFieldErrors((current) => {
          if (current[field] === undefined) {
             return current;
@@ -22,10 +30,10 @@ export default function LoginPage() {
       });
    }
 
-   function handleSubmit(event: FormEvent<HTMLFormElement>) {
+   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
       event.preventDefault();
 
-      const validation = signIn({ username, password });
+      const validation = validateLoginCredentials({ email, password });
       if (!validation.isValid) {
          setFieldErrors(validation.fieldErrors);
          setFormError(t("auth.formError"));
@@ -35,8 +43,17 @@ export default function LoginPage() {
       setIsSubmitting(true);
       setFieldErrors({});
       setFormError(null);
-      navigate(getPostLoginRedirectPath());
-      setPostLoginRedirectPath("/dashboard");
+
+      try {
+         await login({ email, password });
+         const redirectPath = getPostLoginRedirectPath();
+         setPostLoginRedirectPath("/dashboard");
+         navigate(redirectPath);
+      } catch (error) {
+         setFormError(error instanceof Error ? error.message : t("errors.requestFailed", { status: 0 }));
+      } finally {
+         setIsSubmitting(false);
+      }
    }
 
    return (
@@ -57,22 +74,23 @@ export default function LoginPage() {
 
                <form className="login-form" onSubmit={handleSubmit}>
                   <label className="field">
-                     <span className="field-label">{t("auth.username")}</span>
+                     <span className="field-label">{t("auth.email")}</span>
                      <input
                         className="field-input"
                         autoFocus
-                        autoComplete="username"
-                        value={username}
+                        type="email"
+                        autoComplete="email"
+                        value={email}
                         onChange={(event) => {
-                           setUsername(event.target.value);
-                           clearFieldError("username");
+                           setEmail(event.target.value);
+                           clearFieldError("email");
                         }}
-                        aria-invalid={fieldErrors.username !== undefined}
-                        aria-describedby={fieldErrors.username !== undefined ? "login-username-error" : undefined}
+                        aria-invalid={fieldErrors.email !== undefined}
+                        aria-describedby={fieldErrors.email !== undefined ? "login-email-error" : undefined}
                      />
-                     {fieldErrors.username !== undefined ? (
-                        <span id="login-username-error" className="field-error">
-                           {fieldErrors.username}
+                     {fieldErrors.email !== undefined ? (
+                        <span id="login-email-error" className="field-error">
+                           {fieldErrors.email}
                         </span>
                      ) : null}
                   </label>
@@ -110,7 +128,7 @@ export default function LoginPage() {
 
                   <div className="form-actions login-actions">
                      <button className="btn primary" type="submit" disabled={isSubmitting}>
-                        {t("auth.signIn")}
+                        {isSubmitting ? t("auth.signingIn") : t("auth.signIn")}
                      </button>
                   </div>
                </form>

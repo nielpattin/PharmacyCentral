@@ -1,18 +1,23 @@
 import { useSyncExternalStore } from "react";
+import { fetchMe, login as apiLogin, logout as apiLogout, resetCsrfToken } from "../api/pharmacyClient";
 
 export type AuthUser = {
-   username: string;
+   displayName: string;
+   email: string;
+   roles: string[];
+   siteIds: string[];
+   isPlatformAdmin: boolean;
 };
 
 export type LoginCredentials = {
-   username: string;
+   email: string;
    password: string;
 };
 
 export type LoginValidationResult = {
    isValid: boolean;
    fieldErrors: {
-      username?: string;
+      email?: string;
       password?: string;
    };
 };
@@ -20,6 +25,7 @@ export type LoginValidationResult = {
 const listeners = new Set<() => void>();
 
 let currentUser: AuthUser | null = null;
+let isInitializing = true;
 let postLoginRedirectPath = "/dashboard";
 
 function emit() {
@@ -39,8 +45,20 @@ export function getCurrentUser() {
    return currentUser;
 }
 
+export function isAuthInitializing() {
+   return isInitializing;
+}
+
 export function useAuth() {
    return useSyncExternalStore(subscribe, getCurrentUser, getCurrentUser);
+}
+
+export function useAuthLoading() {
+   return useSyncExternalStore(
+      subscribe,
+      () => isInitializing,
+      () => isInitializing,
+   );
 }
 
 export function setPostLoginRedirectPath(pathname: string) {
@@ -56,12 +74,12 @@ export function isProtectedPath(pathname: string) {
 }
 
 export function validateLoginCredentials(credentials: LoginCredentials): LoginValidationResult {
-   const trimmedUsername = credentials.username.trim();
+   const trimmedEmail = credentials.email.trim();
    const trimmedPassword = credentials.password.trim();
    const fieldErrors: LoginValidationResult["fieldErrors"] = {};
 
-   if (trimmedUsername.length === 0) {
-      fieldErrors.username = "Username is required.";
+   if (trimmedEmail.length === 0) {
+      fieldErrors.email = "Email is required.";
    }
 
    if (trimmedPassword.length === 0) {
@@ -76,24 +94,39 @@ export function validateLoginCredentials(credentials: LoginCredentials): LoginVa
 
 function setCurrentUser(user: AuthUser | null) {
    currentUser = user;
+   isInitializing = false;
    emit();
 }
 
-export function signIn(credentials: LoginCredentials) {
-   const validation = validateLoginCredentials(credentials);
-
-   if (!validation.isValid) {
-      return validation;
+export async function initializeAuth(): Promise<void> {
+   try {
+      const user = await fetchMe();
+      setCurrentUser(user);
+      return;
+   } catch {
+      // Not authenticated — that's fine
    }
 
-   setCurrentUser({
-      username: credentials.username.trim(),
-   });
-
-   return validation;
+   setCurrentUser(null);
 }
 
-export function signOut() {
+export async function login(credentials: LoginCredentials): Promise<void> {
+   const user = await apiLogin({
+      email: credentials.email.trim(),
+      password: credentials.password,
+   });
+
+   setCurrentUser(user);
+}
+
+export async function logout(): Promise<void> {
+   try {
+      await apiLogout();
+   } catch {
+      // Ignore network errors during logout
+   }
+
+   resetCsrfToken();
    postLoginRedirectPath = "/dashboard";
    setCurrentUser(null);
 }
