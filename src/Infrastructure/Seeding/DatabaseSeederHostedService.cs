@@ -432,6 +432,74 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
 
             CREATE UNIQUE INDEX IF NOT EXISTS "ix_suppliers_code" ON "suppliers" ("code");
 
+            CREATE TABLE IF NOT EXISTS "product_batches" (
+                "id" uuid NOT NULL,
+                "product_id" uuid NOT NULL,
+                "batch_number" character varying(100) NOT NULL,
+                "expiry_date" date NOT NULL,
+                "manufactured_date" date,
+                "supplier_id" uuid,
+                "manufacturer" character varying(200),
+                "status" character varying(30) NOT NULL,
+                "created_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                "updated_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                CONSTRAINT "pk_product_batches" PRIMARY KEY ("id"),
+                CONSTRAINT "fk_product_batches_products_product_id" FOREIGN KEY ("product_id") REFERENCES "products" ("id") ON DELETE RESTRICT,
+                CONSTRAINT "fk_product_batches_suppliers_supplier_id" FOREIGN KEY ("supplier_id") REFERENCES "suppliers" ("id") ON DELETE SET NULL
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "ix_product_batches_product_id_batch_number" ON "product_batches" ("product_id", "batch_number");
+            CREATE INDEX IF NOT EXISTS "ix_product_batches_product_id_expiry_date" ON "product_batches" ("product_id", "expiry_date");
+            CREATE INDEX IF NOT EXISTS "ix_product_batches_supplier_id" ON "product_batches" ("supplier_id");
+
+            CREATE TABLE IF NOT EXISTS "inventory_balances" (
+                "id" uuid NOT NULL,
+                "product_batch_id" uuid NOT NULL,
+                "site_id" uuid NOT NULL,
+                "storage_location_id" uuid NOT NULL,
+                "quantity_on_hand" numeric(18,3) NOT NULL,
+                "quantity_reserved" numeric(18,3) NOT NULL,
+                "created_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                "updated_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                CONSTRAINT "pk_inventory_balances" PRIMARY KEY ("id"),
+                CONSTRAINT "fk_inventory_balances_product_batches_product_batch_id" FOREIGN KEY ("product_batch_id") REFERENCES "product_batches" ("id") ON DELETE RESTRICT,
+                CONSTRAINT "fk_inventory_balances_sites_site_id" FOREIGN KEY ("site_id") REFERENCES "sites" ("id") ON DELETE RESTRICT,
+                CONSTRAINT "fk_inventory_balances_storage_locations_storage_location_id" FOREIGN KEY ("storage_location_id") REFERENCES "storage_locations" ("id") ON DELETE RESTRICT
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "ix_inventory_balances_product_batch_id_storage_location_id" ON "inventory_balances" ("product_batch_id", "storage_location_id");
+            CREATE INDEX IF NOT EXISTS "ix_inventory_balances_site_id_storage_location_id" ON "inventory_balances" ("site_id", "storage_location_id");
+            CREATE INDEX IF NOT EXISTS "ix_inventory_balances_storage_location_id" ON "inventory_balances" ("storage_location_id");
+
+            CREATE TABLE IF NOT EXISTS "stock_ledger_entries" (
+                "id" uuid NOT NULL,
+                "product_id" uuid NOT NULL,
+                "product_batch_id" uuid NOT NULL,
+                "site_id" uuid NOT NULL,
+                "storage_location_id" uuid NOT NULL,
+                "movement_type" character varying(50) NOT NULL,
+                "quantity_delta" numeric(18,3) NOT NULL,
+                "balance_after" numeric(18,3) NOT NULL,
+                "occurred_at_utc" timestamp with time zone NOT NULL,
+                "reference_type" character varying(100),
+                "reference_id" uuid,
+                "reason" character varying(200),
+                "notes" character varying(1000),
+                "created_by_user_id" uuid,
+                "created_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                CONSTRAINT "pk_stock_ledger_entries" PRIMARY KEY ("id"),
+                CONSTRAINT "fk_stock_ledger_entries_products_product_id" FOREIGN KEY ("product_id") REFERENCES "products" ("id") ON DELETE RESTRICT,
+                CONSTRAINT "fk_stock_ledger_entries_product_batches_product_batch_id" FOREIGN KEY ("product_batch_id") REFERENCES "product_batches" ("id") ON DELETE RESTRICT,
+                CONSTRAINT "fk_stock_ledger_entries_sites_site_id" FOREIGN KEY ("site_id") REFERENCES "sites" ("id") ON DELETE RESTRICT,
+                CONSTRAINT "fk_stock_ledger_entries_storage_locations_storage_location_id" FOREIGN KEY ("storage_location_id") REFERENCES "storage_locations" ("id") ON DELETE RESTRICT
+            );
+
+            CREATE INDEX IF NOT EXISTS "ix_stock_ledger_entries_product_id_occurred_at_utc" ON "stock_ledger_entries" ("product_id", "occurred_at_utc");
+            CREATE INDEX IF NOT EXISTS "ix_stock_ledger_entries_product_batch_id_occurred_at_utc" ON "stock_ledger_entries" ("product_batch_id", "occurred_at_utc");
+            CREATE INDEX IF NOT EXISTS "ix_stock_ledger_entries_site_id_storage_location_id_occurred_at_utc" ON "stock_ledger_entries" ("site_id", "storage_location_id", "occurred_at_utc");
+            CREATE INDEX IF NOT EXISTS "ix_stock_ledger_entries_reference_type_reference_id" ON "stock_ledger_entries" ("reference_type", "reference_id");
+            CREATE INDEX IF NOT EXISTS "ix_stock_ledger_entries_created_by_user_id" ON "stock_ledger_entries" ("created_by_user_id");
+
             CREATE TABLE IF NOT EXISTS "AspNetRoles" (
                 "Id" uuid NOT NULL,
                 "Name" character varying(256),

@@ -11,4 +11,6 @@ public static class Tags
     public const string Products = "Products";
 
     public const string Suppliers = "Suppliers";
+
+    public const string Inventory = "Inventory";
 }

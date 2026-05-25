@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Auth.Handlers;
+using PharmacyCentral.Application.Inventory.Handlers;
 using PharmacyCentral.Application.Products.Handlers;
 using PharmacyCentral.Application.Sites.Handlers;
 using PharmacyCentral.Application.StorageLocations.Handlers;
@@ -112,6 +113,9 @@ public static class DependencyInjection
         services.AddScoped<GetProductByIdQueryHandler>();
         services.AddScoped<ListProductsQueryHandler>();
         services.AddScoped<UpdateProductCommandHandler>();
+        services.AddScoped<RecordStockMovementCommandHandler>();
+        services.AddScoped<ListInventoryBalancesQueryHandler>();
+        services.AddScoped<ListStockLedgerEntriesQueryHandler>();
         services.AddScoped<CreateSupplierCommandHandler>();
         services.AddScoped<DeleteSupplierCommandHandler>();
         services.AddScoped<GetSupplierByIdQueryHandler>();

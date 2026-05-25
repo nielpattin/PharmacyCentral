@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.StorageLocations;
@@ -26,6 +27,12 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<StorageLocation> StorageLocations => Set<StorageLocation>();
 
     public IQueryable<Product> Products => Set<Product>();
+
+    public IQueryable<ProductBatch> ProductBatches => Set<ProductBatch>();
+
+    public IQueryable<InventoryBalance> InventoryBalances => Set<InventoryBalance>();
+
+    public IQueryable<StockLedgerEntry> StockLedgerEntries => Set<StockLedgerEntry>();
 
     public IQueryable<Supplier> Suppliers => Set<Supplier>();
 
@@ -84,6 +91,93 @@ public sealed class PharmacyCentralDbContext
     async Task<bool> IApplicationDbContext.ProductSkuExistsAsync(string sku, Guid? excludedProductId, CancellationToken cancellationToken)
     {
         return await Products.AnyAsync(product => product.Sku == sku && product.Id != excludedProductId, cancellationToken);
+    }
+
+    async Task<ProductBatch?> IApplicationDbContext.GetProductBatchByIdAsync(Guid productBatchId, CancellationToken cancellationToken)
+    {
+        return await ProductBatches.SingleOrDefaultAsync(batch => batch.Id == productBatchId, cancellationToken);
+    }
+
+    async Task<ProductBatch?> IApplicationDbContext.GetProductBatchByNumberAsync(Guid productId, string batchNumber, CancellationToken cancellationToken)
+    {
+        return await ProductBatches.SingleOrDefaultAsync(batch => batch.ProductId == productId && batch.BatchNumber == batchNumber, cancellationToken);
+    }
+
+    async Task<InventoryBalance?> IApplicationDbContext.GetInventoryBalanceAsync(Guid productBatchId, Guid storageLocationId, CancellationToken cancellationToken)
+    {
+        return await InventoryBalances.SingleOrDefaultAsync(balance => balance.ProductBatchId == productBatchId && balance.StorageLocationId == storageLocationId, cancellationToken);
+    }
+
+    async Task<List<InventoryBalance>> IApplicationDbContext.ListInventoryBalancesAsync(Guid? productId, Guid? siteId, Guid? storageLocationId, bool includeZeroBalances, CancellationToken cancellationToken)
+    {
+        IQueryable<InventoryBalance> query = Set<InventoryBalance>()
+            .Include(balance => balance.ProductBatch)
+            .ThenInclude(batch => batch.Product)
+            .AsQueryable();
+
+        if (productId is not null)
+        {
+            query = query.Where(balance => balance.ProductBatch.ProductId == productId);
+        }
+
+        if (siteId is not null)
+        {
+            query = query.Where(balance => balance.SiteId == siteId);
+        }
+
+        if (storageLocationId is not null)
+        {
+            query = query.Where(balance => balance.StorageLocationId == storageLocationId);
+        }
+
+        if (!includeZeroBalances)
+        {
+            query = query.Where(balance => balance.QuantityOnHand != 0 || balance.QuantityReserved != 0);
+        }
+
+        return await query
+            .OrderBy(balance => balance.ProductBatch.Product.Sku)
+            .ThenBy(balance => balance.ProductBatch.ExpiryDate)
+            .ThenBy(balance => balance.ProductBatch.BatchNumber)
+            .ThenBy(balance => balance.SiteId)
+            .ThenBy(balance => balance.StorageLocationId)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<List<StockLedgerEntry>> IApplicationDbContext.ListStockLedgerEntriesAsync(Guid? productId, Guid? productBatchId, Guid? siteId, Guid? storageLocationId, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<StockLedgerEntry> query = Set<StockLedgerEntry>()
+            .Include(entry => entry.Product)
+            .Include(entry => entry.ProductBatch)
+            .AsQueryable();
+
+        if (productId is not null)
+        {
+            query = query.Where(entry => entry.ProductId == productId);
+        }
+
+        if (productBatchId is not null)
+        {
+            query = query.Where(entry => entry.ProductBatchId == productBatchId);
+        }
+
+        if (siteId is not null)
+        {
+            query = query.Where(entry => entry.SiteId == siteId);
+        }
+
+        if (storageLocationId is not null)
+        {
+            query = query.Where(entry => entry.StorageLocationId == storageLocationId);
+        }
+
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+
+        return await query
+            .OrderByDescending(entry => entry.OccurredAtUtc)
+            .ThenByDescending(entry => entry.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
     }
 
     async Task<List<Supplier>> IApplicationDbContext.ListSuppliersAsync(CancellationToken cancellationToken)
@@ -150,6 +244,28 @@ public sealed class PharmacyCentralDbContext
             ChangeTracker.Entries<Product>(),
             product => product.CreatedAtUtc = now,
             product => product.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<ProductBatch>(),
+            batch => batch.CreatedAtUtc = now,
+            batch => batch.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<InventoryBalance>(),
+            balance => balance.CreatedAtUtc = now,
+            balance => balance.UpdatedAtUtc = now);
+
+        foreach (EntityEntry<StockLedgerEntry> entry in ChangeTracker.Entries<StockLedgerEntry>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAtUtc = now;
+            }
+            else if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
+            {
+                throw new InvalidOperationException("Stock ledger entries are append-only.");
+            }
+        }
 
         ApplyTimestamps(
             ChangeTracker.Entries<Supplier>(),

@@ -1,3 +1,4 @@
+using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.StorageLocations;
@@ -12,6 +13,12 @@ public interface IApplicationDbContext
     IQueryable<StorageLocation> StorageLocations { get; }
 
     IQueryable<Product> Products { get; }
+
+    IQueryable<ProductBatch> ProductBatches { get; }
+
+    IQueryable<InventoryBalance> InventoryBalances { get; }
+
+    IQueryable<StockLedgerEntry> StockLedgerEntries { get; }
 
     IQueryable<Supplier> Suppliers { get; }
 
@@ -34,6 +41,16 @@ public interface IApplicationDbContext
     Task<Product?> GetProductByIdAsync(Guid productId, CancellationToken cancellationToken = default);
 
     Task<bool> ProductSkuExistsAsync(string sku, Guid? excludedProductId = null, CancellationToken cancellationToken = default);
+
+    Task<ProductBatch?> GetProductBatchByIdAsync(Guid productBatchId, CancellationToken cancellationToken = default);
+
+    Task<ProductBatch?> GetProductBatchByNumberAsync(Guid productId, string batchNumber, CancellationToken cancellationToken = default);
+
+    Task<InventoryBalance?> GetInventoryBalanceAsync(Guid productBatchId, Guid storageLocationId, CancellationToken cancellationToken = default);
+
+    Task<List<InventoryBalance>> ListInventoryBalancesAsync(Guid? productId = null, Guid? siteId = null, Guid? storageLocationId = null, bool includeZeroBalances = false, CancellationToken cancellationToken = default);
+
+    Task<List<StockLedgerEntry>> ListStockLedgerEntriesAsync(Guid? productId = null, Guid? productBatchId = null, Guid? siteId = null, Guid? storageLocationId = null, int limit = 100, CancellationToken cancellationToken = default);
 
     Task<List<Supplier>> ListSuppliersAsync(CancellationToken cancellationToken = default);
 
