@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
@@ -33,6 +34,10 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<InventoryBalance> InventoryBalances => Set<InventoryBalance>();
 
     public IQueryable<StockLedgerEntry> StockLedgerEntries => Set<StockLedgerEntry>();
+
+    public IQueryable<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
+
+    public IQueryable<GoodsReceiptLine> GoodsReceiptLines => Set<GoodsReceiptLine>();
 
     public IQueryable<Supplier> Suppliers => Set<Supplier>();
 
@@ -180,6 +185,25 @@ public sealed class PharmacyCentralDbContext
             .ToListAsync(cancellationToken);
     }
 
+    async Task<List<GoodsReceipt>> IApplicationDbContext.ListGoodsReceiptsAsync(int limit, CancellationToken cancellationToken)
+    {
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+
+        return await GoodsReceipts
+            .Include(receipt => receipt.Lines)
+            .OrderByDescending(receipt => receipt.ReceivedAtUtc)
+            .ThenByDescending(receipt => receipt.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<GoodsReceipt?> IApplicationDbContext.GetGoodsReceiptByIdAsync(Guid goodsReceiptId, CancellationToken cancellationToken)
+    {
+        return await GoodsReceipts
+            .Include(receipt => receipt.Lines)
+            .SingleOrDefaultAsync(receipt => receipt.Id == goodsReceiptId, cancellationToken);
+    }
+
     async Task<List<Supplier>> IApplicationDbContext.ListSuppliersAsync(CancellationToken cancellationToken)
     {
         return await Suppliers
@@ -271,6 +295,16 @@ public sealed class PharmacyCentralDbContext
             ChangeTracker.Entries<Supplier>(),
             supplier => supplier.CreatedAtUtc = now,
             supplier => supplier.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<GoodsReceipt>(),
+            receipt => receipt.CreatedAtUtc = now,
+            receipt => receipt.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<GoodsReceiptLine>(),
+            line => line.CreatedAtUtc = now,
+            line => line.UpdatedAtUtc = now);
 
         ApplyTimestamps(
             ChangeTracker.Entries<UserAccount>(),

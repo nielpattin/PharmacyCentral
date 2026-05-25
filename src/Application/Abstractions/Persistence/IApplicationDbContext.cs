@@ -1,3 +1,4 @@
+using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
@@ -19,6 +20,10 @@ public interface IApplicationDbContext
     IQueryable<InventoryBalance> InventoryBalances { get; }
 
     IQueryable<StockLedgerEntry> StockLedgerEntries { get; }
+
+    IQueryable<GoodsReceipt> GoodsReceipts { get; }
+
+    IQueryable<GoodsReceiptLine> GoodsReceiptLines { get; }
 
     IQueryable<Supplier> Suppliers { get; }
 
@@ -51,6 +56,10 @@ public interface IApplicationDbContext
     Task<List<InventoryBalance>> ListInventoryBalancesAsync(Guid? productId = null, Guid? siteId = null, Guid? storageLocationId = null, bool includeZeroBalances = false, CancellationToken cancellationToken = default);
 
     Task<List<StockLedgerEntry>> ListStockLedgerEntriesAsync(Guid? productId = null, Guid? productBatchId = null, Guid? siteId = null, Guid? storageLocationId = null, int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<List<GoodsReceipt>> ListGoodsReceiptsAsync(int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<GoodsReceipt?> GetGoodsReceiptByIdAsync(Guid goodsReceiptId, CancellationToken cancellationToken = default);
 
     Task<List<Supplier>> ListSuppliersAsync(CancellationToken cancellationToken = default);
 

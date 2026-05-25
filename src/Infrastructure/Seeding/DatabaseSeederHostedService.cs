@@ -471,6 +471,50 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
             CREATE INDEX IF NOT EXISTS "ix_inventory_balances_site_id_storage_location_id" ON "inventory_balances" ("site_id", "storage_location_id");
             CREATE INDEX IF NOT EXISTS "ix_inventory_balances_storage_location_id" ON "inventory_balances" ("storage_location_id");
 
+            CREATE TABLE IF NOT EXISTS "goods_receipts" (
+                "id" uuid NOT NULL,
+                "supplier_id" uuid NOT NULL,
+                "site_id" uuid NOT NULL,
+                "storage_location_id" uuid NOT NULL,
+                "receipt_number" character varying(100) NOT NULL,
+                "status" character varying(30) NOT NULL,
+                "received_at_utc" timestamp with time zone NOT NULL,
+                "notes" character varying(1000),
+                "created_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                "updated_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                CONSTRAINT "pk_goods_receipts" PRIMARY KEY ("id"),
+                CONSTRAINT "fk_goods_receipts_suppliers_supplier_id" FOREIGN KEY ("supplier_id") REFERENCES "suppliers" ("id") ON DELETE RESTRICT,
+                CONSTRAINT "fk_goods_receipts_sites_site_id" FOREIGN KEY ("site_id") REFERENCES "sites" ("id") ON DELETE RESTRICT,
+                CONSTRAINT "fk_goods_receipts_storage_locations_storage_location_id" FOREIGN KEY ("storage_location_id") REFERENCES "storage_locations" ("id") ON DELETE RESTRICT
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "ix_goods_receipts_receipt_number" ON "goods_receipts" ("receipt_number");
+            CREATE INDEX IF NOT EXISTS "ix_goods_receipts_supplier_id_received_at_utc" ON "goods_receipts" ("supplier_id", "received_at_utc");
+            CREATE INDEX IF NOT EXISTS "ix_goods_receipts_site_id_storage_location_id_received_at_utc" ON "goods_receipts" ("site_id", "storage_location_id", "received_at_utc");
+
+            CREATE TABLE IF NOT EXISTS "goods_receipt_lines" (
+                "id" uuid NOT NULL,
+                "goods_receipt_id" uuid NOT NULL,
+                "product_id" uuid NOT NULL,
+                "product_batch_id" uuid,
+                "batch_number" character varying(100) NOT NULL,
+                "expiry_date" date NOT NULL,
+                "manufactured_date" date,
+                "manufacturer" character varying(200),
+                "quantity" numeric(18,3) NOT NULL,
+                "notes" character varying(1000),
+                "created_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                "updated_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                CONSTRAINT "pk_goods_receipt_lines" PRIMARY KEY ("id"),
+                CONSTRAINT "fk_goods_receipt_lines_goods_receipts_goods_receipt_id" FOREIGN KEY ("goods_receipt_id") REFERENCES "goods_receipts" ("id") ON DELETE CASCADE,
+                CONSTRAINT "fk_goods_receipt_lines_products_product_id" FOREIGN KEY ("product_id") REFERENCES "products" ("id") ON DELETE RESTRICT,
+                CONSTRAINT "fk_goods_receipt_lines_product_batches_product_batch_id" FOREIGN KEY ("product_batch_id") REFERENCES "product_batches" ("id") ON DELETE RESTRICT
+            );
+
+            CREATE INDEX IF NOT EXISTS "ix_goods_receipt_lines_goods_receipt_id" ON "goods_receipt_lines" ("goods_receipt_id");
+            CREATE INDEX IF NOT EXISTS "ix_goods_receipt_lines_product_id" ON "goods_receipt_lines" ("product_id");
+            CREATE INDEX IF NOT EXISTS "ix_goods_receipt_lines_product_batch_id" ON "goods_receipt_lines" ("product_batch_id");
+
             CREATE TABLE IF NOT EXISTS "stock_ledger_entries" (
                 "id" uuid NOT NULL,
                 "product_id" uuid NOT NULL,

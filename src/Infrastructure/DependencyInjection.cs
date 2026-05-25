@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Auth.Handlers;
+using PharmacyCentral.Application.GoodsReceipts.Handlers;
 using PharmacyCentral.Application.Inventory.Handlers;
 using PharmacyCentral.Application.Products.Handlers;
 using PharmacyCentral.Application.Sites.Handlers;
@@ -113,6 +114,7 @@ public static class DependencyInjection
         services.AddScoped<GetProductByIdQueryHandler>();
         services.AddScoped<ListProductsQueryHandler>();
         services.AddScoped<UpdateProductCommandHandler>();
+        services.AddScoped<StockMovementRecorder>();
         services.AddScoped<RecordStockMovementCommandHandler>();
         services.AddScoped<ListInventoryBalancesQueryHandler>();
         services.AddScoped<ListStockLedgerEntriesQueryHandler>();
@@ -121,6 +123,9 @@ public static class DependencyInjection
         services.AddScoped<GetSupplierByIdQueryHandler>();
         services.AddScoped<ListSuppliersQueryHandler>();
         services.AddScoped<UpdateSupplierCommandHandler>();
+        services.AddScoped<CreateGoodsReceiptCommandHandler>();
+        services.AddScoped<GetGoodsReceiptByIdQueryHandler>();
+        services.AddScoped<ListGoodsReceiptsQueryHandler>();
         services.AddHostedService<DatabaseSeederHostedService>();
 
         return services;
