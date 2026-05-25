@@ -7,4 +7,8 @@ public static class Tags
     public const string Sites = "Sites";
 
     public const string StorageLocations = "StorageLocations";
+
+    public const string Products = "Products";
+
+    public const string Suppliers = "Suppliers";
 }

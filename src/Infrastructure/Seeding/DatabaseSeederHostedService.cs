@@ -397,6 +397,41 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
             CREATE INDEX IF NOT EXISTS "ix_storage_locations_site_id" ON "storage_locations" ("site_id");
             CREATE UNIQUE INDEX IF NOT EXISTS "ix_storage_locations_site_id_code" ON "storage_locations" ("site_id", "code");
 
+            CREATE TABLE IF NOT EXISTS "products" (
+                "id" uuid NOT NULL,
+                "sku" character varying(50) NOT NULL,
+                "name" character varying(200) NOT NULL,
+                "category" character varying(100),
+                "unit" character varying(50),
+                "manufacturer" character varying(200),
+                "status" character varying(30) NOT NULL,
+                "notes" character varying(1000),
+                "is_active" boolean NOT NULL,
+                "created_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                "updated_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                CONSTRAINT "pk_products" PRIMARY KEY ("id")
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "ix_products_sku" ON "products" ("sku");
+
+            CREATE TABLE IF NOT EXISTS "suppliers" (
+                "id" uuid NOT NULL,
+                "code" character varying(50) NOT NULL,
+                "name" character varying(200) NOT NULL,
+                "contact_name" character varying(200),
+                "email" character varying(320),
+                "phone" character varying(50),
+                "address" character varying(300),
+                "status" character varying(30) NOT NULL,
+                "notes" character varying(1000),
+                "is_active" boolean NOT NULL,
+                "created_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                "updated_at_utc" timestamp with time zone NOT NULL DEFAULT now(),
+                CONSTRAINT "pk_suppliers" PRIMARY KEY ("id")
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "ix_suppliers_code" ON "suppliers" ("code");
+
             CREATE TABLE IF NOT EXISTS "AspNetRoles" (
                 "Id" uuid NOT NULL,
                 "Name" character varying(256),

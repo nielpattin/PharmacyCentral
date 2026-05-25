@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.StorageLocations;
+using PharmacyCentral.Domain.Suppliers;
 using PharmacyCentral.Infrastructure.Identity;
 
 namespace PharmacyCentral.Infrastructure.Persistence;
@@ -22,6 +24,10 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<Site> Sites => Set<Site>();
 
     public IQueryable<StorageLocation> StorageLocations => Set<StorageLocation>();
+
+    public IQueryable<Product> Products => Set<Product>();
+
+    public IQueryable<Supplier> Suppliers => Set<Supplier>();
 
     async Task<List<Site>> IApplicationDbContext.ListSitesAsync(CancellationToken cancellationToken)
     {
@@ -61,6 +67,40 @@ public sealed class PharmacyCentralDbContext
     async Task<bool> IApplicationDbContext.StorageLocationCodeExistsAsync(string code, Guid siteId, Guid? excludedStorageLocationId, CancellationToken cancellationToken)
     {
         return await StorageLocations.AnyAsync(location => location.SiteId == siteId && location.Code == code && location.Id != excludedStorageLocationId, cancellationToken);
+    }
+
+    async Task<List<Product>> IApplicationDbContext.ListProductsAsync(CancellationToken cancellationToken)
+    {
+        return await Products
+            .OrderBy(product => product.Sku)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<Product?> IApplicationDbContext.GetProductByIdAsync(Guid productId, CancellationToken cancellationToken)
+    {
+        return await Products.SingleOrDefaultAsync(product => product.Id == productId, cancellationToken);
+    }
+
+    async Task<bool> IApplicationDbContext.ProductSkuExistsAsync(string sku, Guid? excludedProductId, CancellationToken cancellationToken)
+    {
+        return await Products.AnyAsync(product => product.Sku == sku && product.Id != excludedProductId, cancellationToken);
+    }
+
+    async Task<List<Supplier>> IApplicationDbContext.ListSuppliersAsync(CancellationToken cancellationToken)
+    {
+        return await Suppliers
+            .OrderBy(supplier => supplier.Code)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<Supplier?> IApplicationDbContext.GetSupplierByIdAsync(Guid supplierId, CancellationToken cancellationToken)
+    {
+        return await Suppliers.SingleOrDefaultAsync(supplier => supplier.Id == supplierId, cancellationToken);
+    }
+
+    async Task<bool> IApplicationDbContext.SupplierCodeExistsAsync(string code, Guid? excludedSupplierId, CancellationToken cancellationToken)
+    {
+        return await Suppliers.AnyAsync(supplier => supplier.Code == code && supplier.Id != excludedSupplierId, cancellationToken);
     }
 
     async Task IApplicationDbContext.AddAsync<TEntity>(TEntity entity, CancellationToken cancellationToken)
@@ -105,6 +145,16 @@ public sealed class PharmacyCentralDbContext
             ChangeTracker.Entries<StorageLocation>(),
             location => location.CreatedAtUtc = now,
             location => location.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<Product>(),
+            product => product.CreatedAtUtc = now,
+            product => product.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<Supplier>(),
+            supplier => supplier.CreatedAtUtc = now,
+            supplier => supplier.UpdatedAtUtc = now);
 
         ApplyTimestamps(
             ChangeTracker.Entries<UserAccount>(),

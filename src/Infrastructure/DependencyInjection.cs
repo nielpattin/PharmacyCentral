@@ -8,8 +8,10 @@ using Microsoft.Extensions.DependencyInjection;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Auth.Handlers;
+using PharmacyCentral.Application.Products.Handlers;
 using PharmacyCentral.Application.Sites.Handlers;
 using PharmacyCentral.Application.StorageLocations.Handlers;
+using PharmacyCentral.Application.Suppliers.Handlers;
 using PharmacyCentral.Infrastructure.Authorization;
 using PharmacyCentral.Infrastructure.Identity;
 using PharmacyCentral.Infrastructure.Persistence;
@@ -105,6 +107,16 @@ public static class DependencyInjection
         services.AddScoped<GetStorageLocationByIdQueryHandler>();
         services.AddScoped<ListStorageLocationsQueryHandler>();
         services.AddScoped<UpdateStorageLocationCommandHandler>();
+        services.AddScoped<CreateProductCommandHandler>();
+        services.AddScoped<DeleteProductCommandHandler>();
+        services.AddScoped<GetProductByIdQueryHandler>();
+        services.AddScoped<ListProductsQueryHandler>();
+        services.AddScoped<UpdateProductCommandHandler>();
+        services.AddScoped<CreateSupplierCommandHandler>();
+        services.AddScoped<DeleteSupplierCommandHandler>();
+        services.AddScoped<GetSupplierByIdQueryHandler>();
+        services.AddScoped<ListSuppliersQueryHandler>();
+        services.AddScoped<UpdateSupplierCommandHandler>();
         services.AddHostedService<DatabaseSeederHostedService>();
 
         return services;
