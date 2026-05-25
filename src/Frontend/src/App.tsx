@@ -3,7 +3,8 @@ import { Breadcrumbs } from "./components/layout/Breadcrumbs";
 import { useMountEffect } from "./hooks/useMountEffect";
 import { useT } from "./lib/i18n";
 import { navigate, usePathname } from "./lib/router";
-import { getPostLoginRedirectPath, initializeAuth, isProtectedPath, useAuth, useAuthLoading } from "./lib/auth";
+import { getPostLoginRedirectPath, initializeAuth, isProtectedPath, useAuth, useAuthLoading, type AuthUser } from "./lib/auth";
+import { canAccessPath } from "./lib/access";
 import type { SidebarActiveKey } from "./lib/sidebar";
 import DashboardPage from "./pages/DashboardPage";
 import LandingPage from "./pages/LandingPage";
@@ -39,13 +40,17 @@ function normalizePathname(pathname: string) {
    return pathname;
 }
 
-function resolveRoutePathname(pathname: string, isAuthenticated: boolean) {
-   if (isProtectedPath(pathname) && !isAuthenticated) {
+function resolveRoutePathname(pathname: string, authUser: AuthUser | null) {
+   if (isProtectedPath(pathname) && authUser === null) {
       return "/login";
    }
 
-   if (pathname === "/login" && isAuthenticated) {
+   if (pathname === "/login" && authUser !== null) {
       return getPostLoginRedirectPath();
+   }
+
+   if (isProtectedPath(pathname) && authUser !== null && !canAccessPath(authUser, pathname)) {
+      return "/dashboard";
    }
 
    return pathname;
@@ -63,7 +68,6 @@ export default function App() {
    const t = useT();
    const pathname = normalizePathname(usePathname());
    const authUser = useAuth();
-   const isAuthenticated = authUser !== null;
    const isAuthLoading = useAuthLoading();
 
    useMountEffect(() => {
@@ -91,7 +95,7 @@ export default function App() {
       navigate(href);
    }, []);
 
-   const routePathname = isAuthLoading ? pathname : resolveRoutePathname(pathname, isAuthenticated);
+   const routePathname = isAuthLoading ? pathname : resolveRoutePathname(pathname, authUser);
 
    if (!isAuthLoading && pathname !== routePathname) {
       return <RouteRedirect to={routePathname} />;

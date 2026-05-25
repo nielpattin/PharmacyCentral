@@ -16,6 +16,7 @@ import {
 import { setLanguage, useLanguage, useT } from "../../lib/i18n";
 import { navigate } from "../../lib/router";
 import { logout, useAuth } from "../../lib/auth";
+import { filterNavSections, type NavSection } from "../../lib/access";
 import type { SidebarActiveKey } from "../../lib/sidebar";
 
 type AppShellProps = {
@@ -46,7 +47,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
       audit: <ShieldCheck size={16} strokeWidth={2} />,
    };
 
-   const sidebarSections = [
+   const sidebarSections: NavSection[] = [
       {
          id: "operations" as const,
          label: t("nav.operations"),
@@ -78,6 +79,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
       },
    ];
 
+   const visibleSidebarSections = filterNavSections(authUser, sidebarSections);
    const isLoggedIn = authUser !== null;
    const accountName = authUser?.displayName ?? "";
    const accountEmail = authUser?.email ?? "";
@@ -101,7 +103,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
                </div>
 
                {isLoggedIn
-                  ? sidebarSections.map((section) => (
+                  ? visibleSidebarSections.map((section) => (
                        <section key={section.id} className="sidebar-section">
                           <div className="sidebar-group-label">{section.label}</div>
                           <nav className="sidebar-nav" aria-label={section.label}>
