@@ -1,8 +1,12 @@
 import type {
+   ProductDto,
+   ProductUpsertRequest,
    SiteDto,
    SiteUpsertRequest,
    StorageLocationDto,
    StorageLocationUpsertRequest,
+   SupplierDto,
+   SupplierUpsertRequest,
 } from "../../api/pharmacyClient";
 import {
    normalizeSiteTypeValue,
@@ -20,6 +24,10 @@ export type StorageLocationFormValues = Omit<StorageLocationUpsertRequest, "loca
    locationType: StorageLocationTypeValue | "";
    capacity: string;
 };
+
+export type ProductFormValues = ProductUpsertRequest;
+
+export type SupplierFormValues = SupplierUpsertRequest;
 
 export function blankSiteValues(): SiteFormValues {
    return {
@@ -69,6 +77,60 @@ export function storageLocationValuesFromDto(location: StorageLocationDto): Stor
    };
 }
 
+export function blankProductValues(): ProductFormValues {
+   return {
+      sku: "",
+      name: "",
+      category: "",
+      unit: "",
+      manufacturer: "",
+      status: "Active",
+      notes: "",
+      isActive: true,
+   };
+}
+
+export function productValuesFromDto(product: ProductDto): ProductFormValues {
+   return {
+      sku: product.sku,
+      name: product.name,
+      category: product.category ?? "",
+      unit: product.unit ?? "",
+      manufacturer: product.manufacturer ?? "",
+      status: product.status,
+      notes: product.notes ?? "",
+      isActive: product.isActive,
+   };
+}
+
+export function blankSupplierValues(): SupplierFormValues {
+   return {
+      code: "",
+      name: "",
+      contactName: "",
+      email: "",
+      phone: "",
+      address: "",
+      status: "Active",
+      notes: "",
+      isActive: true,
+   };
+}
+
+export function supplierValuesFromDto(supplier: SupplierDto): SupplierFormValues {
+   return {
+      code: supplier.code,
+      name: supplier.name,
+      contactName: supplier.contactName ?? "",
+      email: supplier.email ?? "",
+      phone: supplier.phone ?? "",
+      address: supplier.address ?? "",
+      status: supplier.status,
+      notes: supplier.notes ?? "",
+      isActive: supplier.isActive,
+   };
+}
+
 export function areSiteFormValuesEqual(left: SiteFormValues, right: SiteFormValues) {
    return (
       left.code === right.code &&
@@ -89,6 +151,33 @@ export function areStorageLocationFormValuesEqual(left: StorageLocationFormValue
       left.locationType === right.locationType &&
       left.status === right.status &&
       left.capacity === right.capacity &&
+      left.isActive === right.isActive
+   );
+}
+
+export function areProductFormValuesEqual(left: ProductFormValues, right: ProductFormValues) {
+   return (
+      left.sku === right.sku &&
+      left.name === right.name &&
+      left.category === right.category &&
+      left.unit === right.unit &&
+      left.manufacturer === right.manufacturer &&
+      left.status === right.status &&
+      left.notes === right.notes &&
+      left.isActive === right.isActive
+   );
+}
+
+export function areSupplierFormValuesEqual(left: SupplierFormValues, right: SupplierFormValues) {
+   return (
+      left.code === right.code &&
+      left.name === right.name &&
+      left.contactName === right.contactName &&
+      left.email === right.email &&
+      left.phone === right.phone &&
+      left.address === right.address &&
+      left.status === right.status &&
+      left.notes === right.notes &&
       left.isActive === right.isActive
    );
 }

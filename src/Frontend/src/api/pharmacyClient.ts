@@ -44,6 +44,35 @@ export type StorageLocationDto = {
    updatedAtUtc: string;
 };
 
+export type ProductDto = {
+   id: string;
+   sku: string;
+   name: string;
+   category: string | null;
+   unit: string | null;
+   manufacturer: string | null;
+   status: string;
+   notes: string | null;
+   isActive: boolean;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+};
+
+export type SupplierDto = {
+   id: string;
+   code: string;
+   name: string;
+   contactName: string | null;
+   email: string | null;
+   phone: string | null;
+   address: string | null;
+   status: string;
+   notes: string | null;
+   isActive: boolean;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+};
+
 export type SiteUpsertRequest = {
    code: string;
    name: string;
@@ -61,6 +90,29 @@ export type StorageLocationUpsertRequest = {
    locationType: StorageLocationTypeValue;
    status: string;
    capacity: number | null;
+   isActive: boolean;
+};
+
+export type ProductUpsertRequest = {
+   sku: string;
+   name: string;
+   category: string;
+   unit: string;
+   manufacturer: string;
+   status: string;
+   notes: string;
+   isActive: boolean;
+};
+
+export type SupplierUpsertRequest = {
+   code: string;
+   name: string;
+   contactName: string;
+   email: string;
+   phone: string;
+   address: string;
+   status: string;
+   notes: string;
    isActive: boolean;
 };
 
@@ -226,6 +278,14 @@ export async function loadStorageLocations() {
    return await requestJson<StorageLocationDto[]>("/api/storage-locations");
 }
 
+export async function loadProducts() {
+   return await requestJson<ProductDto[]>("/api/products");
+}
+
+export async function loadSuppliers() {
+   return await requestJson<SupplierDto[]>("/api/suppliers");
+}
+
 export async function loadPharmacyData() {
    const [sites, storageLocations] = await Promise.all([loadSites(), loadStorageLocations()]);
    return { sites, storageLocations };
@@ -267,6 +327,46 @@ export async function updateStorageLocation(id: string, request: StorageLocation
 
 export async function deleteStorageLocation(id: string) {
    await requestVoid(`/api/storage-locations/${id}`, {
+      method: "DELETE",
+   });
+}
+
+export async function createProduct(request: ProductUpsertRequest) {
+   return await requestJson<ProductDto>("/api/products", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function updateProduct(id: string, request: ProductUpsertRequest) {
+   return await requestJson<ProductDto>(`/api/products/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function deleteProduct(id: string) {
+   await requestVoid(`/api/products/${id}`, {
+      method: "DELETE",
+   });
+}
+
+export async function createSupplier(request: SupplierUpsertRequest) {
+   return await requestJson<SupplierDto>("/api/suppliers", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function updateSupplier(id: string, request: SupplierUpsertRequest) {
+   return await requestJson<SupplierDto>(`/api/suppliers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function deleteSupplier(id: string) {
+   await requestVoid(`/api/suppliers/${id}`, {
       method: "DELETE",
    });
 }

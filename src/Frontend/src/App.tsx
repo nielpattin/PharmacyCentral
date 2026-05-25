@@ -11,8 +11,10 @@ import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import OperationPlaceholderPage from "./pages/OperationPlaceholderPage";
+import ProductsPage from "./pages/ProductsPage";
 import SitesPage from "./pages/SitesPage";
 import StorageLocationsPage from "./pages/StorageLocationsPage";
+import SuppliersPage from "./pages/SuppliersPage";
 
 const PLACEHOLDER_ROUTES: Array<{
    path: string;
@@ -21,8 +23,6 @@ const PLACEHOLDER_ROUTES: Array<{
 }> = [
    { path: "/dashboard/prescriptions", active: "prescriptions", titleKey: "nav.prescription" },
    { path: "/dashboard/transfers", active: "transfers", titleKey: "nav.transfer" },
-   { path: "/dashboard/catalog", active: "catalog", titleKey: "nav.catalog" },
-   { path: "/dashboard/supplier", active: "supplier", titleKey: "nav.supplier" },
    { path: "/dashboard/receiving", active: "receiving", titleKey: "nav.receiving" },
    { path: "/dashboard/inventory", active: "inventory", titleKey: "nav.inventory" },
    { path: "/dashboard/returns", active: "returns", titleKey: "nav.returns" },
@@ -127,6 +127,12 @@ export default function App() {
          break;
       case "/dashboard/sites":
          page = <SitesPage />;
+         break;
+      case "/dashboard/catalog":
+         page = <ProductsPage />;
+         break;
+      case "/dashboard/supplier":
+         page = <SuppliersPage />;
          break;
       default: {
          const storageLocationMatch = routePathname.match(STORAGE_LOCATIONS_PATH);
