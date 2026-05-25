@@ -34,10 +34,7 @@ $requiredVariables = @(
     "JIRA_API_TOKEN",
     "GWS_SPREADSHEET_ID",
     "JIRA_PROJECT_KEY",
-    "JIRA_BASE_URL",
-    "GWS_HELPER_SHEET_NAME",
-    "GWS_VISIBLE_SHEET_NAME",
-    "GWS_VISIBLE_LIMIT"
+    "JIRA_BASE_URL"
 )
 
 foreach ($name in $requiredVariables) {
@@ -48,22 +45,34 @@ foreach ($name in $requiredVariables) {
 }
 
 $arguments = @(
-    'run'
-    '--project'
-    'tools/JiraSheetSync'
-    '--'
     '--spreadsheet-id'
     $env:GWS_SPREADSHEET_ID
     '--project-key'
     $env:JIRA_PROJECT_KEY
     '--jira-base-url'
     $env:JIRA_BASE_URL
-    '--helper-sheet'
-    $env:GWS_HELPER_SHEET_NAME
-    '--visible-sheet'
-    $env:GWS_VISIBLE_SHEET_NAME
-    '--visible-limit'
-    $env:GWS_VISIBLE_LIMIT
 )
 
-dotnet @arguments
+# Optional sheet names
+$helperSheet = [Environment]::GetEnvironmentVariable("GWS_HELPER_SHEET_NAME", "Process")
+if (-not [string]::IsNullOrWhiteSpace($helperSheet)) {
+    $arguments += @('--helper-sheet', $helperSheet)
+}
+
+$visibleSheet = [Environment]::GetEnvironmentVariable("GWS_VISIBLE_SHEET_NAME", "Process")
+if (-not [string]::IsNullOrWhiteSpace($visibleSheet)) {
+    $arguments += @('--visible-sheet', $visibleSheet)
+}
+
+$visibleLimit = [Environment]::GetEnvironmentVariable("GWS_VISIBLE_LIMIT", "Process")
+if (-not [string]::IsNullOrWhiteSpace($visibleLimit)) {
+    $arguments += @('--visible-limit', $visibleLimit)
+}
+
+# Credentials path (optional, defaults to credentials.json in repo root)
+$credsPath = [Environment]::GetEnvironmentVariable("GWS_CREDENTIALS_PATH", "Process")
+if (-not [string]::IsNullOrWhiteSpace($credsPath)) {
+    $arguments += @('--credentials-path', $credsPath)
+}
+
+npx tsx tools/jira-sheet-sync/src/index.ts @arguments

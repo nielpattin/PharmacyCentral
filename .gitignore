@@ -82,6 +82,9 @@ RiderLink/
 # Ignore files for fd
 .fdignore
 
+# Node.js / TypeScript tools
+node_modules/
+
 # Temporary files
 .tmp/
 docs/*
