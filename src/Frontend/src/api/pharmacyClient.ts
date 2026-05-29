@@ -252,6 +252,145 @@ export type StockAdjustmentCreateRequest = {
    notes: string | null;
 };
 
+export type TransferOrderLineDetails = {
+   id: string;
+   transferOrderId: string;
+   productId: string;
+   productBatchId: string;
+   requestedQuantity: number;
+   shippedQuantity: number;
+   receivedQuantity: number;
+   notes: string | null;
+};
+
+export type TransferOrderDetails = {
+   id: string;
+   transferNumber: string;
+   sourceSiteId: string;
+   sourceStorageLocationId: string;
+   destinationSiteId: string;
+   destinationStorageLocationId: string;
+   status: string;
+   notes: string | null;
+   createdByUserId: string | null;
+   approvedByUserId: string | null;
+   approvedAtUtc: string | null;
+   shippedAtUtc: string | null;
+   receivedAtUtc: string | null;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+   lines: TransferOrderLineDetails[];
+};
+
+export type TransferLineRequest = {
+   productId: string;
+   productBatchId: string;
+   requestedQuantity: number;
+   notes: string | null;
+};
+
+export type TransferCreateRequest = {
+   sourceSiteId: string;
+   sourceStorageLocationId: string;
+   destinationSiteId: string;
+   destinationStorageLocationId: string;
+   notes: string | null;
+   lines: TransferLineRequest[];
+};
+
+export type TransferShipLineRequest = {
+   transferOrderLineId: string;
+   shippedQuantity: number;
+};
+
+export type TransferShipRequest = {
+   lines: TransferShipLineRequest[];
+};
+
+export type TransferReceiveLineRequest = {
+   transferOrderLineId: string;
+   receivedQuantity: number;
+};
+
+export type TransferReceiveRequest = {
+   lines: TransferReceiveLineRequest[];
+};
+
+export type PrescriptionLineDetails = {
+   id: string;
+   prescriptionId: string;
+   productId: string;
+   productBatchId: string | null;
+   prescribedQuantity: number;
+   dispensedQuantity: number;
+   dosage: string | null;
+   frequency: string | null;
+   duration: string | null;
+   notes: string | null;
+};
+
+export type PrescriptionDetails = {
+   id: string;
+   prescriptionNumber: string;
+   siteId: string;
+   storageLocationId: string;
+   patientName: string;
+   patientPhone: string | null;
+   doctorName: string | null;
+   doctorLicense: string | null;
+   status: string;
+   notes: string | null;
+   createdByUserId: string | null;
+   cancelledByUserId: string | null;
+   dispensedByUserId: string | null;
+   dispensedAtUtc: string | null;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+   lines: PrescriptionLineDetails[];
+};
+
+export type PrescriptionLineCreateRequest = {
+   productId: string;
+   prescribedQuantity: number;
+   dosage: string | null;
+   frequency: string | null;
+   duration: string | null;
+   notes: string | null;
+};
+
+export type PrescriptionCreateRequest = {
+   siteId: string;
+   storageLocationId: string;
+   patientName: string;
+   patientPhone: string | null;
+   doctorName: string | null;
+   doctorLicense: string | null;
+   notes: string | null;
+   lines: PrescriptionLineCreateRequest[];
+};
+
+export type PrescriptionDispenseLineRequest = {
+   prescriptionLineId: string;
+   productBatchId: string;
+   dispensedQuantity: number;
+};
+
+export type PrescriptionDispenseRequest = {
+   lines: PrescriptionDispenseLineRequest[];
+};
+
+export type PrescriptionFilters = {
+   siteId?: string;
+   status?: string;
+   limit?: number;
+};
+
+export type TransferFilters = {
+   siteId?: string;
+   status?: string;
+   limit?: number;
+};
+
 export type StocktakeFilters = {
    siteId?: string;
    status?: string;
@@ -264,6 +403,7 @@ export type InventoryBalanceFilters = {
    storageLocationId?: string;
    includeZeroBalances?: boolean;
 };
+
 
 let csrfToken: string | null = null;
 let csrfTokenPromise: Promise<string> | null = null;
@@ -435,6 +575,14 @@ function buildStocktakeQuery(filters: StocktakeFilters = {}) {
    return query.size === 0 ? "" : `?${query}`;
 }
 
+function buildTransferQuery(filters: TransferFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.siteId !== undefined && filters.siteId !== "") query.set("siteId", filters.siteId);
+   if (filters.status !== undefined && filters.status !== "") query.set("status", filters.status);
+   if (filters.limit !== undefined) query.set("limit", String(filters.limit));
+   return query.size === 0 ? "" : `?${query}`;
+}
+
 export async function loadProducts() {
    return await requestJson<ProductDto[]>("/api/products");
 }
@@ -452,6 +600,35 @@ export async function createGoodsReceipt(request: GoodsReceiptUpsertRequest) {
       method: "POST",
       body: JSON.stringify(request),
    });
+}
+
+
+function buildPrescriptionQuery(filters: PrescriptionFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.siteId !== undefined && filters.siteId !== "") query.set("siteId", filters.siteId);
+   if (filters.status !== undefined && filters.status !== "") query.set("status", filters.status);
+   if (filters.limit !== undefined) query.set("limit", String(filters.limit));
+   return query.size === 0 ? "" : `?${query}`;
+}
+
+export async function loadPrescriptions(filters: PrescriptionFilters = {}) {
+   return await requestJson<PrescriptionDetails[]>(`/api/prescriptions${buildPrescriptionQuery(filters)}`);
+}
+
+export async function loadPrescription(id: string) {
+   return await requestJson<PrescriptionDetails>(`/api/prescriptions/${id}`);
+}
+
+export async function createPrescription(request: PrescriptionCreateRequest) {
+   return await requestJson<PrescriptionDetails>("/api/prescriptions", { method: "POST", body: JSON.stringify(request) });
+}
+
+export async function dispensePrescription(id: string, request: PrescriptionDispenseRequest) {
+   return await requestJson<PrescriptionDetails>(`/api/prescriptions/${id}/dispense`, { method: "POST", body: JSON.stringify(request) });
+}
+
+export async function cancelPrescription(id: string) {
+   return await requestJson<PrescriptionDetails>(`/api/prescriptions/${id}/cancel`, { method: "POST" });
 }
 
 export async function loadStocktakeSessions(filters: StocktakeFilters = {}) {
@@ -480,6 +657,34 @@ export async function loadStockAdjustments(filters: StocktakeFilters = {}) {
 
 export async function createStockAdjustment(request: StockAdjustmentCreateRequest) {
    return await requestJson<StockAdjustmentDetails>("/api/stock-adjustments", { method: "POST", body: JSON.stringify(request) });
+}
+
+export async function loadTransfers(filters: TransferFilters = {}) {
+   return await requestJson<TransferOrderDetails[]>(`/api/transfers${buildTransferQuery(filters)}`);
+}
+
+export async function loadTransfer(id: string) {
+   return await requestJson<TransferOrderDetails>(`/api/transfers/${id}`);
+}
+
+export async function createTransfer(request: TransferCreateRequest) {
+   return await requestJson<TransferOrderDetails>("/api/transfers", { method: "POST", body: JSON.stringify(request) });
+}
+
+export async function approveTransfer(id: string) {
+   return await requestJson<TransferOrderDetails>(`/api/transfers/${id}/approve`, { method: "POST" });
+}
+
+export async function shipTransfer(id: string, request: TransferShipRequest) {
+   return await requestJson<TransferOrderDetails>(`/api/transfers/${id}/ship`, { method: "POST", body: JSON.stringify(request) });
+}
+
+export async function receiveTransfer(id: string, request: TransferReceiveRequest) {
+   return await requestJson<TransferOrderDetails>(`/api/transfers/${id}/receive`, { method: "POST", body: JSON.stringify(request) });
+}
+
+export async function cancelTransfer(id: string) {
+   return await requestJson<TransferOrderDetails>(`/api/transfers/${id}/cancel`, { method: "POST" });
 }
 
 export async function approveStockAdjustment(id: string, approvalNotes?: string) {

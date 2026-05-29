@@ -8,6 +8,9 @@ import { canAccessPath } from "./lib/access";
 import type { SidebarActiveKey } from "./lib/sidebar";
 import DashboardPage from "./pages/DashboardPage";
 import StocktakePage from "./pages/StocktakePage";
+import TransferPage from "./pages/TransferPage";
+import PrescriptionPage from "./pages/PrescriptionPage";
+
 import GoodsReceiptsPage from "./pages/GoodsReceiptsPage";
 import InventoryPage from "./pages/InventoryPage";
 import LandingPage from "./pages/LandingPage";
@@ -25,7 +28,6 @@ const PLACEHOLDER_ROUTES: Array<{
    titleKey: string;
 }> = [
    { path: "/dashboard/prescriptions", active: "prescriptions", titleKey: "nav.prescription" },
-   { path: "/dashboard/transfers", active: "transfers", titleKey: "nav.transfer" },
    { path: "/dashboard/returns", active: "returns", titleKey: "nav.returns" },
    { path: "/dashboard/reporting", active: "reporting", titleKey: "nav.reporting" },
    { path: "/dashboard/audit", active: "audit", titleKey: "nav.audit" },
@@ -141,6 +143,13 @@ export default function App() {
       case "/dashboard/stocktake":
          page = <StocktakePage />;
          break;
+      case "/dashboard/transfers":
+         page = <TransferPage />;
+         break;
+      case "/dashboard/prescriptions":
+         page = <PrescriptionPage />;
+         break;
+
       case "/dashboard/inventory":
          page = <InventoryPage />;
          break;
