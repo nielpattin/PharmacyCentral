@@ -3,6 +3,7 @@ using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.StorageLocations;
+using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.Suppliers;
 
 namespace PharmacyCentral.Application.Abstractions.Persistence;
@@ -24,6 +25,12 @@ public interface IApplicationDbContext
     IQueryable<GoodsReceipt> GoodsReceipts { get; }
 
     IQueryable<GoodsReceiptLine> GoodsReceiptLines { get; }
+
+    IQueryable<StocktakeSession> StocktakeSessions { get; }
+
+    IQueryable<CountSheetLine> CountSheetLines { get; }
+
+    IQueryable<StockAdjustment> StockAdjustments { get; }
 
     IQueryable<Supplier> Suppliers { get; }
 
@@ -62,6 +69,18 @@ public interface IApplicationDbContext
     Task<List<GoodsReceipt>> ListGoodsReceiptsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task<GoodsReceipt?> GetGoodsReceiptByIdAsync(Guid goodsReceiptId, CancellationToken cancellationToken = default);
+
+    Task<List<StocktakeSession>> ListStocktakeSessionsAsync(Guid? siteId = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<StocktakeSession?> GetStocktakeSessionByIdAsync(Guid stocktakeSessionId, CancellationToken cancellationToken = default);
+
+    Task<CountSheetLine?> GetCountSheetLineAsync(Guid stocktakeSessionId, Guid productBatchId, CancellationToken cancellationToken = default);
+
+    Task<List<CountSheetLine>> ListCountSheetLinesWithVarianceAsync(Guid stocktakeSessionId, CancellationToken cancellationToken = default);
+
+    Task<List<StockAdjustment>> ListStockAdjustmentsAsync(Guid? siteId = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<StockAdjustment?> GetStockAdjustmentByIdAsync(Guid adjustmentId, CancellationToken cancellationToken = default);
 
     Task<List<Supplier>> ListSuppliersAsync(CancellationToken cancellationToken = default);
 
