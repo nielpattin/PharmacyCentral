@@ -17,4 +17,5 @@ public static class Tags
     public const string Stocktakes = "Stocktakes";
 
     public const string Transfers = "Transfers";
+    public const string Prescriptions = "Prescriptions";
 }
