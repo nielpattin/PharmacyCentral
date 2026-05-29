@@ -1,5 +1,6 @@
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
+using PharmacyCentral.Domain.Prescriptions;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.Stocktakes;
@@ -36,6 +37,10 @@ public interface IApplicationDbContext
     IQueryable<TransferOrder> TransferOrders { get; }
 
     IQueryable<TransferOrderLine> TransferOrderLines { get; }
+
+    IQueryable<Prescription> Prescriptions { get; }
+
+    IQueryable<PrescriptionLine> PrescriptionLines { get; }
 
     IQueryable<Supplier> Suppliers { get; }
 
@@ -96,6 +101,12 @@ public interface IApplicationDbContext
     Task<List<TransferOrder>> ListTransfersAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken = default);
 
     Task<TransferOrder?> GetTransferByIdAsync(Guid transferId, CancellationToken cancellationToken = default);
+
+    Task<List<Prescription>> ListPrescriptionsAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken = default);
+
+    Task<Prescription?> GetPrescriptionByIdAsync(Guid prescriptionId, CancellationToken cancellationToken = default);
+
+    Task<int> CountPrescriptionsWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
 
     Task AddAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default)
         where TEntity : class;

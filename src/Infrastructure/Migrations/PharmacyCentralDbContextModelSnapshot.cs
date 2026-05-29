@@ -477,6 +477,155 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.ToTable("stock_ledger_entries", (string)null);
                 });
 
+            modelBuilder.Entity("PharmacyCentral.Domain.Prescriptions.Prescription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("CancelledByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cancelled_by_user_id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<DateTimeOffset?>("DispensedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dispensed_at_utc");
+
+                    b.Property<Guid?>("DispensedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dispensed_by_user_id");
+
+                    b.Property<string>("DoctorLicense")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("doctor_license");
+
+                    b.Property<string>("DoctorName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("doctor_name");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("PatientName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("patient_name");
+
+                    b.Property<string>("PatientPhone")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("patient_phone");
+
+                    b.Property<string>("PrescriptionNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("prescription_number");
+
+                    b.Property<Guid>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StorageLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("storage_location_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PrescriptionNumber")
+                        .IsUnique();
+
+                    b.HasIndex("StorageLocationId");
+
+                    b.HasIndex("SiteId", "Status");
+
+                    b.ToTable("prescriptions", (string)null);
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Prescriptions.PrescriptionLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("DispensedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("dispensed_quantity");
+
+                    b.Property<string>("Dosage")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("dosage");
+
+                    b.Property<string>("Duration")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("duration");
+
+                    b.Property<string>("Frequency")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("frequency");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<decimal>("PrescribedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("prescribed_quantity");
+
+                    b.Property<Guid>("PrescriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prescription_id");
+
+                    b.Property<Guid?>("ProductBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_batch_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PrescriptionId");
+
+                    b.HasIndex("ProductBatchId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("prescription_lines", (string)null);
+                });
+
             modelBuilder.Entity("PharmacyCentral.Domain.Products.Product", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1377,6 +1526,51 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.Navigation("StorageLocation");
                 });
 
+            modelBuilder.Entity("PharmacyCentral.Domain.Prescriptions.Prescription", b =>
+                {
+                    b.HasOne("PharmacyCentral.Domain.Sites.Site", "Site")
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.StorageLocations.StorageLocation", "StorageLocation")
+                        .WithMany()
+                        .HasForeignKey("StorageLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Site");
+
+                    b.Navigation("StorageLocation");
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Prescriptions.PrescriptionLine", b =>
+                {
+                    b.HasOne("PharmacyCentral.Domain.Prescriptions.Prescription", "Prescription")
+                        .WithMany("Lines")
+                        .HasForeignKey("PrescriptionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.Inventory.ProductBatch", "ProductBatch")
+                        .WithMany()
+                        .HasForeignKey("ProductBatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PharmacyCentral.Domain.Products.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Prescription");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("ProductBatch");
+                });
+
             modelBuilder.Entity("PharmacyCentral.Domain.Stocktakes.CountSheetLine", b =>
                 {
                     b.HasOne("PharmacyCentral.Domain.Inventory.ProductBatch", "ProductBatch")
@@ -1567,6 +1761,11 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.Navigation("InventoryBalances");
 
                     b.Navigation("StockLedgerEntries");
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Prescriptions.Prescription", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("PharmacyCentral.Domain.Sites.Site", b =>

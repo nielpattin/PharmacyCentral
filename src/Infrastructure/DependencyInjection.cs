@@ -10,6 +10,7 @@ using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Auth.Handlers;
 using PharmacyCentral.Application.GoodsReceipts.Handlers;
 using PharmacyCentral.Application.Inventory.Handlers;
+using PharmacyCentral.Application.Prescriptions.Handlers;
 using PharmacyCentral.Application.Products.Handlers;
 using PharmacyCentral.Application.Sites.Handlers;
 using PharmacyCentral.Application.Stocktakes.Handlers;
@@ -145,6 +146,11 @@ public static class DependencyInjection
         services.AddScoped<CancelTransferHandler>();
         services.AddScoped<GetTransferByIdQueryHandler>();
         services.AddScoped<ListTransfersQueryHandler>();
+        services.AddScoped<CreatePrescriptionHandler>();
+        services.AddScoped<DispensePrescriptionHandler>();
+        services.AddScoped<CancelPrescriptionHandler>();
+        services.AddScoped<GetPrescriptionByIdQueryHandler>();
+        services.AddScoped<ListPrescriptionsQueryHandler>();
         services.AddHostedService<DatabaseSeederHostedService>();
 
         return services;

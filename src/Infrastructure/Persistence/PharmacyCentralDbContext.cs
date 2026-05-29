@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
+using PharmacyCentral.Domain.Prescriptions;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.Stocktakes;
@@ -50,6 +51,10 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<TransferOrder> TransferOrders => Set<TransferOrder>();
 
     public IQueryable<TransferOrderLine> TransferOrderLines => Set<TransferOrderLine>();
+
+    public IQueryable<Prescription> Prescriptions => Set<Prescription>();
+
+    public IQueryable<PrescriptionLine> PrescriptionLines => Set<PrescriptionLine>();
 
     public IQueryable<Supplier> Suppliers => Set<Supplier>();
 
@@ -348,6 +353,42 @@ public sealed class PharmacyCentralDbContext
             .SingleOrDefaultAsync(order => order.Id == transferId, cancellationToken);
     }
 
+
+    async Task<List<Prescription>> IApplicationDbContext.ListPrescriptionsAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<Prescription> query = Prescriptions
+            .Include(prescription => prescription.Lines);
+
+        if (siteId is not null)
+        {
+            query = query.Where(prescription => prescription.SiteId == siteId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(prescription => prescription.Status == status);
+        }
+
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+
+        return await query
+            .OrderByDescending(prescription => prescription.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<Prescription?> IApplicationDbContext.GetPrescriptionByIdAsync(Guid prescriptionId, CancellationToken cancellationToken)
+    {
+        return await Prescriptions
+            .Include(prescription => prescription.Lines)
+            .SingleOrDefaultAsync(prescription => prescription.Id == prescriptionId, cancellationToken);
+    }
+
+    async Task<int> IApplicationDbContext.CountPrescriptionsWithPrefixAsync(string prefix, CancellationToken cancellationToken)
+    {
+        return await Prescriptions.CountAsync(prescription => prescription.PrescriptionNumber.StartsWith(prefix), cancellationToken);
+    }
+
     async Task IApplicationDbContext.AddAsync<TEntity>(TEntity entity, CancellationToken cancellationToken)
     {
         await AddAsync(entity, cancellationToken);
@@ -452,6 +493,11 @@ public sealed class PharmacyCentralDbContext
             ChangeTracker.Entries<TransferOrder>(),
             order => order.CreatedAtUtc = now,
             order => order.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<Prescription>(),
+            prescription => prescription.CreatedAtUtc = now,
+            prescription => prescription.UpdatedAtUtc = now);
 
         ApplyTimestamps(
             ChangeTracker.Entries<UserAccount>(),
