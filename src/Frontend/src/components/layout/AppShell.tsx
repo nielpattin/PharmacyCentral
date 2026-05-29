@@ -6,6 +6,7 @@ import {
    ChevronDown,
    FileText,
    LayoutDashboard,
+   ClipboardList,
    Package,
    RotateCcw,
    ShieldCheck,
@@ -41,6 +42,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
       catalog: <ShoppingBag size={16} strokeWidth={2} />,
       supplier: <Truck size={16} strokeWidth={2} />,
       receiving: <Warehouse size={16} strokeWidth={2} />,
+      stocktake: <ClipboardList size={16} strokeWidth={2} />,
       inventory: <Package size={16} strokeWidth={2} />,
       returns: <RotateCcw size={16} strokeWidth={2} />,
       reporting: <BarChart3 size={16} strokeWidth={2} />,
@@ -65,6 +67,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
             { key: "catalog" as const, href: "/dashboard/catalog", label: t("nav.catalog") },
             { key: "supplier" as const, href: "/dashboard/supplier", label: t("nav.supplier") },
             { key: "receiving" as const, href: "/dashboard/receiving", label: t("nav.receiving") },
+            { key: "stocktake" as const, href: "/dashboard/stocktake", label: t("nav.stocktake") },
          ],
       },
       {

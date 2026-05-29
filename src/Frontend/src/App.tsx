@@ -7,6 +7,7 @@ import { getPostLoginRedirectPath, initializeAuth, isProtectedPath, useAuth, use
 import { canAccessPath } from "./lib/access";
 import type { SidebarActiveKey } from "./lib/sidebar";
 import DashboardPage from "./pages/DashboardPage";
+import StocktakePage from "./pages/StocktakePage";
 import GoodsReceiptsPage from "./pages/GoodsReceiptsPage";
 import InventoryPage from "./pages/InventoryPage";
 import LandingPage from "./pages/LandingPage";
@@ -136,6 +137,9 @@ export default function App() {
          break;
       case "/dashboard/receiving":
          page = <GoodsReceiptsPage />;
+         break;
+      case "/dashboard/stocktake":
+         page = <StocktakePage />;
          break;
       case "/dashboard/inventory":
          page = <InventoryPage />;

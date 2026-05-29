@@ -179,6 +179,85 @@ export type GoodsReceiptLineUpsertRequest = {
    notes: string | null;
 };
 
+export type CountSheetLineDetails = {
+   id: string;
+   stocktakeSessionId: string;
+   productId: string;
+   productBatchId: string;
+   expectedQuantity: number;
+   countedQuantity: number;
+   variance: number;
+   status: string;
+   notes: string | null;
+};
+
+export type StocktakeSessionDetails = {
+   id: string;
+   siteId: string;
+   storageLocationId: string;
+   status: string;
+   startedAtUtc: string;
+   completedAtUtc: string | null;
+   notes: string | null;
+   createdByUserId: string | null;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+   countSheetLines: CountSheetLineDetails[];
+};
+
+export type StockAdjustmentDetails = {
+   id: string;
+   stocktakeSessionId: string | null;
+   productId: string;
+   productBatchId: string;
+   siteId: string;
+   storageLocationId: string;
+   adjustmentType: string;
+   quantity: number;
+   reason: string;
+   approvedByUserId: string | null;
+   approvedAtUtc: string | null;
+   status: string;
+   notes: string | null;
+   createdByUserId: string | null;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+};
+
+export type StocktakeSessionCreateRequest = {
+   siteId: string;
+   storageLocationId: string;
+   notes: string | null;
+};
+
+export type CountSheetLineUpsertRequest = {
+   productId: string;
+   productBatchId: string;
+   countedQuantity: number;
+   notes: string | null;
+};
+
+export type StocktakeCountRequest = {
+   countSheetLines: CountSheetLineUpsertRequest[];
+};
+
+export type StockAdjustmentCreateRequest = {
+   productId: string;
+   productBatchId: string;
+   siteId: string;
+   storageLocationId: string;
+   adjustmentType: "Positive" | "Negative";
+   quantity: number;
+   reason: string;
+   notes: string | null;
+};
+
+export type StocktakeFilters = {
+   siteId?: string;
+   status?: string;
+   limit?: number;
+};
+
 export type InventoryBalanceFilters = {
    productId?: string;
    siteId?: string;
@@ -348,6 +427,14 @@ export async function loadStorageLocations() {
    return await requestJson<StorageLocationDto[]>("/api/storage-locations");
 }
 
+function buildStocktakeQuery(filters: StocktakeFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.siteId !== undefined && filters.siteId !== "") query.set("siteId", filters.siteId);
+   if (filters.status !== undefined && filters.status !== "") query.set("status", filters.status);
+   if (filters.limit !== undefined) query.set("limit", String(filters.limit));
+   return query.size === 0 ? "" : `?${query}`;
+}
+
 export async function loadProducts() {
    return await requestJson<ProductDto[]>("/api/products");
 }
@@ -365,6 +452,38 @@ export async function createGoodsReceipt(request: GoodsReceiptUpsertRequest) {
       method: "POST",
       body: JSON.stringify(request),
    });
+}
+
+export async function loadStocktakeSessions(filters: StocktakeFilters = {}) {
+   return await requestJson<StocktakeSessionDetails[]>(`/api/stocktake-sessions${buildStocktakeQuery(filters)}`);
+}
+
+export async function createStocktakeSession(request: StocktakeSessionCreateRequest) {
+   return await requestJson<StocktakeSessionDetails>("/api/stocktake-sessions", { method: "POST", body: JSON.stringify(request) });
+}
+
+export async function loadStocktakeSession(id: string) {
+   return await requestJson<StocktakeSessionDetails>(`/api/stocktake-sessions/${id}`);
+}
+
+export async function recordStocktakeCount(id: string, request: StocktakeCountRequest) {
+   return await requestJson<StocktakeSessionDetails>(`/api/stocktake-sessions/${id}/counts`, { method: "POST", body: JSON.stringify(request) });
+}
+
+export async function postStocktakeAdjustments(id: string) {
+   return await requestJson<StockAdjustmentDetails[]>(`/api/stocktake-sessions/${id}/adjustments`, { method: "POST" });
+}
+
+export async function loadStockAdjustments(filters: StocktakeFilters = {}) {
+   return await requestJson<StockAdjustmentDetails[]>(`/api/stock-adjustments${buildStocktakeQuery(filters)}`);
+}
+
+export async function createStockAdjustment(request: StockAdjustmentCreateRequest) {
+   return await requestJson<StockAdjustmentDetails>("/api/stock-adjustments", { method: "POST", body: JSON.stringify(request) });
+}
+
+export async function approveStockAdjustment(id: string, approvalNotes?: string) {
+   return await requestJson<StockAdjustmentDetails>(`/api/stock-adjustments/${id}/approve`, { method: "POST", body: JSON.stringify({ approvalNotes: approvalNotes ?? null }) });
 }
 
 export async function loadInventoryBalances(filters: InventoryBalanceFilters = {}) {
