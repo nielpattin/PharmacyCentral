@@ -959,6 +959,140 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.ToTable("suppliers", (string)null);
                 });
 
+            modelBuilder.Entity("PharmacyCentral.Domain.Transfers.TransferOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at_utc");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by_user_id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<Guid>("DestinationSiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("destination_site_id");
+
+                    b.Property<Guid>("DestinationStorageLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("destination_storage_location_id");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<DateTimeOffset?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at_utc");
+
+                    b.Property<DateTimeOffset?>("ShippedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("shipped_at_utc");
+
+                    b.Property<Guid>("SourceSiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_site_id");
+
+                    b.Property<Guid>("SourceStorageLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_storage_location_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TransferNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("transfer_number");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DestinationStorageLocationId");
+
+                    b.HasIndex("SourceStorageLocationId");
+
+                    b.HasIndex("TransferNumber")
+                        .IsUnique();
+
+                    b.HasIndex("DestinationSiteId", "Status");
+
+                    b.HasIndex("SourceSiteId", "Status");
+
+                    b.ToTable("transfer_orders", (string)null);
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Transfers.TransferOrderLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid>("ProductBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_batch_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<decimal>("ReceivedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("received_quantity");
+
+                    b.Property<decimal>("RequestedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("requested_quantity");
+
+                    b.Property<decimal>("ShippedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("shipped_quantity");
+
+                    b.Property<Guid>("TransferOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transfer_order_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductBatchId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("TransferOrderId");
+
+                    b.ToTable("transfer_order_lines", (string)null);
+                });
+
             modelBuilder.Entity("PharmacyCentral.Infrastructure.Identity.UserAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1342,6 +1476,68 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.Navigation("Site");
                 });
 
+            modelBuilder.Entity("PharmacyCentral.Domain.Transfers.TransferOrder", b =>
+                {
+                    b.HasOne("PharmacyCentral.Domain.Sites.Site", "DestinationSite")
+                        .WithMany()
+                        .HasForeignKey("DestinationSiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.StorageLocations.StorageLocation", "DestinationStorageLocation")
+                        .WithMany()
+                        .HasForeignKey("DestinationStorageLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.Sites.Site", "SourceSite")
+                        .WithMany()
+                        .HasForeignKey("SourceSiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.StorageLocations.StorageLocation", "SourceStorageLocation")
+                        .WithMany()
+                        .HasForeignKey("SourceStorageLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DestinationSite");
+
+                    b.Navigation("DestinationStorageLocation");
+
+                    b.Navigation("SourceSite");
+
+                    b.Navigation("SourceStorageLocation");
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Transfers.TransferOrderLine", b =>
+                {
+                    b.HasOne("PharmacyCentral.Domain.Inventory.ProductBatch", "ProductBatch")
+                        .WithMany()
+                        .HasForeignKey("ProductBatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.Products.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.Transfers.TransferOrder", "TransferOrder")
+                        .WithMany("Lines")
+                        .HasForeignKey("TransferOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+
+                    b.Navigation("ProductBatch");
+
+                    b.Navigation("TransferOrder");
+                });
+
             modelBuilder.Entity("PharmacyCentral.Infrastructure.Identity.UserSiteScope", b =>
                 {
                     b.HasOne("PharmacyCentral.Domain.Sites.Site", "Site")
@@ -1381,6 +1577,11 @@ namespace PharmacyCentral.Infrastructure.Migrations
             modelBuilder.Entity("PharmacyCentral.Domain.Stocktakes.StocktakeSession", b =>
                 {
                     b.Navigation("CountSheets");
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Transfers.TransferOrder", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("PharmacyCentral.Infrastructure.Identity.UserAccount", b =>

@@ -2,9 +2,10 @@ using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
-using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Stocktakes;
+using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Suppliers;
+using PharmacyCentral.Domain.Transfers;
 
 namespace PharmacyCentral.Application.Abstractions.Persistence;
 
@@ -31,6 +32,10 @@ public interface IApplicationDbContext
     IQueryable<CountSheetLine> CountSheetLines { get; }
 
     IQueryable<StockAdjustment> StockAdjustments { get; }
+
+    IQueryable<TransferOrder> TransferOrders { get; }
+
+    IQueryable<TransferOrderLine> TransferOrderLines { get; }
 
     IQueryable<Supplier> Suppliers { get; }
 
@@ -87,6 +92,10 @@ public interface IApplicationDbContext
     Task<Supplier?> GetSupplierByIdAsync(Guid supplierId, CancellationToken cancellationToken = default);
 
     Task<bool> SupplierCodeExistsAsync(string code, Guid? excludedSupplierId = null, CancellationToken cancellationToken = default);
+
+    Task<List<TransferOrder>> ListTransfersAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken = default);
+
+    Task<TransferOrder?> GetTransferByIdAsync(Guid transferId, CancellationToken cancellationToken = default);
 
     Task AddAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default)
         where TEntity : class;

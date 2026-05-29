@@ -7,9 +7,10 @@ using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
-using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Stocktakes;
+using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Suppliers;
+using PharmacyCentral.Domain.Transfers;
 using PharmacyCentral.Infrastructure.Identity;
 
 namespace PharmacyCentral.Infrastructure.Persistence;
@@ -45,6 +46,10 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<CountSheetLine> CountSheetLines => Set<CountSheetLine>();
 
     public IQueryable<StockAdjustment> StockAdjustments => Set<StockAdjustment>();
+
+    public IQueryable<TransferOrder> TransferOrders => Set<TransferOrder>();
+
+    public IQueryable<TransferOrderLine> TransferOrderLines => Set<TransferOrderLine>();
 
     public IQueryable<Supplier> Suppliers => Set<Supplier>();
 
@@ -312,6 +317,37 @@ public sealed class PharmacyCentralDbContext
         return await Suppliers.AnyAsync(supplier => supplier.Code == code && supplier.Id != excludedSupplierId, cancellationToken);
     }
 
+    async Task<List<TransferOrder>> IApplicationDbContext.ListTransfersAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<TransferOrder> query = TransferOrders
+            .Include(order => order.Lines)
+            .AsQueryable();
+
+        if (siteId is not null)
+        {
+            query = query.Where(order => order.SourceSiteId == siteId || order.DestinationSiteId == siteId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(order => order.Status == status);
+        }
+
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+
+        return await query
+            .OrderByDescending(order => order.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<TransferOrder?> IApplicationDbContext.GetTransferByIdAsync(Guid transferId, CancellationToken cancellationToken)
+    {
+        return await TransferOrders
+            .Include(order => order.Lines)
+            .SingleOrDefaultAsync(order => order.Id == transferId, cancellationToken);
+    }
+
     async Task IApplicationDbContext.AddAsync<TEntity>(TEntity entity, CancellationToken cancellationToken)
     {
         await AddAsync(entity, cancellationToken);
@@ -411,6 +447,11 @@ public sealed class PharmacyCentralDbContext
             ChangeTracker.Entries<StockAdjustment>(),
             adjustment => adjustment.CreatedAtUtc = now,
             adjustment => adjustment.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<TransferOrder>(),
+            order => order.CreatedAtUtc = now,
+            order => order.UpdatedAtUtc = now);
 
         ApplyTimestamps(
             ChangeTracker.Entries<UserAccount>(),
