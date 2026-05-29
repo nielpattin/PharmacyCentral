@@ -138,7 +138,19 @@ export class GoogleSheetsSync {
   }
 
   private async applyVisibleSheetStylesAsync(spreadsheetId: string, sheetId: number): Promise<void> {
+    // Clear all existing conditional format rules to prevent duplicates
+    const metadata = await this.getSpreadsheetMetadataAsync(spreadsheetId);
+    const existingRuleCount = metadata.sheets?.find(
+      (s: SheetMetadata) => s.properties.sheetId === sheetId,
+    )?.conditionalFormats?.length ?? 0;
+
+    const deleteRequests = [];
+    for (let index = existingRuleCount - 1; index >= 0; index--) {
+      deleteRequests.push({ deleteConditionalFormatRule: { sheetId, index } });
+    }
+
     const requests = [
+      ...deleteRequests,
       // Merge title row B1:N1
       {
         mergeCells: {
@@ -204,27 +216,6 @@ export class GoogleSheetsSync {
           },
         },
       },
-      // Conditional format: Epic rows
-      {
-        addConditionalFormatRule: {
-          rule: {
-            ranges: [
-              { sheetId, startRowIndex: 2, endRowIndex: 150, startColumnIndex: 1, endColumnIndex: 6 },
-              { sheetId, startRowIndex: 2, endRowIndex: 150, startColumnIndex: 7, endColumnIndex: 14 },
-            ],
-            booleanRule: {
-              condition: {
-                type: 'CUSTOM_FORMULA',
-                values: [{ userEnteredValue: '=$D4="Epic"' }],
-              },
-              format: {
-                backgroundColor: { red: 0.85882354, green: 0.92941177, blue: 1 },
-                textFormat: { bold: true, foregroundColor: { red: 0.039215688, green: 0.1882353, blue: 0.3764706 } },
-              },
-            },
-          },
-        },
-      },
       // Conditional format: Story rows
       {
         addConditionalFormatRule: {
@@ -236,11 +227,31 @@ export class GoogleSheetsSync {
             booleanRule: {
               condition: {
                 type: 'CUSTOM_FORMULA',
-                values: [{ userEnteredValue: '=$D4="Story"' }],
+                values: [{ userEnteredValue: '=$D3="Story"' }],
               },
               format: {
                 backgroundColor: { red: 0.9490196, green: 0.9764706, blue: 0.9098039 },
-                textFormat: { foregroundColor: { red: 0.1764706, green: 0.28627452, blue: 0.08627451 } },
+              },
+            },
+          },
+        },
+      },
+      // Conditional format: Epic rows
+      {
+        addConditionalFormatRule: {
+          rule: {
+            ranges: [
+              { sheetId, startRowIndex: 2, endRowIndex: 150, startColumnIndex: 1, endColumnIndex: 6 },
+              { sheetId, startRowIndex: 2, endRowIndex: 150, startColumnIndex: 7, endColumnIndex: 14 },
+            ],
+            booleanRule: {
+              condition: {
+                type: 'CUSTOM_FORMULA',
+                values: [{ userEnteredValue: '=$D3="Epic"' }],
+              },
+              format: {
+                backgroundColor: { red: 0.85882354, green: 0.92941177, blue: 1 },
+                textFormat: { bold: true, foregroundColor: { red: 0.039215688, green: 0.1882353, blue: 0.3764706 } },
               },
             },
           },
@@ -250,7 +261,7 @@ export class GoogleSheetsSync {
       {
         addConditionalFormatRule: {
           rule: {
-            ranges: [{ sheetId, startRowIndex: 2, endRowIndex: 150, startColumnIndex: 5, endColumnIndex: 6 }],
+            ranges: [{ sheetId, startRowIndex: 3, endRowIndex: 150, startColumnIndex: 6, endColumnIndex: 7 }],
             booleanRule: {
               condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: 'To Do' }] },
               format: {
@@ -265,7 +276,7 @@ export class GoogleSheetsSync {
       {
         addConditionalFormatRule: {
           rule: {
-            ranges: [{ sheetId, startRowIndex: 2, endRowIndex: 150, startColumnIndex: 5, endColumnIndex: 6 }],
+            ranges: [{ sheetId, startRowIndex: 3, endRowIndex: 150, startColumnIndex: 6, endColumnIndex: 7 }],
             booleanRule: {
               condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: 'In Progress' }] },
               format: {
@@ -280,7 +291,7 @@ export class GoogleSheetsSync {
       {
         addConditionalFormatRule: {
           rule: {
-            ranges: [{ sheetId, startRowIndex: 2, endRowIndex: 150, startColumnIndex: 5, endColumnIndex: 6 }],
+            ranges: [{ sheetId, startRowIndex: 3, endRowIndex: 150, startColumnIndex: 6, endColumnIndex: 7 }],
             booleanRule: {
               condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: 'Done' }] },
               format: {
@@ -498,6 +509,24 @@ interface SpreadsheetMetadata {
 
 interface SheetMetadata {
   properties: SheetProperties;
+  conditionalFormats?: Array<{
+    ranges?: Array<{
+      startRowIndex?: number;
+      endRowIndex?: number;
+      startColumnIndex?: number;
+      endColumnIndex?: number;
+    }>;
+    booleanRule?: {
+      condition?: {
+        type?: string;
+        values?: Array<{ userEnteredValue?: string }>;
+      };
+      format?: {
+        backgroundColor?: { red?: number; green?: number; blue?: number };
+        textFormat?: { bold?: boolean; foregroundColor?: { red?: number; green?: number; blue?: number } };
+      };
+    };
+  }>;
 }
 
 interface SheetProperties {
