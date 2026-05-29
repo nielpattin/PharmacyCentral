@@ -149,6 +149,17 @@ public sealed class PharmacyCentralDbContext
             .ToListAsync(cancellationToken);
     }
 
+    async Task<List<InventoryBalance>> IApplicationDbContext.ListBalancesForFefoAsync(Guid productId, Guid siteId, CancellationToken cancellationToken)
+    {
+        return await InventoryBalances
+            .Include(balance => balance.ProductBatch)
+            .Where(balance => balance.ProductBatch.ProductId == productId && balance.SiteId == siteId && balance.QuantityOnHand > 0)
+            .OrderBy(balance => balance.ProductBatch.ExpiryDate)
+            .ThenBy(balance => balance.ProductBatch.BatchNumber)
+            .ThenBy(balance => balance.StorageLocationId)
+            .ToListAsync(cancellationToken);
+    }
+
     async Task<List<StockLedgerEntry>> IApplicationDbContext.ListStockLedgerEntriesAsync(Guid? productId, Guid? productBatchId, Guid? siteId, Guid? storageLocationId, int limit, CancellationToken cancellationToken)
     {
         IQueryable<StockLedgerEntry> query = Set<StockLedgerEntry>()

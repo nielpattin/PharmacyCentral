@@ -30,4 +30,7 @@ internal static class InventoryErrors
 
     public static Error InsufficientStock(decimal balanceAfter) =>
         new("inventory.insufficient_stock", $"Stock movement would leave quantity on hand at {balanceAfter}.");
+
+    public static Error InsufficientStockForAllocation(decimal requested, decimal available) =>
+        new("inventory.insufficient_stock_for_allocation", $"Requested {requested} but only {available} available across all batches.");
 }

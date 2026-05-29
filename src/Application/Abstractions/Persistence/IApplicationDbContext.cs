@@ -55,6 +55,8 @@ public interface IApplicationDbContext
 
     Task<List<InventoryBalance>> ListInventoryBalancesAsync(Guid? productId = null, Guid? siteId = null, Guid? storageLocationId = null, bool includeZeroBalances = false, CancellationToken cancellationToken = default);
 
+    Task<List<InventoryBalance>> ListBalancesForFefoAsync(Guid productId, Guid siteId, CancellationToken cancellationToken = default);
+
     Task<List<StockLedgerEntry>> ListStockLedgerEntriesAsync(Guid? productId = null, Guid? productBatchId = null, Guid? siteId = null, Guid? storageLocationId = null, int limit = 100, CancellationToken cancellationToken = default);
 
     Task<List<GoodsReceipt>> ListGoodsReceiptsAsync(int limit = 100, CancellationToken cancellationToken = default);

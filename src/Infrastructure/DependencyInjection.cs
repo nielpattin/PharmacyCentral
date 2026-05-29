@@ -116,6 +116,7 @@ public static class DependencyInjection
         services.AddScoped<UpdateProductCommandHandler>();
         services.AddScoped<StockMovementRecorder>();
         services.AddScoped<RecordStockMovementCommandHandler>();
+        services.AddScoped<FefoAllocateCommandHandler>();
         services.AddScoped<ListInventoryBalancesQueryHandler>();
         services.AddScoped<ListStockLedgerEntriesQueryHandler>();
         services.AddScoped<CreateSupplierCommandHandler>();

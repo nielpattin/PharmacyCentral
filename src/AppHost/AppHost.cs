@@ -17,8 +17,10 @@ IResourceBuilder<ProjectResource> api = builder.AddProject<Projects.Web_Api>("ap
     .WaitFor(database);
 
 IResourceBuilder<Aspire.Hosting.JavaScript.ViteAppResource> frontend = builder.AddViteApp("frontend", "../Frontend")
+    .WithPnpm()
     .WithEndpoint("http", endpoint =>
     {
+        endpoint.Port = 5200;
         endpoint.TargetHost = "app.pharmacy.dev.localhost";
     })
     .WithReference(api)

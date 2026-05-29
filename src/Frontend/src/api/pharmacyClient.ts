@@ -73,6 +73,50 @@ export type SupplierDto = {
    updatedAtUtc: string;
 };
 
+export type GoodsReceiptLineDto = {
+   id: string;
+   productId: string;
+   productBatchId: string | null;
+   batchNumber: string;
+   expiryDate: string;
+   manufacturedDate: string | null;
+   manufacturer: string | null;
+   quantity: number;
+   notes: string | null;
+};
+
+export type GoodsReceiptDto = {
+   id: string;
+   supplierId: string;
+   siteId: string;
+   storageLocationId: string;
+   receiptNumber: string;
+   status: string;
+   receivedAtUtc: string;
+   notes: string | null;
+   createdAtUtc: string;
+   lines: GoodsReceiptLineDto[];
+};
+
+export type InventoryBalanceDto = {
+   id: string;
+   productId: string;
+   productSku: string;
+   productName: string;
+   productBatchId: string;
+   batchNumber: string;
+   expiryDate: string;
+   manufacturedDate: string | null;
+   supplierId: string | null;
+   manufacturer: string | null;
+   siteId: string;
+   storageLocationId: string;
+   quantityOnHand: number;
+   quantityReserved: number;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+};
+
 export type SiteUpsertRequest = {
    code: string;
    name: string;
@@ -114,6 +158,32 @@ export type SupplierUpsertRequest = {
    status: string;
    notes: string;
    isActive: boolean;
+};
+
+export type GoodsReceiptUpsertRequest = {
+   supplierId: string;
+   siteId: string;
+   storageLocationId: string;
+   receiptNumber: string;
+   notes: string | null;
+   lines: GoodsReceiptLineUpsertRequest[];
+};
+
+export type GoodsReceiptLineUpsertRequest = {
+   productId: string;
+   batchNumber: string;
+   expiryDate: string;
+   manufacturedDate: string | null;
+   manufacturer: string | null;
+   quantity: number;
+   notes: string | null;
+};
+
+export type InventoryBalanceFilters = {
+   productId?: string;
+   siteId?: string;
+   storageLocationId?: string;
+   includeZeroBalances?: boolean;
 };
 
 let csrfToken: string | null = null;
@@ -284,6 +354,39 @@ export async function loadProducts() {
 
 export async function loadSuppliers() {
    return await requestJson<SupplierDto[]>("/api/suppliers");
+}
+
+export async function loadGoodsReceipts() {
+   return await requestJson<GoodsReceiptDto[]>("/api/goods-receipts");
+}
+
+export async function createGoodsReceipt(request: GoodsReceiptUpsertRequest) {
+   return await requestJson<GoodsReceiptDto>("/api/goods-receipts", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function loadInventoryBalances(filters: InventoryBalanceFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.productId !== undefined && filters.productId !== "") {
+      query.set("productId", filters.productId);
+   }
+
+   if (filters.siteId !== undefined && filters.siteId !== "") {
+      query.set("siteId", filters.siteId);
+   }
+
+   if (filters.storageLocationId !== undefined && filters.storageLocationId !== "") {
+      query.set("storageLocationId", filters.storageLocationId);
+   }
+
+   if (filters.includeZeroBalances !== undefined) {
+      query.set("includeZeroBalances", String(filters.includeZeroBalances));
+   }
+
+   const path = query.size === 0 ? "/api/inventory/balances" : `/api/inventory/balances?${query}`;
+   return await requestJson<InventoryBalanceDto[]>(path);
 }
 
 export async function loadPharmacyData() {
