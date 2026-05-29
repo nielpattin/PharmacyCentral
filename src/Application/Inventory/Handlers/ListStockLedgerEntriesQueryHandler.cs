@@ -9,7 +9,7 @@ public sealed class ListStockLedgerEntriesQueryHandler(IApplicationDbContext dbC
 {
     public async Task<Result<IReadOnlyList<StockLedgerEntryDetails>>> HandleAsync(ListStockLedgerEntriesQuery query, CancellationToken cancellationToken)
     {
-        List<StockLedgerEntryDetails> entries = (await dbContext.ListStockLedgerEntriesAsync(
+        var entries = (await dbContext.ListStockLedgerEntriesAsync(
                 query.ProductId,
                 query.ProductBatchId,
                 query.SiteId,

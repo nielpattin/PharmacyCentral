@@ -9,7 +9,7 @@ public sealed class ListInventoryBalancesQueryHandler(IApplicationDbContext dbCo
 {
     public async Task<Result<IReadOnlyList<InventoryBalanceDetails>>> HandleAsync(ListInventoryBalancesQuery query, CancellationToken cancellationToken)
     {
-        List<InventoryBalanceDetails> balances = (await dbContext.ListInventoryBalancesAsync(
+        var balances = (await dbContext.ListInventoryBalancesAsync(
                 query.ProductId,
                 query.SiteId,
                 query.StorageLocationId,

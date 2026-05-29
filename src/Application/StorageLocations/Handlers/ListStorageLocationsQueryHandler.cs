@@ -9,7 +9,7 @@ public sealed class ListStorageLocationsQueryHandler(IApplicationDbContext dbCon
 {
     public async Task<Result<IReadOnlyList<StorageLocationDetails>>> HandleAsync(ListStorageLocationsQuery query, CancellationToken cancellationToken)
     {
-        List<StorageLocationDetails> storageLocations = (await dbContext.ListStorageLocationsAsync(cancellationToken))
+        var storageLocations = (await dbContext.ListStorageLocationsAsync(cancellationToken))
             .Select(StorageLocationDetails.From)
             .ToList();
 
