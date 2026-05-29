@@ -13,6 +13,7 @@ using PharmacyCentral.Application.Inventory.Handlers;
 using PharmacyCentral.Application.Products.Handlers;
 using PharmacyCentral.Application.Sites.Handlers;
 using PharmacyCentral.Application.StorageLocations.Handlers;
+using PharmacyCentral.Application.Stocktakes.Handlers;
 using PharmacyCentral.Application.Suppliers.Handlers;
 using PharmacyCentral.Infrastructure.Authorization;
 using PharmacyCentral.Infrastructure.Identity;
@@ -127,6 +128,15 @@ public static class DependencyInjection
         services.AddScoped<CreateGoodsReceiptCommandHandler>();
         services.AddScoped<GetGoodsReceiptByIdQueryHandler>();
         services.AddScoped<ListGoodsReceiptsQueryHandler>();
+        services.AddScoped<StockAdjustmentMovementService>();
+        services.AddScoped<CreateStocktakeSessionHandler>();
+        services.AddScoped<RecordCountHandler>();
+        services.AddScoped<PostStocktakeAdjustmentsHandler>();
+        services.AddScoped<CreateStockAdjustmentHandler>();
+        services.AddScoped<ApproveAdjustmentHandler>();
+        services.AddScoped<GetStocktakeSessionByIdQueryHandler>();
+        services.AddScoped<ListStocktakeSessionsQueryHandler>();
+        services.AddScoped<ListStockAdjustmentsQueryHandler>();
         services.AddHostedService<DatabaseSeederHostedService>();
 
         return services;

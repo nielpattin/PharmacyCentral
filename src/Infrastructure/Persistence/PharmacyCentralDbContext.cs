@@ -8,6 +8,7 @@ using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.StorageLocations;
+using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.Suppliers;
 using PharmacyCentral.Infrastructure.Identity;
 
@@ -38,6 +39,12 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
 
     public IQueryable<GoodsReceiptLine> GoodsReceiptLines => Set<GoodsReceiptLine>();
+
+    public IQueryable<StocktakeSession> StocktakeSessions => Set<StocktakeSession>();
+
+    public IQueryable<CountSheetLine> CountSheetLines => Set<CountSheetLine>();
+
+    public IQueryable<StockAdjustment> StockAdjustments => Set<StockAdjustment>();
 
     public IQueryable<Supplier> Suppliers => Set<Supplier>();
 
@@ -222,6 +229,79 @@ public sealed class PharmacyCentralDbContext
             .ToListAsync(cancellationToken);
     }
 
+    async Task<List<StocktakeSession>> IApplicationDbContext.ListStocktakeSessionsAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<StocktakeSession> query = StocktakeSessions
+            .Include(session => session.CountSheets)
+            .AsQueryable();
+
+        if (siteId is not null)
+        {
+            query = query.Where(session => session.SiteId == siteId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(session => session.Status == status);
+        }
+
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+
+        return await query
+            .OrderByDescending(session => session.StartedAtUtc)
+            .ThenByDescending(session => session.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<StocktakeSession?> IApplicationDbContext.GetStocktakeSessionByIdAsync(Guid stocktakeSessionId, CancellationToken cancellationToken)
+    {
+        return await StocktakeSessions
+            .Include(session => session.CountSheets)
+            .SingleOrDefaultAsync(session => session.Id == stocktakeSessionId, cancellationToken);
+    }
+
+    async Task<CountSheetLine?> IApplicationDbContext.GetCountSheetLineAsync(Guid stocktakeSessionId, Guid productBatchId, CancellationToken cancellationToken)
+    {
+        return await CountSheetLines
+            .SingleOrDefaultAsync(line => line.StocktakeSessionId == stocktakeSessionId && line.ProductBatchId == productBatchId, cancellationToken);
+    }
+
+    async Task<List<CountSheetLine>> IApplicationDbContext.ListCountSheetLinesWithVarianceAsync(Guid stocktakeSessionId, CancellationToken cancellationToken)
+    {
+        return await CountSheetLines
+            .Where(line => line.StocktakeSessionId == stocktakeSessionId && line.Variance != 0)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<List<StockAdjustment>> IApplicationDbContext.ListStockAdjustmentsAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<StockAdjustment> query = StockAdjustments.AsQueryable();
+
+        if (siteId is not null)
+        {
+            query = query.Where(adjustment => adjustment.SiteId == siteId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(adjustment => adjustment.Status == status);
+        }
+
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+
+        return await query
+            .OrderByDescending(adjustment => adjustment.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<StockAdjustment?> IApplicationDbContext.GetStockAdjustmentByIdAsync(Guid adjustmentId, CancellationToken cancellationToken)
+    {
+        return await StockAdjustments
+            .SingleOrDefaultAsync(adjustment => adjustment.Id == adjustmentId, cancellationToken);
+    }
+
     async Task<Supplier?> IApplicationDbContext.GetSupplierByIdAsync(Guid supplierId, CancellationToken cancellationToken)
     {
         return await Suppliers.SingleOrDefaultAsync(supplier => supplier.Id == supplierId, cancellationToken);
@@ -316,6 +396,21 @@ public sealed class PharmacyCentralDbContext
             ChangeTracker.Entries<GoodsReceiptLine>(),
             line => line.CreatedAtUtc = now,
             line => line.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<StocktakeSession>(),
+            session => session.CreatedAtUtc = now,
+            session => session.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<CountSheetLine>(),
+            line => line.CreatedAtUtc = now,
+            line => line.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<StockAdjustment>(),
+            adjustment => adjustment.CreatedAtUtc = now,
+            adjustment => adjustment.UpdatedAtUtc = now);
 
         ApplyTimestamps(
             ChangeTracker.Entries<UserAccount>(),
