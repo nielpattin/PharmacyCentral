@@ -1,7 +1,9 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.EntityFrameworkCore;
 using PharmacyCentral.Infrastructure;
+using PharmacyCentral.Infrastructure.Persistence;
 using Web.Api.Extensions;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -22,6 +24,13 @@ builder.Services.AddOpenApi();
 builder.Services.AddEndpoints(Assembly.GetExecutingAssembly());
 
 WebApplication app = builder.Build();
+
+// Auto-apply pending EF migrations.
+using (IServiceScope scope = app.Services.CreateScope())
+{
+    PharmacyCentralDbContext dbContext = scope.ServiceProvider.GetRequiredService<PharmacyCentralDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
 
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
