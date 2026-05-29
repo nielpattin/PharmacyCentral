@@ -854,7 +854,7 @@ tbody tr:nth-child(even):hover {
 .site-editor {
    position: static;
    height: 100%;
-   overflow: hidden;
+   overflow: auto;
 }
 
 .site-editor .section {
@@ -862,7 +862,7 @@ tbody tr:nth-child(even):hover {
    flex-direction: column;
    height: 100%;
    min-height: 0;
-   overflow: hidden;
+   overflow: auto;
 }
 
 .site-editor .entity-form {
