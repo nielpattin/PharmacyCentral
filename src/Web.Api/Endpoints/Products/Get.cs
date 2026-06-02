@@ -3,6 +3,7 @@ using PharmacyCentral.Application.Products.Models;
 using PharmacyCentral.Application.Products.Queries;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Products;
 
@@ -16,7 +17,7 @@ internal sealed class Get : IEndpoint
             return Results.Ok(result.Value);
         })
         .WithTags(Tags.Products)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Management);
     }
 }
 

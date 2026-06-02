@@ -3,6 +3,7 @@ using PharmacyCentral.Application.Dashboard.Models;
 using PharmacyCentral.Application.Dashboard.Queries;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Dashboard;
 
@@ -19,6 +20,6 @@ internal sealed class GetDashboardSummary : IEndpoint
             return Results.Ok(result.Value);
         })
         .WithTags(Tags.Dashboard)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.AnyRole);
     }
 }

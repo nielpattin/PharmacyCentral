@@ -5,6 +5,7 @@ using PharmacyCentral.Application.Prescriptions.Handlers;
 using PharmacyCentral.Application.Prescriptions.Models;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Prescriptions;
 
@@ -59,7 +60,7 @@ internal sealed class DispensePrescription : IEndpoint
             return result.IsFailure
                 ? Results.BadRequest(new { error = result.Error.Description, code = result.Error.Code })
                 : Results.Ok(result.Value);
-        }).WithTags(Tags.Prescriptions).RequireAuthorization();
+        }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.Store);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

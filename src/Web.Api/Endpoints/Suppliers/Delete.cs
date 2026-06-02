@@ -1,6 +1,7 @@
 using PharmacyCentral.Application.Suppliers.Handlers;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Suppliers;
 
@@ -19,7 +20,7 @@ internal sealed class Delete : IEndpoint
             return Results.NoContent();
         })
         .WithTags(Tags.Suppliers)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Management);
     }
 }
 

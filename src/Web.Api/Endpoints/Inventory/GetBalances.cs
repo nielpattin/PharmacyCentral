@@ -3,6 +3,7 @@ using PharmacyCentral.Application.Inventory.Models;
 using PharmacyCentral.Application.Inventory.Queries;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Inventory;
 
@@ -30,6 +31,6 @@ internal sealed class GetBalances : IEndpoint
             return Results.Ok(result.Value);
         })
         .WithTags(Tags.Inventory)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.AnyRole);
     }
 }

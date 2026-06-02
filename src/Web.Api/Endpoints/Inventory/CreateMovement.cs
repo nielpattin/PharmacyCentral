@@ -5,6 +5,7 @@ using PharmacyCentral.Application.Inventory.Handlers;
 using PharmacyCentral.Application.Inventory.Models;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Inventory;
 
@@ -95,7 +96,7 @@ internal sealed class CreateMovement : IEndpoint
             return Results.Created($"/api/inventory/ledger/{result.Value.Id}", result.Value);
         })
         .WithTags(Tags.Inventory)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.AnyRole);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

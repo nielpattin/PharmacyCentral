@@ -3,6 +3,7 @@ using PharmacyCentral.Application.Stocktakes.Models;
 using PharmacyCentral.Application.Stocktakes.Queries;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Stocktakes;
 
@@ -14,6 +15,6 @@ internal sealed class GetStocktakeSession : IEndpoint
         {
             Result<StocktakeSessionDetails> result = await handler.HandleAsync(new GetStocktakeSessionByIdQuery { StocktakeSessionId = id }, cancellationToken);
             return result.IsFailure ? Results.NotFound(new { error = result.Error.Description, code = result.Error.Code }) : Results.Ok(result.Value);
-        }).WithTags(Tags.Stocktakes).RequireAuthorization();
+        }).WithTags(Tags.Stocktakes).RequireAuthorization(Policies.Warehouse);
     }
 }

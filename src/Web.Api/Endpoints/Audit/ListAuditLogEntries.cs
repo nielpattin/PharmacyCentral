@@ -3,6 +3,7 @@ using PharmacyCentral.Application.Audit.Models;
 using PharmacyCentral.Application.Audit.Queries;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Audit;
 
@@ -25,6 +26,6 @@ internal sealed class ListAuditLogEntries : IEndpoint
             return Results.Ok(result.Value);
         })
         .WithTags(Tags.Audit)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.PlatformAdmin);
     }
 }

@@ -3,6 +3,7 @@ using PharmacyCentral.Application.Transfers.Models;
 using PharmacyCentral.Application.Transfers.Queries;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Transfers;
 
@@ -14,6 +15,6 @@ internal sealed class GetTransfer : IEndpoint
         {
             Result<TransferOrderDetails> result = await handler.HandleAsync(new GetTransferByIdQuery { TransferId = id }, cancellationToken);
             return result.IsFailure ? Results.NotFound(new { error = result.Error.Description, code = result.Error.Code }) : Results.Ok(result.Value);
-        }).WithTags(Tags.Transfers).RequireAuthorization();
+        }).WithTags(Tags.Transfers).RequireAuthorization(Policies.AnyRole);
     }
 }

@@ -4,6 +4,7 @@ using PharmacyCentral.Application.Sites.Models;
 using PharmacyCentral.Domain.Sites;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Sites;
 
@@ -67,7 +68,7 @@ internal sealed class Update : IEndpoint
             return Results.Ok(result.Value);
         })
         .WithTags(Tags.Sites)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Management);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

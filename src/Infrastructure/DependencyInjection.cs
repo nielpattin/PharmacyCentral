@@ -94,10 +94,18 @@ public static class DependencyInjection
         });
 
         services.AddAuthorizationBuilder()
+            .AddPolicy(Policies.AnyRole, policy =>
+                policy.RequireRole("Platform Admin", "Pharmacy Manager", "Pharmacist", "Warehouse Staff"))
+            .AddPolicy(Policies.Management, policy =>
+                policy.RequireRole("Platform Admin", "Pharmacy Manager"))
+            .AddPolicy(Policies.PlatformAdmin, policy =>
+                policy.RequireRole("Platform Admin"))
             .AddPolicy(Policies.SiteScopedAccess, policy =>
                 policy.Requirements.Add(new SiteScopeRequirement()))
-            .AddPolicy(Policies.PlatformAdmin, policy =>
-                policy.RequireRole("Platform Admin"));
+            .AddPolicy(Policies.Store, policy =>
+                policy.RequireRole("Platform Admin", "Pharmacy Manager", "Pharmacist"))
+            .AddPolicy(Policies.Warehouse, policy =>
+                policy.RequireRole("Platform Admin", "Warehouse Staff"));
 
         services.AddScoped<IAuthorizationHandler, SiteScopeAuthorizationHandler>();
         services.AddScoped<IIdentityService, IdentityService>();

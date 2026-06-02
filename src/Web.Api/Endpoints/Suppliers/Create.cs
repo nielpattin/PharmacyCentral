@@ -3,6 +3,7 @@ using PharmacyCentral.Application.Suppliers.Handlers;
 using PharmacyCentral.Application.Suppliers.Models;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Suppliers;
 
@@ -66,7 +67,7 @@ internal sealed class Create : IEndpoint
             return Results.CreatedAtRoute("GetSupplierById", new { id = result.Value.Id }, result.Value);
         })
         .WithTags(Tags.Suppliers)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Management);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

@@ -2,6 +2,7 @@ using PharmacyCentral.Application.GoodsReceipts.Handlers;
 using PharmacyCentral.Application.GoodsReceipts.Models;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.GoodsReceipts;
 
@@ -18,7 +19,7 @@ internal sealed class GetGoodsReceipts : IEndpoint
             return Results.Ok(receipts);
         })
         .WithTags("Goods Receipts")
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Warehouse);
 
         app.MapGet("goods-receipts/{goodsReceiptId:guid}", async (
             Guid goodsReceiptId,
@@ -34,6 +35,6 @@ internal sealed class GetGoodsReceipts : IEndpoint
             return Results.Ok(result.Value);
         })
         .WithTags("Goods Receipts")
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Warehouse);
     }
 }

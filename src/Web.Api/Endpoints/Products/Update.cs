@@ -3,6 +3,7 @@ using PharmacyCentral.Application.Products.Handlers;
 using PharmacyCentral.Application.Products.Models;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Products;
 
@@ -64,7 +65,7 @@ internal sealed class Update : IEndpoint
             return Results.Ok(result.Value);
         })
         .WithTags(Tags.Products)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Management);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

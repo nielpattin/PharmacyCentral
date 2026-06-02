@@ -3,6 +3,7 @@ using PharmacyCentral.Application.Prescriptions.Models;
 using PharmacyCentral.Application.Prescriptions.Queries;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Prescriptions;
 
@@ -20,6 +21,6 @@ internal sealed class GetPrescription : IEndpoint
             return result.IsFailure
                 ? Results.NotFound(new { error = result.Error.Description, code = result.Error.Code })
                 : Results.Ok(result.Value);
-        }).WithTags(Tags.Prescriptions).RequireAuthorization();
+        }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.Store);
     }
 }

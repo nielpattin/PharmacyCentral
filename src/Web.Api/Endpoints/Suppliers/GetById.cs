@@ -3,6 +3,7 @@ using PharmacyCentral.Application.Suppliers.Models;
 using PharmacyCentral.Application.Suppliers.Queries;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Suppliers;
 
@@ -22,7 +23,7 @@ internal sealed class GetById : IEndpoint
         })
         .WithName("GetSupplierById")
         .WithTags(Tags.Suppliers)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Management);
     }
 }
 

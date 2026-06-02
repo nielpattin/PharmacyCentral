@@ -2,6 +2,7 @@ using PharmacyCentral.Application.StorageLocations.Handlers;
 using PharmacyCentral.Application.StorageLocations.Models;
 using PharmacyCentral.Application.StorageLocations.Queries;
 using SharedKernel.Results;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.StorageLocations;
 
@@ -17,6 +18,6 @@ internal sealed class Get : IEndpoint
             return Results.Ok(result.Value);
         })
         .WithTags(Tags.StorageLocations)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Management);
     }
 }

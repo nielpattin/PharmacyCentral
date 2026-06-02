@@ -2,6 +2,7 @@ using PharmacyCentral.Application.Stocktakes.Handlers;
 using PharmacyCentral.Application.Stocktakes.Models;
 using PharmacyCentral.Application.Stocktakes.Queries;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Stocktakes;
 
@@ -13,6 +14,6 @@ internal sealed class ListStocktakeSessions : IEndpoint
         {
             IReadOnlyList<StocktakeSessionDetails> sessions = await handler.HandleAsync(new ListStocktakeSessionsQuery { SiteId = siteId, Status = status, Limit = limit ?? 100 }, cancellationToken);
             return Results.Ok(sessions);
-        }).WithTags(Tags.Stocktakes).RequireAuthorization();
+        }).WithTags(Tags.Stocktakes).RequireAuthorization(Policies.Warehouse);
     }
 }

@@ -5,6 +5,7 @@ using PharmacyCentral.Application.GoodsReceipts.Handlers;
 using PharmacyCentral.Application.GoodsReceipts.Models;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.GoodsReceipts;
 
@@ -94,7 +95,7 @@ internal sealed class CreateGoodsReceipt : IEndpoint
             return Results.Created($"/api/goods-receipts/{result.Value.Id}", result.Value);
         })
         .WithTags("Goods Receipts")
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Warehouse);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

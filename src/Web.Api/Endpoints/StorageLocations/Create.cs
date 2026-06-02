@@ -3,6 +3,7 @@ using PharmacyCentral.Application.StorageLocations.Handlers;
 using PharmacyCentral.Application.StorageLocations.Models;
 using PharmacyCentral.Domain.StorageLocations;
 using SharedKernel.Results;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.StorageLocations;
 
@@ -65,7 +66,7 @@ internal sealed class Create : IEndpoint
             return Results.CreatedAtRoute("GetStorageLocationById", new { id = result.Value.Id }, result.Value);
         })
         .WithTags(Tags.StorageLocations)
-        .RequireAuthorization();
+        .RequireAuthorization(Policies.Management);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

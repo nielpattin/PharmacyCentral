@@ -5,6 +5,7 @@ using PharmacyCentral.Application.Stocktakes.Handlers;
 using PharmacyCentral.Application.Stocktakes.Models;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Stocktakes;
 
@@ -59,7 +60,7 @@ internal sealed class CreateStockAdjustment : IEndpoint
             return result.IsFailure
                 ? Results.BadRequest(new { error = result.Error.Description, code = result.Error.Code })
                 : Results.Created($"/api/stock-adjustments/{result.Value.Id}", result.Value);
-        }).WithTags(Tags.Stocktakes).RequireAuthorization();
+        }).WithTags(Tags.Stocktakes).RequireAuthorization(Policies.Warehouse);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

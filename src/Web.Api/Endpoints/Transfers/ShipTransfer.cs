@@ -5,6 +5,7 @@ using PharmacyCentral.Application.Transfers.Handlers;
 using PharmacyCentral.Application.Transfers.Models;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
+using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Transfers;
 
@@ -58,7 +59,7 @@ internal sealed class ShipTransfer : IEndpoint
             return result.IsFailure
                 ? Results.BadRequest(new { error = result.Error.Description, code = result.Error.Code })
                 : Results.Ok(result.Value);
-        }).WithTags(Tags.Transfers).RequireAuthorization();
+        }).WithTags(Tags.Transfers).RequireAuthorization(Policies.AnyRole);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)
