@@ -117,6 +117,47 @@ export type InventoryBalanceDto = {
    updatedAtUtc: string;
 };
 
+export type AuditLogEntryDto = {
+   id: string;
+   action: string;
+   entityType: string;
+   entityId: string | null;
+   userId: string | null;
+   siteId: string | null;
+   summary: string | null;
+   details: string | null;
+   occurredAtUtc: string;
+};
+
+export type DashboardActivityDto = {
+   id: string;
+   action: string;
+   entityType: string;
+   entityId: string | null;
+   userId: string | null;
+   siteId: string | null;
+   summary: string | null;
+   occurredAtUtc: string;
+};
+
+export type DashboardSummaryDto = {
+   totalSites: number;
+   activeSites: number;
+   totalStorageLocations: number;
+   activeStorageLocations: number;
+   totalProducts: number;
+   totalSuppliers: number;
+   totalQuantityOnHand: number;
+   totalQuantityReserved: number;
+   lowStockBatchCount: number;
+   expiringBatchCount: number;
+   pendingTransferCount: number;
+   openPrescriptionCount: number;
+   openStocktakeCount: number;
+   pendingAdjustmentCount: number;
+   recentActivity: DashboardActivityDto[];
+};
+
 export type SiteUpsertRequest = {
    code: string;
    name: string;
@@ -404,6 +445,18 @@ export type InventoryBalanceFilters = {
    includeZeroBalances?: boolean;
 };
 
+export type AuditLogFilters = {
+   userId?: string;
+   siteId?: string;
+   entityType?: string;
+   entityId?: string;
+   action?: string;
+   limit?: number;
+};
+
+export type DashboardSummaryFilters = {
+   siteId?: string;
+};
 
 let csrfToken: string | null = null;
 let csrfTokenPromise: Promise<string> | null = null;
@@ -583,6 +636,23 @@ function buildTransferQuery(filters: TransferFilters = {}) {
    return query.size === 0 ? "" : `?${query}`;
 }
 
+function buildAuditLogQuery(filters: AuditLogFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.userId !== undefined && filters.userId !== "") query.set("userId", filters.userId);
+   if (filters.siteId !== undefined && filters.siteId !== "") query.set("siteId", filters.siteId);
+   if (filters.entityType !== undefined && filters.entityType !== "") query.set("entityType", filters.entityType);
+   if (filters.entityId !== undefined && filters.entityId !== "") query.set("entityId", filters.entityId);
+   if (filters.action !== undefined && filters.action !== "") query.set("action", filters.action);
+   if (filters.limit !== undefined) query.set("limit", String(filters.limit));
+   return query.size === 0 ? "" : `?${query}`;
+}
+
+function buildDashboardSummaryQuery(filters: DashboardSummaryFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.siteId !== undefined && filters.siteId !== "") query.set("siteId", filters.siteId);
+   return query.size === 0 ? "" : `?${query}`;
+}
+
 export async function loadProducts() {
    return await requestJson<ProductDto[]>("/api/products");
 }
@@ -595,13 +665,20 @@ export async function loadGoodsReceipts() {
    return await requestJson<GoodsReceiptDto[]>("/api/goods-receipts");
 }
 
+export async function loadAuditLogs(filters: AuditLogFilters = {}) {
+   return await requestJson<AuditLogEntryDto[]>(`/api/audit/logs${buildAuditLogQuery(filters)}`);
+}
+
+export async function loadDashboardSummary(filters: DashboardSummaryFilters = {}) {
+   return await requestJson<DashboardSummaryDto>(`/api/dashboard/summary${buildDashboardSummaryQuery(filters)}`);
+}
+
 export async function createGoodsReceipt(request: GoodsReceiptUpsertRequest) {
    return await requestJson<GoodsReceiptDto>("/api/goods-receipts", {
       method: "POST",
       body: JSON.stringify(request),
    });
 }
-
 
 function buildPrescriptionQuery(filters: PrescriptionFilters = {}) {
    const query = new URLSearchParams();
@@ -620,11 +697,17 @@ export async function loadPrescription(id: string) {
 }
 
 export async function createPrescription(request: PrescriptionCreateRequest) {
-   return await requestJson<PrescriptionDetails>("/api/prescriptions", { method: "POST", body: JSON.stringify(request) });
+   return await requestJson<PrescriptionDetails>("/api/prescriptions", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
 }
 
 export async function dispensePrescription(id: string, request: PrescriptionDispenseRequest) {
-   return await requestJson<PrescriptionDetails>(`/api/prescriptions/${id}/dispense`, { method: "POST", body: JSON.stringify(request) });
+   return await requestJson<PrescriptionDetails>(`/api/prescriptions/${id}/dispense`, {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
 }
 
 export async function cancelPrescription(id: string) {
@@ -636,7 +719,10 @@ export async function loadStocktakeSessions(filters: StocktakeFilters = {}) {
 }
 
 export async function createStocktakeSession(request: StocktakeSessionCreateRequest) {
-   return await requestJson<StocktakeSessionDetails>("/api/stocktake-sessions", { method: "POST", body: JSON.stringify(request) });
+   return await requestJson<StocktakeSessionDetails>("/api/stocktake-sessions", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
 }
 
 export async function loadStocktakeSession(id: string) {
@@ -644,7 +730,10 @@ export async function loadStocktakeSession(id: string) {
 }
 
 export async function recordStocktakeCount(id: string, request: StocktakeCountRequest) {
-   return await requestJson<StocktakeSessionDetails>(`/api/stocktake-sessions/${id}/counts`, { method: "POST", body: JSON.stringify(request) });
+   return await requestJson<StocktakeSessionDetails>(`/api/stocktake-sessions/${id}/counts`, {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
 }
 
 export async function postStocktakeAdjustments(id: string) {
@@ -656,7 +745,10 @@ export async function loadStockAdjustments(filters: StocktakeFilters = {}) {
 }
 
 export async function createStockAdjustment(request: StockAdjustmentCreateRequest) {
-   return await requestJson<StockAdjustmentDetails>("/api/stock-adjustments", { method: "POST", body: JSON.stringify(request) });
+   return await requestJson<StockAdjustmentDetails>("/api/stock-adjustments", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
 }
 
 export async function loadTransfers(filters: TransferFilters = {}) {
@@ -676,11 +768,17 @@ export async function approveTransfer(id: string) {
 }
 
 export async function shipTransfer(id: string, request: TransferShipRequest) {
-   return await requestJson<TransferOrderDetails>(`/api/transfers/${id}/ship`, { method: "POST", body: JSON.stringify(request) });
+   return await requestJson<TransferOrderDetails>(`/api/transfers/${id}/ship`, {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
 }
 
 export async function receiveTransfer(id: string, request: TransferReceiveRequest) {
-   return await requestJson<TransferOrderDetails>(`/api/transfers/${id}/receive`, { method: "POST", body: JSON.stringify(request) });
+   return await requestJson<TransferOrderDetails>(`/api/transfers/${id}/receive`, {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
 }
 
 export async function cancelTransfer(id: string) {
@@ -688,7 +786,10 @@ export async function cancelTransfer(id: string) {
 }
 
 export async function approveStockAdjustment(id: string, approvalNotes?: string) {
-   return await requestJson<StockAdjustmentDetails>(`/api/stock-adjustments/${id}/approve`, { method: "POST", body: JSON.stringify({ approvalNotes: approvalNotes ?? null }) });
+   return await requestJson<StockAdjustmentDetails>(`/api/stock-adjustments/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ approvalNotes: approvalNotes ?? null }),
+   });
 }
 
 export async function loadInventoryBalances(filters: InventoryBalanceFilters = {}) {

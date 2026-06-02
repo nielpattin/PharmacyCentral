@@ -1,0 +1,318 @@
+import { useMemo, useState } from "react";
+import { AppShell } from "../components/layout/AppShell";
+import { Breadcrumbs } from "../components/layout/Breadcrumbs";
+import { PageHeader } from "../components/layout/PageHeader";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { EmptyState } from "../components/ui/EmptyState";
+import {
+   loadAuditLogs,
+   loadSites,
+   type AuditLogEntryDto,
+   type AuditLogFilters,
+   type SiteDto,
+} from "../api/pharmacyClient";
+import { AuditLogTable } from "../features/audit/AuditLogTable";
+import { useMountEffect } from "../hooks/useMountEffect";
+import { useT } from "../lib/i18n";
+
+const AUDIT_ACTIONS = [
+   "Created",
+   "Updated",
+   "Deleted",
+   "Posted",
+   "Approved",
+   "Shipped",
+   "Received",
+   "Dispensed",
+   "Cancelled",
+];
+const AUDIT_ENTITY_TYPES = [
+   "Site",
+   "StorageLocation",
+   "Product",
+   "Supplier",
+   "GoodsReceipt",
+   "TransferOrder",
+   "Prescription",
+   "StocktakeSession",
+   "StockAdjustment",
+   "StockLedgerEntry",
+];
+
+const defaultFilters = {
+   userId: "",
+   siteId: "",
+   entityType: "",
+   entityId: "",
+   action: "",
+   limit: 100,
+};
+
+type AuditLogFilterValues = typeof defaultFilters;
+
+function isUuidLike(value: string) {
+   return value === "" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function toAuditLogFilters(values: AuditLogFilterValues): AuditLogFilters {
+   return {
+      userId: values.userId.trim(),
+      siteId: values.siteId,
+      entityType: values.entityType,
+      entityId: values.entityId.trim(),
+      action: values.action,
+      limit: values.limit,
+   };
+}
+
+function auditActionTone(action: string) {
+   if (action === "Deleted" || action === "Cancelled") return "bad";
+   if (action === "Updated") return "warn";
+   return "ok";
+}
+
+function formatDetails(details: string | null) {
+   if (details === null || details.trim() === "") {
+      return "";
+   }
+
+   try {
+      return JSON.stringify(JSON.parse(details), null, 2);
+   } catch {
+      return details;
+   }
+}
+
+function shortId(id: string | null) {
+   return id === null ? "" : id.slice(0, 8);
+}
+
+export default function AuditPage() {
+   const t = useT();
+   const [logs, setLogs] = useState<AuditLogEntryDto[]>([]);
+   const [sites, setSites] = useState<SiteDto[]>([]);
+   const [filters, setFilters] = useState<AuditLogFilterValues>(defaultFilters);
+   const [selectedId, setSelectedId] = useState("");
+   const [isLoading, setIsLoading] = useState(true);
+   const [bannerError, setBannerError] = useState<string | null>(null);
+
+   const selectedLog = useMemo(() => logs.find((log) => log.id === selectedId) ?? null, [logs, selectedId]);
+   const details = formatDetails(selectedLog?.details ?? null);
+   const siteName = (siteId: string | null) =>
+      siteId === null ? t("audit.system") : (sites.find((site) => site.id === siteId)?.name ?? siteId);
+
+   useMountEffect(() => {
+      void refreshData(defaultFilters);
+   });
+
+   async function refreshData(nextFilters = filters) {
+      if (!isUuidLike(nextFilters.userId.trim()) || !isUuidLike(nextFilters.entityId.trim())) {
+         setBannerError(t("audit.invalidGuid"));
+         return;
+      }
+
+      setIsLoading(true);
+      setBannerError(null);
+      try {
+         const [logData, siteData] = await Promise.all([loadAuditLogs(toAuditLogFilters(nextFilters)), loadSites()]);
+         setLogs(logData);
+         setSites(siteData);
+         setSelectedId(logData.some((log) => log.id === selectedId) ? selectedId : (logData[0]?.id ?? ""));
+      } catch (error) {
+         setBannerError(error instanceof Error ? error.message : t("errors.loadAuditLogs"));
+      } finally {
+         setIsLoading(false);
+      }
+   }
+
+   function updateFilter<K extends keyof AuditLogFilterValues>(key: K, value: AuditLogFilterValues[K]) {
+      setFilters((current) => ({ ...current, [key]: value }));
+   }
+
+   function handleApplyFilters() {
+      void refreshData(filters);
+   }
+
+   function handleClearFilters() {
+      setFilters(defaultFilters);
+      void refreshData(defaultFilters);
+   }
+
+   return (
+      <AppShell
+         active="audit"
+         breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.audit") }]} />}
+      >
+         <div className="sites-page">
+            <PageHeader
+               title={t("audit.title")}
+               description={t("audit.description")}
+               actions={
+                  <div className="page-actions">
+                     <Button variant="secondary" onClick={() => void refreshData()}>
+                        {t("common.refresh")}
+                     </Button>
+                  </div>
+               }
+            />
+
+            {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
+
+            <div className="site-workbench audit-workbench">
+               <section className="card site-registry">
+                  <div className="section">
+                     <div className="section-header">
+                        <div>
+                           <h2 className="section-title">{t("audit.registry")}</h2>
+                           <p className="section-subtitle">{t("audit.registryDesc")}</p>
+                        </div>
+                        <Badge tone="role">
+                           {isLoading ? t("audit.loadingState") : `${logs.length} ${t("common.records")}`}
+                        </Badge>
+                     </div>
+
+                     <div className="audit-filter-grid">
+                        <select
+                           className="field-input"
+                           value={filters.siteId}
+                           onChange={(event) => updateFilter("siteId", event.target.value)}
+                        >
+                           <option value="">{t("audit.allSites")}</option>
+                           {sites.map((site) => (
+                              <option key={site.id} value={site.id}>
+                                 {site.name}
+                              </option>
+                           ))}
+                        </select>
+                        <select
+                           className="field-input"
+                           value={filters.action}
+                           onChange={(event) => updateFilter("action", event.target.value)}
+                        >
+                           <option value="">{t("audit.allActions")}</option>
+                           {AUDIT_ACTIONS.map((action) => (
+                              <option key={action} value={action}>
+                                 {t(`audit.action.${action}`)}
+                              </option>
+                           ))}
+                        </select>
+                        <select
+                           className="field-input"
+                           value={filters.entityType}
+                           onChange={(event) => updateFilter("entityType", event.target.value)}
+                        >
+                           <option value="">{t("audit.allEntityTypes")}</option>
+                           {AUDIT_ENTITY_TYPES.map((entityType) => (
+                              <option key={entityType} value={entityType}>
+                                 {t(`audit.entity.${entityType}`)}
+                              </option>
+                           ))}
+                        </select>
+                        <input
+                           className="field-input"
+                           value={filters.userId}
+                           placeholder={t("audit.userId")}
+                           onChange={(event) => updateFilter("userId", event.target.value)}
+                        />
+                        <input
+                           className="field-input"
+                           value={filters.entityId}
+                           placeholder={t("audit.entityId")}
+                           onChange={(event) => updateFilter("entityId", event.target.value)}
+                        />
+                        <select
+                           className="field-input"
+                           value={filters.limit}
+                           onChange={(event) => updateFilter("limit", Number(event.target.value))}
+                        >
+                           {[25, 50, 100, 250].map((limit) => (
+                              <option key={limit} value={limit}>
+                                 {limit}
+                              </option>
+                           ))}
+                        </select>
+                     </div>
+
+                     <div className="section-header-actions audit-filter-actions">
+                        <Button variant="primary" onClick={handleApplyFilters}>
+                           {t("audit.applyFilters")}
+                        </Button>
+                        <Button variant="secondary" onClick={handleClearFilters}>
+                           {t("audit.clearFilters")}
+                        </Button>
+                     </div>
+
+                     {isLoading ? (
+                        <EmptyState icon="…" title={t("audit.loading")} description={t("audit.fetching")} />
+                     ) : logs.length === 0 ? (
+                        <EmptyState icon="0" title={t("audit.emptyTitle")} description={t("audit.emptyDesc")} />
+                     ) : (
+                        <AuditLogTable rows={logs} selectedId={selectedId} sites={sites} onSelect={setSelectedId} />
+                     )}
+                  </div>
+               </section>
+
+               <aside className="card site-editor">
+                  <div className="section">
+                     <div className="section-header">
+                        <div>
+                           <h2 className="section-title">{t("audit.logDetails")}</h2>
+                           <p className="section-subtitle">{t("audit.logDetailsDesc")}</p>
+                        </div>
+                     </div>
+
+                     {selectedLog === null ? (
+                        <EmptyState icon="0" title={t("audit.emptyTitle")} description={t("audit.emptyDesc")} />
+                     ) : (
+                        <div className="entity-form audit-detail-grid">
+                           <div className="section-header">
+                              <div>
+                                 <h3 className="section-title">{selectedLog.summary ?? t("common.noData")}</h3>
+                                 <p className="section-subtitle">
+                                    {new Date(selectedLog.occurredAtUtc).toLocaleString()}
+                                 </p>
+                              </div>
+                              <Badge tone={auditActionTone(selectedLog.action)}>
+                                 {t(`audit.action.${selectedLog.action}`)}
+                              </Badge>
+                           </div>
+                           <dl className="audit-detail-list">
+                              <div>
+                                 <dt>{t("audit.entityType")}</dt>
+                                 <dd>{t(`audit.entity.${selectedLog.entityType}`)}</dd>
+                              </div>
+                              <div>
+                                 <dt>{t("audit.entityId")}</dt>
+                                 <dd title={selectedLog.entityId ?? undefined}>
+                                    {selectedLog.entityId ?? t("common.noData")}
+                                 </dd>
+                              </div>
+                              <div>
+                                 <dt>{t("audit.site")}</dt>
+                                 <dd>{siteName(selectedLog.siteId)}</dd>
+                              </div>
+                              <div>
+                                 <dt>{t("audit.userId")}</dt>
+                                 <dd title={selectedLog.userId ?? undefined}>
+                                    {selectedLog.userId === null ? t("audit.system") : shortId(selectedLog.userId)}
+                                 </dd>
+                              </div>
+                           </dl>
+                           <div>
+                              <h3 className="section-title">{t("audit.details")}</h3>
+                              {details === "" ? (
+                                 <p className="section-subtitle">{t("common.noData")}</p>
+                              ) : (
+                                 <pre className="audit-details-pre">{details}</pre>
+                              )}
+                           </div>
+                        </div>
+                     )}
+                  </div>
+               </aside>
+            </div>
+         </div>
+      </AppShell>
+   );
+}

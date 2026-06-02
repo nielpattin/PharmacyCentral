@@ -3,9 +3,17 @@ import { Breadcrumbs } from "./components/layout/Breadcrumbs";
 import { useMountEffect } from "./hooks/useMountEffect";
 import { useT } from "./lib/i18n";
 import { navigate, usePathname } from "./lib/router";
-import { getPostLoginRedirectPath, initializeAuth, isProtectedPath, useAuth, useAuthLoading, type AuthUser } from "./lib/auth";
+import {
+   getPostLoginRedirectPath,
+   initializeAuth,
+   isProtectedPath,
+   useAuth,
+   useAuthLoading,
+   type AuthUser,
+} from "./lib/auth";
 import { canAccessPath } from "./lib/access";
 import type { SidebarActiveKey } from "./lib/sidebar";
+import AuditPage from "./pages/AuditPage";
 import DashboardPage from "./pages/DashboardPage";
 import StocktakePage from "./pages/StocktakePage";
 import TransferPage from "./pages/TransferPage";
@@ -30,7 +38,6 @@ const PLACEHOLDER_ROUTES: Array<{
    { path: "/dashboard/prescriptions", active: "prescriptions", titleKey: "nav.prescription" },
    { path: "/dashboard/returns", active: "returns", titleKey: "nav.returns" },
    { path: "/dashboard/reporting", active: "reporting", titleKey: "nav.reporting" },
-   { path: "/dashboard/audit", active: "audit", titleKey: "nav.audit" },
 ];
 
 const STORAGE_LOCATIONS_PATH = /^\/dashboard\/sites\/([^/]+)\/storage-locations$/;
@@ -152,6 +159,9 @@ export default function App() {
 
       case "/dashboard/inventory":
          page = <InventoryPage />;
+         break;
+      case "/dashboard/audit":
+         page = <AuditPage />;
          break;
       default: {
          const storageLocationMatch = routePathname.match(STORAGE_LOCATIONS_PATH);
