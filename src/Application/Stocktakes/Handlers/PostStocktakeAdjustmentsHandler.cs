@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Inventory.Commands;
 using PharmacyCentral.Application.Inventory.Handlers;
 using PharmacyCentral.Application.Stocktakes.Commands;
@@ -11,7 +12,8 @@ namespace PharmacyCentral.Application.Stocktakes.Handlers;
 
 public sealed class PostStocktakeAdjustmentsHandler(
     IApplicationDbContext dbContext,
-    StockMovementRecorder stockMovementRecorder)
+    StockMovementRecorder stockMovementRecorder,
+    AuditLogService auditLogService)
 {
     public async Task<Result<IReadOnlyList<StockAdjustmentDetails>>> HandleAsync(
         PostStocktakeAdjustmentsCommand command,
@@ -90,6 +92,7 @@ public sealed class PostStocktakeAdjustmentsHandler(
 
         session.Status = StocktakeStatus.Completed;
         session.CompletedAtUtc = DateTimeOffset.UtcNow;
+        await auditLogService.RecordAsync(AuditActions.Posted, AuditEntityTypes.StocktakeSession, session.Id, command.ApprovedByUserId, session.SiteId, "Posted stocktake adjustments", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return details;

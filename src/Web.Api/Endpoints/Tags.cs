@@ -4,6 +4,10 @@ public static class Tags
 {
     public const string Auth = "Auth";
 
+    public const string Audit = "Audit";
+
+    public const string Dashboard = "Dashboard";
+
     public const string Sites = "Sites";
 
     public const string StorageLocations = "StorageLocations";

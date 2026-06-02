@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.GoodsReceipts.Commands;
 using PharmacyCentral.Application.GoodsReceipts.Models;
 using PharmacyCentral.Application.Inventory.Commands;
@@ -11,7 +12,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.GoodsReceipts.Handlers;
 
-public sealed class CreateGoodsReceiptCommandHandler(IApplicationDbContext dbContext, StockMovementRecorder stockMovementRecorder)
+public sealed class CreateGoodsReceiptCommandHandler(IApplicationDbContext dbContext, StockMovementRecorder stockMovementRecorder, AuditLogService auditLogService)
 {
     public async Task<Result<GoodsReceiptDetails>> HandleAsync(CreateGoodsReceiptCommand command, CancellationToken cancellationToken)
     {
@@ -120,6 +121,7 @@ public sealed class CreateGoodsReceiptCommandHandler(IApplicationDbContext dbCon
             line.ProductBatch = movementResult.Value.ProductBatch;
         }
 
+        await auditLogService.RecordAsync(AuditActions.Posted, AuditEntityTypes.GoodsReceipt, receipt.Id, command.CreatedByUserId, receipt.SiteId, $"Posted goods receipt {receipt.ReceiptNumber}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return GoodsReceiptDetails.From(receipt);

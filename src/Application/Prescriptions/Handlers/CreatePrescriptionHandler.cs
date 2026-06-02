@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Inventory;
 using PharmacyCentral.Application.Prescriptions.Commands;
 using PharmacyCentral.Application.Prescriptions.Models;
@@ -9,7 +10,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Prescriptions.Handlers;
 
-public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext)
+public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<PrescriptionDetails>> HandleAsync(CreatePrescriptionCommand command, CancellationToken cancellationToken)
     {
@@ -77,6 +78,7 @@ public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext)
         }
 
         await dbContext.AddAsync(prescription, cancellationToken);
+        await auditLogService.RecordAsync(AuditActions.Created, AuditEntityTypes.Prescription, prescription.Id, prescription.CreatedByUserId, prescription.SiteId, $"Created prescription {prescription.PrescriptionNumber}", cancellationToken: cancellationToken);
 
         for (int attempt = 1; attempt <= 3; attempt++)
         {

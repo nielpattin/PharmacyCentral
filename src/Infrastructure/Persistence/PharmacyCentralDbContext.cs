@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit.Models;
+using PharmacyCentral.Application.Dashboard.Models;
+using PharmacyCentral.Domain.Audit;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Prescriptions;
@@ -11,6 +14,9 @@ using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Suppliers;
+using PharmacyCentral.Application.Stocktakes;
+using PharmacyCentral.Application.Transfers;
+using PharmacyCentral.Application.Prescriptions;
 using PharmacyCentral.Domain.Transfers;
 using PharmacyCentral.Infrastructure.Identity;
 
@@ -25,6 +31,8 @@ public sealed class PharmacyCentralDbContext
     }
 
     public DbSet<UserSiteScope> UserSiteScopes => Set<UserSiteScope>();
+
+    public IQueryable<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
 
     public IQueryable<Site> Sites => Set<Site>();
 
@@ -389,6 +397,89 @@ public sealed class PharmacyCentralDbContext
         return await Prescriptions.CountAsync(prescription => prescription.PrescriptionNumber.StartsWith(prefix), cancellationToken);
     }
 
+    async Task<List<AuditLogEntry>> IApplicationDbContext.ListAuditLogEntriesAsync(Guid? userId, Guid? siteId, string? entityType, Guid? entityId, string? action, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<AuditLogEntry> query = AuditLogEntries.AsQueryable();
+
+        if (userId is not null)
+        {
+            query = query.Where(entry => entry.UserId == userId);
+        }
+
+        if (siteId is not null)
+        {
+            query = query.Where(entry => entry.SiteId == siteId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(entityType))
+        {
+            query = query.Where(entry => entry.EntityType == entityType);
+        }
+
+        if (entityId is not null)
+        {
+            query = query.Where(entry => entry.EntityId == entityId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(action))
+        {
+            query = query.Where(entry => entry.Action == action);
+        }
+
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+
+        return await query
+            .OrderByDescending(entry => entry.OccurredAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<DashboardSummaryDetails> IApplicationDbContext.GetDashboardSummaryAsync(Guid? siteId, CancellationToken cancellationToken)
+    {
+        DateOnly expiryCutoff = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(30));
+
+        IQueryable<StorageLocation> storageLocations = StorageLocations;
+        IQueryable<InventoryBalance> inventoryBalances = InventoryBalances.Include(balance => balance.ProductBatch);
+        IQueryable<TransferOrder> transfers = TransferOrders;
+        IQueryable<Prescription> prescriptions = Prescriptions;
+        IQueryable<StocktakeSession> stocktakes = StocktakeSessions;
+        IQueryable<StockAdjustment> adjustments = StockAdjustments;
+        IQueryable<AuditLogEntry> auditEntries = AuditLogEntries;
+
+        if (siteId is not null)
+        {
+            storageLocations = storageLocations.Where(location => location.SiteId == siteId);
+            inventoryBalances = inventoryBalances.Where(balance => balance.SiteId == siteId);
+            transfers = transfers.Where(order => order.SourceSiteId == siteId || order.DestinationSiteId == siteId);
+            prescriptions = prescriptions.Where(prescription => prescription.SiteId == siteId);
+            stocktakes = stocktakes.Where(session => session.SiteId == siteId);
+            adjustments = adjustments.Where(adjustment => adjustment.SiteId == siteId);
+            auditEntries = auditEntries.Where(entry => entry.SiteId == siteId);
+        }
+
+        List<AuditLogEntry> recentActivity = await auditEntries
+            .OrderByDescending(entry => entry.OccurredAtUtc)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+
+        return new DashboardSummaryDetails(
+            TotalSites: siteId is null ? await Sites.CountAsync(cancellationToken) : await Sites.CountAsync(site => site.Id == siteId, cancellationToken),
+            ActiveSites: siteId is null ? await Sites.CountAsync(site => site.IsActive, cancellationToken) : await Sites.CountAsync(site => site.Id == siteId && site.IsActive, cancellationToken),
+            TotalStorageLocations: await storageLocations.CountAsync(cancellationToken),
+            ActiveStorageLocations: await storageLocations.CountAsync(location => location.IsActive, cancellationToken),
+            TotalProducts: await Products.CountAsync(cancellationToken),
+            TotalSuppliers: await Suppliers.CountAsync(cancellationToken),
+            TotalQuantityOnHand: await inventoryBalances.SumAsync(balance => balance.QuantityOnHand, cancellationToken),
+            TotalQuantityReserved: await inventoryBalances.SumAsync(balance => balance.QuantityReserved, cancellationToken),
+            LowStockBatchCount: await inventoryBalances.CountAsync(balance => balance.QuantityOnHand > 0 && balance.QuantityOnHand - balance.QuantityReserved <= 10, cancellationToken),
+            ExpiringBatchCount: await inventoryBalances.CountAsync(balance => balance.QuantityOnHand > 0 && balance.ProductBatch.ExpiryDate <= expiryCutoff, cancellationToken),
+            PendingTransferCount: await transfers.CountAsync(order => order.Status == TransferStatus.PendingApproval || order.Status == TransferStatus.Approved || order.Status == TransferStatus.InTransit, cancellationToken),
+            OpenPrescriptionCount: await prescriptions.CountAsync(prescription => prescription.Status == PrescriptionStatus.Draft || prescription.Status == PrescriptionStatus.Pending || prescription.Status == PrescriptionStatus.PartiallyDispensed, cancellationToken),
+            OpenStocktakeCount: await stocktakes.CountAsync(session => session.Status == StocktakeStatus.Draft || session.Status == StocktakeStatus.InProgress, cancellationToken),
+            PendingAdjustmentCount: await adjustments.CountAsync(adjustment => adjustment.Status == AdjustmentStatus.Pending, cancellationToken),
+            RecentActivity: recentActivity.Select(entry => DashboardActivityDetails.From(AuditLogEntryDetails.From(entry))).ToList());
+    }
+
     async Task IApplicationDbContext.AddAsync<TEntity>(TEntity entity, CancellationToken cancellationToken)
     {
         await AddAsync(entity, cancellationToken);
@@ -456,6 +547,14 @@ public sealed class PharmacyCentralDbContext
             else if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
             {
                 throw new InvalidOperationException("Stock ledger entries are append-only.");
+            }
+        }
+
+        foreach (EntityEntry<AuditLogEntry> entry in ChangeTracker.Entries<AuditLogEntry>())
+        {
+            if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
+            {
+                throw new InvalidOperationException("Audit log entries are append-only.");
             }
         }
 

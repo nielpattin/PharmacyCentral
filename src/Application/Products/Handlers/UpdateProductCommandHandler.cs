@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Products.Commands;
 using PharmacyCentral.Application.Products.Models;
 using PharmacyCentral.Domain.Products;
@@ -6,7 +7,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Products.Handlers;
 
-public sealed class UpdateProductCommandHandler(IApplicationDbContext dbContext)
+public sealed class UpdateProductCommandHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<ProductDetails>> HandleAsync(Guid productId, UpdateProductCommand command, CancellationToken cancellationToken)
     {
@@ -32,6 +33,7 @@ public sealed class UpdateProductCommandHandler(IApplicationDbContext dbContext)
         product.Notes = NormalizeOptional(command.Notes);
         product.IsActive = command.IsActive ?? product.IsActive;
 
+        await auditLogService.RecordAsync(AuditActions.Updated, AuditEntityTypes.Product, product.Id, summary: $"Updated product {product.Sku}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return ProductDetails.From(product);

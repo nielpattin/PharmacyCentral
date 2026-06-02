@@ -1,10 +1,11 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Domain.Suppliers;
 using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Suppliers.Handlers;
 
-public sealed class DeleteSupplierCommandHandler(IApplicationDbContext dbContext)
+public sealed class DeleteSupplierCommandHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result> HandleAsync(Guid supplierId, CancellationToken cancellationToken)
     {
@@ -15,6 +16,7 @@ public sealed class DeleteSupplierCommandHandler(IApplicationDbContext dbContext
         }
 
         dbContext.Remove(supplier);
+        await auditLogService.RecordAsync(AuditActions.Deleted, AuditEntityTypes.Supplier, supplier.Id, summary: $"Deleted supplier {supplier.Code}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

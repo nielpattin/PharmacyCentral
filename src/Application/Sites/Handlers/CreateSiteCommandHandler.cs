@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Sites.Commands;
 using PharmacyCentral.Application.Sites.Models;
 using PharmacyCentral.Domain.Sites;
@@ -6,7 +7,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Sites.Handlers;
 
-public sealed class CreateSiteCommandHandler(IApplicationDbContext dbContext)
+public sealed class CreateSiteCommandHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<SiteDetails>> HandleAsync(CreateSiteCommand command, CancellationToken cancellationToken)
     {
@@ -30,6 +31,7 @@ public sealed class CreateSiteCommandHandler(IApplicationDbContext dbContext)
         };
 
         await dbContext.AddAsync(site, cancellationToken);
+        await auditLogService.RecordAsync(AuditActions.Created, AuditEntityTypes.Site, site.Id, summary: $"Created site {site.Code}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return SiteDetails.From(site);

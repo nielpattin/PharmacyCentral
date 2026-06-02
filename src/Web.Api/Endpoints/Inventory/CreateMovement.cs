@@ -1,3 +1,5 @@
+using PharmacyCentral.Application.Abstractions.Identity;
+using PharmacyCentral.Application.Auth.Models;
 using PharmacyCentral.Application.Inventory.Commands;
 using PharmacyCentral.Application.Inventory.Handlers;
 using PharmacyCentral.Application.Inventory.Models;
@@ -41,17 +43,22 @@ internal sealed class CreateMovement : IEndpoint
         public string? Reason { get; set; }
 
         public string? Notes { get; set; }
-
-        public Guid? CreatedByUserId { get; set; }
     }
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapPost("inventory/movements", async (
             Request request,
+            IIdentityService identityService,
             RecordStockMovementCommandHandler handler,
             CancellationToken cancellationToken) =>
         {
+            AuthUserDetails? currentUser = await identityService.GetCurrentUserAsync(cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
             Dictionary<string, string[]> validationErrors = Validate(request);
             if (validationErrors.Count != 0)
             {
@@ -76,7 +83,7 @@ internal sealed class CreateMovement : IEndpoint
                 ReferenceId = request.ReferenceId,
                 Reason = request.Reason,
                 Notes = request.Notes,
-                CreatedByUserId = request.CreatedByUserId
+                CreatedByUserId = currentUser.Id
             };
 
             Result<StockLedgerEntryDetails> result = await handler.HandleAsync(command, cancellationToken);

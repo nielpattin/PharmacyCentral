@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Stocktakes.Commands;
 using PharmacyCentral.Application.Stocktakes.Models;
 using PharmacyCentral.Domain.Inventory;
@@ -7,7 +8,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Stocktakes.Handlers;
 
-public sealed class RecordCountHandler(IApplicationDbContext dbContext)
+public sealed class RecordCountHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<StocktakeSessionDetails>> HandleAsync(RecordCountCommand command, CancellationToken cancellationToken)
     {
@@ -73,6 +74,7 @@ public sealed class RecordCountHandler(IApplicationDbContext dbContext)
             session.CompletedAtUtc = DateTimeOffset.UtcNow;
         }
 
+        await auditLogService.RecordAsync(AuditActions.Updated, AuditEntityTypes.StocktakeSession, session.Id, siteId: session.SiteId, summary: "Recorded stocktake count", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return StocktakeSessionDetails.From(session);
     }

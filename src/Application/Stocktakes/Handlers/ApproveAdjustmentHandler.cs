@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Stocktakes.Commands;
 using PharmacyCentral.Application.Stocktakes.Models;
 using PharmacyCentral.Domain.Stocktakes;
@@ -8,7 +9,8 @@ namespace PharmacyCentral.Application.Stocktakes.Handlers;
 
 public sealed class ApproveAdjustmentHandler(
     IApplicationDbContext dbContext,
-    StockAdjustmentMovementService movementService)
+    StockAdjustmentMovementService movementService,
+    AuditLogService auditLogService)
 {
     public async Task<Result<StockAdjustmentDetails>> HandleAsync(ApproveAdjustmentCommand command, CancellationToken cancellationToken)
     {
@@ -39,6 +41,7 @@ public sealed class ApproveAdjustmentHandler(
             return movementResult.Error;
         }
 
+        await auditLogService.RecordAsync(AuditActions.Approved, AuditEntityTypes.StockAdjustment, adjustment.Id, command.ApprovedByUserId, adjustment.SiteId, "Approved stock adjustment", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return StockAdjustmentDetails.From(adjustment);
     }

@@ -1,3 +1,5 @@
+using PharmacyCentral.Application.Dashboard.Models;
+using PharmacyCentral.Domain.Audit;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Prescriptions;
@@ -12,6 +14,8 @@ namespace PharmacyCentral.Application.Abstractions.Persistence;
 
 public interface IApplicationDbContext
 {
+    IQueryable<AuditLogEntry> AuditLogEntries { get; }
+
     IQueryable<Site> Sites { get; }
 
     IQueryable<StorageLocation> StorageLocations { get; }
@@ -107,6 +111,10 @@ public interface IApplicationDbContext
     Task<Prescription?> GetPrescriptionByIdAsync(Guid prescriptionId, CancellationToken cancellationToken = default);
 
     Task<int> CountPrescriptionsWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
+
+    Task<List<AuditLogEntry>> ListAuditLogEntriesAsync(Guid? userId = null, Guid? siteId = null, string? entityType = null, Guid? entityId = null, string? action = null, int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<DashboardSummaryDetails> GetDashboardSummaryAsync(Guid? siteId = null, CancellationToken cancellationToken = default);
 
     Task AddAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default)
         where TEntity : class;

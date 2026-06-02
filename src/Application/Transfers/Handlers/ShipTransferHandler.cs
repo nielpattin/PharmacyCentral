@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Inventory.Commands;
 using PharmacyCentral.Application.Inventory.Handlers;
 using PharmacyCentral.Application.Transfers.Commands;
@@ -8,7 +9,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Transfers.Handlers;
 
-public sealed class ShipTransferHandler(IApplicationDbContext dbContext, StockMovementRecorder movementRecorder)
+public sealed class ShipTransferHandler(IApplicationDbContext dbContext, StockMovementRecorder movementRecorder, AuditLogService auditLogService)
 {
     public async Task<Result<TransferOrderDetails>> HandleAsync(ShipTransferCommand command, CancellationToken cancellationToken)
     {
@@ -56,6 +57,7 @@ public sealed class ShipTransferHandler(IApplicationDbContext dbContext, StockMo
         order.Status = TransferStatus.InTransit;
         order.ShippedAtUtc = DateTimeOffset.UtcNow;
 
+        await auditLogService.RecordAsync(AuditActions.Shipped, AuditEntityTypes.TransferOrder, order.Id, command.ShippedByUserId, order.SourceSiteId, $"Shipped transfer {order.TransferNumber}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TransferOrderDetails.From(order);

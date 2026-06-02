@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Transfers.Commands;
 using PharmacyCentral.Application.Transfers.Models;
 using PharmacyCentral.Domain.Transfers;
@@ -6,7 +7,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Transfers.Handlers;
 
-public sealed class CancelTransferHandler(IApplicationDbContext dbContext)
+public sealed class CancelTransferHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<TransferOrderDetails>> HandleAsync(CancelTransferCommand command, CancellationToken cancellationToken)
     {
@@ -23,6 +24,7 @@ public sealed class CancelTransferHandler(IApplicationDbContext dbContext)
 
         order.Status = TransferStatus.Cancelled;
 
+        await auditLogService.RecordAsync(AuditActions.Cancelled, AuditEntityTypes.TransferOrder, order.Id, siteId: order.SourceSiteId, summary: $"Cancelled transfer {order.TransferNumber}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TransferOrderDetails.From(order);

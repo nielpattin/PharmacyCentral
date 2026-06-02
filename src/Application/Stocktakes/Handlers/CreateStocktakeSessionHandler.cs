@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Stocktakes.Commands;
 using PharmacyCentral.Application.Stocktakes.Models;
 using PharmacyCentral.Domain.Stocktakes;
@@ -7,7 +8,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Stocktakes.Handlers;
 
-public sealed class CreateStocktakeSessionHandler(IApplicationDbContext dbContext)
+public sealed class CreateStocktakeSessionHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<StocktakeSessionDetails>> HandleAsync(CreateStocktakeSessionCommand command, CancellationToken cancellationToken)
     {
@@ -41,6 +42,7 @@ public sealed class CreateStocktakeSessionHandler(IApplicationDbContext dbContex
         };
 
         await dbContext.AddAsync(session, cancellationToken);
+        await auditLogService.RecordAsync(AuditActions.Created, AuditEntityTypes.StocktakeSession, session.Id, session.CreatedByUserId, session.SiteId, "Created stocktake session", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return StocktakeSessionDetails.From(session);

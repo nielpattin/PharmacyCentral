@@ -1,3 +1,5 @@
+using PharmacyCentral.Application.Abstractions.Identity;
+using PharmacyCentral.Application.Auth.Models;
 using PharmacyCentral.Application.GoodsReceipts.Commands;
 using PharmacyCentral.Application.GoodsReceipts.Handlers;
 using PharmacyCentral.Application.GoodsReceipts.Models;
@@ -21,8 +23,6 @@ internal sealed class CreateGoodsReceipt : IEndpoint
         public DateTimeOffset? ReceivedAtUtc { get; set; }
 
         public string? Notes { get; set; }
-
-        public Guid? CreatedByUserId { get; set; }
 
         public List<LineRequest> Lines { get; set; } = [];
     }
@@ -48,9 +48,16 @@ internal sealed class CreateGoodsReceipt : IEndpoint
     {
         app.MapPost("goods-receipts", async (
             Request request,
+            IIdentityService identityService,
             CreateGoodsReceiptCommandHandler handler,
             CancellationToken cancellationToken) =>
         {
+            AuthUserDetails? currentUser = await identityService.GetCurrentUserAsync(cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
             Dictionary<string, string[]> validationErrors = Validate(request);
             if (validationErrors.Count != 0)
             {
@@ -65,7 +72,7 @@ internal sealed class CreateGoodsReceipt : IEndpoint
                 ReceiptNumber = request.ReceiptNumber,
                 ReceivedAtUtc = request.ReceivedAtUtc,
                 Notes = request.Notes,
-                CreatedByUserId = request.CreatedByUserId,
+                CreatedByUserId = currentUser.Id,
                 Lines = request.Lines.Select(line => new CreateGoodsReceiptLineCommand
                 {
                     ProductId = line.ProductId,

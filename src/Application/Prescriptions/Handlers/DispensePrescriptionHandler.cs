@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Inventory.Commands;
 using PharmacyCentral.Application.Inventory.Handlers;
 using PharmacyCentral.Application.Prescriptions.Commands;
@@ -8,7 +9,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Prescriptions.Handlers;
 
-public sealed class DispensePrescriptionHandler(IApplicationDbContext dbContext, StockMovementRecorder movementRecorder)
+public sealed class DispensePrescriptionHandler(IApplicationDbContext dbContext, StockMovementRecorder movementRecorder, AuditLogService auditLogService)
 {
     public async Task<Result<PrescriptionDetails>> HandleAsync(DispensePrescriptionCommand command, CancellationToken cancellationToken)
     {
@@ -85,6 +86,7 @@ public sealed class DispensePrescriptionHandler(IApplicationDbContext dbContext,
         prescription.DispensedByUserId = command.DispensedByUserId;
         prescription.DispensedAtUtc = DateTimeOffset.UtcNow;
 
+        await auditLogService.RecordAsync(AuditActions.Dispensed, AuditEntityTypes.Prescription, prescription.Id, command.DispensedByUserId, prescription.SiteId, $"Dispensed prescription {prescription.PrescriptionNumber}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return PrescriptionDetails.From(prescription);

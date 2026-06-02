@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Transfers.Commands;
 using PharmacyCentral.Application.Transfers.Models;
 using PharmacyCentral.Domain.Transfers;
@@ -6,7 +7,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Transfers.Handlers;
 
-public sealed class ApproveTransferHandler(IApplicationDbContext dbContext)
+public sealed class ApproveTransferHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<TransferOrderDetails>> HandleAsync(ApproveTransferCommand command, CancellationToken cancellationToken)
     {
@@ -30,6 +31,7 @@ public sealed class ApproveTransferHandler(IApplicationDbContext dbContext)
         order.ApprovedByUserId = command.ApprovedByUserId;
         order.ApprovedAtUtc = DateTimeOffset.UtcNow;
 
+        await auditLogService.RecordAsync(AuditActions.Approved, AuditEntityTypes.TransferOrder, order.Id, command.ApprovedByUserId, order.SourceSiteId, $"Approved transfer {order.TransferNumber}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TransferOrderDetails.From(order);

@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Prescriptions.Commands;
 using PharmacyCentral.Application.Prescriptions.Models;
 using PharmacyCentral.Domain.Prescriptions;
@@ -6,7 +7,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Prescriptions.Handlers;
 
-public sealed class CancelPrescriptionHandler(IApplicationDbContext dbContext)
+public sealed class CancelPrescriptionHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<PrescriptionDetails>> HandleAsync(CancelPrescriptionCommand command, CancellationToken cancellationToken)
     {
@@ -28,6 +29,7 @@ public sealed class CancelPrescriptionHandler(IApplicationDbContext dbContext)
 
         prescription.Status = PrescriptionStatus.Cancelled;
         prescription.CancelledByUserId = command.CancelledByUserId;
+        await auditLogService.RecordAsync(AuditActions.Cancelled, AuditEntityTypes.Prescription, prescription.Id, command.CancelledByUserId, prescription.SiteId, $"Cancelled prescription {prescription.PrescriptionNumber}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return PrescriptionDetails.From(prescription);

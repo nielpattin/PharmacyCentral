@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.StorageLocations.Commands;
 using PharmacyCentral.Application.StorageLocations.Models;
 using PharmacyCentral.Domain.StorageLocations;
@@ -6,7 +7,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.StorageLocations.Handlers;
 
-public sealed class UpdateStorageLocationCommandHandler(IApplicationDbContext dbContext)
+public sealed class UpdateStorageLocationCommandHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<StorageLocationDetails>> HandleAsync(Guid storageLocationId, UpdateStorageLocationCommand command, CancellationToken cancellationToken)
     {
@@ -37,6 +38,7 @@ public sealed class UpdateStorageLocationCommandHandler(IApplicationDbContext db
         storageLocation.Capacity = command.Capacity;
         storageLocation.IsActive = command.IsActive ?? storageLocation.IsActive;
 
+        await auditLogService.RecordAsync(AuditActions.Updated, AuditEntityTypes.StorageLocation, storageLocation.Id, siteId: storageLocation.SiteId, summary: $"Updated storage location {storageLocation.Code}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return StorageLocationDetails.From(storageLocation);

@@ -1,10 +1,11 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Domain.StorageLocations;
 using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.StorageLocations.Handlers;
 
-public sealed class DeleteStorageLocationCommandHandler(IApplicationDbContext dbContext)
+public sealed class DeleteStorageLocationCommandHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result> HandleAsync(Guid storageLocationId, CancellationToken cancellationToken)
     {
@@ -15,6 +16,7 @@ public sealed class DeleteStorageLocationCommandHandler(IApplicationDbContext db
         }
 
         dbContext.Remove(storageLocation);
+        await auditLogService.RecordAsync(AuditActions.Deleted, AuditEntityTypes.StorageLocation, storageLocation.Id, siteId: storageLocation.SiteId, summary: $"Deleted storage location {storageLocation.Code}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Suppliers.Commands;
 using PharmacyCentral.Application.Suppliers.Models;
 using PharmacyCentral.Domain.Suppliers;
@@ -6,7 +7,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Suppliers.Handlers;
 
-public sealed class CreateSupplierCommandHandler(IApplicationDbContext dbContext)
+public sealed class CreateSupplierCommandHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<SupplierDetails>> HandleAsync(CreateSupplierCommand command, CancellationToken cancellationToken)
     {
@@ -32,6 +33,7 @@ public sealed class CreateSupplierCommandHandler(IApplicationDbContext dbContext
         };
 
         await dbContext.AddAsync(supplier, cancellationToken);
+        await auditLogService.RecordAsync(AuditActions.Created, AuditEntityTypes.Supplier, supplier.Id, summary: $"Created supplier {supplier.Code}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return SupplierDetails.From(supplier);

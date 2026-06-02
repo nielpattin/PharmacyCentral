@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Inventory;
 using PharmacyCentral.Application.Transfers.Commands;
 using PharmacyCentral.Application.Transfers.Models;
@@ -8,7 +9,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Transfers.Handlers;
 
-public sealed class CreateTransferHandler(IApplicationDbContext dbContext)
+public sealed class CreateTransferHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
 {
     public async Task<Result<TransferOrderDetails>> HandleAsync(CreateTransferCommand command, CancellationToken cancellationToken)
     {
@@ -91,6 +92,7 @@ public sealed class CreateTransferHandler(IApplicationDbContext dbContext)
         }
 
         await dbContext.AddAsync(order, cancellationToken);
+        await auditLogService.RecordAsync(AuditActions.Created, AuditEntityTypes.TransferOrder, order.Id, order.CreatedByUserId, order.SourceSiteId, $"Created transfer {order.TransferNumber}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TransferOrderDetails.From(order);

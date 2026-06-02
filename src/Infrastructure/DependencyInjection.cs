@@ -7,7 +7,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Abstractions.Persistence;
+using PharmacyCentral.Application.Audit;
+using PharmacyCentral.Application.Audit.Handlers;
 using PharmacyCentral.Application.Auth.Handlers;
+using PharmacyCentral.Application.Dashboard.Handlers;
 using PharmacyCentral.Application.GoodsReceipts.Handlers;
 using PharmacyCentral.Application.Inventory.Handlers;
 using PharmacyCentral.Application.Prescriptions.Handlers;
@@ -100,6 +103,9 @@ public static class DependencyInjection
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddHttpContextAccessor();
 
+        services.AddScoped<AuditLogService>();
+        services.AddScoped<ListAuditLogEntriesQueryHandler>();
+        services.AddScoped<GetDashboardSummaryQueryHandler>();
         services.AddScoped<LoginHandler>();
         services.AddScoped<RegisterUserHandler>();
         services.AddScoped<CreateSiteCommandHandler>();
