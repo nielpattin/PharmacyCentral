@@ -15,6 +15,7 @@ import {
 import { AuditLogTable } from "../features/audit/AuditLogTable";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import { formatAuditSummary } from "../lib/auditDisplay";
 
 const AUDIT_ACTIONS = [
    "Created",
@@ -268,7 +269,9 @@ export default function AuditPage() {
                         <div className="entity-form audit-detail-grid">
                            <div className="section-header">
                               <div>
-                                 <h3 className="section-title">{selectedLog.summary ?? t("common.noData")}</h3>
+                                 <h3 className="section-title">
+                                    {formatAuditSummary(t, selectedLog.summary, selectedLog.entityId ?? t("common.noData"))}
+                                 </h3>
                                  <p className="section-subtitle">
                                     {new Date(selectedLog.occurredAtUtc).toLocaleString()}
                                  </p>

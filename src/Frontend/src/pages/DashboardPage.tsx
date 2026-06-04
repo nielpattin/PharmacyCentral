@@ -15,6 +15,7 @@ import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useAuth } from "../lib/auth";
 import { useT } from "../lib/i18n";
+import { formatAuditSummary } from "../lib/auditDisplay";
 
 function auditActionTone(action: string) {
    if (action === "Deleted" || action === "Cancelled") return "bad";
@@ -65,7 +66,7 @@ function RecentActivityList({ activity, sites }: { activity: DashboardActivityDt
                      <Badge tone={auditActionTone(entry.action)}>{t(`audit.action.${entry.action}`)}</Badge>
                      <h3>{t(`audit.entity.${entry.entityType}`)}</h3>
                   </div>
-                  <p>{entry.summary ?? entry.entityId ?? t("common.noData")}</p>
+                  <p>{formatAuditSummary(t, entry.summary, entry.entityId ?? t("common.noData"))}</p>
                   <span>{siteName(entry.siteId)}</span>
                </div>
                <time>{new Date(entry.occurredAtUtc).toLocaleString()}</time>

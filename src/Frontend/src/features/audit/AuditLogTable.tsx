@@ -1,6 +1,7 @@
 import { Badge } from "../../components/ui/Badge";
 import type { AuditLogEntryDto, SiteDto } from "../../api/pharmacyClient";
 import { useT } from "../../lib/i18n";
+import { formatAuditSummary } from "../../lib/auditDisplay";
 
 function auditActionTone(action: string) {
    if (action === "Deleted" || action === "Cancelled") return "bad";
@@ -59,7 +60,7 @@ export function AuditLogTable({ rows, selectedId = "", sites, onSelect }: AuditL
                            <Badge tone={auditActionTone(log.action)}>{t(`audit.action.${log.action}`)}</Badge>
                         </td>
                         <td>{t(`audit.entity.${log.entityType}`)}</td>
-                        <td>{log.summary ?? log.entityId ?? t("common.noData")}</td>
+                        <td>{formatAuditSummary(t, log.summary, log.entityId ?? t("common.noData"))}</td>
                         <td>{siteName(log.siteId)}</td>
                         <td title={log.userId ?? undefined}>
                            {log.userId === null ? t("audit.system") : shortId(log.userId)}

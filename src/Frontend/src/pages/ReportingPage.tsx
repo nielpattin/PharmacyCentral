@@ -19,6 +19,7 @@ import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import { formatAuditSummary } from "../lib/auditDisplay";
 
 type CountSummary = {
    label: string;
@@ -194,7 +195,7 @@ function RecentAuditList({ logs, sites }: { logs: AuditLogEntryDto[]; sites: Sit
                      <Badge tone={auditActionTone(entry.action)}>{t(`audit.action.${entry.action}`)}</Badge>
                      <h3>{t(`audit.entity.${entry.entityType}`)}</h3>
                   </div>
-                  <p>{entry.summary ?? entry.entityId ?? t("common.noData")}</p>
+                  <p>{formatAuditSummary(t, entry.summary, entry.entityId ?? t("common.noData"))}</p>
                   <span>{siteName(entry.siteId)}</span>
                </div>
                <time>{new Date(entry.occurredAtUtc).toLocaleString()}</time>
