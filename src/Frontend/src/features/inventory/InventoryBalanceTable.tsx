@@ -6,9 +6,10 @@ export type InventoryBalanceTableProps = {
    rows: InventoryBalanceDto[];
    sites: SiteDto[];
    storageLocations: StorageLocationDto[];
+   onUseBalance?: (balance: InventoryBalanceDto) => void;
 };
 
-export function InventoryBalanceTable({ rows, sites, storageLocations }: InventoryBalanceTableProps) {
+export function InventoryBalanceTable({ rows, sites, storageLocations, onUseBalance }: InventoryBalanceTableProps) {
    const t = useT();
    const sortedRows = useMemo(
       () => [...rows].sort((left, right) => left.productSku.localeCompare(right.productSku) || left.expiryDate.localeCompare(right.expiryDate)),
@@ -36,6 +37,7 @@ export function InventoryBalanceTable({ rows, sites, storageLocations }: Invento
                   <th>{t("inventory.location")}</th>
                   <th>{t("inventory.quantityOnHand")}</th>
                   <th>{t("inventory.quantityReserved")}</th>
+                  {onUseBalance !== undefined ? <th>{t("common.actions")}</th> : null}
                </tr>
             </thead>
             <tbody>
@@ -49,6 +51,13 @@ export function InventoryBalanceTable({ rows, sites, storageLocations }: Invento
                      <td>{storageLocationName(balance.storageLocationId)}</td>
                      <td>{balance.quantityOnHand}</td>
                      <td>{balance.quantityReserved}</td>
+                     {onUseBalance !== undefined ? (
+                        <td>
+                           <button type="button" className="btn secondary btn-sm" onClick={() => onUseBalance(balance)}>
+                              {t("inventory.useForMovement")}
+                           </button>
+                        </td>
+                     ) : null}
                   </tr>
                ))}
             </tbody>

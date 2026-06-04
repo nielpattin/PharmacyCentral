@@ -500,6 +500,20 @@ export type ReturnCreateRequest = {
    notes: string | null;
 };
 
+export type ManualMovementCreateRequest = {
+   productId: string;
+   productBatchId: string;
+   siteId: string;
+   storageLocationId: string;
+   movementType: string;
+   quantityDelta: number;
+   occurredAtUtc: string | null;
+   referenceType: string | null;
+   referenceId: string | null;
+   reason: string | null;
+   notes: string | null;
+};
+
 let csrfToken: string | null = null;
 let csrfTokenPromise: Promise<string> | null = null;
 
@@ -836,6 +850,13 @@ export async function approveStockAdjustment(id: string, approvalNotes?: string)
 
 export async function createReturn(request: ReturnCreateRequest) {
    return await requestJson<StockLedgerEntryDto>("/api/returns", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function createInventoryMovement(request: ManualMovementCreateRequest) {
+   return await requestJson<StockLedgerEntryDto>("/api/inventory/movements", {
       method: "POST",
       body: JSON.stringify(request),
    });

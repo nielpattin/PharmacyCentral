@@ -1071,6 +1071,101 @@ tbody tr:nth-child(even):hover {
    margin-bottom: 0;
 }
 
+.inventory-page {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr);
+   gap: 14px;
+   align-content: start;
+   min-height: min-content;
+   padding-bottom: 20px;
+}
+
+.inventory-page .page-head {
+   margin-bottom: 0;
+}
+
+.inventory-operations-grid {
+   display: grid;
+   grid-template-columns: minmax(0, 0.95fr) minmax(420px, 1.25fr);
+   gap: 16px;
+   align-items: start;
+   min-width: 0;
+}
+
+.inventory-stock-context {
+   display: grid;
+   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+   gap: 10px;
+   margin-top: 12px;
+   padding: 12px;
+   border: 1px solid var(--line);
+   border-radius: 6px;
+   background: var(--surface-soft);
+}
+
+.inventory-stock-context span,
+.table-muted {
+   display: block;
+   margin: 0;
+   color: var(--muted);
+   font-size: 0.813rem;
+   line-height: 1.45;
+}
+
+.inventory-stock-context strong,
+.table-strong {
+   display: block;
+   margin-top: 4px;
+   color: var(--text);
+   font-size: 0.875rem;
+   font-weight: 800;
+}
+
+.inventory-movement-warning {
+   margin-top: 12px;
+   margin-bottom: 0;
+}
+
+.inventory-ledger-filters {
+   margin-bottom: 10px;
+}
+
+.inventory-ledger-actions {
+   margin-bottom: 10px;
+}
+
+.inventory-ledger-table {
+   min-width: 980px;
+   table-layout: fixed;
+}
+
+.inventory-ledger-table th:first-child,
+.inventory-ledger-table td:first-child {
+   width: 22%;
+}
+
+.inventory-ledger-table th:nth-child(2),
+.inventory-ledger-table td:nth-child(2) {
+   width: 20%;
+}
+
+.inventory-ledger-table th:nth-child(3),
+.inventory-ledger-table td:nth-child(3) {
+   width: 130px;
+}
+
+.inventory-ledger-table th:nth-child(4),
+.inventory-ledger-table td:nth-child(4),
+.inventory-ledger-table th:nth-child(5),
+.inventory-ledger-table td:nth-child(5) {
+   width: 120px;
+}
+
+.inventory-ledger-table th:nth-child(7),
+.inventory-ledger-table td:nth-child(7) {
+   width: 150px;
+}
+
 .returns-page {
    display: grid;
    grid-template-columns: minmax(0, 1fr);
@@ -1553,6 +1648,7 @@ tbody tr:nth-child(even):hover {
       align-items: start;
    }
 
+   .inventory-operations-grid,
    .reporting-source-content,
    .reporting-grid,
    .returns-grid {
