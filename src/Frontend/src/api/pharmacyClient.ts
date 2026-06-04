@@ -117,6 +117,28 @@ export type InventoryBalanceDto = {
    updatedAtUtc: string;
 };
 
+export type StockLedgerEntryDto = {
+   id: string;
+   productId: string;
+   productSku: string;
+   productName: string;
+   productBatchId: string;
+   batchNumber: string;
+   expiryDate: string;
+   siteId: string;
+   storageLocationId: string;
+   movementType: string;
+   quantityDelta: number;
+   balanceAfter: number;
+   occurredAtUtc: string;
+   referenceType: string | null;
+   referenceId: string | null;
+   reason: string | null;
+   notes: string | null;
+   createdByUserId: string | null;
+   createdAtUtc: string;
+};
+
 export type AuditLogEntryDto = {
    id: string;
    action: string;
@@ -445,6 +467,14 @@ export type InventoryBalanceFilters = {
    includeZeroBalances?: boolean;
 };
 
+export type StockLedgerFilters = {
+   productId?: string;
+   productBatchId?: string;
+   siteId?: string;
+   storageLocationId?: string;
+   limit?: number;
+};
+
 export type AuditLogFilters = {
    userId?: string;
    siteId?: string;
@@ -456,6 +486,18 @@ export type AuditLogFilters = {
 
 export type DashboardSummaryFilters = {
    siteId?: string;
+};
+
+export type ReturnCreateRequest = {
+   productId: string;
+   productBatchId: string;
+   siteId: string;
+   storageLocationId: string;
+   quantity: number;
+   reason: string;
+   destination: string | null;
+   occurredAtUtc: string | null;
+   notes: string | null;
 };
 
 let csrfToken: string | null = null;
@@ -790,6 +832,39 @@ export async function approveStockAdjustment(id: string, approvalNotes?: string)
       method: "POST",
       body: JSON.stringify({ approvalNotes: approvalNotes ?? null }),
    });
+}
+
+export async function createReturn(request: ReturnCreateRequest) {
+   return await requestJson<StockLedgerEntryDto>("/api/returns", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function loadStockLedgerEntries(filters: StockLedgerFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.productId !== undefined && filters.productId !== "") {
+      query.set("productId", filters.productId);
+   }
+
+   if (filters.productBatchId !== undefined && filters.productBatchId !== "") {
+      query.set("productBatchId", filters.productBatchId);
+   }
+
+   if (filters.siteId !== undefined && filters.siteId !== "") {
+      query.set("siteId", filters.siteId);
+   }
+
+   if (filters.storageLocationId !== undefined && filters.storageLocationId !== "") {
+      query.set("storageLocationId", filters.storageLocationId);
+   }
+
+   if (filters.limit !== undefined) {
+      query.set("limit", String(filters.limit));
+   }
+
+   const path = query.size === 0 ? "/api/inventory/ledger" : `/api/inventory/ledger?${query}`;
+   return await requestJson<StockLedgerEntryDto[]>(path);
 }
 
 export async function loadInventoryBalances(filters: InventoryBalanceFilters = {}) {

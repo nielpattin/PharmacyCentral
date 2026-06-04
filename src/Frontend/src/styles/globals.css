@@ -780,6 +780,11 @@ tbody tr:nth-child(even):hover {
    color: var(--danger);
 }
 
+.success-note {
+   background: var(--success-soft);
+   color: var(--success-text);
+}
+
 .empty {
    display: grid;
    place-items: center;
@@ -1064,6 +1069,94 @@ tbody tr:nth-child(even):hover {
 
 .reporting-count-row .module-head {
    margin-bottom: 0;
+}
+
+.returns-page {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr);
+   gap: 14px;
+   align-content: start;
+   min-height: min-content;
+   padding-bottom: 20px;
+}
+
+.returns-page .page-head {
+   margin-bottom: 0;
+}
+
+
+.returns-grid {
+   display: grid;
+   grid-template-columns: minmax(0, 1.1fr) minmax(340px, 460px);
+   gap: 16px;
+   align-items: start;
+   min-width: 0;
+}
+
+.returns-stock-context {
+   display: grid;
+   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+   gap: 10px;
+   margin-top: 12px;
+   padding: 12px;
+   border: 1px solid var(--line);
+   border-radius: 6px;
+   background: var(--surface-soft);
+}
+
+.returns-stock-context span,
+.returns-history-item span,
+.returns-history-item p {
+   display: block;
+   margin: 0;
+   color: var(--muted);
+   font-size: 0.813rem;
+   line-height: 1.45;
+}
+
+.returns-stock-context strong {
+   display: block;
+   margin-top: 4px;
+   color: var(--text);
+   font-size: 0.875rem;
+}
+
+.returns-history-list {
+   display: grid;
+   gap: 0;
+}
+
+.returns-history-item {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) auto;
+   gap: 16px;
+   padding: 12px 0;
+   border-top: 1px solid var(--line);
+}
+
+.returns-history-item:first-child {
+   border-top: 0;
+   padding-top: 0;
+}
+
+.returns-history-meta {
+   display: grid;
+   justify-items: end;
+   gap: 3px;
+   text-align: right;
+}
+
+.returns-history-meta strong {
+   font-size: 1rem;
+   font-weight: 800;
+   color: var(--text);
+}
+
+.returns-history-meta span,
+.returns-history-meta time {
+   color: var(--muted);
+   font-size: 0.813rem;
+   white-space: nowrap;
 }
 
 .audit-filter-grid {
@@ -1461,7 +1554,8 @@ tbody tr:nth-child(even):hover {
    }
 
    .reporting-source-content,
-   .reporting-grid {
+   .reporting-grid,
+   .returns-grid {
       grid-template-columns: 1fr;
    }
 

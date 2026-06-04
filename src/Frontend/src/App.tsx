@@ -19,6 +19,7 @@ import StocktakePage from "./pages/StocktakePage";
 import TransferPage from "./pages/TransferPage";
 import PrescriptionPage from "./pages/PrescriptionPage";
 import ReportingPage from "./pages/ReportingPage";
+import ReturnsPage from "./pages/ReturnsPage";
 
 import GoodsReceiptsPage from "./pages/GoodsReceiptsPage";
 import InventoryPage from "./pages/InventoryPage";
@@ -37,7 +38,6 @@ const PLACEHOLDER_ROUTES: Array<{
    titleKey: string;
 }> = [
    { path: "/dashboard/prescriptions", active: "prescriptions", titleKey: "nav.prescription" },
-   { path: "/dashboard/returns", active: "returns", titleKey: "nav.returns" },
 ];
 
 const STORAGE_LOCATIONS_PATH = /^\/dashboard\/sites\/([^/]+)\/storage-locations$/;
@@ -165,6 +165,9 @@ export default function App() {
          break;
       case "/dashboard/reporting":
          page = <ReportingPage />;
+         break;
+      case "/dashboard/returns":
+         page = <ReturnsPage />;
          break;
       default: {
          const storageLocationMatch = routePathname.match(STORAGE_LOCATIONS_PATH);

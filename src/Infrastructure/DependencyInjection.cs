@@ -15,6 +15,7 @@ using PharmacyCentral.Application.GoodsReceipts.Handlers;
 using PharmacyCentral.Application.Inventory.Handlers;
 using PharmacyCentral.Application.Prescriptions.Handlers;
 using PharmacyCentral.Application.Products.Handlers;
+using PharmacyCentral.Application.Returns.Handlers;
 using PharmacyCentral.Application.Sites.Handlers;
 using PharmacyCentral.Application.Stocktakes.Handlers;
 using PharmacyCentral.Application.StorageLocations.Handlers;
@@ -136,6 +137,7 @@ public static class DependencyInjection
         services.AddScoped<FefoAllocateCommandHandler>();
         services.AddScoped<ListInventoryBalancesQueryHandler>();
         services.AddScoped<ListStockLedgerEntriesQueryHandler>();
+        services.AddScoped<CreateReturnHandler>();
         services.AddScoped<CreateSupplierCommandHandler>();
         services.AddScoped<DeleteSupplierCommandHandler>();
         services.AddScoped<GetSupplierByIdQueryHandler>();
