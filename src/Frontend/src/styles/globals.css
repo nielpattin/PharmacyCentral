@@ -755,6 +755,10 @@ tbody tr:nth-child(even):hover {
    color: var(--text);
 }
 
+.reporting-stat {
+   min-height: 88px;
+}
+
 .notice {
    margin-bottom: 14px;
    border-radius: 6px;
@@ -956,6 +960,110 @@ tbody tr:nth-child(even):hover {
 
 .audit-workbench {
    grid-template-columns: minmax(0, 1.25fr) minmax(340px, 420px);
+}
+
+.reporting-page {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr);
+   gap: 14px;
+   align-content: start;
+   min-height: min-content;
+   padding-bottom: 20px;
+}
+
+.reporting-page .page-head {
+   margin-bottom: 0;
+}
+
+.reporting-page .dashboard-section {
+   margin-top: 0;
+}
+
+.reporting-section-block {
+   margin-top: 14px;
+}
+
+.reporting-grid {
+   display: grid;
+   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 420px);
+   gap: 16px;
+   align-items: start;
+   min-width: 0;
+}
+
+.reporting-source-strip {
+   background: var(--surface-soft);
+}
+
+.reporting-source-content {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) auto;
+   gap: 16px;
+   align-items: center;
+}
+
+.reporting-source-badges {
+   display: flex;
+   flex-wrap: wrap;
+   justify-content: flex-end;
+   gap: 8px;
+}
+
+.reporting-kpi-row,
+.reporting-risk-summary {
+   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.reporting-risk-table {
+   table-layout: fixed;
+   min-width: 760px;
+}
+
+.reporting-risk-table th:first-child,
+.reporting-risk-table td:first-child {
+   width: 30%;
+}
+
+.reporting-risk-table th:nth-child(2),
+.reporting-risk-table td:nth-child(2) {
+   width: 30%;
+}
+
+.reporting-risk-table th:nth-child(3),
+.reporting-risk-table td:nth-child(3) {
+   width: 110px;
+   text-align: right;
+}
+
+.reporting-risk-table th:nth-child(4),
+.reporting-risk-table td:nth-child(4) {
+   width: 130px;
+}
+
+.reporting-risk-table th:nth-child(5),
+.reporting-risk-table td:nth-child(5) {
+   width: 160px;
+}
+
+.reporting-table-primary {
+   overflow: hidden;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+   color: var(--text);
+   font-weight: 700;
+}
+
+.reporting-table-muted {
+   margin-top: 3px;
+   overflow: hidden;
+   color: var(--muted);
+   font-size: 0.813rem;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+
+.reporting-count-row .module-head {
+   margin-bottom: 0;
 }
 
 .audit-filter-grid {
@@ -1351,6 +1459,15 @@ tbody tr:nth-child(even):hover {
    .page-head {
       align-items: start;
    }
+
+   .reporting-source-content,
+   .reporting-grid {
+      grid-template-columns: 1fr;
+   }
+
+   .reporting-source-badges {
+      justify-content: flex-start;
+   }
 }
 
 @media (max-width: 720px) {
@@ -1389,6 +1506,10 @@ tbody tr:nth-child(even):hover {
    .section-header-actions {
       flex-direction: column;
       align-items: stretch;
+   }
+
+   .reporting-risk-table {
+      min-width: 760px;
    }
 }
 
