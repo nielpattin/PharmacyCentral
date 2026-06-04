@@ -36,6 +36,7 @@ export const ROUTE_ACCESS: RouteAccess[] = [
    { path: "/dashboard/receiving", active: "receiving", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/stocktake", active: "stocktake", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/inventory", active: "inventory", roles: ALL_ROLES },
+   { path: "/dashboard/adjustments", active: "adjustments", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/returns", active: "returns", roles: STORE_ROLES },
    { path: "/dashboard/reporting", active: "reporting", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/audit", active: "audit", roles: ["Platform Admin"] },

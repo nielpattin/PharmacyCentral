@@ -8,6 +8,7 @@ export type SidebarActiveKey =
    | "receiving"
    | "stocktake"
    | "inventory"
+   | "adjustments"
    | "returns"
    | "reporting"
    | "audit";

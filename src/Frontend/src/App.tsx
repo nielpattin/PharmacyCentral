@@ -16,6 +16,7 @@ import type { SidebarActiveKey } from "./lib/sidebar";
 import AuditPage from "./pages/AuditPage";
 import DashboardPage from "./pages/DashboardPage";
 import StocktakePage from "./pages/StocktakePage";
+import StockAdjustmentPage from "./pages/StockAdjustmentPage";
 import TransferPage from "./pages/TransferPage";
 import PrescriptionPage from "./pages/PrescriptionPage";
 import ReportingPage from "./pages/ReportingPage";
@@ -159,6 +160,9 @@ export default function App() {
 
       case "/dashboard/inventory":
          page = <InventoryPage />;
+         break;
+      case "/dashboard/adjustments":
+         page = <StockAdjustmentPage />;
          break;
       case "/dashboard/audit":
          page = <AuditPage />;

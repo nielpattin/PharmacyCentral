@@ -7,6 +7,7 @@ import {
    FileText,
    LayoutDashboard,
    ClipboardList,
+   ClipboardCheck,
    Package,
    RotateCcw,
    ShieldCheck,
@@ -44,6 +45,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
       receiving: <Warehouse size={16} strokeWidth={2} />,
       stocktake: <ClipboardList size={16} strokeWidth={2} />,
       inventory: <Package size={16} strokeWidth={2} />,
+      adjustments: <ClipboardCheck size={16} strokeWidth={2} />,
       returns: <RotateCcw size={16} strokeWidth={2} />,
       reporting: <BarChart3 size={16} strokeWidth={2} />,
       audit: <ShieldCheck size={16} strokeWidth={2} />,
@@ -75,6 +77,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
          label: t("nav.governance"),
          items: [
             { key: "inventory" as const, href: "/dashboard/inventory", label: t("nav.inventory") },
+            { key: "adjustments" as const, href: "/dashboard/adjustments", label: t("nav.adjustments") },
             { key: "returns" as const, href: "/dashboard/returns", label: t("nav.returns") },
             { key: "reporting" as const, href: "/dashboard/reporting", label: t("nav.reporting") },
             { key: "audit" as const, href: "/dashboard/audit", label: t("nav.audit") },

@@ -1166,6 +1166,88 @@ tbody tr:nth-child(even):hover {
    width: 150px;
 }
 
+.adjustments-page {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr);
+   gap: 14px;
+   align-content: start;
+   min-height: min-content;
+   padding-bottom: 20px;
+}
+
+.adjustments-page .page-head {
+   margin-bottom: 0;
+}
+
+.adjustments-grid {
+   display: grid;
+   grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+   gap: 16px;
+   align-items: start;
+   min-width: 0;
+}
+
+.adjustments-stock-context,
+.adjustments-detail-grid {
+   display: grid;
+   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+   gap: 10px;
+   margin-top: 12px;
+   padding: 12px;
+   border: 1px solid var(--line);
+   border-radius: 6px;
+   background: var(--surface-soft);
+}
+
+.adjustments-stock-context span,
+.adjustments-detail-grid span,
+.adjustments-note-block span {
+   display: block;
+   margin: 0;
+   color: var(--muted);
+   font-size: 0.813rem;
+   line-height: 1.45;
+}
+
+.adjustments-stock-context strong,
+.adjustments-detail-grid strong {
+   display: block;
+   margin-top: 4px;
+   color: var(--text);
+   font-size: 0.875rem;
+   font-weight: 800;
+}
+
+.adjustments-toolbar {
+   margin-bottom: 10px;
+}
+
+.adjustments-table {
+   min-width: 920px;
+}
+
+.adjustments-table tr.selected td {
+   background: var(--surface-soft);
+}
+
+.adjustments-detail {
+   gap: 14px;
+}
+
+.adjustments-note-block {
+   display: grid;
+   gap: 4px;
+   padding: 12px;
+   border: 1px solid var(--line);
+   border-radius: 6px;
+}
+
+.adjustments-note-block p {
+   margin: 0;
+   color: var(--text);
+   line-height: 1.5;
+}
+
 .returns-page {
    display: grid;
    grid-template-columns: minmax(0, 1fr);
@@ -1648,6 +1730,7 @@ tbody tr:nth-child(even):hover {
       align-items: start;
    }
 
+   .adjustments-grid,
    .inventory-operations-grid,
    .reporting-source-content,
    .reporting-grid,
