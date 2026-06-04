@@ -21,6 +21,7 @@ import TransferPage from "./pages/TransferPage";
 import PrescriptionPage from "./pages/PrescriptionPage";
 import ReportingPage from "./pages/ReportingPage";
 import ReturnsPage from "./pages/ReturnsPage";
+import UserManagementPage from "./pages/UserManagementPage";
 
 import GoodsReceiptsPage from "./pages/GoodsReceiptsPage";
 import InventoryPage from "./pages/InventoryPage";
@@ -166,6 +167,9 @@ export default function App() {
          break;
       case "/dashboard/audit":
          page = <AuditPage />;
+         break;
+      case "/dashboard/users":
+         page = <UserManagementPage />;
          break;
       case "/dashboard/reporting":
          page = <ReportingPage />;

@@ -13,6 +13,7 @@ import {
    ShieldCheck,
    ShoppingBag,
    Truck,
+   Users,
    Warehouse,
 } from "lucide-react";
 import { setLanguage, useLanguage, useT } from "../../lib/i18n";
@@ -49,6 +50,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
       returns: <RotateCcw size={16} strokeWidth={2} />,
       reporting: <BarChart3 size={16} strokeWidth={2} />,
       audit: <ShieldCheck size={16} strokeWidth={2} />,
+      users: <Users size={16} strokeWidth={2} />,
    };
 
    const sidebarSections: NavSection[] = [
@@ -81,6 +83,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
             { key: "returns" as const, href: "/dashboard/returns", label: t("nav.returns") },
             { key: "reporting" as const, href: "/dashboard/reporting", label: t("nav.reporting") },
             { key: "audit" as const, href: "/dashboard/audit", label: t("nav.audit") },
+            { key: "users" as const, href: "/dashboard/users", label: t("nav.users") },
          ],
       },
    ];

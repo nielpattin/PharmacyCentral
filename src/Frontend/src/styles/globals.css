@@ -1248,6 +1248,109 @@ tbody tr:nth-child(even):hover {
    line-height: 1.5;
 }
 
+.users-page {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr);
+   gap: 14px;
+   align-content: start;
+   min-height: min-content;
+   padding-bottom: 20px;
+}
+
+.users-page .page-head {
+   margin-bottom: 0;
+}
+
+.users-grid {
+   display: grid;
+   grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+   gap: 16px;
+   align-items: start;
+   min-width: 0;
+}
+
+.users-create-grid {
+   margin-bottom: 14px;
+}
+
+.users-access-grid {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 16px;
+   margin-bottom: 14px;
+}
+
+.choice-grid {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 8px;
+}
+
+.choice-pill {
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+   padding: 8px 10px;
+   border: 1px solid var(--line);
+   border-radius: 999px;
+   background: var(--surface);
+   color: var(--text);
+   font-size: 0.813rem;
+   font-weight: 700;
+}
+
+.choice-pill input {
+   width: 16px;
+   height: 16px;
+   accent-color: var(--primary);
+}
+
+.users-toolbar {
+   margin-bottom: 10px;
+}
+
+.users-table {
+   min-width: 920px;
+}
+
+.users-table tr.selected td {
+   background: var(--surface-soft);
+}
+
+.users-table .badge {
+   margin-right: 4px;
+   margin-bottom: 4px;
+}
+
+.users-editor {
+   display: grid;
+   gap: 16px;
+}
+
+.detail-stack {
+   display: grid;
+   gap: 10px;
+   padding: 12px;
+   border: 1px solid var(--line);
+   border-radius: 6px;
+   background: var(--surface-soft);
+}
+
+.detail-stack span {
+   display: block;
+   color: var(--muted);
+   font-size: 0.813rem;
+   line-height: 1.45;
+}
+
+.detail-stack strong {
+   display: block;
+   margin-top: 4px;
+   color: var(--text);
+   font-size: 0.875rem;
+   font-weight: 800;
+}
+
 .returns-page {
    display: grid;
    grid-template-columns: minmax(0, 1fr);
@@ -1730,6 +1833,8 @@ tbody tr:nth-child(even):hover {
       align-items: start;
    }
 
+   .users-grid,
+   .users-access-grid,
    .adjustments-grid,
    .inventory-operations-grid,
    .reporting-source-content,

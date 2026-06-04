@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { fetchMe, login as apiLogin, logout as apiLogout, resetCsrfToken } from "../api/pharmacyClient";
 
 export type AuthUser = {
+   id: string;
    displayName: string;
    email: string;
    roles: string[];

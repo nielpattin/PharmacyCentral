@@ -2,11 +2,36 @@ import { getLanguage, translate } from "../lib/i18n";
 import type { SiteTypeValue, StorageLocationTypeValue } from "../pages/shared/pharmacyTypes";
 
 export type AuthUserDetails = {
+   id: string;
    displayName: string;
    email: string;
    roles: string[];
    siteIds: string[];
    isPlatformAdmin: boolean;
+};
+
+export type AdminUserDetails = {
+   id: string;
+   email: string;
+   displayName: string;
+   emailConfirmed: boolean;
+   roles: string[];
+   siteIds: string[];
+   createdAtUtc: string;
+   updatedAtUtc: string;
+};
+
+export type AdminUserCreateRequest = {
+   email: string;
+   displayName: string;
+   password: string;
+   roles: string[];
+   siteIds: string[];
+};
+
+export type AdminUserAccessRequest = {
+   roles: string[];
+   siteIds: string[];
 };
 
 export type LoginRequest = {
@@ -992,6 +1017,28 @@ export async function updateSupplier(id: string, request: SupplierUpsertRequest)
 export async function deleteSupplier(id: string) {
    await requestVoid(`/api/suppliers/${id}`, {
       method: "DELETE",
+   });
+}
+
+export async function loadAdminUsers() {
+   return await requestJson<AdminUserDetails[]>("/api/admin/users");
+}
+
+export async function loadAdminRoles() {
+   return await requestJson<string[]>("/api/admin/roles");
+}
+
+export async function createAdminUser(request: AdminUserCreateRequest) {
+   return await requestJson<AdminUserDetails>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function updateAdminUserAccess(id: string, request: AdminUserAccessRequest) {
+   return await requestJson<AdminUserDetails>(`/api/admin/users/${id}/access`, {
+      method: "PUT",
+      body: JSON.stringify(request),
    });
 }
 

@@ -40,6 +40,7 @@ export const ROUTE_ACCESS: RouteAccess[] = [
    { path: "/dashboard/returns", active: "returns", roles: STORE_ROLES },
    { path: "/dashboard/reporting", active: "reporting", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/audit", active: "audit", roles: ["Platform Admin"] },
+   { path: "/dashboard/users", active: "users", roles: ["Platform Admin"] },
 ];
 
 const STORAGE_LOCATIONS_PATH = /^\/dashboard\/sites\/[^/]+\/storage-locations$/;
