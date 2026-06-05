@@ -28,6 +28,7 @@ internal sealed class DispensePrescription : IEndpoint
         app.MapPost("prescriptions/{id:guid}/dispense", async (
             Guid id,
             Request request,
+            HttpContext httpContext,
             IIdentityService identityService,
             DispensePrescriptionHandler handler,
             IApplicationDbContext dbContext,
@@ -56,6 +57,14 @@ internal sealed class DispensePrescription : IEndpoint
                 return EndpointSiteAccess.ForbidSiteAccess();
             }
 
+            string? idempotencyKey = IdempotencyEndpointHelper.GetKey(httpContext);
+            string idempotencyScope = IdempotencyEndpointHelper.Scope(httpContext);
+            IResult? replay = await IdempotencyEndpointHelper.TryReplayAsync(dbContext, idempotencyKey, idempotencyScope, currentUser.Id, cancellationToken);
+            if (replay is not null)
+            {
+                return replay;
+            }
+
             DispensePrescriptionCommand command = new()
             {
                 PrescriptionId = id,
@@ -69,9 +78,13 @@ internal sealed class DispensePrescription : IEndpoint
             };
 
             Result<PrescriptionDetails> result = await handler.HandleAsync(command, cancellationToken);
-            return result.IsFailure
-                ? Results.BadRequest(new { error = result.Error.Description, code = result.Error.Code })
-                : Results.Ok(result.Value);
+            if (result.IsFailure)
+            {
+                return Results.BadRequest(new { error = result.Error.Description, code = result.Error.Code });
+            }
+
+            await IdempotencyEndpointHelper.RecordAsync(dbContext, idempotencyKey, idempotencyScope, currentUser.Id, StatusCodes.Status200OK, result.Value, cancellationToken);
+            return Results.Ok(result.Value);
         }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.Store);
     }
 

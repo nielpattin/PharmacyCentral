@@ -1,5 +1,6 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Audit;
+using PharmacyCentral.Application.Inventory.Shared;
 using PharmacyCentral.Application.Prescriptions.Shared;
 using PharmacyCentral.Application.Prescriptions;
 using PharmacyCentral.Domain.Prescriptions;
@@ -7,7 +8,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Prescriptions.CancelPrescription;
 
-public sealed class CancelPrescriptionHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
+public sealed class CancelPrescriptionHandler(IApplicationDbContext dbContext, AuditLogService auditLogService, StockReservationService reservationService)
 {
     public async Task<Result<PrescriptionDetails>> HandleAsync(CancelPrescriptionCommand command, CancellationToken cancellationToken)
     {
@@ -26,6 +27,8 @@ public sealed class CancelPrescriptionHandler(IApplicationDbContext dbContext, A
         {
             return PrescriptionErrors.OnlyCreatorCanCancel();
         }
+
+        await reservationService.ReleasePrescriptionReservationsAsync(prescription.Id, cancellationToken);
 
         prescription.Status = PrescriptionStatus.Cancelled;
         prescription.CancelledByUserId = command.CancelledByUserId;

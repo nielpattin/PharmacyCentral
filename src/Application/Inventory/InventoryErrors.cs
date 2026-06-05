@@ -36,4 +36,7 @@ internal static class InventoryErrors
 
     public static Error InsufficientStockForAllocation(decimal requested, decimal available) =>
         new("inventory.insufficient_stock_for_allocation", $"Requested {requested} but only {available} available across all batches.");
+
+    public static Error InsufficientReservedStock(decimal requested, decimal available) =>
+        new("inventory.insufficient_reserved_stock", $"Requested {requested} but only {available} reserved stock is available.");
 }

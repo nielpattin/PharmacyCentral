@@ -47,6 +47,10 @@ public sealed class PharmacyCentralDbContext
 
     public IQueryable<StockLedgerEntry> StockLedgerEntries => Set<StockLedgerEntry>();
 
+    public IQueryable<StockReservation> StockReservations => Set<StockReservation>();
+
+    public IQueryable<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+
     public IQueryable<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
 
     public IQueryable<GoodsReceiptLine> GoodsReceiptLines => Set<GoodsReceiptLine>();
@@ -175,6 +179,36 @@ public sealed class PharmacyCentralDbContext
         return await InventoryBalances.SingleOrDefaultAsync(balance => balance.ProductBatchId == productBatchId && balance.StorageLocationId == storageLocationId, cancellationToken);
     }
 
+    async Task<List<InventoryBalance>> IApplicationDbContext.ListAvailableBalancesForReservationAsync(Guid productId, Guid siteId, Guid storageLocationId, CancellationToken cancellationToken)
+    {
+        return await InventoryBalances
+            .Include(balance => balance.ProductBatch)
+            .ThenInclude(batch => batch.Product)
+            .Where(balance => balance.ProductBatch.ProductId == productId
+                && balance.ProductBatch.QualityStatus == ProductBatchQualityStatus.Released
+                && balance.SiteId == siteId
+                && balance.StorageLocationId == storageLocationId
+                && balance.QuantityOnHand - balance.QuantityReserved > 0)
+            .OrderBy(balance => balance.ProductBatch.ExpiryDate)
+            .ThenBy(balance => balance.ProductBatch.BatchNumber)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<List<StockReservation>> IApplicationDbContext.ListActiveStockReservationsForPrescriptionAsync(Guid prescriptionId, CancellationToken cancellationToken)
+    {
+        return await StockReservations
+            .Include(reservation => reservation.ProductBatch)
+            .ThenInclude(batch => batch.Product)
+            .Where(reservation => reservation.PrescriptionId == prescriptionId && reservation.Status == StockReservationStatus.Active)
+            .OrderBy(reservation => reservation.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<IdempotencyRecord?> IApplicationDbContext.GetIdempotencyRecordAsync(string key, string scope, Guid? userId, CancellationToken cancellationToken)
+    {
+        return await IdempotencyRecords.SingleOrDefaultAsync(record => record.Key == key && record.Scope == scope && record.UserId == userId, cancellationToken);
+    }
+
     async Task<List<InventoryBalance>> IApplicationDbContext.ListInventoryBalancesAsync(Guid? productId, Guid? siteId, IReadOnlyCollection<Guid>? siteIds, Guid? storageLocationId, bool includeZeroBalances, CancellationToken cancellationToken)
     {
         IQueryable<InventoryBalance> query = Set<InventoryBalance>()
@@ -223,7 +257,7 @@ public sealed class PharmacyCentralDbContext
             .Where(balance => balance.ProductBatch.ProductId == productId
                 && balance.ProductBatch.QualityStatus == ProductBatchQualityStatus.Released
                 && balance.SiteId == siteId
-                && balance.QuantityOnHand > 0)
+                && balance.QuantityOnHand - balance.QuantityReserved > 0)
             .OrderBy(balance => balance.ProductBatch.ExpiryDate)
             .ThenBy(balance => balance.ProductBatch.BatchNumber)
             .ThenBy(balance => balance.StorageLocationId)

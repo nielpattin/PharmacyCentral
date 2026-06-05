@@ -9,7 +9,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Prescriptions.DispensePrescription;
 
-public sealed class DispensePrescriptionHandler(IApplicationDbContext dbContext, StockMovementRecorder movementRecorder, AuditLogService auditLogService)
+public sealed class DispensePrescriptionHandler(IApplicationDbContext dbContext, StockMovementRecorder movementRecorder, StockReservationService reservationService, AuditLogService auditLogService)
 {
     public async Task<Result<PrescriptionDetails>> HandleAsync(DispensePrescriptionCommand command, CancellationToken cancellationToken)
     {
@@ -57,7 +57,20 @@ public sealed class DispensePrescriptionHandler(IApplicationDbContext dbContext,
             {
                 return PrescriptionErrors.DispensedQuantityExceedsPrescribed(item.DispensedQuantity, line.PrescribedQuantity);
             }
+        }
 
+        Result reservationResult = await reservationService.ConsumePrescriptionReservationsAsync(
+            prescription,
+            command.Lines.Select(line => new DispenseReservationLine(line.PrescriptionLineId, line.ProductBatchId, line.DispensedQuantity)).ToList(),
+            cancellationToken);
+        if (reservationResult.IsFailure)
+        {
+            return reservationResult.Error;
+        }
+
+        foreach (DispenseLineItem item in command.Lines)
+        {
+            PrescriptionLine line = prescription.Lines.First(l => l.Id == item.PrescriptionLineId);
             line.ProductBatchId = item.ProductBatchId;
             line.DispensedQuantity = item.DispensedQuantity;
 

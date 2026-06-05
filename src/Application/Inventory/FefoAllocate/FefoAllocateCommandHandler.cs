@@ -18,7 +18,7 @@ public sealed class FefoAllocateCommandHandler(IApplicationDbContext dbContext)
                 balances.Add(balance);
             }
         }
-        decimal quantityAvailable = balances.Sum(balance => balance.QuantityOnHand);
+        decimal quantityAvailable = balances.Sum(balance => balance.QuantityOnHand - balance.QuantityReserved);
         if (quantityAvailable < command.QuantityNeeded)
         {
             return InventoryErrors.InsufficientStockForAllocation(command.QuantityNeeded, quantityAvailable);
@@ -34,7 +34,7 @@ public sealed class FefoAllocateCommandHandler(IApplicationDbContext dbContext)
                 break;
             }
 
-            decimal quantityToConsume = Math.Min(balance.QuantityOnHand, quantityRemaining);
+            decimal quantityToConsume = Math.Min(balance.QuantityOnHand - balance.QuantityReserved, quantityRemaining);
             lines.Add(FefoAllocationLine.From(balance, quantityToConsume));
             quantityRemaining -= quantityToConsume;
         }

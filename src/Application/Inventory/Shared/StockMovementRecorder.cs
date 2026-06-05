@@ -87,6 +87,11 @@ public sealed class StockMovementRecorder(IApplicationDbContext dbContext)
             return InventoryErrors.InsufficientStock(balanceAfter);
         }
 
+        if (command.QuantityDelta < 0 && balanceAfter < balance.QuantityReserved)
+        {
+            return InventoryErrors.InsufficientStock(balanceAfter - balance.QuantityReserved);
+        }
+
         balance.QuantityOnHand = balanceAfter;
 
         StockLedgerEntry ledgerEntry = new()

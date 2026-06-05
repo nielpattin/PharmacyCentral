@@ -1,6 +1,7 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Inventory;
+using PharmacyCentral.Application.Inventory.Shared;
 using PharmacyCentral.Application.Prescriptions.Shared;
 using PharmacyCentral.Application.Prescriptions;
 using PharmacyCentral.Domain.Prescriptions;
@@ -10,7 +11,7 @@ using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Prescriptions.CreatePrescription;
 
-public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, AuditLogService auditLogService)
+public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, AuditLogService auditLogService, StockReservationService reservationService)
 {
     public async Task<Result<PrescriptionDetails>> HandleAsync(CreatePrescriptionCommand command, CancellationToken cancellationToken)
     {
@@ -57,7 +58,7 @@ public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, A
             PatientPhone = NormalizeOptional(command.PatientPhone),
             DoctorName = NormalizeOptional(command.DoctorName),
             DoctorLicense = NormalizeOptional(command.DoctorLicense),
-            Status = PrescriptionStatus.Draft,
+            Status = PrescriptionStatus.Pending,
             Notes = NormalizeOptional(command.Notes),
             CreatedByUserId = command.CreatedByUserId
         };
@@ -78,6 +79,13 @@ public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, A
         }
 
         await dbContext.AddAsync(prescription, cancellationToken);
+
+        Result reservationResult = await reservationService.ReservePrescriptionAsync(prescription, cancellationToken);
+        if (reservationResult.IsFailure)
+        {
+            return reservationResult.Error;
+        }
+
         await auditLogService.RecordAsync(AuditActions.Created, AuditEntityTypes.Prescription, prescription.Id, prescription.CreatedByUserId, prescription.SiteId, $"Created prescription {prescription.PrescriptionNumber}", cancellationToken: cancellationToken);
 
         for (int attempt = 1; attempt <= 3; attempt++)

@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Identity;
+using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Auth.Shared;
 using PharmacyCentral.Application.Prescriptions.CreatePrescription;
 using PharmacyCentral.Application.Prescriptions.Shared;
@@ -36,7 +37,9 @@ internal sealed class CreatePrescription : IEndpoint
     {
         app.MapPost("prescriptions", async (
             Request request,
+            HttpContext httpContext,
             IIdentityService identityService,
+            IApplicationDbContext dbContext,
             CreatePrescriptionHandler handler,
             CancellationToken cancellationToken) =>
         {
@@ -55,6 +58,14 @@ internal sealed class CreatePrescription : IEndpoint
             if (!EndpointSiteAccess.CanAccessSite(currentUser, request.SiteId))
             {
                 return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
+            string? idempotencyKey = IdempotencyEndpointHelper.GetKey(httpContext);
+            string idempotencyScope = IdempotencyEndpointHelper.Scope(httpContext);
+            IResult? replay = await IdempotencyEndpointHelper.TryReplayAsync(dbContext, idempotencyKey, idempotencyScope, currentUser.Id, cancellationToken);
+            if (replay is not null)
+            {
+                return replay;
             }
 
             CreatePrescriptionCommand command = new()
@@ -79,9 +90,13 @@ internal sealed class CreatePrescription : IEndpoint
             };
 
             Result<PrescriptionDetails> result = await handler.HandleAsync(command, cancellationToken);
-            return result.IsFailure
-                ? Results.BadRequest(new { error = result.Error.Description, code = result.Error.Code })
-                : Results.Created($"/api/prescriptions/{result.Value.Id}", result.Value);
+            if (result.IsFailure)
+            {
+                return Results.BadRequest(new { error = result.Error.Description, code = result.Error.Code });
+            }
+
+            await IdempotencyEndpointHelper.RecordAsync(dbContext, idempotencyKey, idempotencyScope, currentUser.Id, StatusCodes.Status201Created, result.Value, cancellationToken);
+            return Results.Created($"/api/prescriptions/{result.Value.Id}", result.Value);
         }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.Store);
     }
 

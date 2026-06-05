@@ -341,6 +341,50 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.ToTable("goods_receipt_lines", (string)null);
                 });
 
+            modelBuilder.Entity("PharmacyCentral.Domain.Inventory.IdempotencyRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("ResponseBody")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("response_body");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("scope");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("status_code");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key", "Scope", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("idempotency_records", (string)null);
+                });
+
             modelBuilder.Entity("PharmacyCentral.Domain.Inventory.InventoryBalance", b =>
                 {
                     b.Property<Guid>("Id")
@@ -558,6 +602,86 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.HasIndex("SiteId", "StorageLocationId", "OccurredAtUtc");
 
                     b.ToTable("stock_ledger_entries", (string)null);
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Inventory.StockReservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConsumedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_at_utc");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("PrescriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prescription_id");
+
+                    b.Property<Guid>("PrescriptionLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prescription_line_id");
+
+                    b.Property<Guid>("ProductBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_batch_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<decimal>("QuantityConsumed")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("quantity_consumed");
+
+                    b.Property<decimal>("QuantityReserved")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("quantity_reserved");
+
+                    b.Property<DateTimeOffset?>("ReleasedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at_utc");
+
+                    b.Property<Guid>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StorageLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("storage_location_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PrescriptionId");
+
+                    b.HasIndex("PrescriptionLineId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("SiteId");
+
+                    b.HasIndex("StorageLocationId");
+
+                    b.HasIndex("ProductBatchId", "SiteId", "StorageLocationId", "Status");
+
+                    b.ToTable("stock_reservations", (string)null);
                 });
 
             modelBuilder.Entity("PharmacyCentral.Domain.Prescriptions.Prescription", b =>
@@ -1729,6 +1853,57 @@ namespace PharmacyCentral.Infrastructure.Migrations
                         .HasForeignKey("StorageLocationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Product");
+
+                    b.Navigation("ProductBatch");
+
+                    b.Navigation("Site");
+
+                    b.Navigation("StorageLocation");
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Inventory.StockReservation", b =>
+                {
+                    b.HasOne("PharmacyCentral.Domain.Prescriptions.Prescription", "Prescription")
+                        .WithMany()
+                        .HasForeignKey("PrescriptionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.Prescriptions.PrescriptionLine", "PrescriptionLine")
+                        .WithMany()
+                        .HasForeignKey("PrescriptionLineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.Inventory.ProductBatch", "ProductBatch")
+                        .WithMany()
+                        .HasForeignKey("ProductBatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.Products.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.Sites.Site", "Site")
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.StorageLocations.StorageLocation", "StorageLocation")
+                        .WithMany()
+                        .HasForeignKey("StorageLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Prescription");
+
+                    b.Navigation("PrescriptionLine");
 
                     b.Navigation("Product");
 

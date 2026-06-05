@@ -29,6 +29,10 @@ public interface IApplicationDbContext
 
     IQueryable<StockLedgerEntry> StockLedgerEntries { get; }
 
+    IQueryable<StockReservation> StockReservations { get; }
+
+    IQueryable<IdempotencyRecord> IdempotencyRecords { get; }
+
     IQueryable<GoodsReceipt> GoodsReceipts { get; }
 
     IQueryable<GoodsReceiptLine> GoodsReceiptLines { get; }
@@ -80,6 +84,12 @@ public interface IApplicationDbContext
     Task<List<Guid>> ListSiteIdsForProductBatchAsync(Guid productBatchId, bool onlyPositiveStock = true, CancellationToken cancellationToken = default);
 
     Task<InventoryBalance?> GetInventoryBalanceAsync(Guid productBatchId, Guid storageLocationId, CancellationToken cancellationToken = default);
+
+    Task<List<InventoryBalance>> ListAvailableBalancesForReservationAsync(Guid productId, Guid siteId, Guid storageLocationId, CancellationToken cancellationToken = default);
+
+    Task<List<StockReservation>> ListActiveStockReservationsForPrescriptionAsync(Guid prescriptionId, CancellationToken cancellationToken = default);
+
+    Task<IdempotencyRecord?> GetIdempotencyRecordAsync(string key, string scope, Guid? userId, CancellationToken cancellationToken = default);
 
     Task<List<InventoryBalance>> ListInventoryBalancesAsync(Guid? productId = null, Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, Guid? storageLocationId = null, bool includeZeroBalances = false, CancellationToken cancellationToken = default);
 

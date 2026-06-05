@@ -43,13 +43,14 @@ class ApiClient {
     return await readExpected(response, expectedStatus, `${this.name} GET ${path}`);
   }
 
-  async post(path, body, expectedStatus = 200) {
+  async post(path, body, expectedStatus = 200, extraHeaders = {}) {
     const token = await this.csrf();
     const response = await this.request(path, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-CSRF-TOKEN": token,
+        ...extraHeaders,
       },
       body: JSON.stringify(body),
     });
@@ -287,7 +288,7 @@ async function main() {
   }, 400);
   console.log("PASS quality release, FEFO allocation, and insufficient-stock guard");
 
-  const prescription = await admin.post("prescriptions", {
+  const prescriptionPayload = {
     siteId: sourceSite.id,
     storageLocationId: sourceLocation.id,
     patientName: `Patient ${suffix}`,
@@ -303,7 +304,13 @@ async function main() {
       duration: "5 days",
       notes: "Verification dispense line.",
     }],
-  }, 201);
+  };
+  const prescriptionIdempotencyKey = `rx-${suffix}`;
+  const prescription = await admin.post("prescriptions", prescriptionPayload, 201, { "Idempotency-Key": prescriptionIdempotencyKey });
+  const replayedPrescription = await admin.post("prescriptions", prescriptionPayload, 201, { "Idempotency-Key": prescriptionIdempotencyKey });
+  assertEqual(replayedPrescription.id, prescription.id, "Prescription retry with the same key should return the original prescription");
+  let balances = await admin.get(`inventory/balances?productId=${product.id}&siteId=${sourceSite.id}&includeZeroBalances=true`);
+  assertApprox(balanceFor(balances, productBatchId, sourceLocation.id).quantityReserved, 5, "Prescription creation should hold stock before dispensing");
   const dispensed = await admin.post(`prescriptions/${prescription.id}/dispense`, {
     lines: [{
       prescriptionLineId: prescription.lines[0].id,
@@ -312,9 +319,10 @@ async function main() {
     }],
   });
   assert(["Dispensed", "PartiallyDispensed"].includes(dispensed.status), "Prescription should be dispensed or partially dispensed");
-  let balances = await admin.get(`inventory/balances?productId=${product.id}&siteId=${sourceSite.id}&includeZeroBalances=true`);
+  balances = await admin.get(`inventory/balances?productId=${product.id}&siteId=${sourceSite.id}&includeZeroBalances=true`);
   assertApprox(balanceFor(balances, productBatchId, sourceLocation.id).quantityOnHand, 45, "Dispense should decrease source balance");
-  console.log("PASS prescription and dispensing lifecycle");
+  assertApprox(balanceFor(balances, productBatchId, sourceLocation.id).quantityReserved, 0, "Dispensing should consume held stock");
+  console.log("PASS prescription reservation, retry safety, and dispensing lifecycle");
 
   const transfer = await admin.post("transfers", {
     sourceSiteId: sourceSite.id,
