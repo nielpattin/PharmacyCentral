@@ -4,6 +4,7 @@ export type SidebarActiveKey =
    | "transfers"
    | "sites"
    | "catalog"
+   | "pricing"
    | "supplier"
    | "receiving"
    | "procurement"

@@ -240,6 +240,34 @@ async function main() {
     isActive: true,
   }, 201);
 
+  const draftPrice = await admin.post("pricing/prices", {
+    productId: product.id,
+    siteId: sourceSite.id,
+    unitPrice: 12500,
+    currency: "VND",
+    effectiveFrom: "2031-01-01",
+    effectiveTo: "2031-12-31",
+    notes: "Product verification price.",
+  }, 201);
+  assertEqual(draftPrice.status, "Draft", "New price should start as draft");
+  const publishedPrice = await admin.post(`pricing/prices/${draftPrice.id}/publish`, {}, 200);
+  assertEqual(publishedPrice.status, "Published", "Price should publish successfully");
+  const activePrice = await admin.get(`pricing/active?productId=${product.id}&siteId=${sourceSite.id}&effectiveDate=2031-06-01`);
+  assertEqual(activePrice.id, draftPrice.id, "Active price lookup should return the published site price");
+  const overlappingDraft = await admin.post("pricing/prices", {
+    productId: product.id,
+    siteId: sourceSite.id,
+    unitPrice: 13000,
+    currency: "VND",
+    effectiveFrom: "2031-06-01",
+    effectiveTo: "2031-12-31",
+    notes: "Overlapping price should not publish.",
+  }, 201);
+  await admin.post(`pricing/prices/${overlappingDraft.id}/publish`, {}, 400);
+  const archivedPrice = await admin.post(`pricing/prices/${publishedPrice.id}/archive`, { notes: "Product verification archive." }, 200);
+  assertEqual(archivedPrice.status, "Archived", "Price should archive successfully");
+  console.log("PASS pricing publish, active lookup, overlap guard, and archive");
+
   const purchaseOrder = await admin.post("purchase-orders", {
     purchaseOrderNumber: `PO-${suffix}`.slice(0, 100),
     supplierId: supplier.id,

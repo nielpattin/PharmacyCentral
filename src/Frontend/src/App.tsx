@@ -25,6 +25,7 @@ import UserManagementPage from "./pages/UserManagementPage";
 import QualityPage from "./pages/QualityPage";
 import RecallPage from "./pages/RecallPage";
 
+import PricingPage from "./pages/PricingPage";
 import ProcurementPage from "./pages/ProcurementPage";
 import GoodsReceiptsPage from "./pages/GoodsReceiptsPage";
 import InventoryPage from "./pages/InventoryPage";
@@ -145,6 +146,9 @@ export default function App() {
          break;
       case "/dashboard/catalog":
          page = <ProductsPage />;
+         break;
+      case "/dashboard/pricing":
+         page = <PricingPage />;
          break;
       case "/dashboard/supplier":
          page = <SuppliersPage />;

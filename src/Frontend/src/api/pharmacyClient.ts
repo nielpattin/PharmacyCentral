@@ -98,6 +98,28 @@ export type SupplierDto = {
    updatedAtUtc: string;
 };
 
+export type ProductPriceDto = {
+   id: string;
+   productId: string;
+   productSku: string;
+   productName: string;
+   siteId: string | null;
+   siteName: string | null;
+   unitPrice: number;
+   currency: string;
+   effectiveFrom: string;
+   effectiveTo: string | null;
+   status: string;
+   notes: string | null;
+   createdByUserId: string | null;
+   publishedByUserId: string | null;
+   archivedByUserId: string | null;
+   publishedAtUtc: string | null;
+   archivedAtUtc: string | null;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+};
+
 export type GoodsReceiptLineDto = {
    id: string;
    productId: string;
@@ -344,6 +366,16 @@ export type GoodsReceiptUpsertRequest = {
    receiptNumber: string;
    notes: string | null;
    lines: GoodsReceiptLineUpsertRequest[];
+};
+
+export type ProductPriceCreateRequest = {
+   productId: string;
+   siteId: string | null;
+   unitPrice: number;
+   currency: string;
+   effectiveFrom: string;
+   effectiveTo: string | null;
+   notes: string | null;
 };
 
 export type PurchaseOrderCreateRequest = {
@@ -858,6 +890,47 @@ function buildPurchaseOrderQuery(filters: PurchaseOrderFilters = {}) {
    if (filters.status !== undefined && filters.status !== "") query.set("status", filters.status);
    if (filters.limit !== undefined) query.set("limit", String(filters.limit));
    return query.size === 0 ? "" : `?${query}`;
+}
+
+export type ProductPriceFilters = {
+   productId?: string;
+   siteId?: string;
+   status?: string;
+   limit?: number;
+};
+
+function buildProductPriceQuery(filters: ProductPriceFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.productId !== undefined && filters.productId !== "") query.set("productId", filters.productId);
+   if (filters.siteId !== undefined && filters.siteId !== "") query.set("siteId", filters.siteId);
+   if (filters.status !== undefined && filters.status !== "") query.set("status", filters.status);
+   if (filters.limit !== undefined) query.set("limit", String(filters.limit));
+   return query.size === 0 ? "" : `?${query}`;
+}
+
+export async function loadProductPrices(filters: ProductPriceFilters = {}) {
+   return await requestJson<ProductPriceDto[]>(`/api/pricing/prices${buildProductPriceQuery(filters)}`);
+}
+
+export async function createProductPrice(request: ProductPriceCreateRequest) {
+   return await requestJson<ProductPriceDto>("/api/pricing/prices", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function publishProductPrice(id: string) {
+   return await requestJson<ProductPriceDto>(`/api/pricing/prices/${id}/publish`, {
+      method: "POST",
+      body: JSON.stringify({}),
+   });
+}
+
+export async function archiveProductPrice(id: string, notes: string | null = null) {
+   return await requestJson<ProductPriceDto>(`/api/pricing/prices/${id}/archive`, {
+      method: "POST",
+      body: JSON.stringify({ notes }),
+   });
 }
 
 export async function loadPurchaseOrders(filters: PurchaseOrderFilters = {}) {

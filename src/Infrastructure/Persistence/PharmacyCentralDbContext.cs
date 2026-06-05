@@ -12,6 +12,7 @@ using PharmacyCentral.Domain.Audit;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Prescriptions;
+using PharmacyCentral.Domain.Pricing;
 using PharmacyCentral.Domain.Procurement;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Recalls;
@@ -73,6 +74,8 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<Prescription> Prescriptions => Set<Prescription>();
 
     public IQueryable<PrescriptionLine> PrescriptionLines => Set<PrescriptionLine>();
+
+    public IQueryable<ProductPrice> ProductPrices => Set<ProductPrice>();
 
     public IQueryable<RecallCase> RecallCases => Set<RecallCase>();
 
@@ -584,6 +587,78 @@ public sealed class PharmacyCentralDbContext
         return await Prescriptions
             .Include(prescription => prescription.Lines)
             .SingleOrDefaultAsync(prescription => prescription.Id == prescriptionId, cancellationToken);
+    }
+
+    async Task<List<ProductPrice>> IApplicationDbContext.ListProductPricesAsync(Guid? productId, Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<ProductPrice> query = ProductPrices
+            .Include(price => price.Product)
+            .Include(price => price.Site)
+            .AsQueryable();
+
+        if (productId is not null)
+        {
+            query = query.Where(price => price.ProductId == productId);
+        }
+
+        if (siteId is not null)
+        {
+            query = query.Where(price => price.SiteId == siteId);
+        }
+
+        if (siteIds is not null)
+        {
+            query = query.Where(price => price.SiteId == null || siteIds.Contains(price.SiteId.Value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(price => price.Status == status);
+        }
+
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+        return await query
+            .OrderByDescending(price => price.EffectiveFrom)
+            .ThenBy(price => price.Product.Sku)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<ProductPrice?> IApplicationDbContext.GetProductPriceByIdAsync(Guid priceId, CancellationToken cancellationToken)
+    {
+        return await ProductPrices
+            .Include(price => price.Product)
+            .Include(price => price.Site)
+            .SingleOrDefaultAsync(price => price.Id == priceId, cancellationToken);
+    }
+
+    async Task<ProductPrice?> IApplicationDbContext.GetActiveProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveDate, CancellationToken cancellationToken)
+    {
+        IQueryable<ProductPrice> query = ProductPrices
+            .Include(price => price.Product)
+            .Include(price => price.Site)
+            .Where(price => price.ProductId == productId
+                && price.Status == ProductPriceStatus.Published
+                && price.EffectiveFrom <= effectiveDate
+                && (price.EffectiveTo == null || price.EffectiveTo >= effectiveDate)
+                && (price.SiteId == siteId || price.SiteId == null));
+
+        return await query
+            .OrderByDescending(price => price.SiteId == siteId)
+            .ThenByDescending(price => price.EffectiveFrom)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    async Task<bool> IApplicationDbContext.HasOverlappingPublishedProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveFrom, DateOnly? effectiveTo, Guid? excludePriceId, CancellationToken cancellationToken)
+    {
+        DateOnly requestedEnd = effectiveTo ?? DateOnly.MaxValue;
+        return await ProductPrices.AnyAsync(price =>
+            price.ProductId == productId
+            && price.SiteId == siteId
+            && price.Status == ProductPriceStatus.Published
+            && (excludePriceId == null || price.Id != excludePriceId)
+            && price.EffectiveFrom <= requestedEnd
+            && (price.EffectiveTo == null || price.EffectiveTo >= effectiveFrom), cancellationToken);
     }
 
     async Task<int> IApplicationDbContext.CountPrescriptionsWithPrefixAsync(string prefix, CancellationToken cancellationToken)

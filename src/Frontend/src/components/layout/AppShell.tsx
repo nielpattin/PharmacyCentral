@@ -43,6 +43,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
       transfers: <ArrowLeftRight size={16} strokeWidth={2} />,
       sites: <Building2 size={16} strokeWidth={2} />,
       catalog: <ShoppingBag size={16} strokeWidth={2} />,
+      pricing: <ShoppingBag size={16} strokeWidth={2} />,
       supplier: <Truck size={16} strokeWidth={2} />,
       receiving: <Warehouse size={16} strokeWidth={2} />,
       procurement: <ShoppingBag size={16} strokeWidth={2} />,
@@ -73,6 +74,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
          items: [
             { key: "sites" as const, href: "/dashboard/sites", label: t("nav.sites") },
             { key: "catalog" as const, href: "/dashboard/catalog", label: t("nav.catalog") },
+            { key: "pricing" as const, href: "/dashboard/pricing", label: t("nav.pricing") },
             { key: "supplier" as const, href: "/dashboard/supplier", label: t("nav.supplier") },
             { key: "receiving" as const, href: "/dashboard/receiving", label: t("nav.receiving") },
             { key: "procurement" as const, href: "/dashboard/procurement", label: t("nav.procurement") },

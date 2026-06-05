@@ -3,6 +3,7 @@ using PharmacyCentral.Domain.Audit;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Prescriptions;
+using PharmacyCentral.Domain.Pricing;
 using PharmacyCentral.Domain.Procurement;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Recalls;
@@ -55,6 +56,8 @@ public interface IApplicationDbContext
     IQueryable<Prescription> Prescriptions { get; }
 
     IQueryable<PrescriptionLine> PrescriptionLines { get; }
+
+    IQueryable<ProductPrice> ProductPrices { get; }
 
     IQueryable<RecallCase> RecallCases { get; }
 
@@ -143,6 +146,14 @@ public interface IApplicationDbContext
     Task<List<Prescription>> ListPrescriptionsAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken = default);
 
     Task<Prescription?> GetPrescriptionByIdAsync(Guid prescriptionId, CancellationToken cancellationToken = default);
+
+    Task<List<ProductPrice>> ListProductPricesAsync(Guid? productId = null, Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<ProductPrice?> GetProductPriceByIdAsync(Guid priceId, CancellationToken cancellationToken = default);
+
+    Task<ProductPrice?> GetActiveProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveDate, CancellationToken cancellationToken = default);
+
+    Task<bool> HasOverlappingPublishedProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveFrom, DateOnly? effectiveTo, Guid? excludePriceId = null, CancellationToken cancellationToken = default);
 
     Task<int> CountPrescriptionsWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
 
