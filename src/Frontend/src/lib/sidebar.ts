@@ -11,6 +11,7 @@ export type SidebarActiveKey =
    | "adjustments"
    | "returns"
    | "quality"
+   | "recalls"
    | "reporting"
    | "users"
    | "audit";

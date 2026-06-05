@@ -4,6 +4,7 @@ using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Prescriptions;
 using PharmacyCentral.Domain.Products;
+using PharmacyCentral.Domain.Recalls;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.StorageLocations;
@@ -46,6 +47,10 @@ public interface IApplicationDbContext
 
     IQueryable<PrescriptionLine> PrescriptionLines { get; }
 
+    IQueryable<RecallCase> RecallCases { get; }
+
+    IQueryable<RecallAffectedBatch> RecallAffectedBatches { get; }
+
     IQueryable<Supplier> Suppliers { get; }
 
     Task<List<Site>> ListSitesAsync(IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
@@ -81,6 +86,12 @@ public interface IApplicationDbContext
     Task<List<InventoryBalance>> ListBalancesForFefoAsync(Guid productId, Guid siteId, CancellationToken cancellationToken = default);
 
     Task<List<StockLedgerEntry>> ListStockLedgerEntriesAsync(Guid? productId = null, Guid? productBatchId = null, Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, Guid? storageLocationId = null, int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<bool> IsProductBatchBlockedByActiveRecallAsync(Guid productBatchId, Guid siteId, CancellationToken cancellationToken = default);
+
+    Task<List<RecallCase>> ListRecallCasesAsync(string? status = null, int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<RecallCase?> GetRecallCaseByIdAsync(Guid recallCaseId, CancellationToken cancellationToken = default);
 
     Task<List<GoodsReceipt>> ListGoodsReceiptsAsync(int limit = 100, IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
 

@@ -1925,3 +1925,34 @@ tbody tr:nth-child(even):hover {
 .block {
    display: block;
 }
+
+.recall-page .recall-form-card {
+   align-self: start;
+}
+
+.recall-list {
+   display: grid;
+   gap: 16px;
+}
+
+.recall-card {
+   display: grid;
+   gap: 12px;
+   padding: 16px;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-lg);
+   background: var(--surface);
+}
+
+.recall-card-head {
+   display: flex;
+   align-items: start;
+   justify-content: space-between;
+   gap: 16px;
+}
+
+@media (max-width: 760px) {
+   .recall-card-head {
+      display: grid;
+   }
+}

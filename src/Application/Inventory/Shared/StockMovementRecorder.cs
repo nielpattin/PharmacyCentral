@@ -58,6 +58,11 @@ public sealed class StockMovementRecorder(IApplicationDbContext dbContext)
             return InventoryErrors.BatchNotReleased(batch.Id, batch.QualityStatus);
         }
 
+        if (command.QuantityDelta < 0 && await dbContext.IsProductBatchBlockedByActiveRecallAsync(batch.Id, command.SiteId, cancellationToken))
+        {
+            return PharmacyCentral.Application.Recalls.RecallErrors.BatchBlockedByRecall(batch.Id);
+        }
+
         InventoryBalance? balance = await dbContext.GetInventoryBalanceAsync(batch.Id, storageLocation.Id, cancellationToken);
         if (balance is null)
         {

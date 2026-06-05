@@ -13,6 +13,7 @@ using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Prescriptions;
 using PharmacyCentral.Domain.Products;
+using PharmacyCentral.Domain.Recalls;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.StorageLocations;
@@ -63,6 +64,10 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<Prescription> Prescriptions => Set<Prescription>();
 
     public IQueryable<PrescriptionLine> PrescriptionLines => Set<PrescriptionLine>();
+
+    public IQueryable<RecallCase> RecallCases => Set<RecallCase>();
+
+    public IQueryable<RecallAffectedBatch> RecallAffectedBatches => Set<RecallAffectedBatch>();
 
     public IQueryable<Supplier> Suppliers => Set<Supplier>();
 
@@ -139,7 +144,9 @@ public sealed class PharmacyCentralDbContext
 
     async Task<ProductBatch?> IApplicationDbContext.GetProductBatchByIdAsync(Guid productBatchId, CancellationToken cancellationToken)
     {
-        return await ProductBatches.SingleOrDefaultAsync(batch => batch.Id == productBatchId, cancellationToken);
+        return await ProductBatches
+            .Include(batch => batch.Product)
+            .SingleOrDefaultAsync(batch => batch.Id == productBatchId, cancellationToken);
     }
 
     async Task<ProductBatch?> IApplicationDbContext.GetProductBatchByNumberAsync(Guid productId, string batchNumber, CancellationToken cancellationToken)
@@ -221,6 +228,42 @@ public sealed class PharmacyCentralDbContext
             .ThenBy(balance => balance.ProductBatch.BatchNumber)
             .ThenBy(balance => balance.StorageLocationId)
             .ToListAsync(cancellationToken);
+    }
+
+    async Task<bool> IApplicationDbContext.IsProductBatchBlockedByActiveRecallAsync(Guid productBatchId, Guid siteId, CancellationToken cancellationToken)
+    {
+        return await RecallAffectedBatches
+            .AnyAsync(affectedBatch => affectedBatch.ProductBatchId == productBatchId
+                && (affectedBatch.SiteId == null || affectedBatch.SiteId == siteId)
+                && affectedBatch.RecallCase.Status == RecallCaseStatus.Active
+                && affectedBatch.Status != RecallBatchStatus.Released, cancellationToken);
+    }
+
+    async Task<List<RecallCase>> IApplicationDbContext.ListRecallCasesAsync(string? status, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<RecallCase> query = RecallCases
+            .Include(recall => recall.AffectedBatches)
+            .ThenInclude(affectedBatch => affectedBatch.ProductBatch)
+            .ThenInclude(batch => batch.Product);
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(recall => recall.Status == status);
+        }
+
+        return await query
+            .OrderByDescending(recall => recall.CreatedAtUtc)
+            .Take(Math.Clamp(limit, 1, 500))
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<RecallCase?> IApplicationDbContext.GetRecallCaseByIdAsync(Guid recallCaseId, CancellationToken cancellationToken)
+    {
+        return await RecallCases
+            .Include(recall => recall.AffectedBatches)
+            .ThenInclude(affectedBatch => affectedBatch.ProductBatch)
+            .ThenInclude(batch => batch.Product)
+            .SingleOrDefaultAsync(recall => recall.Id == recallCaseId, cancellationToken);
     }
 
     async Task<List<StockLedgerEntry>> IApplicationDbContext.ListStockLedgerEntriesAsync(Guid? productId, Guid? productBatchId, Guid? siteId, IReadOnlyCollection<Guid>? siteIds, Guid? storageLocationId, int limit, CancellationToken cancellationToken)

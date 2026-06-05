@@ -180,6 +180,49 @@ export type ProductBatchQualityDto = {
    qualityNotes: string | null;
 };
 
+export type RecallAffectedBatchDto = {
+   id: string;
+   recallCaseId: string;
+   productBatchId: string;
+   productId: string;
+   productSku: string;
+   productName: string;
+   batchNumber: string;
+   expiryDate: string;
+   siteId: string | null;
+   status: string;
+   actionedAtUtc: string | null;
+   actionedByUserId: string | null;
+   notes: string | null;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+};
+
+export type RecallCaseDto = {
+   id: string;
+   recallNumber: string;
+   title: string;
+   reason: string;
+   status: string;
+   activatedAtUtc: string | null;
+   closedAtUtc: string | null;
+   createdByUserId: string | null;
+   activatedByUserId: string | null;
+   closedByUserId: string | null;
+   notes: string | null;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+   affectedBatches: RecallAffectedBatchDto[];
+};
+
+export type RecallCreateRequest = {
+   recallNumber: string;
+   title: string;
+   reason: string;
+   notes: string | null;
+   affectedBatches: Array<{ productBatchId: string; siteId: string | null; notes: string | null }>;
+};
+
 export type AuditLogEntryDto = {
    id: string;
    action: string;
@@ -900,6 +943,37 @@ export async function rejectProductBatch(productBatchId: string, notes?: string)
    return await requestJson<ProductBatchQualityDto>(`/api/quality/batches/${productBatchId}/reject`, {
       method: "POST",
       body: JSON.stringify({ notes: notes ?? null }),
+   });
+}
+
+export async function loadRecalls(filters: { status?: string; limit?: number } = {}) {
+   const query = new URLSearchParams();
+   if (filters.status !== undefined && filters.status !== "") {
+      query.set("status", filters.status);
+   }
+   if (filters.limit !== undefined) {
+      query.set("limit", String(filters.limit));
+   }
+   const path = query.size === 0 ? "/api/recalls" : `/api/recalls?${query}`;
+   return await requestJson<RecallCaseDto[]>(path);
+}
+
+export async function createRecall(request: RecallCreateRequest) {
+   return await requestJson<RecallCaseDto>("/api/recalls", { method: "POST", body: JSON.stringify(request) });
+}
+
+export async function activateRecall(id: string, notes?: string) {
+   return await requestJson<RecallCaseDto>(`/api/recalls/${id}/activate`, { method: "POST", body: JSON.stringify({ notes: notes ?? null }) });
+}
+
+export async function closeRecall(id: string, notes?: string) {
+   return await requestJson<RecallCaseDto>(`/api/recalls/${id}/close`, { method: "POST", body: JSON.stringify({ notes: notes ?? null }) });
+}
+
+export async function updateRecallAffectedBatch(id: string, affectedBatchId: string, status: string, notes?: string) {
+   return await requestJson<RecallCaseDto>(`/api/recalls/${id}/affected-batches/${affectedBatchId}`, {
+      method: "POST",
+      body: JSON.stringify({ status, notes: notes ?? null }),
    });
 }
 

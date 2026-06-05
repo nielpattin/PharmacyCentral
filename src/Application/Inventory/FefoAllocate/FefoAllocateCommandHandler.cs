@@ -10,7 +10,14 @@ public sealed class FefoAllocateCommandHandler(IApplicationDbContext dbContext)
 {
     public async Task<Result<FefoAllocationResult>> HandleAsync(FefoAllocateCommand command, CancellationToken cancellationToken)
     {
-        List<InventoryBalance> balances = await dbContext.ListBalancesForFefoAsync(command.ProductId, command.SiteId, cancellationToken);
+        List<InventoryBalance> balances = [];
+        foreach (InventoryBalance balance in await dbContext.ListBalancesForFefoAsync(command.ProductId, command.SiteId, cancellationToken))
+        {
+            if (!await dbContext.IsProductBatchBlockedByActiveRecallAsync(balance.ProductBatchId, command.SiteId, cancellationToken))
+            {
+                balances.Add(balance);
+            }
+        }
         decimal quantityAvailable = balances.Sum(balance => balance.QuantityOnHand);
         if (quantityAvailable < command.QuantityNeeded)
         {

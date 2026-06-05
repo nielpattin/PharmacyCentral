@@ -13,4 +13,6 @@ public static class AuditEntityTypes
     public const string StocktakeSession = "StocktakeSession";
     public const string StockAdjustment = "StockAdjustment";
     public const string StockLedgerEntry = "StockLedgerEntry";
+
+    public const string RecallCase = "RecallCase";
 }

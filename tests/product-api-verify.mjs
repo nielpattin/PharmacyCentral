@@ -398,6 +398,33 @@ async function main() {
   assertApprox(balanceFor(balances, productBatchId, sourceLocation.id).quantityOnHand, 43, "Standalone adjustment approval should update balance");
   console.log("PASS standalone stock adjustment approval");
 
+  const recall = await admin.post("recalls", {
+    recallNumber: `RC-${suffix}`.slice(0, 100),
+    title: `Recall verification ${suffix}`,
+    reason: "Verification recall action.",
+    notes: "Product verification recall.",
+    affectedBatches: [{ productBatchId, siteId: sourceSite.id, notes: "Source site scope." }],
+  }, 201);
+  assertEqual(recall.status, "Draft", "Recall should start as draft");
+  const activeRecall = await admin.post(`recalls/${recall.id}/activate`, { notes: "Activate verification recall." });
+  assertEqual(activeRecall.status, "Active", "Recall should activate");
+  await admin.post("inventory/fefo-allocate", { productId: product.id, siteId: sourceSite.id, quantityNeeded: 1 }, 400);
+  await admin.post("returns", {
+    productId: product.id,
+    productBatchId,
+    siteId: sourceSite.id,
+    storageLocationId: sourceLocation.id,
+    quantity: 1,
+    reason: "Damaged",
+    destination: "Verification disposal",
+    notes: "Active recall should block operational use.",
+  }, 400);
+  const releasedRecall = await admin.post(`recalls/${recall.id}/affected-batches/${recall.affectedBatches[0].id}`, { status: "Released", notes: "Cleared by verification." });
+  assertEqual(releasedRecall.affectedBatches[0].status, "Released", "Recall affected batch should be released after review");
+  const closedRecall = await admin.post(`recalls/${recall.id}/close`, { notes: "Close verification recall." });
+  assertEqual(closedRecall.status, "Closed", "Recall should close");
+  console.log("PASS recall blocks affected batch and tracks final action");
+
   const rejectedReceipt = await admin.post("goods-receipts", {
     supplierId: supplier.id,
     siteId: sourceSite.id,
