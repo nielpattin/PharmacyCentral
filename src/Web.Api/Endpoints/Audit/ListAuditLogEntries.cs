@@ -1,9 +1,8 @@
-using PharmacyCentral.Application.Audit.Handlers;
-using PharmacyCentral.Application.Audit.Models;
-using PharmacyCentral.Application.Audit.Queries;
+using PharmacyCentral.Application.Audit.ListAuditLogEntries;
+using PharmacyCentral.Application.Audit.Shared;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Audit;
 

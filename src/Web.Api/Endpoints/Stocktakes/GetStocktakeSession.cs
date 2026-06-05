@@ -1,9 +1,8 @@
-using PharmacyCentral.Application.Stocktakes.Handlers;
-using PharmacyCentral.Application.Stocktakes.Models;
-using PharmacyCentral.Application.Stocktakes.Queries;
+using PharmacyCentral.Application.Stocktakes.GetStocktakeSessionById;
+using PharmacyCentral.Application.Stocktakes.Shared;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Stocktakes;
 

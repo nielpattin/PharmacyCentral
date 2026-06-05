@@ -1,10 +1,9 @@
-using PharmacyCentral.Application.Sites.Commands;
-using PharmacyCentral.Application.Sites.Handlers;
-using PharmacyCentral.Application.Sites.Models;
+using PharmacyCentral.Application.Sites.CreateSite;
+using PharmacyCentral.Application.Sites.Shared;
 using PharmacyCentral.Domain.Sites;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Sites;
 

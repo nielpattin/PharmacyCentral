@@ -1,11 +1,10 @@
 using PharmacyCentral.Application.Abstractions.Identity;
-using PharmacyCentral.Application.Auth.Models;
-using PharmacyCentral.Application.GoodsReceipts.Commands;
-using PharmacyCentral.Application.GoodsReceipts.Handlers;
-using PharmacyCentral.Application.GoodsReceipts.Models;
+using PharmacyCentral.Application.Auth.Shared;
+using PharmacyCentral.Application.GoodsReceipts.CreateGoodsReceipt;
+using PharmacyCentral.Application.GoodsReceipts.Shared;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.GoodsReceipts;
 

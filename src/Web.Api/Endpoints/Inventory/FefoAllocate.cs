@@ -1,9 +1,8 @@
-using PharmacyCentral.Application.Inventory.Commands;
-using PharmacyCentral.Application.Inventory.Handlers;
-using PharmacyCentral.Application.Inventory.Models;
+using PharmacyCentral.Application.Inventory.FefoAllocate;
+using PharmacyCentral.Application.Inventory.Shared;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Inventory;
 

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore;
 using PharmacyCentral.Infrastructure.Authorization;
 using PharmacyCentral.Infrastructure.Identity;
 using PharmacyCentral.Infrastructure.Persistence;

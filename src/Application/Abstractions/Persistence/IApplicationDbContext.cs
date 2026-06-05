@@ -1,4 +1,4 @@
-using PharmacyCentral.Application.Dashboard.Models;
+using PharmacyCentral.Application.Dashboard.Shared;
 using PharmacyCentral.Domain.Audit;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;

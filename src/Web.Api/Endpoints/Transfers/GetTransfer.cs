@@ -1,9 +1,8 @@
-using PharmacyCentral.Application.Transfers.Handlers;
-using PharmacyCentral.Application.Transfers.Models;
-using PharmacyCentral.Application.Transfers.Queries;
+using PharmacyCentral.Application.Transfers.GetTransferById;
+using PharmacyCentral.Application.Transfers.Shared;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Transfers;
 

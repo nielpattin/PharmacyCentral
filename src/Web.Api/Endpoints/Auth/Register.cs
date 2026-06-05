@@ -1,6 +1,5 @@
-using PharmacyCentral.Application.Auth.Commands;
-using PharmacyCentral.Application.Auth.Handlers;
-using PharmacyCentral.Application.Auth.Models;
+using PharmacyCentral.Application.Auth.RegisterUser;
+using PharmacyCentral.Application.Auth.Shared;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
 

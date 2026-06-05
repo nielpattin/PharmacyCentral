@@ -1,9 +1,8 @@
 using PharmacyCentral.Application.Abstractions.Identity;
-using PharmacyCentral.Application.Auth.Models;
-using PharmacyCentral.Application.Inventory.Models;
+using PharmacyCentral.Application.Auth.Shared;
+using PharmacyCentral.Application.Inventory.Shared;
+using PharmacyCentral.Application.Returns.CreateReturn;
 using PharmacyCentral.Application.Returns;
-using PharmacyCentral.Application.Returns.Commands;
-using PharmacyCentral.Application.Returns.Handlers;
 using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;

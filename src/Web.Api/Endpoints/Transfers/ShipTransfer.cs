@@ -1,11 +1,10 @@
 using PharmacyCentral.Application.Abstractions.Identity;
-using PharmacyCentral.Application.Auth.Models;
-using PharmacyCentral.Application.Transfers.Commands;
-using PharmacyCentral.Application.Transfers.Handlers;
-using PharmacyCentral.Application.Transfers.Models;
+using PharmacyCentral.Application.Auth.Shared;
+using PharmacyCentral.Application.Transfers.Shared;
+using PharmacyCentral.Application.Transfers.ShipTransfer;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Transfers;
 

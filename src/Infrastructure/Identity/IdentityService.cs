@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using PharmacyCentral.Application.Abstractions.Identity;
+using PharmacyCentral.Application.Auth.Shared;
 using PharmacyCentral.Application.Auth;
-using PharmacyCentral.Application.Auth.Models;
 using PharmacyCentral.Domain.Sites;
 using SharedKernel.Results;
 

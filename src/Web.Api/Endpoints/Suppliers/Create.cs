@@ -1,9 +1,8 @@
-using PharmacyCentral.Application.Suppliers.Commands;
-using PharmacyCentral.Application.Suppliers.Handlers;
-using PharmacyCentral.Application.Suppliers.Models;
+using PharmacyCentral.Application.Suppliers.CreateSupplier;
+using PharmacyCentral.Application.Suppliers.Shared;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Suppliers;
 

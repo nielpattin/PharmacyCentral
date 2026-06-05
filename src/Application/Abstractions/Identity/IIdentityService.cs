@@ -1,4 +1,4 @@
-using PharmacyCentral.Application.Auth.Models;
+using PharmacyCentral.Application.Auth.Shared;
 using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Abstractions.Identity;

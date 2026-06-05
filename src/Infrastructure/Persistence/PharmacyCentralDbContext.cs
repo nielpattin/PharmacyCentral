@@ -1,10 +1,13 @@
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore;
 using PharmacyCentral.Application.Abstractions.Persistence;
-using PharmacyCentral.Application.Audit.Models;
-using PharmacyCentral.Application.Dashboard.Models;
+using PharmacyCentral.Application.Audit.Shared;
+using PharmacyCentral.Application.Dashboard.Shared;
+using PharmacyCentral.Application.Prescriptions;
+using PharmacyCentral.Application.Stocktakes;
+using PharmacyCentral.Application.Transfers;
 using PharmacyCentral.Domain.Audit;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
@@ -14,9 +17,6 @@ using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Suppliers;
-using PharmacyCentral.Application.Stocktakes;
-using PharmacyCentral.Application.Transfers;
-using PharmacyCentral.Application.Prescriptions;
 using PharmacyCentral.Domain.Transfers;
 using PharmacyCentral.Infrastructure.Identity;
 
@@ -436,7 +436,7 @@ public sealed class PharmacyCentralDbContext
 
     async Task<DashboardSummaryDetails> IApplicationDbContext.GetDashboardSummaryAsync(Guid? siteId, CancellationToken cancellationToken)
     {
-        DateOnly expiryCutoff = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(30));
+        var expiryCutoff = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(30));
 
         IQueryable<StorageLocation> storageLocations = StorageLocations;
         IQueryable<InventoryBalance> inventoryBalances = InventoryBalances.Include(balance => balance.ProductBatch);

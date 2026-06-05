@@ -1,9 +1,8 @@
-using PharmacyCentral.Application.StorageLocations.Commands;
-using PharmacyCentral.Application.StorageLocations.Handlers;
-using PharmacyCentral.Application.StorageLocations.Models;
+using PharmacyCentral.Application.StorageLocations.CreateStorageLocation;
+using PharmacyCentral.Application.StorageLocations.Shared;
 using PharmacyCentral.Domain.StorageLocations;
-using SharedKernel.Results;
 using PharmacyCentral.Infrastructure.Authorization;
+using SharedKernel.Results;
 
 namespace Web.Api.Endpoints.StorageLocations;
 

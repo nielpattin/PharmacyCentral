@@ -343,3 +343,93 @@ Until lower-level implementation details are finalized, the safest default direc
 - keep strong internal module boundaries
 - use async outbox and background jobs for side effects
 - avoid microservices in v1
+
+## Final Code Architecture Decision
+
+Pharmacy Central uses **Clean Modular Vertical Slice Architecture** for backend code organization.
+
+This combines three concerns without treating them as competing patterns:
+
+- **Modular monolith** defines the runtime and ownership shape: one deployable backend split by business capability.
+- **Clean Architecture** defines dependency direction: business and application logic stay protected from frameworks, HTTP, EF Core, and external services.
+- **Vertical slices** define use-case layout: code that changes together for a business action lives together.
+
+### Dependency Direction
+
+The dependency direction is fixed:
+
+```text
+Domain / SharedKernel
+  <- Application
+  <- Infrastructure
+  <- Web.Api
+  <- AppHost
+```
+
+Rules:
+
+- `Domain` contains business entities, value objects, stable business rules, and domain services.
+- `SharedKernel` contains tiny, stable primitives only, such as result/error types.
+- `Application` contains use-case orchestration, commands, queries, handlers, and application abstractions.
+- `Infrastructure` implements persistence, identity, authorization, external services, and other technical details.
+- `Web.Api` adapts HTTP requests to Application use cases and must stay thin.
+
+`Domain` and `Application` must not reference EF Core, ASP.NET Core, Web.Api, or Infrastructure.
+
+### Vertical Slice Layout
+
+Application features are organized by business capability and then by use case:
+
+```text
+Application/<Feature>/<UseCase>/
+  Command.cs or Query.cs
+  Handler.cs
+  Details.cs or Response.cs
+  Validator.cs if needed
+
+Application/<Feature>/Shared/
+  feature-family services or policies only
+```
+
+Examples:
+
+```text
+Application/Inventory/RecordStockMovement/
+Application/Inventory/ListInventoryBalances/
+Application/Inventory/Shared/StockMovementRecorder.cs
+
+Application/Transfers/CreateTransfer/
+Application/Transfers/ApproveTransfer/
+Application/Transfers/ReceiveTransfer/
+
+Application/Stocktakes/CreateStocktakeSession/
+Application/Stocktakes/ApproveAdjustment/
+Application/Stocktakes/Shared/StockAdjustmentMovementService.cs
+```
+
+Endpoint files remain grouped by API feature under `Web.Api/Endpoints/<Feature>`, but they should only perform HTTP adaptation, authorization policy registration, request validation that belongs at the transport boundary, current-user extraction, and result mapping.
+
+### Shared Logic Decision Tree
+
+When logic appears in multiple places, choose its home by meaning:
+
+1. **One use case only** — keep it inside that use-case folder.
+2. **Several use cases in one feature family** — put it under `Application/<Feature>/Shared`.
+3. **Stable business rule** — move it into a Domain entity, value object, domain service, or domain policy.
+4. **Technical plumbing** — put it in Infrastructure, Web.Api middleware, or SharedKernel only if it is stable and generic.
+5. **Cross-feature abstraction** — allow only after at least three real, stable usages and a clear business name.
+
+Do not share request/response DTOs merely because two shapes currently match. Each use case owns its API/application contract unless a shared business model is genuinely stable.
+
+### Dead Traps to Avoid
+
+- No global `Common`, `Utils`, or broad `SharedServices` junk drawer.
+- No handler-to-handler calls.
+- No EF Core references from Application or Domain.
+- No ASP.NET Core references from Application or Domain.
+- No business rules in endpoints.
+- No trusted user identity accepted from request bodies.
+- No broad shared DTOs across unrelated use cases.
+- No vague classes named `Helper`, `Util`, `Manager`, or `CommonService` unless there is a specific domain meaning and review justification.
+
+The goal is feature locality without losing boundary discipline: use cases stay easy to find and change, while business rules and technical details stay in their correct layers.

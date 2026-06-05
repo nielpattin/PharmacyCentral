@@ -1,9 +1,8 @@
-using PharmacyCentral.Application.Prescriptions.Handlers;
-using PharmacyCentral.Application.Prescriptions.Models;
-using PharmacyCentral.Application.Prescriptions.Queries;
+using PharmacyCentral.Application.Prescriptions.GetPrescriptionById;
+using PharmacyCentral.Application.Prescriptions.Shared;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Prescriptions;
 

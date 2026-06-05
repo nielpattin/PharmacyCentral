@@ -1,9 +1,8 @@
-using PharmacyCentral.Application.Dashboard.Handlers;
-using PharmacyCentral.Application.Dashboard.Models;
-using PharmacyCentral.Application.Dashboard.Queries;
+using PharmacyCentral.Application.Dashboard.GetDashboardSummary;
+using PharmacyCentral.Application.Dashboard.Shared;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Dashboard;
 

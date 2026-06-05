@@ -1,9 +1,8 @@
-using PharmacyCentral.Application.Products.Commands;
-using PharmacyCentral.Application.Products.Handlers;
-using PharmacyCentral.Application.Products.Models;
+using PharmacyCentral.Application.Products.Shared;
+using PharmacyCentral.Application.Products.UpdateProduct;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Products;
 

@@ -1,7 +1,7 @@
-using PharmacyCentral.Application.StorageLocations.Handlers;
+using PharmacyCentral.Application.StorageLocations.DeleteStorageLocation;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.StorageLocations;
 

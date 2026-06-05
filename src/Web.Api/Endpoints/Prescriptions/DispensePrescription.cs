@@ -1,11 +1,10 @@
 using PharmacyCentral.Application.Abstractions.Identity;
-using PharmacyCentral.Application.Auth.Models;
-using PharmacyCentral.Application.Prescriptions.Commands;
-using PharmacyCentral.Application.Prescriptions.Handlers;
-using PharmacyCentral.Application.Prescriptions.Models;
+using PharmacyCentral.Application.Auth.Shared;
+using PharmacyCentral.Application.Prescriptions.DispensePrescription;
+using PharmacyCentral.Application.Prescriptions.Shared;
+using PharmacyCentral.Infrastructure.Authorization;
 using SharedKernel.Results;
 using Web.Api.Endpoints;
-using PharmacyCentral.Infrastructure.Authorization;
 
 namespace Web.Api.Endpoints.Prescriptions;
 

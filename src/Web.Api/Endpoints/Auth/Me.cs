@@ -1,5 +1,5 @@
 using PharmacyCentral.Application.Abstractions.Identity;
-using PharmacyCentral.Application.Auth.Models;
+using PharmacyCentral.Application.Auth.Shared;
 using Web.Api.Endpoints;
 
 namespace Web.Api.Endpoints.Auth;
