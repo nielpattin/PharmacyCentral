@@ -34,13 +34,17 @@ The suite creates uniquely named test users and records, then verifies:
 - login success and failed-login rejection
 - no-role user blocking
 - assigned-site filtering and cross-site denial
+- pricing publish, active lookup, overlap guard, and archive
+- purchase order approval and receipt matching
 - receiving creates a batch, inventory balance, and history entry
+- quality release and quality rejection controls
 - FEFO allocation and insufficient-stock rejection
-- prescription dispensing
+- prescription reservation, retry safety, and dispensing lifecycle
 - transfer approval by a second user, shipment, and receipt
 - return/removal stock decrease
 - stocktake variance posting
 - standalone stock adjustment approval by a second user
-- dashboard/inventory sanity after the workflow
+- recall blocking and affected-batch action tracking
+- dashboard/reporting sanity after the workflow
 
 The script mutates only development data and does not create migrations or change schema.

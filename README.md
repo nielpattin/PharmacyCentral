@@ -1,4 +1,4 @@
-﻿# Pharmacy Central
+# Pharmacy Central
 
 ## Prerequisites
 
@@ -52,6 +52,14 @@ The AppHost configures the frontend host as:
 ```text
 app.pharmacy.dev.localhost
 ```
+
+## Guides
+
+- [User Guide](docs/UserGuide.md)
+- [API Guide](docs/ApiGuide.md)
+- [Demo Script](docs/DemoScript.md)
+- [Runbooks](docs/Runbooks.md)
+- [Deployment Package](docs/Deployment.md)
 
 ## Local deployment package
 
