@@ -52,3 +52,27 @@ The AppHost configures the frontend host as:
 ```text
 app.pharmacy.dev.localhost
 ```
+
+## Local deployment package
+
+> This package is for local validation and handoff only. It does not push images or deploy to any external environment.
+
+Build the local production-like container package:
+
+```bash
+docker compose --env-file deploy/pharmacycentral.env.example build
+```
+
+Run it locally:
+
+```bash
+docker compose --env-file deploy/pharmacycentral.env.example up
+```
+
+Check health:
+
+```bash
+curl http://localhost:8080/health
+```
+
+See [`docs/Deployment.md`](docs/Deployment.md) for the full local packaging notes, HTTPS guidance, and CI behavior.

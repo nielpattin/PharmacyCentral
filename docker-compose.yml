@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: pharmacycentral-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pharmacycentral}
+      POSTGRES_USER: ${POSTGRES_USER:-pharmacycentral}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_this_password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pharmacycentral-postgres-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  pharmacycentral:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pharmacycentral-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__PharmacyCentral: Host=postgres;Port=5432;Database=${POSTGRES_DB:-pharmacycentral};Username=${POSTGRES_USER:-pharmacycentral};Password=${POSTGRES_PASSWORD:-change_this_password}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    ports:
+      - "${APP_HTTP_PORT:-8080}:8080"
+
+volumes:
+  pharmacycentral-postgres-data:

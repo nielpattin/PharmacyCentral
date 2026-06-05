@@ -1,0 +1,52 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate application package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Restore backend
+        run: dotnet restore src/Web.Api/Web.Api.csproj
+
+      - name: Build backend
+        run: dotnet build src/Web.Api/Web.Api.csproj --configuration Release --no-restore
+
+      - name: Install frontend dependencies
+        working-directory: src/Frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint frontend
+        working-directory: src/Frontend
+        run: pnpm lint
+
+      - name: Build frontend
+        working-directory: src/Frontend
+        run: pnpm build
+
+      - name: Build container image locally
+        run: docker build --pull --tag pharmacycentral:ci .
