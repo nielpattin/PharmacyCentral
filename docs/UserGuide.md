@@ -150,6 +150,10 @@ Use **Recalls** to identify affected batches, activate recall controls, record b
 
 Active recalls block affected batches from operational use until an allowed action releases or removes the batch.
 
+## Finance reconciliation
+
+Use **Finance** to review inventory valuation and operational reconciliation by site and date range. It summarizes current value from published prices, received quantities, dispensing, returns/removals, adjustments, and transfers. External accounting posting is not part of this workspace.
+
 ## Audit
 
 Use **Audit** to review recorded business activity. Audit details are intended for operational traceability and review.

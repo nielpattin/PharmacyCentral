@@ -12,6 +12,7 @@ using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Auth.Login;
 using PharmacyCentral.Application.Auth.RegisterUser;
 using PharmacyCentral.Application.Dashboard.GetDashboardSummary;
+using PharmacyCentral.Application.Finance.GetFinanceSummary;
 using PharmacyCentral.Application.GoodsReceipts.CreateGoodsReceipt;
 using PharmacyCentral.Application.GoodsReceipts.GetGoodsReceiptById;
 using PharmacyCentral.Application.GoodsReceipts.ListGoodsReceipts;
@@ -174,6 +175,7 @@ public static class DependencyInjection
         services.AddScoped<AuditLogService>();
         services.AddScoped<ListAuditLogEntriesQueryHandler>();
         services.AddScoped<GetDashboardSummaryQueryHandler>();
+        services.AddScoped<GetFinanceSummaryHandler>();
         services.AddScoped<LoginHandler>();
         services.AddScoped<RegisterUserHandler>();
         services.AddScoped<CreateSiteCommandHandler>();

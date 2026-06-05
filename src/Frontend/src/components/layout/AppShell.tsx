@@ -54,6 +54,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
       quality: <ShieldCheck size={16} strokeWidth={2} />,
       recalls: <Siren size={16} strokeWidth={2} />,
       reporting: <BarChart3 size={16} strokeWidth={2} />,
+      finance: <BarChart3 size={16} strokeWidth={2} />,
       audit: <ShieldCheck size={16} strokeWidth={2} />,
       users: <Users size={16} strokeWidth={2} />,
    };
@@ -91,6 +92,7 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
             { key: "quality" as const, href: "/dashboard/quality", label: t("nav.quality") },
             { key: "recalls" as const, href: "/dashboard/recalls", label: t("nav.recalls") },
             { key: "reporting" as const, href: "/dashboard/reporting", label: t("nav.reporting") },
+            { key: "finance" as const, href: "/dashboard/finance", label: t("nav.finance") },
             { key: "audit" as const, href: "/dashboard/audit", label: t("nav.audit") },
             { key: "users" as const, href: "/dashboard/users", label: t("nav.users") },
          ],

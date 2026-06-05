@@ -124,6 +124,55 @@ export type ProductPriceDto = {
    updatedAtUtc: string;
 };
 
+export type FinanceInventoryValuationLineDto = {
+   productId: string;
+   productSku: string;
+   productName: string;
+   productBatchId: string;
+   batchNumber: string;
+   siteId: string;
+   siteName: string;
+   storageLocationId: string;
+   storageLocationName: string;
+   quantityOnHand: number;
+   quantityReserved: number;
+   availableQuantity: number;
+   unitPrice: number | null;
+   currency: string;
+   valueOnHand: number;
+   reservedValue: number;
+   priceStatus: string;
+};
+
+export type FinanceActivityLineDto = {
+   activityType: string;
+   count: number;
+   quantityIn: number;
+   quantityOut: number;
+   latestActivityAtUtc: string | null;
+};
+
+export type FinanceSummaryDto = {
+   siteId: string | null;
+   from: string;
+   to: string;
+   totalQuantityOnHand: number;
+   totalQuantityReserved: number;
+   inventoryValue: number;
+   reservedValue: number;
+   balanceCount: number;
+   missingPriceCount: number;
+   receiptCount: number;
+   receiptQuantity: number;
+   dispensedQuantity: number;
+   returnQuantity: number;
+   adjustmentQuantity: number;
+   transferOutQuantity: number;
+   transferInQuantity: number;
+   valuationLines: FinanceInventoryValuationLineDto[];
+   activityLines: FinanceActivityLineDto[];
+};
+
 export type GoodsReceiptLineDto = {
    id: string;
    productId: string;
@@ -653,6 +702,12 @@ export type DashboardSummaryFilters = {
    siteId?: string;
 };
 
+export type FinanceSummaryFilters = {
+   siteId?: string;
+   from?: string;
+   to?: string;
+};
+
 export type ReturnCreateRequest = {
    productId: string;
    productBatchId: string;
@@ -874,6 +929,14 @@ function buildDashboardSummaryQuery(filters: DashboardSummaryFilters = {}) {
    return query.size === 0 ? "" : `?${query}`;
 }
 
+function buildFinanceSummaryQuery(filters: FinanceSummaryFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.siteId !== undefined && filters.siteId !== "") query.set("siteId", filters.siteId);
+   if (filters.from !== undefined && filters.from !== "") query.set("from", filters.from);
+   if (filters.to !== undefined && filters.to !== "") query.set("to", filters.to);
+   return query.size === 0 ? "" : `?${query}`;
+}
+
 export async function loadProducts() {
    return await requestJson<ProductDto[]>("/api/products");
 }
@@ -972,6 +1035,10 @@ export async function loadAuditLogs(filters: AuditLogFilters = {}) {
 
 export async function loadDashboardSummary(filters: DashboardSummaryFilters = {}) {
    return await requestJson<DashboardSummaryDto>(`/api/dashboard/summary${buildDashboardSummaryQuery(filters)}`);
+}
+
+export async function loadFinanceSummary(filters: FinanceSummaryFilters = {}) {
+   return await requestJson<FinanceSummaryDto>(`/api/finance/summary${buildFinanceSummaryQuery(filters)}`);
 }
 
 export async function createGoodsReceipt(request: GoodsReceiptUpsertRequest) {

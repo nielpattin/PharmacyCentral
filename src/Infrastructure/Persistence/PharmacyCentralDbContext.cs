@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Audit.Shared;
 using PharmacyCentral.Application.Dashboard.Shared;
+using PharmacyCentral.Application.Finance.Shared;
 using PharmacyCentral.Application.Prescriptions;
 using PharmacyCentral.Application.Stocktakes;
 using PharmacyCentral.Application.Transfers;
@@ -766,6 +767,126 @@ public sealed class PharmacyCentralDbContext
             OpenStocktakeCount: await stocktakes.CountAsync(session => session.Status == StocktakeStatus.Draft || session.Status == StocktakeStatus.InProgress, cancellationToken),
             PendingAdjustmentCount: await adjustments.CountAsync(adjustment => adjustment.Status == AdjustmentStatus.Pending, cancellationToken),
             RecentActivity: recentActivity.Select(entry => DashboardActivityDetails.From(AuditLogEntryDetails.From(entry))).ToList());
+    }
+
+    async Task<FinanceSummaryDetails> IApplicationDbContext.GetFinanceSummaryAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
+    {
+        DateOnly effectiveFrom = from ?? DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-30));
+        DateOnly effectiveTo = to ?? DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        DateTimeOffset fromUtc = effectiveFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        DateTimeOffset toUtc = effectiveTo.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+        DateOnly priceDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+
+        IQueryable<InventoryBalance> balanceQuery = InventoryBalances
+            .Include(balance => balance.ProductBatch).ThenInclude(batch => batch.Product)
+            .Include(balance => balance.Site)
+            .Include(balance => balance.StorageLocation)
+            .Where(balance => balance.QuantityOnHand != 0 || balance.QuantityReserved != 0);
+
+        IQueryable<StockLedgerEntry> ledgerQuery = StockLedgerEntries
+            .Where(entry => entry.OccurredAtUtc >= fromUtc && entry.OccurredAtUtc <= toUtc);
+
+        IQueryable<GoodsReceipt> receiptQuery = GoodsReceipts
+            .Include(receipt => receipt.Lines)
+            .Where(receipt => receipt.ReceivedAtUtc >= fromUtc && receipt.ReceivedAtUtc <= toUtc);
+
+        if (siteId is not null)
+        {
+            balanceQuery = balanceQuery.Where(balance => balance.SiteId == siteId);
+            ledgerQuery = ledgerQuery.Where(entry => entry.SiteId == siteId);
+            receiptQuery = receiptQuery.Where(receipt => receipt.SiteId == siteId);
+        }
+
+        if (siteIds is not null)
+        {
+            balanceQuery = balanceQuery.Where(balance => siteIds.Contains(balance.SiteId));
+            ledgerQuery = ledgerQuery.Where(entry => siteIds.Contains(entry.SiteId));
+            receiptQuery = receiptQuery.Where(receipt => siteIds.Contains(receipt.SiteId));
+        }
+
+        List<InventoryBalance> balances = await balanceQuery
+            .OrderBy(balance => balance.Site.Name)
+            .ThenBy(balance => balance.ProductBatch.Product.Sku)
+            .ThenBy(balance => balance.ProductBatch.BatchNumber)
+            .Take(500)
+            .ToListAsync(cancellationToken);
+
+        Guid[] productIds = balances.Select(balance => balance.ProductBatch.ProductId).Distinct().ToArray();
+        List<ProductPrice> prices = await ProductPrices
+            .Include(price => price.Site)
+            .Where(price => productIds.Contains(price.ProductId)
+                && price.Status == ProductPriceStatus.Published
+                && price.EffectiveFrom <= priceDate
+                && (price.EffectiveTo == null || price.EffectiveTo >= priceDate)
+                && (price.SiteId == null || balances.Select(balance => balance.SiteId).Contains(price.SiteId.Value)))
+            .ToListAsync(cancellationToken);
+
+        List<FinanceInventoryValuationLine> valuationLines = [];
+        foreach (InventoryBalance balance in balances)
+        {
+            ProductPrice? price = prices
+                .Where(candidate => candidate.ProductId == balance.ProductBatch.ProductId
+                    && (candidate.SiteId == balance.SiteId || candidate.SiteId == null))
+                .OrderByDescending(candidate => candidate.SiteId == balance.SiteId)
+                .ThenByDescending(candidate => candidate.EffectiveFrom)
+                .FirstOrDefault();
+            decimal unitPrice = price?.UnitPrice ?? 0m;
+            decimal availableQuantity = balance.QuantityOnHand - balance.QuantityReserved;
+
+            valuationLines.Add(new FinanceInventoryValuationLine(
+                balance.ProductBatch.ProductId,
+                balance.ProductBatch.Product.Sku,
+                balance.ProductBatch.Product.Name,
+                balance.ProductBatchId,
+                balance.ProductBatch.BatchNumber,
+                balance.SiteId,
+                balance.Site.Name,
+                balance.StorageLocationId,
+                balance.StorageLocation.Name,
+                balance.QuantityOnHand,
+                balance.QuantityReserved,
+                availableQuantity,
+                price?.UnitPrice,
+                price?.Currency ?? "VND",
+                balance.QuantityOnHand * unitPrice,
+                balance.QuantityReserved * unitPrice,
+                price is null ? "Missing" : price.SiteId == balance.SiteId ? "Site" : "Default"));
+        }
+
+        List<StockLedgerEntry> ledgerEntries = await ledgerQuery.ToListAsync(cancellationToken);
+        List<FinanceActivityLine> activityLines = ledgerEntries
+            .GroupBy(entry => entry.MovementType)
+            .OrderBy(group => group.Key)
+            .Select(group => new FinanceActivityLine(
+                group.Key,
+                group.Count(),
+                group.Where(entry => entry.QuantityDelta > 0).Sum(entry => entry.QuantityDelta),
+                Math.Abs(group.Where(entry => entry.QuantityDelta < 0).Sum(entry => entry.QuantityDelta)),
+                group.Max(entry => (DateTimeOffset?)entry.OccurredAtUtc)))
+            .ToList();
+
+        int receiptCount = await receiptQuery.CountAsync(cancellationToken);
+        decimal receiptQuantity = await receiptQuery.SelectMany(receipt => receipt.Lines).SumAsync(line => line.Quantity, cancellationToken);
+
+        return new FinanceSummaryDetails(
+            siteId,
+            effectiveFrom,
+            effectiveTo,
+            valuationLines.Sum(line => line.QuantityOnHand),
+            valuationLines.Sum(line => line.QuantityReserved),
+            valuationLines.Sum(line => line.ValueOnHand),
+            valuationLines.Sum(line => line.ReservedValue),
+            valuationLines.Count,
+            valuationLines.Count(line => line.UnitPrice is null),
+            receiptCount,
+            receiptQuantity,
+            activityLines.Where(line => line.ActivityType is "Dispense" or "Dispensed").Sum(line => line.QuantityOut),
+            activityLines.Where(line => line.ActivityType is "InventoryReturn" or "Return" or "InventoryRemoval").Sum(line => line.QuantityOut),
+            activityLines.Where(line => line.ActivityType is "Adjustment" or "ManualAdjustment" or "StocktakeAdjustment").Sum(line => line.QuantityIn + line.QuantityOut),
+            activityLines.Where(line => line.ActivityType == "TransferOut").Sum(line => line.QuantityOut),
+            activityLines.Where(line => line.ActivityType == "TransferIn").Sum(line => line.QuantityIn),
+            valuationLines.OrderByDescending(line => line.ValueOnHand).ThenBy(line => line.ProductSku).Take(50).ToList(),
+            activityLines);
     }
 
     async Task IApplicationDbContext.AddAsync<TEntity>(TEntity entity, CancellationToken cancellationToken)

@@ -96,6 +96,7 @@ Non-admin users can only access assigned-site data.
 | --- | --- |
 | GET | `/api/dashboard/summary` |
 | GET | `/api/audit/logs` |
+| GET | `/api/finance/summary` | Finance valuation and operational reconciliation |
 
 ### Master data
 

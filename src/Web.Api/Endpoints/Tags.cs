@@ -9,6 +9,7 @@ public static class Tags
 
 
     public const string Dashboard = "Dashboard";
+    public const string Finance = "Finance";
 
     public const string Sites = "Sites";
 

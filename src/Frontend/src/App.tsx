@@ -20,6 +20,7 @@ import StockAdjustmentPage from "./pages/StockAdjustmentPage";
 import TransferPage from "./pages/TransferPage";
 import PrescriptionPage from "./pages/PrescriptionPage";
 import ReportingPage from "./pages/ReportingPage";
+import FinancePage from "./pages/FinancePage";
 import ReturnsPage from "./pages/ReturnsPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import QualityPage from "./pages/QualityPage";
@@ -183,6 +184,9 @@ export default function App() {
          break;
       case "/dashboard/reporting":
          page = <ReportingPage />;
+         break;
+      case "/dashboard/finance":
+         page = <FinancePage />;
          break;
       case "/dashboard/returns":
          page = <ReturnsPage />;

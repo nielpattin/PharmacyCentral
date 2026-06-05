@@ -572,6 +572,22 @@ async function main() {
   assert(qualityAudit.some((entry) => entry.action === "Rejected"), "Rejected quality decision should be auditable");
   console.log("PASS quality rejection blocks operational use and records audit");
 
+  const financePrice = await admin.post("pricing/prices", {
+    productId: product.id,
+    siteId: sourceSite.id,
+    unitPrice: 14000,
+    currency: "VND",
+    effectiveFrom: new Date().toISOString().slice(0, 10),
+    effectiveTo: null,
+    notes: "Product verification finance price.",
+  }, 201);
+  await admin.post(`pricing/prices/${financePrice.id}/publish`, {}, 200);
+  const finance = await admin.get(`finance/summary?siteId=${sourceSite.id}`);
+  assert(finance.inventoryValue > 0, "Finance summary should include inventory valuation when prices are available");
+  assert(finance.valuationLines.some((line) => line.productId === product.id && line.unitPrice === 14000), "Finance valuation should include the verification product price");
+  assert(finance.activityLines.some((line) => line.activityType === "GoodsReceipt"), "Finance activity should include received stock");
+  console.log("PASS finance valuation and activity reconciliation");
+
   const dashboard = await admin.get(`dashboard/summary?siteId=${sourceSite.id}`);
   assert(typeof dashboard.totalQuantityOnHand === "number", "Dashboard summary should include quantity totals");
   const limitedBalances = await limited.get("inventory/balances");

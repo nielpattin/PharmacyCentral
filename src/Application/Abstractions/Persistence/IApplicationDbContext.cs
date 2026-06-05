@@ -1,4 +1,5 @@
 using PharmacyCentral.Application.Dashboard.Shared;
+using PharmacyCentral.Application.Finance.Shared;
 using PharmacyCentral.Domain.Audit;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
@@ -160,6 +161,8 @@ public interface IApplicationDbContext
     Task<List<AuditLogEntry>> ListAuditLogEntriesAsync(Guid? userId = null, Guid? siteId = null, string? entityType = null, Guid? entityId = null, string? action = null, int limit = 100, CancellationToken cancellationToken = default);
 
     Task<DashboardSummaryDetails> GetDashboardSummaryAsync(Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
+
+    Task<FinanceSummaryDetails> GetFinanceSummaryAsync(Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, DateOnly? from = null, DateOnly? to = null, CancellationToken cancellationToken = default);
 
     Task AddAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default)
         where TEntity : class;

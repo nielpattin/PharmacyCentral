@@ -36,6 +36,7 @@ The suite creates uniquely named test users and records, then verifies:
 - assigned-site filtering and cross-site denial
 - password change, admin reset, and session revocation
 - pricing publish, active lookup, overlap guard, and archive
+- finance valuation and operational reconciliation
 - purchase order approval and receipt matching
 - receiving creates a batch, inventory balance, and history entry
 - quality release and quality rejection controls
