@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Auth.Shared;
 using PharmacyCentral.Application.Prescriptions.CancelPrescription;
@@ -16,12 +17,24 @@ internal sealed class CancelPrescription : IEndpoint
             Guid id,
             IIdentityService identityService,
             CancelPrescriptionHandler handler,
+            IApplicationDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
             AuthUserDetails? currentUser = await identityService.GetCurrentUserAsync(cancellationToken);
             if (currentUser is null)
             {
                 return Results.Unauthorized();
+            }
+
+            var prescription = await dbContext.GetPrescriptionByIdAsync(id, cancellationToken);
+            if (prescription is null)
+            {
+                return Results.NotFound(new { error = $"Prescription '{id}' was not found." });
+            }
+
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, prescription.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             CancelPrescriptionCommand command = new()

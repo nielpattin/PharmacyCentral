@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Auth.Shared;
 using PharmacyCentral.Application.Stocktakes.ApproveAdjustment;
@@ -22,12 +23,24 @@ internal sealed class ApproveAdjustment : IEndpoint
             Request request,
             IIdentityService identityService,
             ApproveAdjustmentHandler handler,
+            IApplicationDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
             AuthUserDetails? currentUser = await identityService.GetCurrentUserAsync(cancellationToken);
             if (currentUser is null)
             {
                 return Results.Unauthorized();
+            }
+
+            var adjustment = await dbContext.GetStockAdjustmentByIdAsync(id, cancellationToken);
+            if (adjustment is null)
+            {
+                return Results.NotFound(new { error = $"Stock adjustment '{id}' was not found." });
+            }
+
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, adjustment.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             ApproveAdjustmentCommand command = new()

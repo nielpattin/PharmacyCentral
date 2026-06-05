@@ -56,6 +56,11 @@ internal sealed class CreateTransfer : IEndpoint
                 return Results.ValidationProblem(errors);
             }
 
+            if (!EndpointSiteAccess.CanAccessSites(currentUser, request.SourceSiteId, request.DestinationSiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
             CreateTransferCommand command = new()
             {
                 SourceSiteId = request.SourceSiteId,

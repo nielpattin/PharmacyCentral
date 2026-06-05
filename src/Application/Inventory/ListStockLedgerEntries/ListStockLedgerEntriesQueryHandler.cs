@@ -12,6 +12,7 @@ public sealed class ListStockLedgerEntriesQueryHandler(IApplicationDbContext dbC
                 query.ProductId,
                 query.ProductBatchId,
                 query.SiteId,
+                query.AllowedSiteIds,
                 query.StorageLocationId,
                 query.Limit,
                 cancellationToken))

@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Sites.GetSiteById;
 using PharmacyCentral.Application.Sites.Shared;
 using PharmacyCentral.Infrastructure.Authorization;
@@ -13,8 +14,15 @@ internal sealed class GetById : IEndpoint
         app.MapGet("sites/{id:guid}", async (
             Guid id,
             GetSiteByIdQueryHandler handler,
+            IIdentityService identityService,
             CancellationToken cancellationToken) =>
         {
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
             Result<SiteDetails> result = await handler.HandleAsync(new GetSiteByIdQuery(id), cancellationToken);
 
             if (result.IsFailure)
@@ -22,7 +30,9 @@ internal sealed class GetById : IEndpoint
                 return Results.NotFound();
             }
 
-            return Results.Ok(result.Value);
+            return EndpointSiteAccess.CanAccessSite(currentUser, result.Value.Id)
+                ? Results.Ok(result.Value)
+                : EndpointSiteAccess.ForbidSiteAccess();
         })
         .WithName("GetSiteById")
         .WithTags(Tags.Sites)

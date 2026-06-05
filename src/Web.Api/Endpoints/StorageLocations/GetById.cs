@@ -1,3 +1,5 @@
+using PharmacyCentral.Application.Abstractions.Identity;
+using Web.Api.Endpoints;
 using PharmacyCentral.Application.StorageLocations.GetStorageLocationById;
 using PharmacyCentral.Application.StorageLocations.Shared;
 using PharmacyCentral.Infrastructure.Authorization;
@@ -12,8 +14,15 @@ internal sealed class GetById : IEndpoint
         app.MapGet("storage-locations/{id:guid}", async (
             Guid id,
             GetStorageLocationByIdQueryHandler handler,
+            IIdentityService identityService,
             CancellationToken cancellationToken) =>
         {
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
             Result<StorageLocationDetails> result = await handler.HandleAsync(new GetStorageLocationByIdQuery(id), cancellationToken);
 
             if (result.IsFailure)
@@ -21,7 +30,9 @@ internal sealed class GetById : IEndpoint
                 return Results.NotFound();
             }
 
-            return Results.Ok(result.Value);
+            return EndpointSiteAccess.CanAccessSite(currentUser, result.Value.SiteId)
+                ? Results.Ok(result.Value)
+                : EndpointSiteAccess.ForbidSiteAccess();
         })
         .WithName("GetStorageLocationById")
         .WithTags(Tags.StorageLocations)

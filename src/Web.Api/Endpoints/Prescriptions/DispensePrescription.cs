@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Auth.Shared;
 using PharmacyCentral.Application.Prescriptions.DispensePrescription;
@@ -29,6 +30,7 @@ internal sealed class DispensePrescription : IEndpoint
             Request request,
             IIdentityService identityService,
             DispensePrescriptionHandler handler,
+            IApplicationDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
             AuthUserDetails? currentUser = await identityService.GetCurrentUserAsync(cancellationToken);
@@ -41,6 +43,17 @@ internal sealed class DispensePrescription : IEndpoint
             if (errors.Count != 0)
             {
                 return Results.ValidationProblem(errors);
+            }
+
+            var prescription = await dbContext.GetPrescriptionByIdAsync(id, cancellationToken);
+            if (prescription is null)
+            {
+                return Results.NotFound(new { error = $"Prescription '{id}' was not found." });
+            }
+
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, prescription.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             DispensePrescriptionCommand command = new()

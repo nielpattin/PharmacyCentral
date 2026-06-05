@@ -48,13 +48,13 @@ public interface IApplicationDbContext
 
     IQueryable<Supplier> Suppliers { get; }
 
-    Task<List<Site>> ListSitesAsync(CancellationToken cancellationToken = default);
+    Task<List<Site>> ListSitesAsync(IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
 
     Task<Site?> GetSiteByIdAsync(Guid siteId, CancellationToken cancellationToken = default);
 
     Task<bool> SiteCodeExistsAsync(string code, Guid? excludedSiteId = null, CancellationToken cancellationToken = default);
 
-    Task<List<StorageLocation>> ListStorageLocationsAsync(CancellationToken cancellationToken = default);
+    Task<List<StorageLocation>> ListStorageLocationsAsync(IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
 
     Task<StorageLocation?> GetStorageLocationByIdAsync(Guid storageLocationId, CancellationToken cancellationToken = default);
 
@@ -74,17 +74,17 @@ public interface IApplicationDbContext
 
     Task<InventoryBalance?> GetInventoryBalanceAsync(Guid productBatchId, Guid storageLocationId, CancellationToken cancellationToken = default);
 
-    Task<List<InventoryBalance>> ListInventoryBalancesAsync(Guid? productId = null, Guid? siteId = null, Guid? storageLocationId = null, bool includeZeroBalances = false, CancellationToken cancellationToken = default);
+    Task<List<InventoryBalance>> ListInventoryBalancesAsync(Guid? productId = null, Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, Guid? storageLocationId = null, bool includeZeroBalances = false, CancellationToken cancellationToken = default);
 
     Task<List<InventoryBalance>> ListBalancesForFefoAsync(Guid productId, Guid siteId, CancellationToken cancellationToken = default);
 
-    Task<List<StockLedgerEntry>> ListStockLedgerEntriesAsync(Guid? productId = null, Guid? productBatchId = null, Guid? siteId = null, Guid? storageLocationId = null, int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<StockLedgerEntry>> ListStockLedgerEntriesAsync(Guid? productId = null, Guid? productBatchId = null, Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, Guid? storageLocationId = null, int limit = 100, CancellationToken cancellationToken = default);
 
-    Task<List<GoodsReceipt>> ListGoodsReceiptsAsync(int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<GoodsReceipt>> ListGoodsReceiptsAsync(int limit = 100, IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
 
     Task<GoodsReceipt?> GetGoodsReceiptByIdAsync(Guid goodsReceiptId, CancellationToken cancellationToken = default);
 
-    Task<List<StocktakeSession>> ListStocktakeSessionsAsync(Guid? siteId = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<StocktakeSession>> ListStocktakeSessionsAsync(Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
 
     Task<StocktakeSession?> GetStocktakeSessionByIdAsync(Guid stocktakeSessionId, CancellationToken cancellationToken = default);
 
@@ -92,7 +92,7 @@ public interface IApplicationDbContext
 
     Task<List<CountSheetLine>> ListCountSheetLinesWithVarianceAsync(Guid stocktakeSessionId, CancellationToken cancellationToken = default);
 
-    Task<List<StockAdjustment>> ListStockAdjustmentsAsync(Guid? siteId = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<StockAdjustment>> ListStockAdjustmentsAsync(Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
 
     Task<StockAdjustment?> GetStockAdjustmentByIdAsync(Guid adjustmentId, CancellationToken cancellationToken = default);
 
@@ -102,11 +102,11 @@ public interface IApplicationDbContext
 
     Task<bool> SupplierCodeExistsAsync(string code, Guid? excludedSupplierId = null, CancellationToken cancellationToken = default);
 
-    Task<List<TransferOrder>> ListTransfersAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken = default);
+    Task<List<TransferOrder>> ListTransfersAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken = default);
 
     Task<TransferOrder?> GetTransferByIdAsync(Guid transferId, CancellationToken cancellationToken = default);
 
-    Task<List<Prescription>> ListPrescriptionsAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken = default);
+    Task<List<Prescription>> ListPrescriptionsAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken = default);
 
     Task<Prescription?> GetPrescriptionByIdAsync(Guid prescriptionId, CancellationToken cancellationToken = default);
 
@@ -114,7 +114,7 @@ public interface IApplicationDbContext
 
     Task<List<AuditLogEntry>> ListAuditLogEntriesAsync(Guid? userId = null, Guid? siteId = null, string? entityType = null, Guid? entityId = null, string? action = null, int limit = 100, CancellationToken cancellationToken = default);
 
-    Task<DashboardSummaryDetails> GetDashboardSummaryAsync(Guid? siteId = null, CancellationToken cancellationToken = default);
+    Task<DashboardSummaryDetails> GetDashboardSummaryAsync(Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
 
     Task AddAsync<TEntity>(TEntity entity, CancellationToken cancellationToken = default)
         where TEntity : class;

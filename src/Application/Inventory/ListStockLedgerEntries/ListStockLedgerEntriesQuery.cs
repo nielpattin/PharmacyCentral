@@ -8,6 +8,8 @@ public sealed class ListStockLedgerEntriesQuery
 
     public Guid? SiteId { get; set; }
 
+    public IReadOnlyCollection<Guid>? AllowedSiteIds { get; set; }
+
     public Guid? StorageLocationId { get; set; }
 
     public int Limit { get; set; } = 100;

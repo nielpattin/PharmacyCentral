@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Inventory.ListStockLedgerEntries;
 using PharmacyCentral.Application.Inventory.Shared;
 using PharmacyCentral.Infrastructure.Authorization;
@@ -17,13 +18,26 @@ internal sealed class GetLedger : IEndpoint
             Guid? storageLocationId,
             int? limit,
             ListStockLedgerEntriesQueryHandler handler,
+            IIdentityService identityService,
             CancellationToken cancellationToken) =>
         {
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!EndpointSiteAccess.TryAuthorizeRequestedSite(currentUser, siteId, out IReadOnlyCollection<Guid>? allowedSiteIds))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
             ListStockLedgerEntriesQuery query = new()
             {
                 ProductId = productId,
                 ProductBatchId = productBatchId,
                 SiteId = siteId,
+                AllowedSiteIds = allowedSiteIds,
                 StorageLocationId = storageLocationId,
                 Limit = limit ?? 100
             };

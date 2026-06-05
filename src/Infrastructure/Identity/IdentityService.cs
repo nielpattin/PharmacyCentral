@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Auth.Shared;
 using PharmacyCentral.Application.Auth;
 using PharmacyCentral.Domain.Sites;
+using PharmacyCentral.Infrastructure.Persistence;
 using SharedKernel.Results;
 
 namespace PharmacyCentral.Infrastructure.Identity;
@@ -12,7 +14,8 @@ namespace PharmacyCentral.Infrastructure.Identity;
 internal sealed class IdentityService(
     SignInManager<UserAccount> signInManager,
     UserManager<UserAccount> userManager,
-    IHttpContextAccessor httpContextAccessor)
+    IHttpContextAccessor httpContextAccessor,
+    PharmacyCentralDbContext dbContext)
     : IIdentityService
 {
     public async Task<Result<AuthUserDetails>> LoginAsync(string email, string password, bool rememberMe, CancellationToken cancellationToken)
@@ -92,7 +95,11 @@ internal sealed class IdentityService(
     private async Task<AuthUserDetails> BuildUserDetails(UserAccount user)
     {
         IList<string> roles = await userManager.GetRolesAsync(user);
-        var siteIds = user.SiteScopes.Select(scope => scope.SiteId).ToList();
+        List<Guid> siteIds = await dbContext.UserSiteScopes
+            .Where(scope => scope.UserId == user.Id)
+            .OrderBy(scope => scope.SiteId)
+            .Select(scope => scope.SiteId)
+            .ToListAsync();
 
         return new AuthUserDetails
         {

@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Auth.Shared;
 using PharmacyCentral.Application.Transfers.ReceiveTransfer;
@@ -29,6 +30,7 @@ internal sealed class ReceiveTransfer : IEndpoint
             Request request,
             IIdentityService identityService,
             ReceiveTransferHandler handler,
+            IApplicationDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
             AuthUserDetails? currentUser = await identityService.GetCurrentUserAsync(cancellationToken);
@@ -41,6 +43,17 @@ internal sealed class ReceiveTransfer : IEndpoint
             if (errors.Count != 0)
             {
                 return Results.ValidationProblem(errors);
+            }
+
+            var transfer = await dbContext.GetTransferByIdAsync(id, cancellationToken);
+            if (transfer is null)
+            {
+                return Results.NotFound(new { error = $"Transfer '{id}' was not found." });
+            }
+
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, transfer.DestinationSiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             ReceiveTransferCommand command = new()

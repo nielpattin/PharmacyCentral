@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Prescriptions.ListPrescriptions;
 using PharmacyCentral.Application.Prescriptions.Shared;
 using PharmacyCentral.Infrastructure.Authorization;
@@ -15,11 +16,24 @@ internal sealed class ListPrescriptions : IEndpoint
             string? status,
             int? limit,
             ListPrescriptionsQueryHandler handler,
+            IIdentityService identityService,
             CancellationToken cancellationToken) =>
         {
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!EndpointSiteAccess.TryAuthorizeRequestedSite(currentUser, siteId, out IReadOnlyCollection<Guid>? allowedSiteIds))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
             ListPrescriptionsQuery query = new()
             {
                 SiteId = siteId,
+                AllowedSiteIds = allowedSiteIds,
                 Status = status,
                 Limit = limit ?? 100
             };

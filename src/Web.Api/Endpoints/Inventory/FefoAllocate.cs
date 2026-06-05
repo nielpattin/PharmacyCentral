@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Inventory.FefoAllocate;
 using PharmacyCentral.Application.Inventory.Shared;
 using PharmacyCentral.Infrastructure.Authorization;
@@ -22,12 +23,24 @@ internal sealed class FefoAllocate : IEndpoint
         app.MapPost("inventory/fefo-allocate", async (
             Request request,
             FefoAllocateCommandHandler handler,
+            IIdentityService identityService,
             CancellationToken cancellationToken) =>
         {
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
             Dictionary<string, string[]> validationErrors = Validate(request);
             if (validationErrors.Count != 0)
             {
                 return Results.ValidationProblem(validationErrors);
+            }
+
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, request.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             FefoAllocateCommand command = new()

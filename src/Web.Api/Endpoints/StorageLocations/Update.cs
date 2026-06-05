@@ -1,3 +1,6 @@
+using PharmacyCentral.Application.Abstractions.Identity;
+using PharmacyCentral.Application.Abstractions.Persistence;
+using Web.Api.Endpoints;
 using PharmacyCentral.Application.StorageLocations.Shared;
 using PharmacyCentral.Application.StorageLocations.UpdateStorageLocation;
 using PharmacyCentral.Domain.StorageLocations;
@@ -31,8 +34,16 @@ internal sealed class Update : IEndpoint
             Guid id,
             Request request,
             UpdateStorageLocationCommandHandler handler,
+            IIdentityService identityService,
+            IApplicationDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
             Dictionary<string, string[]> validationErrors = Validate(request);
             if (validationErrors.Count != 0)
             {
@@ -42,6 +53,17 @@ internal sealed class Update : IEndpoint
             if (request.LocationType is not StorageLocationType locationType)
             {
                 return Results.ValidationProblem(RequiredField(nameof(request.LocationType)));
+            }
+
+            var existingLocation = await dbContext.GetStorageLocationByIdAsync(id, cancellationToken);
+            if (existingLocation is null)
+            {
+                return Results.NotFound(new { error = $"Storage location '{id}' was not found." });
+            }
+
+            if (!EndpointSiteAccess.CanAccessSites(currentUser, existingLocation.SiteId, request.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             UpdateStorageLocationCommand command = new()

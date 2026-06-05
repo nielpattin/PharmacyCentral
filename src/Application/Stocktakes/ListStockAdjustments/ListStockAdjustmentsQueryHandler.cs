@@ -8,7 +8,7 @@ public sealed class ListStockAdjustmentsQueryHandler(IApplicationDbContext dbCon
 {
     public async Task<IReadOnlyList<StockAdjustmentDetails>> HandleAsync(ListStockAdjustmentsQuery query, CancellationToken cancellationToken)
     {
-        List<StockAdjustment> adjustments = await dbContext.ListStockAdjustmentsAsync(query.SiteId, NormalizeOptional(query.Status), query.Limit, cancellationToken);
+        List<StockAdjustment> adjustments = await dbContext.ListStockAdjustmentsAsync(query.SiteId, query.AllowedSiteIds, NormalizeOptional(query.Status), query.Limit, cancellationToken);
         return adjustments.Select(StockAdjustmentDetails.From).ToList();
     }
 

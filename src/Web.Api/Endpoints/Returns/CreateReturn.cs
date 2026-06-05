@@ -52,6 +52,11 @@ internal sealed class CreateReturn : IEndpoint
                 return Results.ValidationProblem(validationErrors);
             }
 
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, request.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
             CreateReturnCommand command = new()
             {
                 ProductId = request.ProductId,

@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Auth.Shared;
 using PharmacyCentral.Application.Stocktakes.PostAdjustments;
@@ -16,12 +17,24 @@ internal sealed class PostAdjustments : IEndpoint
             Guid id,
             IIdentityService identityService,
             PostStocktakeAdjustmentsHandler handler,
+            IApplicationDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
             AuthUserDetails? currentUser = await identityService.GetCurrentUserAsync(cancellationToken);
             if (currentUser is null)
             {
                 return Results.Unauthorized();
+            }
+
+            var session = await dbContext.GetStocktakeSessionByIdAsync(id, cancellationToken);
+            if (session is null)
+            {
+                return Results.NotFound(new { error = $"Stocktake session '{id}' was not found." });
+            }
+
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, session.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             PostStocktakeAdjustmentsCommand command = new()

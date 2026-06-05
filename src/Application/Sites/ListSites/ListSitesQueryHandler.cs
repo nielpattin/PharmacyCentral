@@ -8,7 +8,7 @@ public sealed class ListSitesQueryHandler(IApplicationDbContext dbContext)
 {
     public async Task<Result<IReadOnlyList<SiteDetails>>> HandleAsync(ListSitesQuery query, CancellationToken cancellationToken)
     {
-        var sites = (await dbContext.ListSitesAsync(cancellationToken))
+        var sites = (await dbContext.ListSitesAsync(query.AllowedSiteIds, cancellationToken))
             .Select(SiteDetails.From)
             .OrderBy(site => site.Code)
             .ToList();

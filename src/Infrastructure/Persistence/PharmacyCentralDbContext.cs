@@ -66,9 +66,16 @@ public sealed class PharmacyCentralDbContext
 
     public IQueryable<Supplier> Suppliers => Set<Supplier>();
 
-    async Task<List<Site>> IApplicationDbContext.ListSitesAsync(CancellationToken cancellationToken)
+    async Task<List<Site>> IApplicationDbContext.ListSitesAsync(IReadOnlyCollection<Guid>? siteIds, CancellationToken cancellationToken)
     {
-        return await Sites
+        IQueryable<Site> query = Sites;
+
+        if (siteIds is not null)
+        {
+            query = query.Where(site => siteIds.Contains(site.Id));
+        }
+
+        return await query
             .OrderBy(site => site.Code)
             .ToListAsync(cancellationToken);
     }
@@ -83,9 +90,16 @@ public sealed class PharmacyCentralDbContext
         return await Sites.AnyAsync(site => site.Code == code && site.Id != excludedSiteId, cancellationToken);
     }
 
-    async Task<List<StorageLocation>> IApplicationDbContext.ListStorageLocationsAsync(CancellationToken cancellationToken)
+    async Task<List<StorageLocation>> IApplicationDbContext.ListStorageLocationsAsync(IReadOnlyCollection<Guid>? siteIds, CancellationToken cancellationToken)
     {
-        return await StorageLocations
+        IQueryable<StorageLocation> query = StorageLocations;
+
+        if (siteIds is not null)
+        {
+            query = query.Where(location => siteIds.Contains(location.SiteId));
+        }
+
+        return await query
             .OrderBy(location => location.SiteId)
             .ThenBy(location => location.Code)
             .ToListAsync(cancellationToken);
@@ -138,7 +152,7 @@ public sealed class PharmacyCentralDbContext
         return await InventoryBalances.SingleOrDefaultAsync(balance => balance.ProductBatchId == productBatchId && balance.StorageLocationId == storageLocationId, cancellationToken);
     }
 
-    async Task<List<InventoryBalance>> IApplicationDbContext.ListInventoryBalancesAsync(Guid? productId, Guid? siteId, Guid? storageLocationId, bool includeZeroBalances, CancellationToken cancellationToken)
+    async Task<List<InventoryBalance>> IApplicationDbContext.ListInventoryBalancesAsync(Guid? productId, Guid? siteId, IReadOnlyCollection<Guid>? siteIds, Guid? storageLocationId, bool includeZeroBalances, CancellationToken cancellationToken)
     {
         IQueryable<InventoryBalance> query = Set<InventoryBalance>()
             .Include(balance => balance.ProductBatch)
@@ -153,6 +167,11 @@ public sealed class PharmacyCentralDbContext
         if (siteId is not null)
         {
             query = query.Where(balance => balance.SiteId == siteId);
+        }
+
+        if (siteIds is not null)
+        {
+            query = query.Where(balance => siteIds.Contains(balance.SiteId));
         }
 
         if (storageLocationId is not null)
@@ -185,7 +204,7 @@ public sealed class PharmacyCentralDbContext
             .ToListAsync(cancellationToken);
     }
 
-    async Task<List<StockLedgerEntry>> IApplicationDbContext.ListStockLedgerEntriesAsync(Guid? productId, Guid? productBatchId, Guid? siteId, Guid? storageLocationId, int limit, CancellationToken cancellationToken)
+    async Task<List<StockLedgerEntry>> IApplicationDbContext.ListStockLedgerEntriesAsync(Guid? productId, Guid? productBatchId, Guid? siteId, IReadOnlyCollection<Guid>? siteIds, Guid? storageLocationId, int limit, CancellationToken cancellationToken)
     {
         IQueryable<StockLedgerEntry> query = Set<StockLedgerEntry>()
             .Include(entry => entry.Product)
@@ -207,6 +226,11 @@ public sealed class PharmacyCentralDbContext
             query = query.Where(entry => entry.SiteId == siteId);
         }
 
+        if (siteIds is not null)
+        {
+            query = query.Where(entry => siteIds.Contains(entry.SiteId));
+        }
+
         if (storageLocationId is not null)
         {
             query = query.Where(entry => entry.StorageLocationId == storageLocationId);
@@ -221,12 +245,19 @@ public sealed class PharmacyCentralDbContext
             .ToListAsync(cancellationToken);
     }
 
-    async Task<List<GoodsReceipt>> IApplicationDbContext.ListGoodsReceiptsAsync(int limit, CancellationToken cancellationToken)
+    async Task<List<GoodsReceipt>> IApplicationDbContext.ListGoodsReceiptsAsync(int limit, IReadOnlyCollection<Guid>? siteIds, CancellationToken cancellationToken)
     {
         int boundedLimit = Math.Clamp(limit, 1, 500);
 
-        return await GoodsReceipts
-            .Include(receipt => receipt.Lines)
+        IQueryable<GoodsReceipt> query = GoodsReceipts
+            .Include(receipt => receipt.Lines);
+
+        if (siteIds is not null)
+        {
+            query = query.Where(receipt => siteIds.Contains(receipt.SiteId));
+        }
+
+        return await query
             .OrderByDescending(receipt => receipt.ReceivedAtUtc)
             .ThenByDescending(receipt => receipt.CreatedAtUtc)
             .Take(boundedLimit)
@@ -247,7 +278,7 @@ public sealed class PharmacyCentralDbContext
             .ToListAsync(cancellationToken);
     }
 
-    async Task<List<StocktakeSession>> IApplicationDbContext.ListStocktakeSessionsAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken)
+    async Task<List<StocktakeSession>> IApplicationDbContext.ListStocktakeSessionsAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
     {
         IQueryable<StocktakeSession> query = StocktakeSessions
             .Include(session => session.CountSheets)
@@ -256,6 +287,11 @@ public sealed class PharmacyCentralDbContext
         if (siteId is not null)
         {
             query = query.Where(session => session.SiteId == siteId);
+        }
+
+        if (siteIds is not null)
+        {
+            query = query.Where(session => siteIds.Contains(session.SiteId));
         }
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -292,13 +328,18 @@ public sealed class PharmacyCentralDbContext
             .ToListAsync(cancellationToken);
     }
 
-    async Task<List<StockAdjustment>> IApplicationDbContext.ListStockAdjustmentsAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken)
+    async Task<List<StockAdjustment>> IApplicationDbContext.ListStockAdjustmentsAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
     {
         IQueryable<StockAdjustment> query = StockAdjustments.AsQueryable();
 
         if (siteId is not null)
         {
             query = query.Where(adjustment => adjustment.SiteId == siteId);
+        }
+
+        if (siteIds is not null)
+        {
+            query = query.Where(adjustment => siteIds.Contains(adjustment.SiteId));
         }
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -330,7 +371,7 @@ public sealed class PharmacyCentralDbContext
         return await Suppliers.AnyAsync(supplier => supplier.Code == code && supplier.Id != excludedSupplierId, cancellationToken);
     }
 
-    async Task<List<TransferOrder>> IApplicationDbContext.ListTransfersAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken)
+    async Task<List<TransferOrder>> IApplicationDbContext.ListTransfersAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
     {
         IQueryable<TransferOrder> query = TransferOrders
             .Include(order => order.Lines)
@@ -339,6 +380,11 @@ public sealed class PharmacyCentralDbContext
         if (siteId is not null)
         {
             query = query.Where(order => order.SourceSiteId == siteId || order.DestinationSiteId == siteId);
+        }
+
+        if (siteIds is not null)
+        {
+            query = query.Where(order => siteIds.Contains(order.SourceSiteId) || siteIds.Contains(order.DestinationSiteId));
         }
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -362,7 +408,7 @@ public sealed class PharmacyCentralDbContext
     }
 
 
-    async Task<List<Prescription>> IApplicationDbContext.ListPrescriptionsAsync(Guid? siteId, string? status, int limit, CancellationToken cancellationToken)
+    async Task<List<Prescription>> IApplicationDbContext.ListPrescriptionsAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
     {
         IQueryable<Prescription> query = Prescriptions
             .Include(prescription => prescription.Lines);
@@ -370,6 +416,11 @@ public sealed class PharmacyCentralDbContext
         if (siteId is not null)
         {
             query = query.Where(prescription => prescription.SiteId == siteId);
+        }
+
+        if (siteIds is not null)
+        {
+            query = query.Where(prescription => siteIds.Contains(prescription.SiteId));
         }
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -434,7 +485,7 @@ public sealed class PharmacyCentralDbContext
             .ToListAsync(cancellationToken);
     }
 
-    async Task<DashboardSummaryDetails> IApplicationDbContext.GetDashboardSummaryAsync(Guid? siteId, CancellationToken cancellationToken)
+    async Task<DashboardSummaryDetails> IApplicationDbContext.GetDashboardSummaryAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, CancellationToken cancellationToken)
     {
         var expiryCutoff = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(30));
 
@@ -457,14 +508,33 @@ public sealed class PharmacyCentralDbContext
             auditEntries = auditEntries.Where(entry => entry.SiteId == siteId);
         }
 
+        if (siteIds is not null)
+        {
+            storageLocations = storageLocations.Where(location => siteIds.Contains(location.SiteId));
+            inventoryBalances = inventoryBalances.Where(balance => siteIds.Contains(balance.SiteId));
+            transfers = transfers.Where(order => siteIds.Contains(order.SourceSiteId) || siteIds.Contains(order.DestinationSiteId));
+            prescriptions = prescriptions.Where(prescription => siteIds.Contains(prescription.SiteId));
+            stocktakes = stocktakes.Where(session => siteIds.Contains(session.SiteId));
+            adjustments = adjustments.Where(adjustment => siteIds.Contains(adjustment.SiteId));
+            auditEntries = auditEntries.Where(entry => entry.SiteId != null && siteIds.Contains(entry.SiteId.Value));
+        }
+
         List<AuditLogEntry> recentActivity = await auditEntries
             .OrderByDescending(entry => entry.OccurredAtUtc)
             .Take(10)
             .ToListAsync(cancellationToken);
 
         return new DashboardSummaryDetails(
-            TotalSites: siteId is null ? await Sites.CountAsync(cancellationToken) : await Sites.CountAsync(site => site.Id == siteId, cancellationToken),
-            ActiveSites: siteId is null ? await Sites.CountAsync(site => site.IsActive, cancellationToken) : await Sites.CountAsync(site => site.Id == siteId && site.IsActive, cancellationToken),
+            TotalSites: siteId is not null
+                ? await Sites.CountAsync(site => site.Id == siteId, cancellationToken)
+                : siteIds is not null
+                    ? await Sites.CountAsync(site => siteIds.Contains(site.Id), cancellationToken)
+                    : await Sites.CountAsync(cancellationToken),
+            ActiveSites: siteId is not null
+                ? await Sites.CountAsync(site => site.Id == siteId && site.IsActive, cancellationToken)
+                : siteIds is not null
+                    ? await Sites.CountAsync(site => siteIds.Contains(site.Id) && site.IsActive, cancellationToken)
+                    : await Sites.CountAsync(site => site.IsActive, cancellationToken),
             TotalStorageLocations: await storageLocations.CountAsync(cancellationToken),
             ActiveStorageLocations: await storageLocations.CountAsync(location => location.IsActive, cancellationToken),
             TotalProducts: await Products.CountAsync(cancellationToken),

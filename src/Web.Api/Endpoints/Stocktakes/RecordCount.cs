@@ -1,3 +1,5 @@
+using PharmacyCentral.Application.Abstractions.Identity;
+using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Stocktakes.RecordCount;
 using PharmacyCentral.Application.Stocktakes.Shared;
 using PharmacyCentral.Infrastructure.Authorization;
@@ -23,12 +25,29 @@ internal sealed class RecordCount : IEndpoint
 
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPost("stocktake-sessions/{id:guid}/counts", async (Guid id, Request request, RecordCountHandler handler, CancellationToken cancellationToken) =>
+        app.MapPost("stocktake-sessions/{id:guid}/counts", async (Guid id, Request request, RecordCountHandler handler, IIdentityService identityService, IApplicationDbContext dbContext, CancellationToken cancellationToken) =>
         {
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
             Dictionary<string, string[]> errors = Validate(request);
             if (errors.Count != 0)
             {
                 return Results.ValidationProblem(errors);
+            }
+
+            var session = await dbContext.GetStocktakeSessionByIdAsync(id, cancellationToken);
+            if (session is null)
+            {
+                return Results.NotFound(new { error = $"Stocktake session '{id}' was not found." });
+            }
+
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, session.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             RecordCountCommand command = new()

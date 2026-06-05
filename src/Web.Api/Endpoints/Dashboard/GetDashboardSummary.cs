@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Dashboard.GetDashboardSummary;
 using PharmacyCentral.Application.Dashboard.Shared;
 using PharmacyCentral.Infrastructure.Authorization;
@@ -13,9 +14,21 @@ internal sealed class GetDashboardSummary : IEndpoint
         app.MapGet("dashboard/summary", async (
             Guid? siteId,
             GetDashboardSummaryQueryHandler handler,
+            IIdentityService identityService,
             CancellationToken cancellationToken) =>
         {
-            Result<DashboardSummaryDetails> result = await handler.HandleAsync(new GetDashboardSummaryQuery(siteId), cancellationToken);
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!EndpointSiteAccess.TryAuthorizeRequestedSite(currentUser, siteId, out IReadOnlyCollection<Guid>? allowedSiteIds))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
+            Result<DashboardSummaryDetails> result = await handler.HandleAsync(new GetDashboardSummaryQuery(siteId, allowedSiteIds), cancellationToken);
             return Results.Ok(result.Value);
         })
         .WithTags(Tags.Dashboard)

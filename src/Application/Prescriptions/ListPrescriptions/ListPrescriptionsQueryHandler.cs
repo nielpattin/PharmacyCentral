@@ -9,7 +9,7 @@ public sealed class ListPrescriptionsQueryHandler(IApplicationDbContext dbContex
 {
     public async Task<Result<IReadOnlyList<PrescriptionDetails>>> HandleAsync(ListPrescriptionsQuery query, CancellationToken cancellationToken)
     {
-        List<Prescription> prescriptions = await dbContext.ListPrescriptionsAsync(query.SiteId, query.Status, query.Limit, cancellationToken);
+        List<Prescription> prescriptions = await dbContext.ListPrescriptionsAsync(query.SiteId, query.AllowedSiteIds, query.Status, query.Limit, cancellationToken);
         return prescriptions.Select(PrescriptionDetails.From).ToList();
     }
 }

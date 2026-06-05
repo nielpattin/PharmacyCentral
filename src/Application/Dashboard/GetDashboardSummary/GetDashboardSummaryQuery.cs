@@ -1,3 +1,3 @@
 namespace PharmacyCentral.Application.Dashboard.GetDashboardSummary;
 
-public sealed record GetDashboardSummaryQuery(Guid? SiteId = null);
+public sealed record GetDashboardSummaryQuery(Guid? SiteId = null, IReadOnlyCollection<Guid>? AllowedSiteIds = null);

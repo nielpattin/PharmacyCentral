@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Sites.ListSites;
 using PharmacyCentral.Application.Sites.Shared;
 using PharmacyCentral.Infrastructure.Authorization;
@@ -12,9 +13,16 @@ internal sealed class Get : IEndpoint
     {
         app.MapGet("sites", async (
             ListSitesQueryHandler handler,
+            IIdentityService identityService,
             CancellationToken cancellationToken) =>
         {
-            Result<IReadOnlyList<SiteDetails>> result = await handler.HandleAsync(new ListSitesQuery(), cancellationToken);
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            Result<IReadOnlyList<SiteDetails>> result = await handler.HandleAsync(new ListSitesQuery(EndpointSiteAccess.GetAllowedSiteIds(currentUser)), cancellationToken);
             return Results.Ok(result.Value);
         })
         .WithTags(Tags.Sites)

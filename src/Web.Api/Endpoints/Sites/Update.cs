@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Sites.Shared;
 using PharmacyCentral.Application.Sites.UpdateSite;
 using PharmacyCentral.Domain.Sites;
@@ -32,8 +33,20 @@ internal sealed class Update : IEndpoint
             Guid id,
             Request request,
             UpdateSiteCommandHandler handler,
+            IIdentityService identityService,
             CancellationToken cancellationToken) =>
         {
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, id))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
             Dictionary<string, string[]> validationErrors = Validate(request);
             if (validationErrors.Count != 0)
             {

@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Auth.Shared;
 using PharmacyCentral.Application.Transfers.ApproveTransfer;
@@ -16,12 +17,24 @@ internal sealed class ApproveTransfer : IEndpoint
             Guid id,
             IIdentityService identityService,
             ApproveTransferHandler handler,
+            IApplicationDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
             AuthUserDetails? currentUser = await identityService.GetCurrentUserAsync(cancellationToken);
             if (currentUser is null)
             {
                 return Results.Unauthorized();
+            }
+
+            var transfer = await dbContext.GetTransferByIdAsync(id, cancellationToken);
+            if (transfer is null)
+            {
+                return Results.NotFound(new { error = $"Transfer '{id}' was not found." });
+            }
+
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, transfer.SourceSiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             ApproveTransferCommand command = new()

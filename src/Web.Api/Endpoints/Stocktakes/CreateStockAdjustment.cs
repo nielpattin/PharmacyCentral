@@ -43,6 +43,11 @@ internal sealed class CreateStockAdjustment : IEndpoint
                 return Results.ValidationProblem(errors);
             }
 
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, request.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
             CreateStockAdjustmentCommand command = new()
             {
                 ProductId = request.ProductId,

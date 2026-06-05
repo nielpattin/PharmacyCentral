@@ -8,7 +8,7 @@ public sealed class GetDashboardSummaryQueryHandler(IApplicationDbContext dbCont
 {
     public async Task<Result<DashboardSummaryDetails>> HandleAsync(GetDashboardSummaryQuery query, CancellationToken cancellationToken)
     {
-        DashboardSummaryDetails summary = await dbContext.GetDashboardSummaryAsync(query.SiteId, cancellationToken);
+        DashboardSummaryDetails summary = await dbContext.GetDashboardSummaryAsync(query.SiteId, query.AllowedSiteIds, cancellationToken);
         return summary;
     }
 }

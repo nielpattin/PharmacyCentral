@@ -11,6 +11,7 @@ public sealed class ListInventoryBalancesQueryHandler(IApplicationDbContext dbCo
         var balances = (await dbContext.ListInventoryBalancesAsync(
                 query.ProductId,
                 query.SiteId,
+                query.AllowedSiteIds,
                 query.StorageLocationId,
                 query.IncludeZeroBalances,
                 cancellationToken))

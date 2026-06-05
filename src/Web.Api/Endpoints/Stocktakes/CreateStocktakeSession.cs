@@ -37,6 +37,11 @@ internal sealed class CreateStocktakeSession : IEndpoint
                 return Results.ValidationProblem(errors);
             }
 
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, request.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
             CreateStocktakeSessionCommand command = new()
             {
                 SiteId = request.SiteId,

@@ -1,3 +1,5 @@
+using PharmacyCentral.Application.Abstractions.Identity;
+using Web.Api.Endpoints;
 using PharmacyCentral.Application.StorageLocations.CreateStorageLocation;
 using PharmacyCentral.Application.StorageLocations.Shared;
 using PharmacyCentral.Domain.StorageLocations;
@@ -30,8 +32,15 @@ internal sealed class Create : IEndpoint
         app.MapPost("storage-locations", async (
             Request request,
             CreateStorageLocationCommandHandler handler,
+            IIdentityService identityService,
             CancellationToken cancellationToken) =>
         {
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
             Dictionary<string, string[]> validationErrors = Validate(request);
             if (validationErrors.Count != 0)
             {
@@ -41,6 +50,11 @@ internal sealed class Create : IEndpoint
             if (request.LocationType is not StorageLocationType locationType)
             {
                 return Results.ValidationProblem(RequiredField(nameof(request.LocationType)));
+            }
+
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, request.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             CreateStorageLocationCommand command = new()

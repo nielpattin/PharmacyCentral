@@ -52,6 +52,11 @@ internal sealed class CreatePrescription : IEndpoint
                 return Results.ValidationProblem(errors);
             }
 
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, request.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
             CreatePrescriptionCommand command = new()
             {
                 SiteId = request.SiteId,

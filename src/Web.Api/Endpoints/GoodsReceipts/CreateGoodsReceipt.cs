@@ -64,6 +64,11 @@ internal sealed class CreateGoodsReceipt : IEndpoint
                 return Results.ValidationProblem(validationErrors);
             }
 
+            if (!EndpointSiteAccess.CanAccessSite(currentUser, request.SiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
             CreateGoodsReceiptCommand command = new()
             {
                 SupplierId = request.SupplierId,

@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Auth.Shared;
 using PharmacyCentral.Application.Transfers.CancelTransfer;
@@ -16,12 +17,24 @@ internal sealed class CancelTransfer : IEndpoint
             Guid id,
             IIdentityService identityService,
             CancelTransferHandler handler,
+            IApplicationDbContext dbContext,
             CancellationToken cancellationToken) =>
         {
             AuthUserDetails? currentUser = await identityService.GetCurrentUserAsync(cancellationToken);
             if (currentUser is null)
             {
                 return Results.Unauthorized();
+            }
+
+            var transfer = await dbContext.GetTransferByIdAsync(id, cancellationToken);
+            if (transfer is null)
+            {
+                return Results.NotFound(new { error = $"Transfer '{id}' was not found." });
+            }
+
+            if (!EndpointSiteAccess.CanAccessAnySite(currentUser, transfer.SourceSiteId, transfer.DestinationSiteId))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
             }
 
             CancelTransferCommand command = new()

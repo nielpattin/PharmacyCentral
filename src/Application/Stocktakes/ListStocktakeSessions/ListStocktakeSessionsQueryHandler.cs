@@ -8,7 +8,7 @@ public sealed class ListStocktakeSessionsQueryHandler(IApplicationDbContext dbCo
 {
     public async Task<IReadOnlyList<StocktakeSessionDetails>> HandleAsync(ListStocktakeSessionsQuery query, CancellationToken cancellationToken)
     {
-        List<StocktakeSession> sessions = await dbContext.ListStocktakeSessionsAsync(query.SiteId, NormalizeOptional(query.Status), query.Limit, cancellationToken);
+        List<StocktakeSession> sessions = await dbContext.ListStocktakeSessionsAsync(query.SiteId, query.AllowedSiteIds, NormalizeOptional(query.Status), query.Limit, cancellationToken);
         return sessions.Select(StocktakeSessionDetails.From).ToList();
     }
 

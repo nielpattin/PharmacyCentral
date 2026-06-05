@@ -1,3 +1,4 @@
+using PharmacyCentral.Application.Abstractions.Identity;
 using PharmacyCentral.Application.Inventory.ListInventoryBalances;
 using PharmacyCentral.Application.Inventory.Shared;
 using PharmacyCentral.Infrastructure.Authorization;
@@ -16,12 +17,25 @@ internal sealed class GetBalances : IEndpoint
             Guid? storageLocationId,
             bool? includeZeroBalances,
             ListInventoryBalancesQueryHandler handler,
+            IIdentityService identityService,
             CancellationToken cancellationToken) =>
         {
+            var currentUser = await EndpointSiteAccess.GetCurrentUserAsync(identityService, cancellationToken);
+            if (currentUser is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (!EndpointSiteAccess.TryAuthorizeRequestedSite(currentUser, siteId, out IReadOnlyCollection<Guid>? allowedSiteIds))
+            {
+                return EndpointSiteAccess.ForbidSiteAccess();
+            }
+
             ListInventoryBalancesQuery query = new()
             {
                 ProductId = productId,
                 SiteId = siteId,
+                AllowedSiteIds = allowedSiteIds,
                 StorageLocationId = storageLocationId,
                 IncludeZeroBalances = includeZeroBalances ?? false
             };
