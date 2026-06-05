@@ -129,6 +129,11 @@ public static class DependencyInjection
             options.Cookie.SameSite = SameSiteMode.Strict;
         });
 
+        services.Configure<SecurityStampValidatorOptions>(options =>
+        {
+            options.ValidationInterval = TimeSpan.Zero;
+        });
+
         services.ConfigureApplicationCookie(options =>
         {
             options.Cookie.HttpOnly = true;

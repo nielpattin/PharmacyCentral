@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createAdminUser, loadAdminRoles, loadAdminUsers, loadSites, updateAdminUserAccess, type AdminUserCreateRequest, type AdminUserDetails, type SiteDto } from "../api/pharmacyClient";
+import { createAdminUser, loadAdminRoles, loadAdminUsers, loadSites, resetAdminUserPassword, revokeAdminUserSessions, updateAdminUserAccess, type AdminUserCreateRequest, type AdminUserDetails, type SiteDto } from "../api/pharmacyClient";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -21,6 +21,10 @@ type CreateUserForm = {
 type AccessForm = {
    roles: string[];
    siteIds: string[];
+};
+
+type PasswordForm = {
+   newPassword: string;
 };
 
 const blankCreateForm: CreateUserForm = {
@@ -49,6 +53,7 @@ export default function UserManagementPage() {
    const [roleFilter, setRoleFilter] = useState("");
    const [createForm, setCreateForm] = useState<CreateUserForm>(blankCreateForm);
    const [accessForm, setAccessForm] = useState<AccessForm>({ roles: [], siteIds: [] });
+   const [passwordForm, setPasswordForm] = useState<PasswordForm>({ newPassword: "" });
    const [isLoading, setIsLoading] = useState(true);
    const [isSaving, setIsSaving] = useState(false);
    const [banner, setBanner] = useState<string | null>(null);
@@ -90,6 +95,7 @@ export default function UserManagementPage() {
       setSelectedUserId(user.id);
       setAccessForm({ roles: user.roles, siteIds: user.siteIds });
       setNotice(null);
+      setPasswordForm({ newPassword: "" });
       setBanner(null);
    }
 
@@ -168,6 +174,45 @@ export default function UserManagementPage() {
          await refreshData(updated.id);
       } catch (error) {
          setBanner(error instanceof Error ? error.message : t("users.errors.update"));
+      } finally {
+         setIsSaving(false);
+      }
+   }
+
+   async function handleResetPassword() {
+      if (selectedUser === null) return;
+      if (passwordForm.newPassword.trim().length === 0) {
+         setBanner(t("users.validation.password"));
+         return;
+      }
+
+      setIsSaving(true);
+      setBanner(null);
+      setNotice(null);
+      try {
+         const updated = await resetAdminUserPassword(selectedUser.id, { newPassword: passwordForm.newPassword });
+         setPasswordForm({ newPassword: "" });
+         setNotice(t("users.passwordReset"));
+         await refreshData(updated.id);
+      } catch (error) {
+         setBanner(error instanceof Error ? error.message : t("users.errors.passwordReset"));
+      } finally {
+         setIsSaving(false);
+      }
+   }
+
+   async function handleRevokeSessions() {
+      if (selectedUser === null) return;
+
+      setIsSaving(true);
+      setBanner(null);
+      setNotice(null);
+      try {
+         const updated = await revokeAdminUserSessions(selectedUser.id);
+         setNotice(t("users.sessionsRevoked"));
+         await refreshData(updated.id);
+      } catch (error) {
+         setBanner(error instanceof Error ? error.message : t("users.errors.revokeSessions"));
       } finally {
          setIsSaving(false);
       }
@@ -258,6 +303,16 @@ export default function UserManagementPage() {
                               <h3 className="section-kicker">{t("users.siteAccess")}</h3>
                               <div className="choice-grid">
                                  {sites.map((site) => <label key={site.id} className="choice-pill"><input type="checkbox" checked={accessForm.siteIds.includes(site.id)} onChange={() => setAccessForm({ ...accessForm, siteIds: toggleValue(accessForm.siteIds, site.id) })} />{site.name}</label>)}
+                              </div>
+                           </div>
+                           <div>
+                              <h3 className="section-kicker">{t("users.security")}</h3>
+                              <Field label={t("users.newPassword")} hint={t("users.newPasswordHint")}>
+                                 <input className="field-input" type="password" value={passwordForm.newPassword} onChange={(event) => setPasswordForm({ newPassword: event.target.value })} />
+                              </Field>
+                              <div className="form-actions">
+                                 <Button disabled={isSaving} onClick={() => void handleResetPassword()}>{t("users.resetPassword")}</Button>
+                                 <Button variant="danger" disabled={isSaving} onClick={() => void handleRevokeSessions()}>{t("users.revokeSessions")}</Button>
                               </div>
                            </div>
                            <div className="form-actions"><Button variant="primary" disabled={isSaving} onClick={() => void handleSaveAccess()}>{isSaving ? t("common.saving") : t("users.saveAccess")}</Button></div>

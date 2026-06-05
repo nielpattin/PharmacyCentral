@@ -162,6 +162,12 @@ async function createUser(admin, email, password, roles, siteIds) {
   }, 201);
 }
 
+function securityEmailToId(users, email) {
+  const user = users.find((item) => item.email?.toLowerCase() === email.toLowerCase());
+  assert(user, `Expected security verification user ${email} to exist`);
+  return user.id;
+}
+
 async function main() {
   console.log(`Running product API verification against ${apiBase}`);
 
@@ -169,6 +175,7 @@ async function main() {
   const limited = new ApiClient("limited");
   const approver = new ApiClient("approver");
   const noRole = new ApiClient("no-role");
+  const securityUser = new ApiClient("security-user");
 
   await admin.get("health", 200).catch(async () => {
     const response = await fetch(`${apiBase.replace(/\/api$/, "")}/health`);
@@ -195,11 +202,13 @@ async function main() {
   const limitedEmail = `product-limited-${suffix}@pharmacy.local`;
   const approverEmail = `product-approver-${suffix}@pharmacy.local`;
   const noRoleEmail = `product-norole-${suffix}@pharmacy.local`;
+  const securityEmail = `product-security-${suffix}@pharmacy.local`;
   const password = "Product@123!";
 
   await createUser(admin, limitedEmail, password, ["Pharmacy Manager", "Warehouse Staff"], [sourceSite.id]);
   await createUser(admin, approverEmail, password, ["Warehouse Staff"], [sourceSite.id, destinationSite.id]);
   await noRole.post("auth/register", { email: noRoleEmail, password, displayName: "No role verifier" }, 201);
+  await createUser(admin, securityEmail, password, ["Pharmacist"], [sourceSite.id]);
 
   await limited.login(limitedEmail, password);
   await approver.login(approverEmail, password);
@@ -216,6 +225,19 @@ async function main() {
   assertEqual(limitedSites.length, 1, "Limited verifier should see only assigned sites");
   assertEqual(limitedSites[0].id, sourceSite.id, "Limited verifier sites list should contain only source site");
   console.log("PASS RBAC and assigned-site boundaries");
+
+  const changedPassword = "Product@124!";
+  const resetPassword = "Product@125!";
+  await securityUser.login(securityEmail, password);
+  await securityUser.post("auth/change-password", { currentPassword: password, newPassword: changedPassword }, 200);
+  await securityUser.get("auth/me", 401);
+  await securityUser.login(securityEmail, changedPassword);
+  await admin.post(`admin/users/${securityEmailToId(await admin.get("admin/users"), securityEmail)}/reset-password`, { newPassword: resetPassword }, 200);
+  await securityUser.get("auth/me", 401);
+  await securityUser.login(securityEmail, resetPassword);
+  await admin.post(`admin/users/${securityEmailToId(await admin.get("admin/users"), securityEmail)}/revoke-sessions`, {}, 200);
+  await securityUser.get("auth/me", 401);
+  console.log("PASS password change, admin reset, and session revoke");
 
   const product = await admin.post("products", {
     sku: `E2E-${suffix}`.slice(0, 50),

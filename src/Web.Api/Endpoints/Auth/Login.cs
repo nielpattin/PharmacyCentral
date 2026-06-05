@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using PharmacyCentral.Application.Auth.Login;
 using PharmacyCentral.Application.Auth.Shared;
 using SharedKernel.Results;
@@ -46,7 +47,8 @@ internal sealed class Login : IEndpoint
 
             return Results.Ok(result.Value);
         })
-        .WithTags(Tags.Auth);
+        .WithTags(Tags.Auth)
+        .RequireRateLimiting("auth-sensitive");
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

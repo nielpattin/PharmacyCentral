@@ -29,3 +29,8 @@ internal sealed class AdminUserAccessRequest
 
     public List<Guid> SiteIds { get; set; } = [];
 }
+
+internal sealed class AdminUserPasswordRequest
+{
+    public string NewPassword { get; set; } = string.Empty;
+}

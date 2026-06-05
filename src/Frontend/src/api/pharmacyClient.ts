@@ -34,6 +34,10 @@ export type AdminUserAccessRequest = {
    siteIds: string[];
 };
 
+export type AdminUserPasswordRequest = {
+   newPassword: string;
+};
+
 export type LoginRequest = {
    email: string;
    password: string;
@@ -1303,6 +1307,19 @@ export async function updateAdminUserAccess(id: string, request: AdminUserAccess
    });
 }
 
+export async function resetAdminUserPassword(id: string, request: AdminUserPasswordRequest) {
+   return await requestJson<AdminUserDetails>(`/api/admin/users/${id}/reset-password`, {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function revokeAdminUserSessions(id: string) {
+   return await requestJson<AdminUserDetails>(`/api/admin/users/${id}/revoke-sessions`, {
+      method: "POST",
+   });
+}
+
 export async function login(request: LoginRequest) {
    const user = await requestJson<AuthUserDetails>("/api/auth/login", {
       method: "POST",
@@ -1323,4 +1340,11 @@ export async function logout() {
 
 export async function fetchMe() {
    return await requestJson<AuthUserDetails>("/api/auth/me");
+}
+
+export async function changePassword(request: { currentPassword: string; newPassword: string }) {
+   await requestVoid("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
 }

@@ -77,6 +77,7 @@ Non-admin users can only access assigned-site data.
 | POST | `/api/auth/logout` | Logout |
 | GET | `/api/auth/me` | Current user, roles, assigned sites |
 | POST | `/api/auth/register` | Development/internal registration path |
+| POST | `/api/auth/change-password` | Change the current user's password |
 
 ### Admin users
 
@@ -86,6 +87,8 @@ Non-admin users can only access assigned-site data.
 | POST | `/api/admin/users` |
 | GET | `/api/admin/roles` |
 | PUT | `/api/admin/users/{id}/access` |
+| POST | `/api/admin/users/{id}/reset-password` | Reset a user's password |
+| POST | `/api/admin/users/{id}/revoke-sessions` | Sign out a user's active sessions |
 
 ### Dashboard, reporting, and audit
 

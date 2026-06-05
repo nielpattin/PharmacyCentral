@@ -163,6 +163,8 @@ Platform Admin users can use **Users** to:
 - assign roles
 - assign site access
 - update access
+- reset a user's password when needed
+- sign out a user's active sessions after access changes or suspected account misuse
 
 ## Good operating habits
 
