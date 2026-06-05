@@ -32,6 +32,7 @@ export function blankGoodsReceiptValues(): GoodsReceiptFormValues {
       supplierId: "",
       siteId: "",
       storageLocationId: "",
+      purchaseOrderId: null,
       receiptNumber: "",
       notes: "",
       lines: [blankGoodsReceiptLineValues()],
@@ -43,6 +44,7 @@ export function areGoodsReceiptFormValuesEqual(left: GoodsReceiptFormValues, rig
       left.supplierId === right.supplierId &&
       left.siteId === right.siteId &&
       left.storageLocationId === right.storageLocationId &&
+      left.purchaseOrderId === right.purchaseOrderId &&
       left.receiptNumber === right.receiptNumber &&
       left.notes === right.notes &&
       left.lines.length === right.lines.length &&

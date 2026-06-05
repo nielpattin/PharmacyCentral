@@ -8,6 +8,7 @@ public static class AuditEntityTypes
     public const string Supplier = "Supplier";
     public const string ProductBatch = "ProductBatch";
     public const string GoodsReceipt = "GoodsReceipt";
+    public const string PurchaseOrder = "PurchaseOrder";
     public const string TransferOrder = "TransferOrder";
     public const string Prescription = "Prescription";
     public const string StocktakeSession = "StocktakeSession";

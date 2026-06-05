@@ -5,7 +5,7 @@ import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
-import { createGoodsReceipt, loadGoodsReceipts, loadProducts, loadSites, loadStorageLocations, loadSuppliers, type GoodsReceiptDto, type GoodsReceiptUpsertRequest, type ProductDto, type SiteDto, type StorageLocationDto, type SupplierDto } from "../api/pharmacyClient";
+import { createGoodsReceipt, loadGoodsReceipts, loadProducts, loadPurchaseOrders, loadSites, loadStorageLocations, loadSuppliers, type GoodsReceiptDto, type GoodsReceiptUpsertRequest, type ProductDto, type PurchaseOrderDto, type SiteDto, type StorageLocationDto, type SupplierDto } from "../api/pharmacyClient";
 import { GoodsReceiptForm } from "../features/goods-receipts/GoodsReceiptForm";
 import { GoodsReceiptTable } from "../features/goods-receipts/GoodsReceiptTable";
 import { useMountEffect } from "../hooks/useMountEffect";
@@ -17,6 +17,7 @@ export default function GoodsReceiptsPage() {
    const t = useT();
    const [receipts, setReceipts] = useState<GoodsReceiptDto[]>([]);
    const [products, setProducts] = useState<ProductDto[]>([]);
+   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderDto[]>([]);
    const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
    const [sites, setSites] = useState<SiteDto[]>([]);
    const [storageLocations, setStorageLocations] = useState<StorageLocationDto[]>([]);
@@ -50,12 +51,13 @@ export default function GoodsReceiptsPage() {
       setBannerError(null);
 
       try {
-         const [receiptData, productData, supplierData, siteData, storageLocationData] = await Promise.all([loadGoodsReceipts(), loadProducts(), loadSuppliers(), loadSites(), loadStorageLocations()]);
+         const [receiptData, productData, supplierData, siteData, storageLocationData, purchaseOrderData] = await Promise.all([loadGoodsReceipts(), loadProducts(), loadSuppliers(), loadSites(), loadStorageLocations(), loadPurchaseOrders({ limit: 200 })]);
          setReceipts(receiptData);
          setProducts(productData);
          setSuppliers(supplierData);
          setSites(siteData);
          setStorageLocations(storageLocationData);
+         setPurchaseOrders(purchaseOrderData);
 
          const nextSelectedGoodsReceiptId = preferredSelectedGoodsReceiptId ?? selectedGoodsReceiptId;
          const resolvedSelectedGoodsReceiptId = receiptData.some((receipt) => receipt.id === nextSelectedGoodsReceiptId) ? nextSelectedGoodsReceiptId : (receiptData[0]?.id ?? "");
@@ -76,6 +78,7 @@ export default function GoodsReceiptsPage() {
             supplierId: values.supplierId,
             siteId: values.siteId,
             storageLocationId: values.storageLocationId,
+            purchaseOrderId: values.purchaseOrderId,
             receiptNumber: normalizeText(values.receiptNumber),
             notes: values.notes.trim() || null,
             lines: values.lines.map((line) => ({
@@ -125,7 +128,7 @@ export default function GoodsReceiptsPage() {
                <aside className="card site-editor">
                   <div className="section">
                      <div className="section-header"><div><h2 className="section-title">{t("receiving.editor")}</h2><p className="section-subtitle">{t("receiving.editorDesc")}</p></div></div>
-                     <GoodsReceiptForm key={formKey} initialValues={formValues} isSaving={isSaving} products={products} suppliers={suppliers} sites={sites} storageLocations={storageLocations} onSubmit={handleSaveGoodsReceipt} />
+                     <GoodsReceiptForm key={formKey} initialValues={formValues} isSaving={isSaving} products={products} purchaseOrders={purchaseOrders} suppliers={suppliers} sites={sites} storageLocations={storageLocations} onSubmit={handleSaveGoodsReceipt} />
                   </div>
                </aside>
             </div>

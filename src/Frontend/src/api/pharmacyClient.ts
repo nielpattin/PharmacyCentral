@@ -116,12 +116,41 @@ export type GoodsReceiptDto = {
    supplierId: string;
    siteId: string;
    storageLocationId: string;
+   purchaseOrderId: string | null;
    receiptNumber: string;
    status: string;
    receivedAtUtc: string;
    notes: string | null;
    createdAtUtc: string;
    lines: GoodsReceiptLineDto[];
+};
+
+export type PurchaseOrderLineDto = {
+   id: string;
+   productId: string;
+   productSku: string;
+   productName: string;
+   orderedQuantity: number;
+   receivedQuantity: number;
+   notes: string | null;
+};
+
+export type PurchaseOrderDto = {
+   id: string;
+   purchaseOrderNumber: string;
+   supplierId: string;
+   siteId: string;
+   status: string;
+   expectedDate: string | null;
+   notes: string | null;
+   createdByUserId: string | null;
+   approvedByUserId: string | null;
+   cancelledByUserId: string | null;
+   approvedAtUtc: string | null;
+   cancelledAtUtc: string | null;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+   lines: PurchaseOrderLineDto[];
 };
 
 export type InventoryBalanceDto = {
@@ -311,9 +340,25 @@ export type GoodsReceiptUpsertRequest = {
    supplierId: string;
    siteId: string;
    storageLocationId: string;
+   purchaseOrderId: string | null;
    receiptNumber: string;
    notes: string | null;
    lines: GoodsReceiptLineUpsertRequest[];
+};
+
+export type PurchaseOrderCreateRequest = {
+   purchaseOrderNumber: string | null;
+   supplierId: string;
+   siteId: string;
+   expectedDate: string | null;
+   notes: string | null;
+   lines: PurchaseOrderLineCreateRequest[];
+};
+
+export type PurchaseOrderLineCreateRequest = {
+   productId: string;
+   orderedQuantity: number;
+   notes: string | null;
 };
 
 export type GoodsReceiptLineUpsertRequest = {
@@ -799,6 +844,45 @@ export async function loadProducts() {
 
 export async function loadSuppliers() {
    return await requestJson<SupplierDto[]>("/api/suppliers");
+}
+
+export type PurchaseOrderFilters = {
+   siteId?: string;
+   status?: string;
+   limit?: number;
+};
+
+function buildPurchaseOrderQuery(filters: PurchaseOrderFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.siteId !== undefined && filters.siteId !== "") query.set("siteId", filters.siteId);
+   if (filters.status !== undefined && filters.status !== "") query.set("status", filters.status);
+   if (filters.limit !== undefined) query.set("limit", String(filters.limit));
+   return query.size === 0 ? "" : `?${query}`;
+}
+
+export async function loadPurchaseOrders(filters: PurchaseOrderFilters = {}) {
+   return await requestJson<PurchaseOrderDto[]>(`/api/purchase-orders${buildPurchaseOrderQuery(filters)}`);
+}
+
+export async function createPurchaseOrder(request: PurchaseOrderCreateRequest) {
+   return await requestJson<PurchaseOrderDto>("/api/purchase-orders", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function approvePurchaseOrder(id: string) {
+   return await requestJson<PurchaseOrderDto>(`/api/purchase-orders/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({}),
+   });
+}
+
+export async function cancelPurchaseOrder(id: string, notes: string | null = null) {
+   return await requestJson<PurchaseOrderDto>(`/api/purchase-orders/${id}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ notes }),
+   });
 }
 
 export async function loadGoodsReceipts() {

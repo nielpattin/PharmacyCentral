@@ -240,6 +240,61 @@ async function main() {
     isActive: true,
   }, 201);
 
+  const purchaseOrder = await admin.post("purchase-orders", {
+    purchaseOrderNumber: `PO-${suffix}`.slice(0, 100),
+    supplierId: supplier.id,
+    siteId: sourceSite.id,
+    expectedDate: "2031-01-15",
+    notes: "Product verification purchase order.",
+    lines: [{
+      productId: product.id,
+      orderedQuantity: 7,
+      notes: "Verification ordered quantity.",
+    }],
+  }, 201);
+  assertEqual(purchaseOrder.status, "Draft", "New purchase order should start as draft");
+  const approvedPurchaseOrder = await admin.post(`purchase-orders/${purchaseOrder.id}/approve`, {}, 200);
+  assertEqual(approvedPurchaseOrder.status, "Approved", "Purchase order should be approved before receiving");
+  const purchaseReceipt = await admin.post("goods-receipts", {
+    supplierId: supplier.id,
+    siteId: sourceSite.id,
+    storageLocationId: sourceLocation.id,
+    purchaseOrderId: purchaseOrder.id,
+    receiptNumber: `GR-PO-${suffix}`.slice(0, 100),
+    notes: "Product verification receipt from purchase order.",
+    lines: [{
+      productId: product.id,
+      batchNumber: `B-PO-${suffix}`.slice(0, 100),
+      expiryDate: "2031-12-31",
+      manufacturedDate: "2026-01-01",
+      manufacturer: "Verification manufacturer",
+      quantity: 7,
+      notes: "Purchase order verification stock.",
+    }],
+  }, 201);
+  assertEqual(purchaseReceipt.purchaseOrderId, purchaseOrder.id, "Receipt should keep the purchase order reference");
+  const receivedPurchaseOrder = await admin.get(`purchase-orders/${purchaseOrder.id}`);
+  assertEqual(receivedPurchaseOrder.status, "Received", "Purchase order should be received when all ordered quantity arrives");
+  assertApprox(receivedPurchaseOrder.lines[0].receivedQuantity, 7, "Purchase order line should track received quantity");
+  await admin.post("goods-receipts", {
+    supplierId: supplier.id,
+    siteId: sourceSite.id,
+    storageLocationId: sourceLocation.id,
+    purchaseOrderId: purchaseOrder.id,
+    receiptNumber: `GR-PO-OVER-${suffix}`.slice(0, 100),
+    notes: "Over-receipt should fail.",
+    lines: [{
+      productId: product.id,
+      batchNumber: `B-PO-OVER-${suffix}`.slice(0, 100),
+      expiryDate: "2031-12-31",
+      manufacturedDate: "2026-01-01",
+      manufacturer: "Verification manufacturer",
+      quantity: 1,
+      notes: "Over-receipt verification.",
+    }],
+  }, 400);
+  console.log("PASS purchase order approval and receipt matching");
+
   const receipt = await admin.post("goods-receipts", {
     supplierId: supplier.id,
     siteId: sourceSite.id,

@@ -16,6 +16,7 @@ internal sealed class GoodsReceiptConfiguration : IEntityTypeConfiguration<Goods
         builder.Property(receipt => receipt.SupplierId).HasColumnName("supplier_id");
         builder.Property(receipt => receipt.SiteId).HasColumnName("site_id");
         builder.Property(receipt => receipt.StorageLocationId).HasColumnName("storage_location_id");
+        builder.Property(receipt => receipt.PurchaseOrderId).HasColumnName("purchase_order_id");
         builder.Property(receipt => receipt.ReceiptNumber).HasColumnName("receipt_number").HasMaxLength(100).IsRequired();
         builder.Property(receipt => receipt.Status).HasColumnName("status").HasMaxLength(30).IsRequired();
         builder.Property(receipt => receipt.ReceivedAtUtc).HasColumnName("received_at_utc");
@@ -26,6 +27,7 @@ internal sealed class GoodsReceiptConfiguration : IEntityTypeConfiguration<Goods
         builder.HasIndex(receipt => receipt.ReceiptNumber).IsUnique();
         builder.HasIndex(receipt => new { receipt.SupplierId, receipt.ReceivedAtUtc });
         builder.HasIndex(receipt => new { receipt.SiteId, receipt.StorageLocationId, receipt.ReceivedAtUtc });
+        builder.HasIndex(receipt => receipt.PurchaseOrderId);
 
         builder.HasOne(receipt => receipt.Supplier)
             .WithMany()
@@ -40,6 +42,11 @@ internal sealed class GoodsReceiptConfiguration : IEntityTypeConfiguration<Goods
         builder.HasOne(receipt => receipt.StorageLocation)
             .WithMany()
             .HasForeignKey(receipt => receipt.StorageLocationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(receipt => receipt.PurchaseOrder)
+            .WithMany()
+            .HasForeignKey(receipt => receipt.PurchaseOrderId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

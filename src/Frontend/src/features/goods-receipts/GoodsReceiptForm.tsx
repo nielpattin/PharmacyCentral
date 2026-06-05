@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "../../components/ui/Button";
 import { Field } from "../../components/ui/Field";
-import type { ProductDto, SiteDto, StorageLocationDto, SupplierDto } from "../../api/pharmacyClient";
+import type { ProductDto, PurchaseOrderDto, SiteDto, StorageLocationDto, SupplierDto } from "../../api/pharmacyClient";
 import { useT } from "../../lib/i18n";
 import { areGoodsReceiptFormValuesEqual, blankGoodsReceiptLineValues, type GoodsReceiptFormValues } from "../../pages/shared/goodsReceiptForms";
 
@@ -10,12 +10,13 @@ type GoodsReceiptFormProps = {
    isSaving: boolean;
    products: ProductDto[];
    suppliers: SupplierDto[];
+   purchaseOrders: PurchaseOrderDto[];
    sites: SiteDto[];
    storageLocations: StorageLocationDto[];
    onSubmit: (values: GoodsReceiptFormValues) => Promise<void>;
 };
 
-export function GoodsReceiptForm({ initialValues, isSaving, products, suppliers, sites, storageLocations, onSubmit }: GoodsReceiptFormProps) {
+export function GoodsReceiptForm({ initialValues, isSaving, products, purchaseOrders, suppliers, sites, storageLocations, onSubmit }: GoodsReceiptFormProps) {
    const t = useT();
    const [values, setValues] = useState(initialValues);
    const [baselineValues, setBaselineValues] = useState(initialValues);
@@ -29,6 +30,14 @@ export function GoodsReceiptForm({ initialValues, isSaving, products, suppliers,
 
       return storageLocations.filter((location) => location.siteId === values.siteId);
    }, [storageLocations, values.siteId]);
+
+   const availablePurchaseOrders = useMemo(() => {
+      return purchaseOrders.filter((order) =>
+         (order.status === "Approved" || order.status === "PartiallyReceived")
+         && (values.siteId === "" || order.siteId === values.siteId)
+         && (values.supplierId === "" || order.supplierId === values.supplierId),
+      );
+   }, [purchaseOrders, values.siteId, values.supplierId]);
 
    function validate() {
       if (values.supplierId === "" || values.siteId === "" || values.storageLocationId === "" || values.receiptNumber.trim() === "") {
@@ -84,6 +93,12 @@ export function GoodsReceiptForm({ initialValues, isSaving, products, suppliers,
                <select className="field-input" required value={values.storageLocationId} onChange={(event) => setValues((current) => ({ ...current, storageLocationId: event.target.value }))}>
                   <option value="">{t("receiving.selectLocation")}</option>
                   {availableStorageLocations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+               </select>
+            </Field>
+            <Field label={t("procurement.purchaseOrder")}>
+               <select className="field-input" value={values.purchaseOrderId ?? ""} onChange={(event) => setValues((current) => ({ ...current, purchaseOrderId: event.target.value === "" ? null : event.target.value }))}>
+                  <option value="">{t("receiving.directReceipt")}</option>
+                  {availablePurchaseOrders.map((order) => <option key={order.id} value={order.id}>{order.purchaseOrderNumber}</option>)}
                </select>
             </Field>
             <Field label={t("receiving.receiptNumber")} required>

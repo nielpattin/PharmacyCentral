@@ -8,6 +8,8 @@ public sealed class CreateGoodsReceiptCommand
 
     public Guid StorageLocationId { get; set; }
 
+    public Guid? PurchaseOrderId { get; set; }
+
     public string ReceiptNumber { get; set; } = string.Empty;
 
     public DateTimeOffset? ReceivedAtUtc { get; set; }

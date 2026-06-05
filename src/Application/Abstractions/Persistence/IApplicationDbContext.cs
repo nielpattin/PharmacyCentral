@@ -3,6 +3,7 @@ using PharmacyCentral.Domain.Audit;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Prescriptions;
+using PharmacyCentral.Domain.Procurement;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Recalls;
 using PharmacyCentral.Domain.Sites;
@@ -36,6 +37,10 @@ public interface IApplicationDbContext
     IQueryable<GoodsReceipt> GoodsReceipts { get; }
 
     IQueryable<GoodsReceiptLine> GoodsReceiptLines { get; }
+
+    IQueryable<PurchaseOrder> PurchaseOrders { get; }
+
+    IQueryable<PurchaseOrderLine> PurchaseOrderLines { get; }
 
     IQueryable<StocktakeSession> StocktakeSessions { get; }
 
@@ -106,6 +111,12 @@ public interface IApplicationDbContext
     Task<List<GoodsReceipt>> ListGoodsReceiptsAsync(int limit = 100, IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
 
     Task<GoodsReceipt?> GetGoodsReceiptByIdAsync(Guid goodsReceiptId, CancellationToken cancellationToken = default);
+
+    Task<List<PurchaseOrder>> ListPurchaseOrdersAsync(Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<PurchaseOrder?> GetPurchaseOrderByIdAsync(Guid purchaseOrderId, CancellationToken cancellationToken = default);
+
+    Task<int> CountPurchaseOrdersWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
 
     Task<List<StocktakeSession>> ListStocktakeSessionsAsync(Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
 

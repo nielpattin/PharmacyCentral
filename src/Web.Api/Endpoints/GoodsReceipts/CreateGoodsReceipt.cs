@@ -18,6 +18,8 @@ internal sealed class CreateGoodsReceipt : IEndpoint
 
         public Guid StorageLocationId { get; set; }
 
+        public Guid? PurchaseOrderId { get; set; }
+
         public string ReceiptNumber { get; set; } = string.Empty;
 
         public DateTimeOffset? ReceivedAtUtc { get; set; }
@@ -74,6 +76,7 @@ internal sealed class CreateGoodsReceipt : IEndpoint
                 SupplierId = request.SupplierId,
                 SiteId = request.SiteId,
                 StorageLocationId = request.StorageLocationId,
+                PurchaseOrderId = request.PurchaseOrderId,
                 ReceiptNumber = request.ReceiptNumber,
                 ReceivedAtUtc = request.ReceivedAtUtc,
                 Notes = request.Notes,

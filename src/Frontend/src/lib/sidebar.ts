@@ -6,6 +6,7 @@ export type SidebarActiveKey =
    | "catalog"
    | "supplier"
    | "receiving"
+   | "procurement"
    | "stocktake"
    | "inventory"
    | "adjustments"

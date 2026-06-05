@@ -12,6 +12,7 @@ using PharmacyCentral.Domain.Audit;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Prescriptions;
+using PharmacyCentral.Domain.Procurement;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Recalls;
 using PharmacyCentral.Domain.Sites;
@@ -54,6 +55,10 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
 
     public IQueryable<GoodsReceiptLine> GoodsReceiptLines => Set<GoodsReceiptLine>();
+
+    public IQueryable<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+
+    public IQueryable<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
 
     public IQueryable<StocktakeSession> StocktakeSessions => Set<StocktakeSession>();
 
@@ -365,6 +370,48 @@ public sealed class PharmacyCentralDbContext
         return await GoodsReceipts
             .Include(receipt => receipt.Lines)
             .SingleOrDefaultAsync(receipt => receipt.Id == goodsReceiptId, cancellationToken);
+    }
+
+    async Task<List<PurchaseOrder>> IApplicationDbContext.ListPurchaseOrdersAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<PurchaseOrder> query = PurchaseOrders
+            .Include(order => order.Lines)
+            .ThenInclude(line => line.Product)
+            .AsQueryable();
+
+        if (siteId is not null)
+        {
+            query = query.Where(order => order.SiteId == siteId);
+        }
+
+        if (siteIds is not null)
+        {
+            query = query.Where(order => siteIds.Contains(order.SiteId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(order => order.Status == status);
+        }
+
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+        return await query
+            .OrderByDescending(order => order.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<PurchaseOrder?> IApplicationDbContext.GetPurchaseOrderByIdAsync(Guid purchaseOrderId, CancellationToken cancellationToken)
+    {
+        return await PurchaseOrders
+            .Include(order => order.Lines)
+            .ThenInclude(line => line.Product)
+            .SingleOrDefaultAsync(order => order.Id == purchaseOrderId, cancellationToken);
+    }
+
+    async Task<int> IApplicationDbContext.CountPurchaseOrdersWithPrefixAsync(string prefix, CancellationToken cancellationToken)
+    {
+        return await PurchaseOrders.CountAsync(order => order.PurchaseOrderNumber.StartsWith(prefix), cancellationToken);
     }
 
     async Task<List<Supplier>> IApplicationDbContext.ListSuppliersAsync(CancellationToken cancellationToken)

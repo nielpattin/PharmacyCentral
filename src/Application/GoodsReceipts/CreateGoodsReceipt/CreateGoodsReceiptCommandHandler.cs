@@ -6,6 +6,7 @@ using PharmacyCentral.Application.Inventory.RecordStockMovement;
 using PharmacyCentral.Application.Inventory.Shared;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
+using PharmacyCentral.Domain.Procurement;
 using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Suppliers;
 using SharedKernel.Results;
@@ -50,6 +51,45 @@ public sealed class CreateGoodsReceiptCommandHandler(IApplicationDbContext dbCon
             return PharmacyCentral.Application.Inventory.InventoryErrors.StorageLocationSiteMismatch(command.StorageLocationId, command.SiteId);
         }
 
+        PurchaseOrder? purchaseOrder = null;
+        if (command.PurchaseOrderId is not null)
+        {
+            purchaseOrder = await dbContext.GetPurchaseOrderByIdAsync(command.PurchaseOrderId.Value, cancellationToken);
+            if (purchaseOrder is null)
+            {
+                return Procurement.ProcurementErrors.PurchaseOrderNotFound(command.PurchaseOrderId.Value);
+            }
+
+            if (purchaseOrder.SupplierId != command.SupplierId)
+            {
+                return Procurement.ProcurementErrors.SupplierMismatch(purchaseOrder.SupplierId, command.SupplierId);
+            }
+
+            if (purchaseOrder.SiteId != command.SiteId)
+            {
+                return Procurement.ProcurementErrors.SiteMismatch(purchaseOrder.SiteId, command.SiteId);
+            }
+
+            if (purchaseOrder.Status is not (PurchaseOrderStatus.Approved or PurchaseOrderStatus.PartiallyReceived))
+            {
+                return Procurement.ProcurementErrors.OnlyApprovedCanReceive(purchaseOrder.Status);
+            }
+
+            foreach (CreateGoodsReceiptLineCommand lineCommand in command.Lines)
+            {
+                PurchaseOrderLine? orderLine = purchaseOrder.Lines.FirstOrDefault(line => line.ProductId == lineCommand.ProductId);
+                if (orderLine is null)
+                {
+                    return Procurement.ProcurementErrors.ProductNotOrdered(lineCommand.ProductId);
+                }
+
+                if (orderLine.ReceivedQuantity + lineCommand.Quantity > orderLine.OrderedQuantity)
+                {
+                    return Procurement.ProcurementErrors.ReceivedQuantityExceeded(lineCommand.ProductId);
+                }
+            }
+        }
+
         DateTimeOffset receivedAtUtc = command.ReceivedAtUtc ?? DateTimeOffset.UtcNow;
         GoodsReceipt receipt = new()
         {
@@ -59,6 +99,8 @@ public sealed class CreateGoodsReceiptCommandHandler(IApplicationDbContext dbCon
             SiteId = command.SiteId,
             StorageLocationId = command.StorageLocationId,
             StorageLocation = storageLocation,
+            PurchaseOrderId = purchaseOrder?.Id,
+            PurchaseOrder = purchaseOrder,
             ReceiptNumber = receiptNumber,
             Status = "Posted",
             ReceivedAtUtc = receivedAtUtc,
@@ -119,8 +161,23 @@ public sealed class CreateGoodsReceiptCommandHandler(IApplicationDbContext dbCon
 
             line.ProductBatchId = movementResult.Value.ProductBatchId;
             line.ProductBatch = movementResult.Value.ProductBatch;
-        }
 
+            if (purchaseOrder is not null)
+            {
+                PurchaseOrderLine orderLine = purchaseOrder.Lines.First(orderLine => orderLine.ProductId == lineCommand.ProductId);
+                orderLine.ReceivedQuantity += lineCommand.Quantity;
+                orderLine.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            }
+
+        }
+        if (purchaseOrder is not null)
+        {
+            bool allReceived = purchaseOrder.Lines.All(line => line.ReceivedQuantity >= line.OrderedQuantity);
+            bool anyReceived = purchaseOrder.Lines.Any(line => line.ReceivedQuantity > 0);
+            purchaseOrder.Status = allReceived ? PurchaseOrderStatus.Received : anyReceived ? PurchaseOrderStatus.PartiallyReceived : purchaseOrder.Status;
+            purchaseOrder.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            await auditLogService.RecordAsync(AuditActions.Updated, AuditEntityTypes.PurchaseOrder, purchaseOrder.Id, command.CreatedByUserId, purchaseOrder.SiteId, $"Updated purchase order {purchaseOrder.PurchaseOrderNumber}", cancellationToken: cancellationToken);
+        }
         await auditLogService.RecordAsync(AuditActions.Posted, AuditEntityTypes.GoodsReceipt, receipt.Id, command.CreatedByUserId, receipt.SiteId, $"Posted goods receipt {receipt.ReceiptNumber}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
