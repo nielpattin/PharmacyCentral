@@ -30,6 +30,7 @@ using PharmacyCentral.Application.Products.DeleteProduct;
 using PharmacyCentral.Application.Products.GetProductById;
 using PharmacyCentral.Application.Products.ListProducts;
 using PharmacyCentral.Application.Products.UpdateProduct;
+using PharmacyCentral.Application.Quality.ReviewProductBatchQuality;
 using PharmacyCentral.Application.Returns.CreateReturn;
 using PharmacyCentral.Application.Sites.CreateSite;
 using PharmacyCentral.Application.Sites.DeleteSite;
@@ -178,6 +179,7 @@ public static class DependencyInjection
         services.AddScoped<FefoAllocateCommandHandler>();
         services.AddScoped<ListInventoryBalancesQueryHandler>();
         services.AddScoped<ListStockLedgerEntriesQueryHandler>();
+        services.AddScoped<ReviewProductBatchQualityHandler>();
         services.AddScoped<CreateReturnHandler>();
         services.AddScoped<CreateSupplierCommandHandler>();
         services.AddScoped<DeleteSupplierCommandHandler>();

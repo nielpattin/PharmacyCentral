@@ -258,14 +258,22 @@ async function main() {
 
   const productBatchId = receipt.lines[0].productBatchId;
   assert(productBatchId, "Goods receipt should create or resolve a product batch");
+  assertEqual(receipt.lines[0].qualityStatus, "PendingQc", "New receipt batch should wait for quality review");
   const balancesAfterReceipt = await admin.get(`inventory/balances?productId=${product.id}&siteId=${sourceSite.id}&includeZeroBalances=true`);
   const sourceBalanceAfterReceipt = balanceFor(balancesAfterReceipt, productBatchId, sourceLocation.id);
   assert(sourceBalanceAfterReceipt, "Receipt should create inventory balance at source location");
   assertApprox(sourceBalanceAfterReceipt.quantityOnHand, 50, "Receipt should increase source balance");
   const receiptLedger = await admin.get(`inventory/ledger?productBatchId=${productBatchId}&siteId=${sourceSite.id}&limit=20`);
   assert(receiptLedger.some((entry) => entry.referenceType === "GoodsReceipt" && Number(entry.quantityDelta) === 50), "Receipt should be visible in inventory history");
-  console.log("PASS receiving creates batch, balance, and history");
+  console.log("PASS receiving creates batch, balance, history, and review state");
 
+  await admin.post("inventory/fefo-allocate", {
+    productId: product.id,
+    siteId: sourceSite.id,
+    quantityNeeded: 5,
+  }, 400);
+  const releasedBatch = await admin.post(`quality/batches/${productBatchId}/release`, { notes: "Product verification release." });
+  assertEqual(releasedBatch.qualityStatus, "Released", "Released batch should become available for operations");
   const fefo = await admin.post("inventory/fefo-allocate", {
     productId: product.id,
     siteId: sourceSite.id,
@@ -277,7 +285,7 @@ async function main() {
     siteId: sourceSite.id,
     quantityNeeded: 5000,
   }, 400);
-  console.log("PASS FEFO allocation and insufficient-stock guard");
+  console.log("PASS quality release, FEFO allocation, and insufficient-stock guard");
 
   const prescription = await admin.post("prescriptions", {
     siteId: sourceSite.id,
@@ -389,6 +397,40 @@ async function main() {
   balances = await admin.get(`inventory/balances?productId=${product.id}&siteId=${sourceSite.id}&includeZeroBalances=true`);
   assertApprox(balanceFor(balances, productBatchId, sourceLocation.id).quantityOnHand, 43, "Standalone adjustment approval should update balance");
   console.log("PASS standalone stock adjustment approval");
+
+  const rejectedReceipt = await admin.post("goods-receipts", {
+    supplierId: supplier.id,
+    siteId: sourceSite.id,
+    storageLocationId: sourceLocation.id,
+    receiptNumber: `GR-RJ-${suffix}`.slice(0, 100),
+    notes: "Product verification rejected receipt.",
+    lines: [{
+      productId: product.id,
+      batchNumber: `RJ-${suffix}`.slice(0, 100),
+      expiryDate: "2031-12-31",
+      manufacturedDate: "2026-01-01",
+      manufacturer: "Verification manufacturer",
+      quantity: 2,
+      notes: "Rejected verification stock.",
+    }],
+  }, 201);
+  const rejectedBatchId = rejectedReceipt.lines[0].productBatchId;
+  assert(rejectedBatchId, "Rejected receipt should create or resolve a product batch");
+  const rejectedBatch = await admin.post(`quality/batches/${rejectedBatchId}/reject`, { notes: "Product verification rejection." });
+  assertEqual(rejectedBatch.qualityStatus, "Rejected", "Rejected batch should be marked unavailable");
+  await admin.post("returns", {
+    productId: product.id,
+    productBatchId: rejectedBatchId,
+    siteId: sourceSite.id,
+    storageLocationId: sourceLocation.id,
+    quantity: 1,
+    reason: "Damaged",
+    destination: "Verification disposal",
+    notes: "Rejected stock should not be selected for operations.",
+  }, 400);
+  const qualityAudit = await admin.get(`audit/logs?entityType=ProductBatch&entityId=${rejectedBatchId}&limit=10`);
+  assert(qualityAudit.some((entry) => entry.action === "Rejected"), "Rejected quality decision should be auditable");
+  console.log("PASS quality rejection blocks operational use and records audit");
 
   const dashboard = await admin.get(`dashboard/summary?siteId=${sourceSite.id}`);
   assert(typeof dashboard.totalQuantityOnHand === "number", "Dashboard summary should include quantity totals");

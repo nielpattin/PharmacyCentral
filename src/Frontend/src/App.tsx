@@ -22,6 +22,7 @@ import PrescriptionPage from "./pages/PrescriptionPage";
 import ReportingPage from "./pages/ReportingPage";
 import ReturnsPage from "./pages/ReturnsPage";
 import UserManagementPage from "./pages/UserManagementPage";
+import QualityPage from "./pages/QualityPage";
 
 import GoodsReceiptsPage from "./pages/GoodsReceiptsPage";
 import InventoryPage from "./pages/InventoryPage";
@@ -176,6 +177,9 @@ export default function App() {
          break;
       case "/dashboard/returns":
          page = <ReturnsPage />;
+         break;
+      case "/dashboard/quality":
+         page = <QualityPage />;
          break;
       default: {
          const storageLocationMatch = routePathname.match(STORAGE_LOCATIONS_PATH);

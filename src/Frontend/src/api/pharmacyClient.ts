@@ -106,6 +106,7 @@ export type GoodsReceiptLineDto = {
    expiryDate: string;
    manufacturedDate: string | null;
    manufacturer: string | null;
+   qualityStatus: string | null;
    quantity: number;
    notes: string | null;
 };
@@ -134,6 +135,10 @@ export type InventoryBalanceDto = {
    manufacturedDate: string | null;
    supplierId: string | null;
    manufacturer: string | null;
+   qualityStatus: string;
+   qualityReviewedAtUtc: string | null;
+   qualityReviewedByUserId: string | null;
+   qualityNotes: string | null;
    siteId: string;
    storageLocationId: string;
    quantityOnHand: number;
@@ -162,6 +167,17 @@ export type StockLedgerEntryDto = {
    notes: string | null;
    createdByUserId: string | null;
    createdAtUtc: string;
+};
+
+export type ProductBatchQualityDto = {
+   productBatchId: string;
+   productId: string;
+   batchNumber: string;
+   expiryDate: string;
+   qualityStatus: string;
+   qualityReviewedAtUtc: string | null;
+   qualityReviewedByUserId: string | null;
+   qualityNotes: string | null;
 };
 
 export type AuditLogEntryDto = {
@@ -870,6 +886,20 @@ export async function approveStockAdjustment(id: string, approvalNotes?: string)
    return await requestJson<StockAdjustmentDetails>(`/api/stock-adjustments/${id}/approve`, {
       method: "POST",
       body: JSON.stringify({ approvalNotes: approvalNotes ?? null }),
+   });
+}
+
+export async function releaseProductBatch(productBatchId: string, notes?: string) {
+   return await requestJson<ProductBatchQualityDto>(`/api/quality/batches/${productBatchId}/release`, {
+      method: "POST",
+      body: JSON.stringify({ notes: notes ?? null }),
+   });
+}
+
+export async function rejectProductBatch(productBatchId: string, notes?: string) {
+   return await requestJson<ProductBatchQualityDto>(`/api/quality/batches/${productBatchId}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ notes: notes ?? null }),
    });
 }
 

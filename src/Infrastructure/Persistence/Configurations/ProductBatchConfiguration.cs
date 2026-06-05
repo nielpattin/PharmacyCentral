@@ -20,12 +20,17 @@ internal sealed class ProductBatchConfiguration : IEntityTypeConfiguration<Produ
         builder.Property(batch => batch.SupplierId).HasColumnName("supplier_id");
         builder.Property(batch => batch.Manufacturer).HasColumnName("manufacturer").HasMaxLength(200);
         builder.Property(batch => batch.Status).HasColumnName("status").HasMaxLength(30).IsRequired();
+        builder.Property(batch => batch.QualityStatus).HasColumnName("quality_status").HasMaxLength(30).HasDefaultValue(ProductBatchQualityStatus.Released).IsRequired();
+        builder.Property(batch => batch.QualityReviewedByUserId).HasColumnName("quality_reviewed_by_user_id");
+        builder.Property(batch => batch.QualityReviewedAtUtc).HasColumnName("quality_reviewed_at_utc");
+        builder.Property(batch => batch.QualityNotes).HasColumnName("quality_notes").HasMaxLength(1000);
         builder.Property(batch => batch.CreatedAtUtc).HasColumnName("created_at_utc");
         builder.Property(batch => batch.UpdatedAtUtc).HasColumnName("updated_at_utc");
 
         builder.HasIndex(batch => new { batch.ProductId, batch.BatchNumber }).IsUnique();
         builder.HasIndex(batch => new { batch.ProductId, batch.ExpiryDate });
         builder.HasIndex(batch => batch.SupplierId);
+        builder.HasIndex(batch => batch.QualityStatus);
 
         builder.HasOne(batch => batch.Product)
             .WithMany()

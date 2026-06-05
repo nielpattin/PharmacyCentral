@@ -1901,3 +1901,27 @@ tbody tr:nth-child(even):hover {
    color: var(--muted);
    word-break: break-all;
 }
+
+.quality-page {
+   display: grid;
+   gap: 16px;
+   align-content: start;
+   min-height: min-content;
+}
+.quality-review-card {
+   align-self: start;
+}
+.quality-context {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 10px;
+   align-items: center;
+   margin-top: 12px;
+   padding: 12px;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface-soft);
+}
+.block {
+   display: block;
+}

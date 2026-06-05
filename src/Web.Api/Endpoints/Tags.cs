@@ -21,6 +21,7 @@ public static class Tags
     public const string Inventory = "Inventory";
 
     public const string Returns = "Returns";
+    public const string Quality = "Quality";
 
     public const string Stocktakes = "Stocktakes";
 

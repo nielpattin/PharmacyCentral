@@ -21,6 +21,14 @@ public sealed class ProductBatch
 
     public string Status { get; set; } = "Active";
 
+    public string QualityStatus { get; set; } = ProductBatchQualityStatus.Released;
+
+    public Guid? QualityReviewedByUserId { get; set; }
+
+    public DateTimeOffset? QualityReviewedAtUtc { get; set; }
+
+    public string? QualityNotes { get; set; }
+
     public DateTimeOffset CreatedAtUtc { get; set; }
 
     public DateTimeOffset UpdatedAtUtc { get; set; }

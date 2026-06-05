@@ -10,6 +10,7 @@ export type SidebarActiveKey =
    | "inventory"
    | "adjustments"
    | "returns"
+   | "quality"
    | "reporting"
    | "users"
    | "audit";

@@ -147,6 +147,22 @@ public sealed class PharmacyCentralDbContext
         return await ProductBatches.SingleOrDefaultAsync(batch => batch.ProductId == productId && batch.BatchNumber == batchNumber, cancellationToken);
     }
 
+    async Task<List<Guid>> IApplicationDbContext.ListSiteIdsForProductBatchAsync(Guid productBatchId, bool onlyPositiveStock, CancellationToken cancellationToken)
+    {
+        IQueryable<InventoryBalance> query = InventoryBalances
+            .Where(balance => balance.ProductBatchId == productBatchId);
+
+        if (onlyPositiveStock)
+        {
+            query = query.Where(balance => balance.QuantityOnHand > 0);
+        }
+
+        return await query
+            .Select(balance => balance.SiteId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+    }
+
     async Task<InventoryBalance?> IApplicationDbContext.GetInventoryBalanceAsync(Guid productBatchId, Guid storageLocationId, CancellationToken cancellationToken)
     {
         return await InventoryBalances.SingleOrDefaultAsync(balance => balance.ProductBatchId == productBatchId && balance.StorageLocationId == storageLocationId, cancellationToken);
@@ -197,7 +213,10 @@ public sealed class PharmacyCentralDbContext
     {
         return await InventoryBalances
             .Include(balance => balance.ProductBatch)
-            .Where(balance => balance.ProductBatch.ProductId == productId && balance.SiteId == siteId && balance.QuantityOnHand > 0)
+            .Where(balance => balance.ProductBatch.ProductId == productId
+                && balance.ProductBatch.QualityStatus == ProductBatchQualityStatus.Released
+                && balance.SiteId == siteId
+                && balance.QuantityOnHand > 0)
             .OrderBy(balance => balance.ProductBatch.ExpiryDate)
             .ThenBy(balance => balance.ProductBatch.BatchNumber)
             .ThenBy(balance => balance.StorageLocationId)
@@ -541,8 +560,8 @@ public sealed class PharmacyCentralDbContext
             TotalSuppliers: await Suppliers.CountAsync(cancellationToken),
             TotalQuantityOnHand: await inventoryBalances.SumAsync(balance => balance.QuantityOnHand, cancellationToken),
             TotalQuantityReserved: await inventoryBalances.SumAsync(balance => balance.QuantityReserved, cancellationToken),
-            LowStockBatchCount: await inventoryBalances.CountAsync(balance => balance.QuantityOnHand > 0 && balance.QuantityOnHand - balance.QuantityReserved <= 10, cancellationToken),
-            ExpiringBatchCount: await inventoryBalances.CountAsync(balance => balance.QuantityOnHand > 0 && balance.ProductBatch.ExpiryDate <= expiryCutoff, cancellationToken),
+            LowStockBatchCount: await inventoryBalances.CountAsync(balance => balance.ProductBatch.QualityStatus == ProductBatchQualityStatus.Released && balance.QuantityOnHand > 0 && balance.QuantityOnHand - balance.QuantityReserved <= 10, cancellationToken),
+            ExpiringBatchCount: await inventoryBalances.CountAsync(balance => balance.ProductBatch.QualityStatus == ProductBatchQualityStatus.Released && balance.QuantityOnHand > 0 && balance.ProductBatch.ExpiryDate <= expiryCutoff, cancellationToken),
             PendingTransferCount: await transfers.CountAsync(order => order.Status == TransferStatus.PendingApproval || order.Status == TransferStatus.Approved || order.Status == TransferStatus.InTransit, cancellationToken),
             OpenPrescriptionCount: await prescriptions.CountAsync(prescription => prescription.Status == PrescriptionStatus.Draft || prescription.Status == PrescriptionStatus.Pending || prescription.Status == PrescriptionStatus.PartiallyDispensed, cancellationToken),
             OpenStocktakeCount: await stocktakes.CountAsync(session => session.Status == StocktakeStatus.Draft || session.Status == StocktakeStatus.InProgress, cancellationToken),

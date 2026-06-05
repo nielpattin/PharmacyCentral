@@ -53,6 +53,11 @@ public sealed class StockMovementRecorder(IApplicationDbContext dbContext)
             return InventoryErrors.BatchProductMismatch(batch.Id, product.Id);
         }
 
+        if (command.QuantityDelta < 0 && batch.QualityStatus != ProductBatchQualityStatus.Released)
+        {
+            return InventoryErrors.BatchNotReleased(batch.Id, batch.QualityStatus);
+        }
+
         InventoryBalance? balance = await dbContext.GetInventoryBalanceAsync(batch.Id, storageLocation.Id, cancellationToken);
         if (balance is null)
         {
@@ -136,6 +141,9 @@ public sealed class StockMovementRecorder(IApplicationDbContext dbContext)
             ManufacturedDate = command.ManufacturedDate,
             SupplierId = command.SupplierId,
             Manufacturer = NormalizeOptional(command.Manufacturer),
+            QualityStatus = command.MovementType == "GoodsReceipt"
+                ? ProductBatchQualityStatus.PendingQc
+                : ProductBatchQualityStatus.Released,
             Status = "Active"
         };
 

@@ -424,6 +424,27 @@ namespace PharmacyCentral.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("product_id");
 
+                    b.Property<string>("QualityNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("quality_notes");
+
+                    b.Property<DateTimeOffset?>("QualityReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("quality_reviewed_at_utc");
+
+                    b.Property<Guid?>("QualityReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("quality_reviewed_by_user_id");
+
+                    b.Property<string>("QualityStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Released")
+                        .HasColumnName("quality_status");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -439,6 +460,8 @@ namespace PharmacyCentral.Infrastructure.Migrations
                         .HasColumnName("updated_at_utc");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("QualityStatus");
 
                     b.HasIndex("SupplierId");
 

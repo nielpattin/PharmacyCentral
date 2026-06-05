@@ -25,6 +25,9 @@ internal static class InventoryErrors
     public static Error BatchProductMismatch(Guid productBatchId, Guid productId) =>
         new("inventory.batch_product_mismatch", $"Product batch '{productBatchId}' does not belong to product '{productId}'.");
 
+    public static Error BatchNotReleased(Guid productBatchId, string status) =>
+        new("inventory.batch_not_released", $"Product batch '{productBatchId}' is not available for use. Current quality status is '{status}'.");
+
     public static Error InvalidQuantityDelta() =>
         new("inventory.invalid_quantity_delta", "Quantity delta must not be zero.");
 

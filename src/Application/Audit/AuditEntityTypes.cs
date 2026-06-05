@@ -6,6 +6,7 @@ public static class AuditEntityTypes
     public const string StorageLocation = "StorageLocation";
     public const string Product = "Product";
     public const string Supplier = "Supplier";
+    public const string ProductBatch = "ProductBatch";
     public const string GoodsReceipt = "GoodsReceipt";
     public const string TransferOrder = "TransferOrder";
     public const string Prescription = "Prescription";

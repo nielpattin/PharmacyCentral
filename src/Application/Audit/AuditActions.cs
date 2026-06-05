@@ -11,4 +11,7 @@ public static class AuditActions
     public const string Received = "Received";
     public const string Dispensed = "Dispensed";
     public const string Cancelled = "Cancelled";
+    public const string Released = "Released";
+
+    public const string Rejected = "Rejected";
 }

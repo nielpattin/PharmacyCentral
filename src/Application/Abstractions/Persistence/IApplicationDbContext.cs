@@ -72,6 +72,8 @@ public interface IApplicationDbContext
 
     Task<ProductBatch?> GetProductBatchByNumberAsync(Guid productId, string batchNumber, CancellationToken cancellationToken = default);
 
+    Task<List<Guid>> ListSiteIdsForProductBatchAsync(Guid productBatchId, bool onlyPositiveStock = true, CancellationToken cancellationToken = default);
+
     Task<InventoryBalance?> GetInventoryBalanceAsync(Guid productBatchId, Guid storageLocationId, CancellationToken cancellationToken = default);
 
     Task<List<InventoryBalance>> ListInventoryBalancesAsync(Guid? productId = null, Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, Guid? storageLocationId = null, bool includeZeroBalances = false, CancellationToken cancellationToken = default);

@@ -36,6 +36,7 @@ public sealed record GoodsReceiptLineDetails(
     DateOnly ExpiryDate,
     DateOnly? ManufacturedDate,
     string? Manufacturer,
+    string? QualityStatus,
     decimal Quantity,
     string? Notes)
 {
@@ -48,6 +49,7 @@ public sealed record GoodsReceiptLineDetails(
             line.ExpiryDate,
             line.ManufacturedDate,
             line.Manufacturer,
+            line.ProductBatch?.QualityStatus,
             line.Quantity,
             line.Notes);
 }
