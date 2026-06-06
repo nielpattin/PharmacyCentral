@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useCallback, type ReactNode, type UIEvent } from "react";
 import {
    ArrowLeftRight,
    BarChart3,
@@ -30,12 +30,26 @@ type AppShellProps = {
 };
 
 const accountAvatarUrl = "https://api.dicebear.com/9.x/notionists/svg?seed=pharmacy-staff&backgroundColor=b6e3f4";
+let sidebarScrollTop = 0;
 
 export function AppShell({ active, breadcrumb, children }: AppShellProps) {
    const authUser = useAuth();
    const language = useLanguage();
    const t = useT();
    const nextLanguage = language === "vi" ? "en" : "vi";
+   const setSidebarScrollNode = useCallback(
+      (node: HTMLDivElement | null) => {
+         if (node === null) {
+            return;
+         }
+
+         node.scrollTop = sidebarScrollTop;
+         const activeLink = node.querySelector("a.active");
+         activeLink?.scrollIntoView({ block: "nearest" });
+         sidebarScrollTop = node.scrollTop;
+      },
+      [],
+   );
 
    const navIcons: Record<SidebarActiveKey, ReactNode> = {
       dashboard: <LayoutDashboard size={16} strokeWidth={2} />,
@@ -105,6 +119,10 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
    const accountEmail = authUser?.email ?? "";
    const accountRole = authUser?.roles !== undefined && authUser.roles.length > 0 ? authUser.roles[0] : "";
 
+   function handleSidebarScroll(event: UIEvent<HTMLDivElement>) {
+      sidebarScrollTop = event.currentTarget.scrollTop;
+   }
+
    async function handleSignOut() {
       await logout();
       navigate("/login");
@@ -122,27 +140,29 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
                   </div>
                </div>
 
-               {isLoggedIn
-                  ? visibleSidebarSections.map((section) => (
-                       <section key={section.id} className="sidebar-section">
-                          <div className="sidebar-group-label">{section.label}</div>
-                          <nav className="sidebar-nav" aria-label={section.label}>
-                             {section.items.map((item) => (
-                                <a
-                                   key={item.href}
-                                   className={active === item.key ? "active" : undefined}
-                                   href={item.href}
-                                >
-                                   <span className="sidebar-nav-icon" aria-hidden="true">
-                                      {navIcons[item.key]}
-                                   </span>
-                                   <span>{item.label}</span>
-                                </a>
-                             ))}
-                          </nav>
-                       </section>
-                    ))
-                  : null}
+               <div ref={setSidebarScrollNode} className="sidebar-scroll" onScroll={handleSidebarScroll}>
+                  {isLoggedIn
+                     ? visibleSidebarSections.map((section) => (
+                          <section key={section.id} className="sidebar-section">
+                             <div className="sidebar-group-label">{section.label}</div>
+                             <nav className="sidebar-nav" aria-label={section.label}>
+                                {section.items.map((item) => (
+                                   <a
+                                      key={item.href}
+                                      className={active === item.key ? "active" : undefined}
+                                      href={item.href}
+                                   >
+                                      <span className="sidebar-nav-icon" aria-hidden="true">
+                                         {navIcons[item.key]}
+                                      </span>
+                                      <span>{item.label}</span>
+                                   </a>
+                                ))}
+                             </nav>
+                          </section>
+                       ))
+                     : null}
+               </div>
             </aside>
 
             <main className="main">

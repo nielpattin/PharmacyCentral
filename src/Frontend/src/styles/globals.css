@@ -90,8 +90,8 @@ a {
    padding: 12px;
    background: linear-gradient(180deg, rgba(26, 31, 39, 0.98), rgba(16, 20, 28, 0.98));
    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.24);
-   overflow: hidden;
-   scrollbar-gutter: stable;
+   min-height: 0;
+   overflow: visible;
    z-index: 1;
 }
 
@@ -101,6 +101,7 @@ a {
    align-items: center;
    padding: 6px 6px 14px;
    margin-bottom: 12px;
+   flex: none;
    border-bottom: 1px solid var(--sidebar-line);
 }
 
@@ -125,8 +126,43 @@ a {
    font-size: 0.75rem;
 }
 
+.sidebar-scroll {
+   flex: 1 1 auto;
+   min-height: 0;
+   display: grid;
+   align-content: start;
+   gap: 20px;
+   padding: 0 4px 8px 0;
+   overflow-x: hidden;
+   overflow-y: auto;
+   scrollbar-gutter: stable;
+   scrollbar-width: thin;
+   scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+   width: 8px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+   background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+   background: rgba(255, 255, 255, 0.24);
+   border: 2px solid transparent;
+   border-radius: 999px;
+   background-clip: content-box;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+   background: rgba(255, 255, 255, 0.36);
+   border: 2px solid transparent;
+   background-clip: content-box;
+}
+
 .sidebar-section + .sidebar-section {
-   margin-top: 20px;
+   margin-top: 0;
 }
 
 .sidebar-group-label {
