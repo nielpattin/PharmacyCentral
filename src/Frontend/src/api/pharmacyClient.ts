@@ -38,6 +38,16 @@ export type AdminUserPasswordRequest = {
    newPassword: string;
 };
 
+export type FirstAdminSetupStatus = {
+   requiresAdminSetup: boolean;
+};
+
+export type FirstAdminSetupRequest = {
+   email: string;
+   password: string;
+   displayName: string;
+};
+
 export type LoginRequest = {
    email: string;
    password: string;
@@ -1385,6 +1395,20 @@ export async function revokeAdminUserSessions(id: string) {
    return await requestJson<AdminUserDetails>(`/api/admin/users/${id}/revoke-sessions`, {
       method: "POST",
    });
+}
+
+export async function loadFirstAdminSetupStatus() {
+   return await requestJson<FirstAdminSetupStatus>("/api/auth/setup-status");
+}
+
+export async function setupFirstAdmin(request: FirstAdminSetupRequest) {
+   const user = await requestJson<AuthUserDetails>("/api/auth/setup-admin", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+
+   resetCsrfToken();
+   return user;
 }
 
 export async function login(request: LoginRequest) {

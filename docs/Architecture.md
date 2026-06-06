@@ -216,4 +216,22 @@ The repository currently supports:
 - Aspire local development.
 - A single Web.Api container that serves the built frontend from `wwwroot`.
 - A PostgreSQL container in `docker-compose.yml`.
-- GitHub Act
+- GitHub Actions build validation only; no image push or real deployment step.
+
+## Bootstrap and first administrator setup
+
+For local/demo convenience, the seeder can create a development administrator. This is controlled by:
+
+```env
+PHARMACY_SEED_ADMIN_USER=true
+PHARMACY_SEED_DEMO_USERS=true
+PHARMACY_SEED_BUSINESS_DATA=true
+```
+
+When `PHARMACY_SEED_ADMIN_USER=false` and no Platform Admin exists, the login page switches into first-administrator setup mode. The first submitted administrator account is created once, signed in, and the setup mode is disabled because a Platform Admin now exists.
+
+This keeps two supported paths: seeded development credentials for fast local work, and a first-run setup flow for validating a fresh workspace without demo users or business seed data.
+
+## Deferred product discussion
+
+Payment, invoice capture, refunds and settlement posting are not implemented in the current baseline. The Finance workspace is read-only reconciliation and valuation. Treat cashier/payment workflow as a deferred product discussion until its business rules are selected.

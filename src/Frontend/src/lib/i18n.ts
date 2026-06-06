@@ -34,6 +34,11 @@ const translations: Record<Language, Record<string, string>> = {
       "auth.formError": "Fix the highlighted fields.",
       "auth.invalidCredentials": "Invalid email or password.",
       "auth.sessionExpired": "Session expired. Please sign in again.",
+      "auth.setupTitle": "Create first administrator",
+      "auth.setupSubtitle": "Set up the first administrator account for this workspace.",
+      "auth.displayName": "Display name",
+      "auth.createFirstAdmin": "Create administrator",
+      "auth.settingUp": "Setting up...",
 
       "language.switch": "Switch language",
       "language.vi": "VN",
@@ -1030,6 +1035,11 @@ const translations: Record<Language, Record<string, string>> = {
       "auth.formError": "Hãy sửa các trường được đánh dấu.",
       "auth.invalidCredentials": "Email hoặc mật khẩu không đúng.",
       "auth.sessionExpired": "Phiên đã hết hạn. Vui lòng đăng nhập lại.",
+      "auth.setupTitle": "Tạo quản trị viên đầu tiên",
+      "auth.setupSubtitle": "Thiết lập tài khoản quản trị đầu tiên cho không gian làm việc này.",
+      "auth.displayName": "Tên hiển thị",
+      "auth.createFirstAdmin": "Tạo quản trị viên",
+      "auth.settingUp": "Đang thiết lập...",
 
       "language.switch": "Đổi ngôn ngữ",
       "language.vi": "VN",

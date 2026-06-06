@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { fetchMe, login as apiLogin, logout as apiLogout, resetCsrfToken } from "../api/pharmacyClient";
+import { fetchMe, login as apiLogin, logout as apiLogout, resetCsrfToken, setupFirstAdmin as apiSetupFirstAdmin } from "../api/pharmacyClient";
 
 export type AuthUser = {
    id: string;
@@ -13,6 +13,12 @@ export type AuthUser = {
 export type LoginCredentials = {
    email: string;
    password: string;
+};
+
+export type FirstAdminSetupCredentials = {
+   email: string;
+   password: string;
+   displayName: string;
 };
 
 export type LoginValidationResult = {
@@ -115,6 +121,16 @@ export async function login(credentials: LoginCredentials): Promise<void> {
    const user = await apiLogin({
       email: credentials.email.trim(),
       password: credentials.password,
+   });
+
+   setCurrentUser(user);
+}
+
+export async function setupFirstAdmin(credentials: FirstAdminSetupCredentials): Promise<void> {
+   const user = await apiSetupFirstAdmin({
+      email: credentials.email.trim(),
+      password: credentials.password,
+      displayName: credentials.displayName.trim(),
    });
 
    setCurrentUser(user);

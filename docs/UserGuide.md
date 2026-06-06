@@ -11,14 +11,16 @@ This guide explains how the implemented Pharmacy Central app is used by internal
 3. Sign in with an assigned internal account.
 4. The sidebar shows only workspaces allowed for the signed-in user's roles.
 
-Seeded local development admin account:
+If the app starts with no configured administrator, the sign-in page shows a first-administrator setup form. Enter the administrator display name, email and password once. After that account exists, the page returns to normal sign-in for future sessions.
+
+Seeded local development admin account, when admin seeding is enabled:
 
 ```text
 Email: admin@pharmacy.local
 Password: Admin@123!
 ```
 
-The local development seed creates these role-specific accounts:
+The local development seed can also create these role-specific accounts when demo-user seeding is enabled:
 
 | Purpose | Email | Password | Role | Site access |
 | --- | --- | --- | --- | --- |

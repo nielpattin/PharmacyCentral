@@ -157,6 +157,8 @@ async function main() {
   });
 
   await admin.login(adminEmail, adminPassword);
+  const setupStatus = await admin.get("auth/setup-status");
+  assertEqual(setupStatus.requiresAdminSetup, false, "Admin setup should be disabled once a Platform Admin exists");
   const adminMe = await admin.get("auth/me");
   assert(adminMe.isPlatformAdmin === true, "Bootstrap admin should be Platform Admin");
   console.log("PASS bootstrap admin login");

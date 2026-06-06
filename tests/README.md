@@ -66,4 +66,6 @@ The suite creates uniquely named test users and records, then verifies:
 
 The fresh flow script additionally verifies the first operational order from a minimal baseline: admin login, site/location setup, role-specific user creation, manager procurement/pricing, warehouse receiving/quality/transfer, pharmacist dispensing/return, and admin/manager visibility checks.
 
+The fresh flow also confirms that first-administrator setup is disabled after a Platform Admin exists. To manually validate the first-run administrator form, start with a disposable database and `PHARMACY_SEED_ADMIN_USER=false`.
+
 The script mutates only development data and does not create migrations or change schema.
