@@ -1,44 +1,92 @@
-# Pharmacy Central User Guide
+# Pharmacy Central Product Guide
 
-This guide describes how to use the implemented internal Pharmacy Central application.
+## Purpose
+
+This guide explains how the implemented Pharmacy Central app is used by internal teams. It combines user guidance and demo flow into one product-facing guide.
 
 ## Sign in
 
-1. Start the app with Aspire for development or with the local deployment package.
-2. Open the frontend URL.
+1. Start the app with Aspire or the local package.
+2. Open the frontend URL from Aspire. In local AppHost testing, prefer `http://app.pharmacy.dev.localhost:5200/` when available.
 3. Sign in with an assigned internal account.
-4. The sidebar only shows workspaces allowed by the signed-in user's roles.
+4. The sidebar shows only workspaces allowed for the signed-in user's roles.
 
-Seeded development admin account:
+Seeded local development admin account:
 
 ```text
 Email: admin@pharmacy.local
 Password: Admin@123!
 ```
 
-Use this account only in local development data.
+The local development seed creates these role-specific accounts:
 
-## Roles and workspaces
+| Purpose | Email | Password | Role | Site access |
+| --- | --- | --- | --- | --- |
+| Manager demo | `manager@pharmacy.local` | `Manager@123!` | Pharmacy Manager | HQ/store demo sites |
+| Pharmacist demo | `pharmacist@pharmacy.local` | `Pharmacist@123!` | Pharmacist | Store demo sites |
+| Warehouse demo | `warehouse@pharmacy.local` | `Warehouse@123!` | Warehouse Staff | Warehouse/store demo sites |
+
+Use seeded credentials only in local development data.
+
+## Not an admin-only app
+
+Platform Admin sees every workspace, so the seeded admin account can make the app look admin-only. In normal use, work is split by role.
+
+```mermaid
+flowchart LR
+    Admin[Platform Admin] --> Users[Users and access]
+    Admin --> Audit[Audit]
+    Manager[Pharmacy Manager] --> Procurement[Procurement]
+    Manager --> Pricing[Pricing]
+    Manager --> Reporting[Reporting and finance]
+    Pharmacist[Pharmacist] --> Prescriptions[Prescriptions]
+    Pharmacist --> Returns[Returns/removals]
+    Warehouse[Warehouse Staff] --> Receiving[Receiving]
+    Warehouse --> Quality[Quality]
+    Warehouse --> Transfers[Transfers]
+    Warehouse --> Stocktake[Stocktake and adjustments]
+```
 
 | Role | Typical workspaces |
 | --- | --- |
 | Platform Admin | All workspaces, user access management, audit |
-| Pharmacy Manager | Site, catalog, supplier, pricing, procurement, reporting, recall oversight |
+| Pharmacy Manager | Sites, catalog, suppliers, pricing, procurement, reporting, finance, recalls |
 | Pharmacist | Prescriptions, dispensing, inventory visibility, returns/removals |
-| Warehouse Staff | Receiving, procurement receiving, quality review, transfers, stocktake, adjustments |
+| Warehouse Staff | Receiving, quality review, transfers, stocktake, adjustments |
 
 Users can also be limited to assigned sites. Site-limited users only see and operate on their assigned sites.
 
+## Main product journey
+
+```mermaid
+flowchart TD
+    Setup[Set up sites locations products suppliers] --> Pricing[Publish prices]
+    Setup --> PO[Create and approve purchase order]
+    PO --> Receiving[Receive supplier delivery]
+    Receiving --> Quality[Review batch quality]
+    Quality --> Inventory[Inventory available for work]
+    Inventory --> Prescription[Dispense prescription]
+    Inventory --> Transfer[Transfer stock]
+    Inventory --> Return[Return or remove stock]
+    Inventory --> Stocktake[Stocktake and adjustment]
+    Inventory --> Recall[Recall controls]
+    Prescription --> Dashboard[Dashboard reporting finance audit]
+    Transfer --> Dashboard
+    Return --> Dashboard
+    Stocktake --> Dashboard
+    Recall --> Dashboard
+```
+
 ## Dashboard and reporting
 
-Use **Dashboard** for operational totals, alerts, and recent activity.
+Use **Dashboard** for operational totals, alerts and recent activity.
 
-Use **Reporting** for a broader operational view:
+Use **Reporting** for broader operational visibility:
 
 - inventory risk summary
 - low-stock and near-expiry view
 - recent activity
-- audit breakdowns
+- activity breakdowns
 
 Low-stock and near-expiry rules match the backend dashboard definitions.
 
@@ -46,25 +94,25 @@ Low-stock and near-expiry rules match the backend dashboard definitions.
 
 ### Sites and storage locations
 
-Use **Sites** to manage pharmacies, warehouses, and related storage locations.
+Use **Sites** to manage pharmacies, warehouses and related storage locations.
 
 ### Catalog
 
-Use **Catalog** to manage product records such as SKU, name, unit, manufacturer, and status.
+Use **Catalog** to manage product records such as SKU, name, unit, manufacturer and status.
 
 ### Suppliers
 
 Use **Suppliers** to manage approved supplier records.
 
-### Pricing
+## Pricing
 
-Use **Pricing** to prepare, publish, and archive product prices.
+Use **Pricing** to prepare, publish and archive product prices.
 
 Basic flow:
 
 1. Create a draft price for a product.
 2. Optionally scope it to one site, or leave it applicable to all sites.
-3. Set the unit price, currency, and effective dates.
+3. Set unit price, currency and effective dates.
 4. Publish the price when ready.
 5. Archive old prices when they should no longer be used.
 
@@ -74,11 +122,11 @@ The app blocks overlapping published prices for the same product/site/effective 
 
 ### Purchase orders
 
-Use **Mua hàng / Procurement** to create and manage purchase orders.
+Use **Procurement** to create and manage purchase orders.
 
 Basic flow:
 
-1. Create a purchase order for a supplier, site, expected date, and product quantities.
+1. Create a purchase order for a supplier, site, expected date and product quantities.
 2. Approve the order.
 3. Receive goods against the approved order from the Receiving page.
 4. The order status updates as quantities are received.
@@ -89,9 +137,9 @@ Use **Receiving** to record supplier deliveries.
 
 Basic flow:
 
-1. Choose supplier, site, storage location, and receipt number.
+1. Choose supplier, site, storage location and receipt number.
 2. Optionally select an approved purchase order.
-3. Enter received product, batch number, expiry date, and quantity.
+3. Enter received product, batch number, expiry date and quantity.
 4. Submit the receipt.
 5. Newly received batches wait for quality review before operational use.
 
@@ -105,9 +153,9 @@ Use **Quality** to review newly received batches.
 
 ## Inventory
 
-Use **Inventory** to view balances, available quantity, and history.
+Use **Inventory** to view balances, available quantity and history.
 
-The manual adjustment form is available for allowed users and records controlled quantity corrections.
+The correction form is available for allowed users and records controlled quantity corrections.
 
 ## Prescriptions and dispensing
 
@@ -116,9 +164,9 @@ Use **Prescriptions** for dispensing workflows.
 Basic flow:
 
 1. Create a prescription with patient and line details.
-2. The app reserves available stock for the prescription.
+2. The app holds available stock for the prescription.
 3. Dispense when ready.
-4. Dispensing consumes the reserved quantity and records activity.
+4. Dispensing consumes the held quantity and records activity.
 5. Cancel if the prescription should not proceed; cancellation releases held quantity.
 
 ## Transfers
@@ -140,23 +188,25 @@ Use **Returns** for supplier returns, damaged goods, expired goods, recalled goo
 
 ## Stocktake and adjustments
 
-Use **Stocktake** to create count sessions, record counts, and post resulting adjustments.
+Use **Stocktake** to create count sessions, record counts and post resulting adjustments.
 
 Use **Adjustments** to prepare and approve standalone stock adjustments. Approval requires an eligible user and records the decision.
 
 ## Recalls
 
-Use **Recalls** to identify affected batches, activate recall controls, record batch actions, and close or cancel recall cases.
+Use **Recalls** to identify affected batches, activate recall controls, record batch actions and close or cancel recall cases.
 
 Active recalls block affected batches from operational use until an allowed action releases or removes the batch.
 
 ## Finance reconciliation
 
-Use **Finance** to review inventory valuation and operational reconciliation by site and date range. It summarizes current value from published prices, received quantities, dispensing, returns/removals, adjustments, and transfers. External accounting posting is not part of this workspace.
+Use **Finance** to review inventory valuation and operational reconciliation by site and date range. It summarizes current value from published prices, received quantities, dispensing, returns/removals, adjustments and transfers.
+
+External accounting posting is not part of this workspace.
 
 ## Audit
 
-Use **Audit** to review recorded business activity. Audit details are intended for operational traceability and review.
+Use **Audit** to review recorded business activity. Audit details are intended for operational traceability and oversight.
 
 ## User management
 
@@ -170,9 +220,36 @@ Platform Admin users can use **Users** to:
 - reset a user's password when needed
 - sign out a user's active sessions after access changes or suspected account misuse
 
+## Demo path
+
+Use this path for a compact local demo:
+
+1. Sign in as the seeded development admin.
+2. Open **Dashboard** and show totals, alerts and role-aware navigation.
+3. Open **Sites**, **Catalog** and **Suppliers** to show master data.
+4. Open **Pricing**, create a draft price and publish it.
+5. Open **Procurement**, create and approve a purchase order.
+6. Open **Receiving**, record a delivery against the order.
+7. Open **Quality**, release the new batch.
+8. Open **Inventory**, show available quantity and history.
+9. Open **Prescriptions**, create and dispense a prescription.
+10. Open **Transfers**, show create/approve/ship/receive lifecycle if a second eligible account is available.
+11. Open **Returns**, show a return/removal reason.
+12. Open **Stocktake** and **Adjustments**, show count sessions and approval workflow.
+13. Open **Recalls**, create or inspect recall controls.
+14. Open **Reporting**, **Finance** and **Audit** to show visibility and traceability.
+15. Open **Users** to show role and site access management.
+
+## Demo cautions
+
+- Use local/development data only.
+- Avoid real patient, supplier or staff information.
+- Do not reuse development credentials outside development.
+- If a workflow needs a second approver, create a dedicated demo user with the required role and site access.
+
 ## Good operating habits
 
 - Use named staff accounts, not shared accounts.
 - Keep site access narrow for users who only work at specific sites.
-- Review quality, recall, stock adjustment, and audit records regularly.
+- Review quality, recall, stock adjustment and audit records regularly.
 - Use development seed credentials only in development environments.

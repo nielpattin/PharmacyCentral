@@ -36,6 +36,6 @@ internal sealed class GetById : IEndpoint
         })
         .WithName("GetStorageLocationById")
         .WithTags(Tags.StorageLocations)
-        .RequireAuthorization(Policies.Management);
+        .RequireAuthorization(Policies.AnyRole);
     }
 }

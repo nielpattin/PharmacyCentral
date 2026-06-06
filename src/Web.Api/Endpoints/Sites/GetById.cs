@@ -36,6 +36,6 @@ internal sealed class GetById : IEndpoint
         })
         .WithName("GetSiteById")
         .WithTags(Tags.Sites)
-        .RequireAuthorization(Policies.Management);
+        .RequireAuthorization(Policies.AnyRole);
     }
 }

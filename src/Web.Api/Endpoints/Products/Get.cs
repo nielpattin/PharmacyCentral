@@ -16,7 +16,7 @@ internal sealed class Get : IEndpoint
             return Results.Ok(result.Value);
         })
         .WithTags(Tags.Products)
-        .RequireAuthorization(Policies.Management);
+        .RequireAuthorization(Policies.AnyRole);
     }
 }
 

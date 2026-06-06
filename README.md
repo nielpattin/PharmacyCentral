@@ -44,7 +44,7 @@ Aspire starts the backend server and the Vite frontend together.
 1. After `aspire run` starts, open the Aspire dashboard URL printed in the terminal.
 2. In the dashboard, go to the **Resources** page.
 3. Find the `frontend` resource.
-4. Open the endpoint shown for `frontend`. Eg: `http://app.pharmacy.localhost:63995/`
+4. Open the endpoint shown for `frontend`. In the current AppHost setup this is typically `http://app.pharmacy.dev.localhost:5200/`.
 5. The PharmacyCentral frontend should load in your browser.
 
 The AppHost configures the frontend host as:
@@ -55,11 +55,10 @@ app.pharmacy.dev.localhost
 
 ## Guides
 
-- [User Guide](docs/UserGuide.md)
-- [API Guide](docs/ApiGuide.md)
-- [Demo Script](docs/DemoScript.md)
-- [Runbooks](docs/Runbooks.md)
-- [Deployment Package](docs/Deployment.md)
+- [Product Guide](docs/UserGuide.md) — workspaces, roles, workflows and demo path
+- [API Guide](docs/ApiGuide.md) — auth, CSRF, authorization and endpoint map
+- [Architecture](docs/Architecture.md) — current system shape and code organization
+- [Operations Guide](docs/Runbooks.md) — local runbooks, verification and package validation
 
 ## Local deployment package
 
@@ -83,4 +82,4 @@ Check health:
 curl http://localhost:8080/health
 ```
 
-See [`docs/Deployment.md`](docs/Deployment.md) for the full local packaging notes, HTTPS guidance, and CI behavior.
+See [`docs/Runbooks.md`](docs/Runbooks.md) for local packaging notes, HTTPS guidance and CI behavior.

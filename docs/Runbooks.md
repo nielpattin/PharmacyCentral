@@ -1,6 +1,8 @@
-# Pharmacy Central Runbooks
+# Pharmacy Central Operations Guide
 
-These runbooks cover local development and local package validation. They do not describe a real cloud deployment.
+## Purpose
+
+This guide covers local development, verification, local package validation and common recovery tasks. It merges the previous runbook and deployment package notes. It does not describe a real cloud deployment.
 
 ## Start development environment
 
@@ -15,7 +17,7 @@ Wait until the API and frontend resources are healthy in Aspire.
 Typical local endpoints:
 
 ```text
-Frontend: http://localhost:5200
+Frontend: http://app.pharmacy.dev.localhost:5200/
 API:      https://localhost:7528
 Health:   https://localhost:7528/health
 ```
@@ -44,6 +46,12 @@ When Aspire is running, keep build output isolated:
 dotnet build PharmacyCentral.sln --artifacts-path .tmp/runbook/dotnet-artifacts
 ```
 
+If stale AppHost/Web.Api processes are locking files, use:
+
+```bash
+bash scripts/build-clean.sh
+```
+
 ## Frontend build check
 
 ```bash
@@ -70,9 +78,27 @@ PHARMACY_ADMIN_PASSWORD='Admin@123!' \
 node tests/product-api-verify.mjs
 ```
 
+## Local package shape
+
+The repository includes a local production-like package for validation and handoff. It does **not** push images, publish infrastructure or deploy to any external environment.
+
+The package builds one application image:
+
+- Vite builds the React frontend.
+- The compiled frontend is copied into `src/Web.Api/wwwroot` during the container build.
+- `Web.Api` serves the API under `/api` and serves the frontend static files from the same container.
+- PostgreSQL runs as a separate container in `docker-compose.yml`.
+
+Files:
+
+- `Dockerfile` — multi-stage build for frontend + Web.Api runtime image.
+- `docker-compose.yml` — local app + PostgreSQL composition.
+- `deploy/pharmacycentral.env.example` — non-secret environment template.
+- `.github/workflows/build.yml` — CI build validation only; no publish or deployment step.
+
 ## Local package build
 
-This validates the container package only. It does not push or deploy anything.
+From the repository root:
 
 ```bash
 docker compose --env-file deploy/pharmacycentral.env.example build
@@ -92,6 +118,12 @@ Health check:
 curl http://localhost:8080/health
 ```
 
+Open the web UI:
+
+```text
+http://localhost:8080
+```
+
 Stop local package:
 
 ```bash
@@ -104,9 +136,31 @@ Remove local package data volume if needed:
 docker compose --env-file deploy/pharmacycentral.env.example down --volumes
 ```
 
+## HTTPS and antiforgery note
+
+The API uses secure cookie behavior and antiforgery validation for unsafe requests. For real environments, run the container behind a TLS-terminating reverse proxy or platform load balancer and expose the application over HTTPS.
+
+The compose file is for local package validation, health checks and handoff. It is not a complete internet-facing production stack.
+
+## Secrets
+
+Do not commit real secrets. Copy `deploy/pharmacycentral.env.example` to a local untracked file and replace values there.
+
 ## Database migration behavior
 
-`Web.Api` applies EF Core migrations on startup. When a new migration is generated while Aspire is already running, rebuild and restart the API before product verification so the running API has the new schema-aware binaries.
+`Web.Api` applies EF Core migrations on startup. The app container must have a valid `ConnectionStrings__PharmacyCentral` value before it starts.
+
+When a new migration is generated while Aspire is already running, rebuild and restart the API before product verification so the running API has the new schema-aware binaries.
+
+## CI behavior
+
+The GitHub Actions workflow validates:
+
+- backend restore/build
+- frontend install/lint/type/build
+- Docker image build
+
+It does not push images, publish artifacts to a registry or deploy anywhere.
 
 ## Development database backup
 
@@ -164,7 +218,7 @@ For local development:
 4. Restart the app.
 5. Run smoke checks.
 
-For real environments, use environment-specific deployment and backup tooling. Do not rely on this local runbook as a full production rollback plan.
+For real environments, use environment-specific deployment and backup tooling. Do not rely on this local guide as a full production rollback plan.
 
 ## Common issues
 

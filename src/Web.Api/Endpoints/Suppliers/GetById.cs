@@ -22,7 +22,7 @@ internal sealed class GetById : IEndpoint
         })
         .WithName("GetSupplierById")
         .WithTags(Tags.Suppliers)
-        .RequireAuthorization(Policies.Management);
+        .RequireAuthorization(Policies.AnyRole);
     }
 }
 

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PharmacyCentral.Domain.GoodsReceipts;
@@ -16,7 +17,7 @@ using PharmacyCentral.Infrastructure.Persistence;
 
 namespace PharmacyCentral.Infrastructure.Seeding;
 
-internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFactory) : IHostedService
+internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFactory, IConfiguration configuration) : IHostedService
 {
     private static readonly string[] RoleNames =
     [
@@ -24,6 +25,49 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
         "Pharmacy Manager",
         "Pharmacist",
         "Warehouse Staff"
+    ];
+
+    private const string SeedingSectionName = "PharmacyCentral:Seeding";
+
+    private sealed record UserSeed(
+        string Email,
+        string Password,
+        string DisplayName,
+        string RoleName,
+        bool AllSites,
+        string[] SiteCodes);
+
+    private static readonly UserSeed AdminUserSeed = new(
+        "admin@pharmacy.local",
+        "Admin@123!",
+        "Quản trị viên",
+        "Platform Admin",
+        true,
+        []);
+
+    private static readonly UserSeed[] DemoUserSeeds =
+    [
+        new(
+            "manager@pharmacy.local",
+            "Manager@123!",
+            "Quản lý nhà thuốc",
+            "Pharmacy Manager",
+            false,
+            ["HQ-HCM-01", "WH-HCM-01", "ST-HCM-01", "ST-HCM-02"]),
+        new(
+            "pharmacist@pharmacy.local",
+            "Pharmacist@123!",
+            "Dược sĩ bán hàng",
+            "Pharmacist",
+            false,
+            ["ST-HCM-01", "ST-HCM-02"]),
+        new(
+            "warehouse@pharmacy.local",
+            "Warehouse@123!",
+            "Nhân viên kho",
+            "Warehouse Staff",
+            false,
+            ["WH-HCM-01", "ST-HCM-01", "ST-HCM-02"])
     ];
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -34,8 +78,24 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
         UserManager<UserAccount> userManager = scope.ServiceProvider.GetRequiredService<UserManager<UserAccount>>();
 
         await SeedRolesAsync(roleManager);
-        await SeedBusinessDataAsync(dbContext, cancellationToken);
-        await SeedAdminUserAsync(userManager, dbContext, cancellationToken);
+
+        if (IsEnabled("SeedBusinessData", defaultValue: true))
+        {
+            await SeedBusinessDataAsync(dbContext, cancellationToken);
+        }
+
+        List<UserSeed> usersToSeed = [];
+        if (IsEnabled("SeedAdminUser", defaultValue: true))
+        {
+            usersToSeed.Add(AdminUserSeed);
+        }
+
+        if (IsEnabled("SeedDemoUsers", defaultValue: true))
+        {
+            usersToSeed.AddRange(DemoUserSeeds);
+        }
+
+        await SeedUsersAsync(userManager, dbContext, usersToSeed, cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -53,40 +113,76 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
         }
     }
 
-    private static async Task SeedAdminUserAsync(
+    private bool IsEnabled(string key, bool defaultValue)
+    {
+        return configuration.GetValue<bool?>($"{SeedingSectionName}:{key}") ?? defaultValue;
+    }
+
+    private static async Task SeedUsersAsync(
         UserManager<UserAccount> userManager,
         PharmacyCentralDbContext dbContext,
+        IReadOnlyCollection<UserSeed> userSeeds,
         CancellationToken cancellationToken)
     {
-        UserAccount? admin = await userManager.FindByEmailAsync("admin@pharmacy.local");
-        if (admin is not null)
-        {
-            return;
-        }
-
-        admin = new UserAccount
-        {
-            Id = Guid.NewGuid(),
-            Email = "admin@pharmacy.local",
-            UserName = "admin@pharmacy.local",
-            DisplayName = "Quản trị viên",
-            EmailConfirmed = true,
-            CreatedAtUtc = DateTimeOffset.UtcNow,
-            UpdatedAtUtc = DateTimeOffset.UtcNow
-        };
-
-        await userManager.CreateAsync(admin, "Admin@123!");
-        await userManager.AddToRoleAsync(admin, "Platform Admin");
-
         List<Site> sites = await dbContext.Sites.OrderBy(s => s.Code).ToListAsync(cancellationToken);
-        foreach (Site site in sites)
+
+        foreach (UserSeed seed in userSeeds)
         {
-            dbContext.UserSiteScopes.Add(new UserSiteScope
+            UserAccount? user = await userManager.FindByEmailAsync(seed.Email);
+            if (user is null)
             {
-                Id = Guid.NewGuid(),
-                UserId = admin.Id,
-                SiteId = site.Id
-            });
+                user = new UserAccount
+                {
+                    Id = Guid.NewGuid(),
+                    Email = seed.Email,
+                    UserName = seed.Email,
+                    DisplayName = seed.DisplayName,
+                    EmailConfirmed = true,
+                    CreatedAtUtc = DateTimeOffset.UtcNow,
+                    UpdatedAtUtc = DateTimeOffset.UtcNow
+                };
+
+                IdentityResult createResult = await userManager.CreateAsync(user, seed.Password);
+                if (!createResult.Succeeded)
+                {
+                    string error = createResult.Errors.FirstOrDefault()?.Description ?? "User creation failed.";
+                    throw new InvalidOperationException($"Failed to seed user '{seed.Email}': {error}");
+                }
+            }
+
+            if (!await userManager.IsInRoleAsync(user, seed.RoleName))
+            {
+                IdentityResult roleResult = await userManager.AddToRoleAsync(user, seed.RoleName);
+                if (!roleResult.Succeeded)
+                {
+                    string error = roleResult.Errors.FirstOrDefault()?.Description ?? "Role assignment failed.";
+                    throw new InvalidOperationException($"Failed to assign role '{seed.RoleName}' to '{seed.Email}': {error}");
+                }
+            }
+
+            HashSet<Guid> existingSiteIds = await dbContext.UserSiteScopes
+                .Where(scope => scope.UserId == user.Id)
+                .Select(scope => scope.SiteId)
+                .ToHashSetAsync(cancellationToken);
+
+            IEnumerable<Site> assignedSites = seed.AllSites
+                ? sites
+                : sites.Where(site => seed.SiteCodes.Contains(site.Code));
+
+            foreach (Site site in assignedSites)
+            {
+                if (existingSiteIds.Contains(site.Id))
+                {
+                    continue;
+                }
+
+                dbContext.UserSiteScopes.Add(new UserSiteScope
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    SiteId = site.Id
+                });
+            }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
