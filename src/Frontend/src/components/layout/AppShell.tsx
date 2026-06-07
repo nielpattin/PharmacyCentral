@@ -1,22 +1,46 @@
+import { motion } from "motion/react";
 import { useCallback, type ReactNode, type UIEvent } from "react";
 import {
    ArrowLeftRight,
    BarChart3,
    Building2,
    ChevronDown,
-   FileText,
-   LayoutDashboard,
-   ClipboardList,
    ClipboardCheck,
+   ClipboardList,
+   FileText,
+   Languages,
+   LayoutDashboard,
+   LogOut,
+   Menu,
    Package,
    RotateCcw,
-   Siren,
+   Settings,
    ShieldCheck,
    ShoppingBag,
+   Siren,
    Truck,
    Users,
    Warehouse,
 } from "lucide-react";
+import { Button } from "../shadcn/button";
+import {
+   DropdownMenu,
+   DropdownMenuContent,
+   DropdownMenuItem,
+   DropdownMenuLabel,
+   DropdownMenuSeparator,
+   DropdownMenuTrigger,
+} from "../shadcn/dropdown-menu";
+import {
+   Sheet,
+   SheetClose,
+   SheetContent,
+   SheetDescription,
+   SheetHeader,
+   SheetTitle,
+   SheetTrigger,
+} from "../shadcn/sheet";
+import { activeIndicatorTransition } from "../../lib/motion";
 import { setLanguage, useLanguage, useT } from "../../lib/i18n";
 import { navigate } from "../../lib/router";
 import { logout, useAuth } from "../../lib/auth";
@@ -29,29 +53,97 @@ type AppShellProps = {
    children: ReactNode;
 };
 
+type NavIconMap = Record<SidebarActiveKey, ReactNode>;
+
+type ShellNavProps = {
+   active: SidebarActiveKey;
+   isLoggedIn: boolean;
+   navIcons: NavIconMap;
+   sections: NavSection[];
+   variant: "desktop" | "mobile";
+};
+
 const accountAvatarUrl = "https://api.dicebear.com/9.x/notionists/svg?seed=pharmacy-staff&backgroundColor=b6e3f4";
 let sidebarScrollTop = 0;
+
+function BrandBlock() {
+   const t = useT();
+
+   return (
+      <div className="brand">
+         <img className="brand-mark" src="/brandmark.png" alt="" />
+         <div>
+            <h2>{t("app.brand")}</h2>
+            <p>{t("app.operationsAdmin")}</p>
+         </div>
+      </div>
+   );
+}
+
+function ShellNav({ active, isLoggedIn, navIcons, sections, variant }: ShellNavProps) {
+   if (!isLoggedIn) {
+      return null;
+   }
+
+   const activeLayoutId = variant === "desktop" ? "sidebar-active-indicator" : "mobile-sidebar-active-indicator";
+
+   return (
+      <>
+         {sections.map((section) => (
+            <section key={section.id} className="sidebar-section">
+               <div className="sidebar-group-label">{section.label}</div>
+               <nav className="sidebar-nav" aria-label={section.label}>
+                  {section.items.map((item) => {
+                     const isActive = active === item.key;
+                     const link = (
+                        <a key={item.href} className={isActive ? "active" : undefined} href={item.href}>
+                           {isActive && (
+                              <motion.span
+                                 layoutId={activeLayoutId}
+                                 className="sidebar-nav-active-indicator"
+                                 transition={activeIndicatorTransition}
+                                 aria-hidden="true"
+                              />
+                           )}
+                           <span className="sidebar-nav-icon" aria-hidden="true">
+                              {navIcons[item.key]}
+                           </span>
+                           <span className="sidebar-nav-label">{item.label}</span>
+                        </a>
+                     );
+
+                     return variant === "mobile" ? (
+                        <SheetClose key={item.href} asChild>
+                           {link}
+                        </SheetClose>
+                     ) : (
+                        link
+                     );
+                  })}
+               </nav>
+            </section>
+         ))}
+      </>
+   );
+}
 
 export function AppShell({ active, breadcrumb, children }: AppShellProps) {
    const authUser = useAuth();
    const language = useLanguage();
    const t = useT();
    const nextLanguage = language === "vi" ? "en" : "vi";
-   const setSidebarScrollNode = useCallback(
-      (node: HTMLDivElement | null) => {
-         if (node === null) {
-            return;
-         }
+   const setSidebarScrollNode = useCallback((node: HTMLDivElement | null) => {
+      if (node === null) {
+         return;
+      }
 
-         node.scrollTop = sidebarScrollTop;
-         const activeLink = node.querySelector("a.active");
-         activeLink?.scrollIntoView({ block: "nearest" });
-         sidebarScrollTop = node.scrollTop;
-      },
-      [],
-   );
+      node.scrollTop = sidebarScrollTop;
+      const activeLink = node.querySelector("a.active");
+      activeLink?.scrollIntoView({ block: "nearest" });
+      sidebarScrollTop = node.scrollTop;
+   }, []);
 
-   const navIcons: Record<SidebarActiveKey, ReactNode> = {
+   const navIcons: NavIconMap = {
       dashboard: <LayoutDashboard size={16} strokeWidth={2} />,
       prescriptions: <FileText size={16} strokeWidth={2} />,
       transfers: <ArrowLeftRight size={16} strokeWidth={2} />,
@@ -132,68 +224,82 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
       <div className="app-shell">
          <div className="app">
             <aside className="sidebar">
-               <div className="brand">
-                  <img className="brand-mark" src="/brandmark.png" alt="" />
-                  <div>
-                     <h2>{t("app.brand")}</h2>
-                     <p>{t("app.operationsAdmin")}</p>
-                  </div>
-               </div>
+               <BrandBlock />
 
                <div ref={setSidebarScrollNode} className="sidebar-scroll" onScroll={handleSidebarScroll}>
-                  {isLoggedIn
-                     ? visibleSidebarSections.map((section) => (
-                          <section key={section.id} className="sidebar-section">
-                             <div className="sidebar-group-label">{section.label}</div>
-                             <nav className="sidebar-nav" aria-label={section.label}>
-                                {section.items.map((item) => (
-                                   <a
-                                      key={item.href}
-                                      className={active === item.key ? "active" : undefined}
-                                      href={item.href}
-                                   >
-                                      <span className="sidebar-nav-icon" aria-hidden="true">
-                                         {navIcons[item.key]}
-                                      </span>
-                                      <span>{item.label}</span>
-                                   </a>
-                                ))}
-                             </nav>
-                          </section>
-                       ))
-                     : null}
+                  <ShellNav
+                     active={active}
+                     isLoggedIn={isLoggedIn}
+                     navIcons={navIcons}
+                     sections={visibleSidebarSections}
+                     variant="desktop"
+                  />
                </div>
             </aside>
 
             <main className="main">
                <div className="topbar">
-                  <div className="breadcrumb">{breadcrumb}</div>
+                  <div className="topbar-leading">
+                     <Sheet>
+                        <SheetTrigger asChild>
+                           <Button
+                              className="mobile-nav-trigger"
+                              variant="outline"
+                              size="icon"
+                              aria-label={t("nav.operations")}
+                           >
+                              <Menu size={17} strokeWidth={2} aria-hidden="true" />
+                           </Button>
+                        </SheetTrigger>
+                        <SheetContent side="left" className="mobile-sidebar-sheet" showCloseButton={false}>
+                           <SheetHeader className="mobile-sidebar-header">
+                              <SheetTitle className="sr-only">{t("app.brand")}</SheetTitle>
+                              <SheetDescription className="sr-only">{t("app.operationsAdmin")}</SheetDescription>
+                              <BrandBlock />
+                           </SheetHeader>
+                           <div className="sidebar-scroll mobile-sidebar-scroll">
+                              <ShellNav
+                                 active={active}
+                                 isLoggedIn={isLoggedIn}
+                                 navIcons={navIcons}
+                                 sections={visibleSidebarSections}
+                                 variant="mobile"
+                              />
+                           </div>
+                        </SheetContent>
+                     </Sheet>
+                     <div className="breadcrumb">{breadcrumb}</div>
+                  </div>
 
-                  <details className="profile-menu">
-                     <summary className="profile-trigger">
-                        <img className="profile-photo" src={accountAvatarUrl} alt="" />
-                        <span className="profile-copy">
-                           <strong>{accountName}</strong>
-                           <span>{accountRole}</span>
-                        </span>
-                        <ChevronDown className="profile-chevron" size={16} strokeWidth={2} aria-hidden="true" />
-                     </summary>
-
-                     <div className="profile-dropdown" role="menu" aria-label={accountName}>
-                        <div className="profile-menu-section">
-                           <span className="profile-menu-label">{accountEmail}</span>
-                        </div>
-                        <button type="button" className="profile-menu-item" disabled>
+                  <DropdownMenu>
+                     <DropdownMenuTrigger asChild>
+                        <button type="button" className="profile-trigger">
+                           <img className="profile-photo" src={accountAvatarUrl} alt="" />
+                           <span className="profile-copy">
+                              <strong>{accountName}</strong>
+                              <span>{accountRole}</span>
+                           </span>
+                           <ChevronDown className="profile-chevron" size={16} strokeWidth={2} aria-hidden="true" />
+                        </button>
+                     </DropdownMenuTrigger>
+                     <DropdownMenuContent align="end" sideOffset={10} className="profile-dropdown-menu">
+                        <DropdownMenuLabel className="profile-dropdown-label">{accountEmail}</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem disabled className="profile-dropdown-item">
+                           <Settings size={15} strokeWidth={2} aria-hidden="true" />
                            {t("account.settings")}
-                        </button>
-                        <button type="button" className="profile-menu-item" onClick={() => setLanguage(nextLanguage)}>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="profile-dropdown-item" onClick={() => setLanguage(nextLanguage)}>
+                           <Languages size={15} strokeWidth={2} aria-hidden="true" />
                            {t("account.language")}: {t(`language.${nextLanguage}`)}
-                        </button>
-                        <button type="button" className="profile-menu-item" onClick={() => void handleSignOut()}>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="profile-dropdown-item" onClick={() => void handleSignOut()}>
+                           <LogOut size={15} strokeWidth={2} aria-hidden="true" />
                            {t("account.signOut")}
-                        </button>
-                     </div>
-                  </details>
+                        </DropdownMenuItem>
+                     </DropdownMenuContent>
+                  </DropdownMenu>
                </div>
 
                <div className={active === "sites" ? "content-panel content-panel-sites" : "content-panel"}>

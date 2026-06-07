@@ -1,6 +1,8 @@
+import { MotionConfig } from "motion/react";
 import appStyles from "./App.module.css";
 import { useCallback, type MouseEvent, type ReactNode } from "react";
 import { Breadcrumbs } from "./components/layout/Breadcrumbs";
+import { TooltipProvider } from "./components/shadcn/tooltip";
 import { useMountEffect } from "./hooks/useMountEffect";
 import { useT } from "./lib/i18n";
 import { navigate, usePathname } from "./lib/router";
@@ -43,9 +45,7 @@ const PLACEHOLDER_ROUTES: Array<{
    path: string;
    active: SidebarActiveKey;
    titleKey: string;
-}> = [
-   { path: "/dashboard/prescriptions", active: "prescriptions", titleKey: "nav.prescription" },
-];
+}> = [{ path: "/dashboard/prescriptions", active: "prescriptions", titleKey: "nav.prescription" }];
 
 const STORAGE_LOCATIONS_PATH = /^\/dashboard\/sites\/([^/]+)\/storage-locations$/;
 
@@ -219,5 +219,11 @@ export default function App() {
       }
    }
 
-   return <div onClick={handleRootClick}>{page}</div>;
+   return (
+      <MotionConfig reducedMotion="user">
+         <TooltipProvider>
+            <div onClick={handleRootClick}>{page}</div>
+         </TooltipProvider>
+      </MotionConfig>
+   );
 }
