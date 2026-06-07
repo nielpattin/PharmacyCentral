@@ -747,6 +747,16 @@ export type ManualMovementCreateRequest = {
 let csrfToken: string | null = null;
 let csrfTokenPromise: Promise<string> | null = null;
 
+export class ApiRequestError extends Error {
+   readonly status: number;
+
+   constructor(message: string, status: number) {
+      super(message);
+      this.name = "ApiRequestError";
+      this.status = status;
+   }
+}
+
 async function readErrorMessage(response: Response) {
    const contentType = response.headers.get("content-type") ?? "";
 
@@ -873,7 +883,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
    });
 
    if (!response.ok) {
-      throw new Error(await readErrorMessage(response));
+      throw new ApiRequestError(await readErrorMessage(response), response.status);
    }
 
    return (await response.json()) as T;
@@ -894,7 +904,7 @@ async function requestVoid(path: string, init?: RequestInit): Promise<void> {
    });
 
    if (!response.ok) {
-      throw new Error(await readErrorMessage(response));
+      throw new ApiRequestError(await readErrorMessage(response), response.status);
    }
 }
 

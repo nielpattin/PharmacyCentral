@@ -30,7 +30,6 @@ import PricingPage from "./pages/PricingPage";
 import ProcurementPage from "./pages/ProcurementPage";
 import GoodsReceiptsPage from "./pages/GoodsReceiptsPage";
 import InventoryPage from "./pages/InventoryPage";
-import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import OperationPlaceholderPage from "./pages/OperationPlaceholderPage";
@@ -58,6 +57,10 @@ function normalizePathname(pathname: string) {
 }
 
 function resolveRoutePathname(pathname: string, authUser: AuthUser | null) {
+   if (pathname === "/") {
+      return "/login";
+   }
+
    if (isProtectedPath(pathname) && authUser === null) {
       return "/login";
    }
@@ -115,7 +118,7 @@ export default function App() {
    const routePathname = isAuthLoading ? pathname : resolveRoutePathname(pathname, authUser);
 
    if (!isAuthLoading && pathname !== routePathname) {
-      return <RouteRedirect to={routePathname} />;
+      return <RouteRedirect key={routePathname} to={routePathname} />;
    }
 
    if (isAuthLoading) {
@@ -133,9 +136,6 @@ export default function App() {
    let page: ReactNode;
 
    switch (routePathname) {
-      case "/":
-         page = <LandingPage />;
-         break;
       case "/login":
          page = <LoginPage />;
          break;

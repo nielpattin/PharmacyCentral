@@ -1,15 +1,17 @@
 import { useState, type FormEvent } from "react";
-import { loadFirstAdminSetupStatus } from "../api/pharmacyClient";
+import { AlertCircle, Eye, EyeOff, Globe2, LockKeyhole, LogIn, Mail, UserRound } from "lucide-react";
+import { ApiRequestError, loadFirstAdminSetupStatus } from "../api/pharmacyClient";
 import { login, validateLoginCredentials, getPostLoginRedirectPath, setPostLoginRedirectPath, setupFirstAdmin } from "../lib/auth";
 import { navigate, usePathname } from "../lib/router";
 import { useMountEffect } from "../hooks/useMountEffect";
-import { useT } from "../lib/i18n";
+import { setLanguage, useLanguage, useT } from "../lib/i18n";
 
 type LoginFieldErrors = { email?: string; password?: string };
 type SetupFieldErrors = LoginFieldErrors & { displayName?: string };
 
 export default function LoginPage() {
    const t = useT();
+   const language = useLanguage();
    const pathname = usePathname();
    const [email, setEmail] = useState("");
    const [password, setPassword] = useState("");
@@ -63,6 +65,14 @@ export default function LoginPage() {
       });
    }
 
+   function getLoginErrorMessage(error: unknown) {
+      if (error instanceof ApiRequestError && error.status === 401) {
+         return t("auth.invalidCredentials");
+      }
+
+      return error instanceof Error ? error.message : t("errors.requestFailed", { status: 0 });
+   }
+
    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
       event.preventDefault();
 
@@ -83,7 +93,7 @@ export default function LoginPage() {
          setPostLoginRedirectPath("/dashboard");
          navigate(redirectPath);
       } catch (error) {
-         setFormError(error instanceof Error ? error.message : t("errors.requestFailed", { status: 0 }));
+         setFormError(getLoginErrorMessage(error));
       } finally {
          setIsSubmitting(false);
       }
@@ -137,135 +147,173 @@ export default function LoginPage() {
 
    return (
       <main className="login-page">
-         <section className="login-card card">
-            <div className="section">
-               <header className="login-header">
-                  <div className="login-brand">
+         <div aria-hidden="true" className="login-bg-orb" />
+         <section className="login-panel" aria-label={requiresAdminSetup ? t("auth.setupTitle") : t("auth.title")}>
+            <div className="login-card card">
+               <header className="login-card-header">
+                  <div className="login-brand-row">
                      <img className="brand-mark" src="/brandmark.png" alt="" />
                      <div>
                         <h1>{requiresAdminSetup ? t("auth.setupTitle") : t("auth.title")}</h1>
-                        <p className="desc">{requiresAdminSetup ? t("auth.setupSubtitle") : t("auth.subtitle")}</p>
+                        {requiresAdminSetup ? <p className="login-tagline">{t("auth.setupSubtitle")}</p> : null}
                      </div>
                   </div>
                </header>
 
-               {formError !== null ? <div className="notice danger-note">{formError}</div> : null}
-               {isSetupStatusLoading ? <div className="notice">{t("common.loading")}</div> : null}
-
-               {requiresAdminSetup ? (
-                  <form className="login-form" onSubmit={handleSetupSubmit}>
-                     <label className="field">
-                        <span className="field-label">{t("auth.displayName")}</span>
-                        <input
-                           className="field-input"
-                           autoFocus
-                           type="text"
-                           autoComplete="name"
-                           value={setupDisplayName}
-                           onChange={(event) => {
-                              setSetupDisplayName(event.target.value);
-                              clearSetupFieldError("displayName");
-                           }}
-                           aria-invalid={setupFieldErrors.displayName !== undefined}
-                           aria-describedby={setupFieldErrors.displayName !== undefined ? "setup-display-name-error" : undefined}
-                        />
-                        {setupFieldErrors.displayName !== undefined ? <span id="setup-display-name-error" className="field-error">{setupFieldErrors.displayName}</span> : null}
-                     </label>
-
-                     <label className="field">
-                        <span className="field-label">{t("auth.email")}</span>
-                        <input
-                           className="field-input"
-                           type="email"
-                           autoComplete="email"
-                           value={setupEmail}
-                           onChange={(event) => {
-                              setSetupEmail(event.target.value);
-                              clearSetupFieldError("email");
-                           }}
-                           aria-invalid={setupFieldErrors.email !== undefined}
-                           aria-describedby={setupFieldErrors.email !== undefined ? "setup-email-error" : undefined}
-                        />
-                        {setupFieldErrors.email !== undefined ? <span id="setup-email-error" className="field-error">{setupFieldErrors.email}</span> : null}
-                     </label>
-
-                     <label className="field">
-                        <span className="field-label">{t("auth.password")}</span>
-                        <div className="login-password-row">
-                           <input
-                              className="field-input"
-                              type={showPassword ? "text" : "password"}
-                              autoComplete="new-password"
-                              value={setupPassword}
-                              onChange={(event) => {
-                                 setSetupPassword(event.target.value);
-                                 clearSetupFieldError("password");
-                              }}
-                              aria-invalid={setupFieldErrors.password !== undefined}
-                              aria-describedby={setupFieldErrors.password !== undefined ? "setup-password-error" : undefined}
-                           />
-                           <button type="button" className="btn secondary btn-sm login-password-toggle" onClick={() => setShowPassword((current) => !current)} aria-pressed={showPassword}>
-                              {showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
-                           </button>
-                        </div>
-                        {setupFieldErrors.password !== undefined ? <span id="setup-password-error" className="field-error">{setupFieldErrors.password}</span> : null}
-                     </label>
-
-                     <div className="form-actions login-actions">
-                        <button className="btn primary" type="submit" disabled={isSubmitting || isSetupStatusLoading}>
-                           {isSubmitting ? t("auth.settingUp") : t("auth.createFirstAdmin")}
-                        </button>
+               <div className="login-card-body">
+                  {formError !== null ? (
+                     <div className="notice danger-note login-notice">
+                        <AlertCircle aria-hidden="true" size={16} />
+                        <span>{formError}</span>
                      </div>
-                  </form>
-               ) : (
-                  <form className="login-form" onSubmit={handleSubmit}>
-                     <label className="field">
-                        <span className="field-label">{t("auth.email")}</span>
-                        <input
-                           className="field-input"
-                           autoFocus
-                           type="email"
-                           autoComplete="email"
-                           value={email}
-                           onChange={(event) => {
-                              setEmail(event.target.value);
-                              clearFieldError("email");
-                           }}
-                           aria-invalid={fieldErrors.email !== undefined}
-                           aria-describedby={fieldErrors.email !== undefined ? "login-email-error" : undefined}
-                        />
-                        {fieldErrors.email !== undefined ? <span id="login-email-error" className="field-error">{fieldErrors.email}</span> : null}
-                     </label>
+                  ) : null}
+                  {isSetupStatusLoading ? <div className="notice login-notice">{t("common.loading")}</div> : null}
 
-                     <label className="field">
-                        <span className="field-label">{t("auth.password")}</span>
-                        <div className="login-password-row">
-                           <input
-                              className="field-input"
-                              type={showPassword ? "text" : "password"}
-                              autoComplete="current-password"
-                              value={password}
-                              onChange={(event) => {
-                                 setPassword(event.target.value);
-                                 clearFieldError("password");
-                              }}
-                              aria-invalid={fieldErrors.password !== undefined}
-                              aria-describedby={fieldErrors.password !== undefined ? "login-password-error" : undefined}
-                           />
-                           <button type="button" className="btn secondary btn-sm login-password-toggle" onClick={() => setShowPassword((current) => !current)} aria-pressed={showPassword}>
-                              {showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
-                           </button>
-                        </div>
-                        {fieldErrors.password !== undefined ? <span id="login-password-error" className="field-error">{fieldErrors.password}</span> : null}
-                     </label>
+                  {requiresAdminSetup ? (
+                     <>
+                     <h2 className="login-form-title">{t("auth.setupFormTitle")}</h2>
+                     <form className="login-form" onSubmit={handleSetupSubmit}>
+                        <label className="field">
+                           <span className="field-label">{t("auth.displayName")}</span>
+                           <span className="login-input-wrap has-icon">
+                              <UserRound className="login-input-icon" aria-hidden="true" size={18} />
+                              <input
+                                 className="field-input"
+                                 autoFocus
+                                 type="text"
+                                 autoComplete="name"
+                                 placeholder={t("auth.displayNamePlaceholder")}
+                                 value={setupDisplayName}
+                                 onChange={(event) => {
+                                    setSetupDisplayName(event.target.value);
+                                    clearSetupFieldError("displayName");
+                                 }}
+                                 aria-invalid={setupFieldErrors.displayName !== undefined}
+                                 aria-describedby={setupFieldErrors.displayName !== undefined ? "setup-display-name-error" : undefined}
+                              />
+                           </span>
+                           {setupFieldErrors.displayName !== undefined ? <span id="setup-display-name-error" className="field-error">{setupFieldErrors.displayName}</span> : null}
+                        </label>
 
-                     <div className="form-actions login-actions">
-                        <button className="btn primary" type="submit" disabled={isSubmitting || isSetupStatusLoading}>
-                           {isSubmitting ? t("auth.signingIn") : t("auth.signIn")}
+                        <label className="field">
+                           <span className="field-label">{t("auth.email")}</span>
+                           <span className="login-input-wrap has-icon">
+                              <Mail className="login-input-icon" aria-hidden="true" size={18} />
+                              <input
+                                 className="field-input"
+                                 type="email"
+                                 autoComplete="email"
+                                 placeholder={t("auth.emailPlaceholder")}
+                                 value={setupEmail}
+                                 onChange={(event) => {
+                                    setSetupEmail(event.target.value);
+                                    clearSetupFieldError("email");
+                                 }}
+                                 aria-invalid={setupFieldErrors.email !== undefined}
+                                 aria-describedby={setupFieldErrors.email !== undefined ? "setup-email-error" : undefined}
+                              />
+                           </span>
+                           {setupFieldErrors.email !== undefined ? <span id="setup-email-error" className="field-error">{setupFieldErrors.email}</span> : null}
+                        </label>
+
+                        <label className="field">
+                           <span className="field-label">{t("auth.password")}</span>
+                           <span className="login-input-wrap has-icon has-action">
+                              <LockKeyhole className="login-input-icon" aria-hidden="true" size={18} />
+                              <input
+                                 className="field-input"
+                                 type={showPassword ? "text" : "password"}
+                                 autoComplete="new-password"
+                                 placeholder={t("auth.passwordPlaceholder")}
+                                 value={setupPassword}
+                                 onChange={(event) => {
+                                    setSetupPassword(event.target.value);
+                                    clearSetupFieldError("password");
+                                 }}
+                                 aria-invalid={setupFieldErrors.password !== undefined}
+                                 aria-describedby={setupFieldErrors.password !== undefined ? "setup-password-error" : undefined}
+                              />
+                              <button type="button" className="login-input-action" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")} aria-pressed={showPassword}>
+                                 {showPassword ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
+                              </button>
+                           </span>
+                           {setupFieldErrors.password !== undefined ? <span id="setup-password-error" className="field-error">{setupFieldErrors.password}</span> : null}
+                        </label>
+
+                        <button className="btn primary login-submit" type="submit" disabled={isSubmitting || isSetupStatusLoading}>
+                           <span>{isSubmitting ? t("auth.settingUp") : t("auth.createFirstAdmin")}</span>
+                           <LogIn aria-hidden="true" size={18} />
                         </button>
-                     </div>
-                  </form>
-               )}
+                     </form>
+                     </>
+                  ) : (
+                     <>
+                     <h2 className="login-form-title">{t("auth.formTitle")}</h2>
+                     <form className="login-form" onSubmit={handleSubmit}>
+                        <label className="field">
+                           <span className="field-label">{t("auth.email")}</span>
+                           <span className="login-input-wrap has-icon">
+                              <Mail className="login-input-icon" aria-hidden="true" size={18} />
+                              <input
+                                 className="field-input"
+                                 autoFocus
+                                 type="email"
+                                 autoComplete="email"
+                                 placeholder={t("auth.emailPlaceholder")}
+                                 value={email}
+                                 onChange={(event) => {
+                                    setEmail(event.target.value);
+                                    clearFieldError("email");
+                                 }}
+                                 aria-invalid={fieldErrors.email !== undefined}
+                                 aria-describedby={fieldErrors.email !== undefined ? "login-email-error" : undefined}
+                              />
+                           </span>
+                           {fieldErrors.email !== undefined ? <span id="login-email-error" className="field-error">{fieldErrors.email}</span> : null}
+                        </label>
+
+                        <label className="field">
+                           <span className="field-label">{t("auth.password")}</span>
+                           <span className="login-input-wrap has-icon has-action">
+                              <LockKeyhole className="login-input-icon" aria-hidden="true" size={18} />
+                              <input
+                                 className="field-input"
+                                 type={showPassword ? "text" : "password"}
+                                 autoComplete="current-password"
+                                 placeholder={t("auth.passwordPlaceholder")}
+                                 value={password}
+                                 onChange={(event) => {
+                                    setPassword(event.target.value);
+                                    clearFieldError("password");
+                                 }}
+                                 aria-invalid={fieldErrors.password !== undefined}
+                                 aria-describedby={fieldErrors.password !== undefined ? "login-password-error" : undefined}
+                              />
+                              <button type="button" className="login-input-action" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")} aria-pressed={showPassword}>
+                                 {showPassword ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
+                              </button>
+                           </span>
+                           {fieldErrors.password !== undefined ? <span id="login-password-error" className="field-error">{fieldErrors.password}</span> : null}
+                        </label>
+
+                        <button className="btn primary login-submit" type="submit" disabled={isSubmitting || isSetupStatusLoading}>
+                           <span>{isSubmitting ? t("auth.signingIn") : t("auth.signIn")}</span>
+                           <LogIn aria-hidden="true" size={18} />
+                        </button>
+                     </form>
+                     </>
+                  )}
+
+               </div>
+               <footer className="login-card-footer">
+                  <label className="login-language" aria-label={t("language.switch")}>
+                     <Globe2 aria-hidden="true" size={16} />
+                     <select value={language} onChange={(event) => setLanguage(event.target.value === "vi" ? "vi" : "en")}>
+                        <option value="en">English</option>
+                        <option value="vi">Tiếng Việt</option>
+                     </select>
+                  </label>
+               </footer>
             </div>
          </section>
       </main>

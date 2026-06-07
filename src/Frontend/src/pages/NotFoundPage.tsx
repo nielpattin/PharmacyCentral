@@ -4,10 +4,10 @@ export default function NotFoundPage() {
    const t = useT();
 
    return (
-      <div className="landing-page">
-         <section className="card">
+      <main className="login-page">
+         <section className="login-card card">
             <div className="section">
-               <div className="landing-eyebrow">404</div>
+               <div className="section-kicker">404</div>
                <h1>{t("notFound.title")}</h1>
                <p className="desc">{t("notFound.description")}</p>
                <div className="page-actions">
@@ -20,6 +20,6 @@ export default function NotFoundPage() {
                </div>
             </div>
          </section>
-      </div>
+      </main>
    );
 }
