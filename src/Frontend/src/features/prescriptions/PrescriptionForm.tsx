@@ -476,40 +476,47 @@ export function PrescriptionForm({
                                        {t("counterSale.infoButton")}
                                     </Button>
                                     <div className={styles.quantityStepper} aria-label={t("counterSale.quantityLabel")}>
-                                       {[-10, -5, -1].map((delta) => (
-                                          <Button
-                                             key={delta}
-                                             type="button"
-                                             variant="outline"
-                                             size="sm"
-                                             className={styles.quantityStepButton}
-                                             onClick={() => adjustLineQuantity(line.productId, delta)}
-                                          >
-                                             {delta}
-                                          </Button>
-                                       ))}
-                                       <Input
-                                          className={styles.lineQty}
-                                          type="number"
-                                          min="1"
-                                          step="1"
-                                          inputMode="numeric"
-                                          aria-label={t("counterSale.quantityLabel")}
-                                          value={line.prescribedQuantity}
-                                          onChange={(event) => updateLineQuantity(line.productId, event.target.value)}
-                                       />
-                                       {[1, 5, 10].map((delta) => (
-                                          <Button
-                                             key={delta}
-                                             type="button"
-                                             variant="outline"
-                                             size="sm"
-                                             className={styles.quantityStepButton}
-                                             onClick={() => adjustLineQuantity(line.productId, delta)}
-                                          >
-                                             +{delta}
-                                          </Button>
-                                       ))}
+                                       <div className={styles.quantityAdjustGroup} aria-label={t("counterSale.decreaseQuantity")}>
+                                          {[-10, -5, -1].map((delta) => (
+                                             <Button
+                                                key={delta}
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className={`${styles.quantityStepButton} ${styles.quantityStepButtonDecrease}`}
+                                                onClick={() => adjustLineQuantity(line.productId, delta)}
+                                             >
+                                                {delta}
+                                             </Button>
+                                          ))}
+                                       </div>
+                                       <label className={styles.quantityValueControl}>
+                                          <span>SL</span>
+                                          <Input
+                                             className={styles.lineQty}
+                                             type="number"
+                                             min="1"
+                                             step="1"
+                                             inputMode="numeric"
+                                             aria-label={t("counterSale.quantityLabel")}
+                                             value={line.prescribedQuantity}
+                                             onChange={(event) => updateLineQuantity(line.productId, event.target.value)}
+                                          />
+                                       </label>
+                                       <div className={styles.quantityAdjustGroup} aria-label={t("counterSale.increaseQuantity")}>
+                                          {[1, 5, 10].map((delta) => (
+                                             <Button
+                                                key={delta}
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className={`${styles.quantityStepButton} ${styles.quantityStepButtonIncrease}`}
+                                                onClick={() => adjustLineQuantity(line.productId, delta)}
+                                             >
+                                                +{delta}
+                                             </Button>
+                                          ))}
+                                       </div>
                                     </div>
                                  </div>
                               </MotionListItem>
