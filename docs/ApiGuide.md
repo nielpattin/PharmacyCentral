@@ -65,7 +65,6 @@ Endpoint enforce role policy và site access ở backend.
 | Any app role | Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff |
 | Management | Platform Admin, Pharmacy Manager |
 | Counter sale | Pharmacist |
-| Store | Pharmacist |
 | Warehouse | Platform Admin, Warehouse Staff |
 | Platform Admin | Platform Admin |
 

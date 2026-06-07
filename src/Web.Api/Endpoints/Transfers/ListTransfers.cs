@@ -25,6 +25,6 @@ internal sealed class ListTransfers : IEndpoint
 
             IReadOnlyList<TransferOrderDetails> transfers = await handler.HandleAsync(new ListTransfersQuery { SiteId = siteId, AllowedSiteIds = allowedSiteIds, Status = status, Limit = limit ?? 100 }, cancellationToken);
             return Results.Ok(transfers);
-        }).WithTags(Tags.Transfers).RequireAuthorization(Policies.AnyRole);
+        }).WithTags(Tags.Transfers).RequireAuthorization(Policies.Warehouse);
     }
 }

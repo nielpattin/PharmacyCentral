@@ -82,7 +82,7 @@ internal sealed class CreateTransfer : IEndpoint
             return result.IsFailure
                 ? Results.BadRequest(new { error = result.Error.Description, code = result.Error.Code })
                 : Results.Created($"/api/transfers/{result.Value.Id}", result.Value);
-        }).WithTags(Tags.Transfers).RequireAuthorization(Policies.AnyRole);
+        }).WithTags(Tags.Transfers).RequireAuthorization(Policies.Warehouse);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

@@ -57,28 +57,39 @@ bash scripts/build-clean.sh
 ```bash
 cd src/Frontend
 pnpm lint
-npx tsc --noEmit
-npx vite build --outDir ../../.tmp/runbook/vite
+pnpm exec tsc --noEmit
+pnpm exec vite build --outDir ../../.tmp/runbook/vite
 ```
 
 ## Product verification
 
-With Aspire running and the API healthy:
+Run the verification commands that match the area being changed:
 
 ```bash
-node tests/product-api-verify.mjs
+dotnet build --artifacts-path .tmp/runbook/dotnet
+dotnet test PharmacyCentral.sln --artifacts-path .tmp/runbook/tests
 ```
 
-Optional environment variables:
+For frontend changes, also run the frontend lint/type/build checks above. For runtime-sensitive changes, run a focused API or UI check against the current Aspire stack. Do not add ad-hoc Node smoke scripts as permanent project tests.
 
-```bash
-PHARMACY_API_BASE_URL=https://localhost:7528/api \
-PHARMACY_ADMIN_EMAIL=admin@pharmacy.local \
-PHARMACY_ADMIN_PASSWORD='Admin@123!' \
-node tests/product-api-verify.mjs
+## Seed and demo data configuration
+
+These seed toggles are important dev/demo configuration and are not tied to any test script:
+
+```text
+PHARMACY_SEED_ADMIN_USER=true
+PHARMACY_SEED_DEMO_USERS=false
+PHARMACY_SEED_BUSINESS_DATA=false
 ```
 
-Payment/webhook checks need the API to be reachable from SePay Test mode. For local development, expose only the API webhook path through the project-specific Cloudflare Tunnel described below.
+Meaning:
+
+- `PHARMACY_SEED_ADMIN_USER`: creates the development Platform Admin account when the database is empty.
+- `PHARMACY_SEED_DEMO_USERS`: creates role-specific demo users when needed for demos.
+- `PHARMACY_SEED_BUSINESS_DATA`: creates demo business data such as products, batches, stock, documents, and history.
+
+To validate the first-admin setup screen, use a disposable database and set `PHARMACY_SEED_ADMIN_USER=false`.
+
 
 ## Local package shape
 

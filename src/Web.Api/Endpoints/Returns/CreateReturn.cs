@@ -80,7 +80,7 @@ internal sealed class CreateReturn : IEndpoint
             return Results.Created($"/api/inventory/ledger/{result.Value.Id}", result.Value);
         })
         .WithTags(Tags.Returns)
-        .RequireAuthorization(Policies.Store);
+        .RequireAuthorization(Policies.Warehouse);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

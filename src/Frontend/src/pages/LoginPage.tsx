@@ -5,6 +5,7 @@ import { login, validateLoginCredentials, getPostLoginRedirectPath, setPostLogin
 import { navigate, usePathname } from "../lib/router";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { setLanguage, useLanguage, useT } from "../lib/i18n";
+import { canAccessPath, getDefaultPathForUser } from "../lib/access";
 import styles from "./LoginPage.module.css";
 
 type LoginFieldErrors = { email?: string; password?: string };
@@ -89,9 +90,10 @@ export default function LoginPage() {
       setFormError(null);
 
       try {
-         await login({ email, password });
-         const redirectPath = getPostLoginRedirectPath();
-         setPostLoginRedirectPath("/dashboard");
+         const user = await login({ email, password });
+         const preferredPath = getPostLoginRedirectPath();
+         const redirectPath = canAccessPath(user, preferredPath) ? preferredPath : getDefaultPathForUser(user);
+         setPostLoginRedirectPath(getDefaultPathForUser(user));
          navigate(redirectPath);
       } catch (error) {
          setFormError(getLoginErrorMessage(error));
@@ -115,9 +117,10 @@ export default function LoginPage() {
       setFormError(null);
 
       try {
-         await setupFirstAdmin({ email: setupEmail, password: setupPassword, displayName: setupDisplayName });
-         setPostLoginRedirectPath("/dashboard");
-         navigate("/dashboard");
+         const user = await setupFirstAdmin({ email: setupEmail, password: setupPassword, displayName: setupDisplayName });
+         const redirectPath = getDefaultPathForUser(user);
+         setPostLoginRedirectPath(redirectPath);
+         navigate(redirectPath);
       } catch (error) {
          setFormError(error instanceof Error ? error.message : t("errors.requestFailed", { status: 0 }));
          await refreshSetupStatus();

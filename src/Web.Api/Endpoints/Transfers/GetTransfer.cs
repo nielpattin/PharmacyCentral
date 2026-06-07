@@ -28,6 +28,6 @@ internal sealed class GetTransfer : IEndpoint
             return EndpointSiteAccess.CanAccessAnySite(currentUser, result.Value.SourceSiteId, result.Value.DestinationSiteId)
                 ? Results.Ok(result.Value)
                 : EndpointSiteAccess.ForbidSiteAccess();
-        }).WithTags(Tags.Transfers).RequireAuthorization(Policies.AnyRole);
+        }).WithTags(Tags.Transfers).RequireAuthorization(Policies.Warehouse);
     }
 }

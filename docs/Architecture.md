@@ -138,27 +138,28 @@ flowchart TD
 | AnyRole | Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff |
 | Management | Platform Admin, Pharmacy Manager |
 | CounterSale | Pharmacist |
-| Store | Pharmacist |
 | Warehouse | Platform Admin, Warehouse Staff |
 | PlatformAdmin | Platform Admin only |
 
 Site-bound list endpoints filter data by assigned site IDs for non-admin users. Site-bound write endpoints reject unassigned sites.
 
+Dashboard tổng quan không áp dụng cho user chỉ có role Pharmacist. User này được đưa thẳng vào Quầy bán thuốc sau khi đăng nhập; dashboard dành cho quản trị hệ thống, quản lý vận hành và warehouse.
+
 ## Module nghiệp vụ chính
 
-| Module | Current responsibility |
+| Module | Trách nhiệm hiện tại |
 | --- | --- |
-| Identity and access | Login, roles, site scopes, account controls |
-| Sites and locations | Site master data and storage location setup |
-| Catalog and suppliers | Product and supplier master data |
-| Pricing | Draft/publish/archive prices and active price lookup |
-| Procurement | Purchase orders and lifecycle status |
-| Receiving | Supplier delivery capture and optional PO matching |
-| Quality | Batch release/reject before operational use |
-| Inventory | Balances, availability, history and controlled corrections |
+| Identity and access | Đăng nhập, role, site scope và kiểm soát tài khoản |
+| Sites and locations | Dữ liệu cơ sở và vị trí lưu trữ |
+| Catalog and suppliers | Dữ liệu sản phẩm và nhà cung cấp |
+| Pricing | Tạo draft, publish, archive giá và tra giá đang hiệu lực |
+| Procurement | Đơn mua và trạng thái vòng đời đơn mua |
+| Receiving | Ghi nhận hàng nhà cung cấp và liên kết đơn mua khi có |
+| Quality | Release/reject lô trước khi dùng trong vận hành |
+| Inventory | Workspace chi tiết cho Warehouse Staff/Platform Admin xem số lượng theo vị trí và lịch sử; dược sĩ chỉ thấy tồn khả dụng trong Quầy bán thuốc |
 | Quầy bán thuốc và cấp phát | Chỉ Pharmacist tạo phiếu bán hiện tại, giữ hàng, thanh toán, hủy và cấp phát |
-| Transfers | Approve, ship and receive stock between locations |
-| Returns/removals | Supplier returns, damage, expiry, recall or other removals |
+| Transfers | Nghiệp vụ warehouse cho tạo, duyệt, xuất, nhận và hủy điều chuyển giữa các vị trí |
+| Returns/removals | Nghiệp vụ warehouse cho trả nhà cung cấp, hàng hư hỏng, hàng hết hạn, thu hồi hoặc các trường hợp loại khỏi tồn |
 | Stocktake/adjustments | Count sessions, variance posting and approval |
 | Recalls | Recall cases and affected batch action tracking |
 | Reporting/finance | Read-only operational visibility and valuation/reconciliation |

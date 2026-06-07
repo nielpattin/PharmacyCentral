@@ -12,7 +12,7 @@ import {
    useAuthLoading,
    type AuthUser,
 } from "./lib/auth";
-import { canAccessPath } from "./lib/access";
+import { canAccessPath, getDefaultPathForUser } from "./lib/access";
 import type { SidebarActiveKey } from "./lib/sidebar";
 import AuditPage from "./pages/AuditPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -67,11 +67,12 @@ function resolveRoutePathname(pathname: string, authUser: AuthUser | null) {
    }
 
    if (pathname === "/login" && authUser !== null) {
-      return getPostLoginRedirectPath();
+      const preferredPath = getPostLoginRedirectPath();
+      return canAccessPath(authUser, preferredPath) ? preferredPath : getDefaultPathForUser(authUser);
    }
 
    if (isProtectedPath(pathname) && authUser !== null && !canAccessPath(authUser, pathname)) {
-      return "/dashboard";
+      return getDefaultPathForUser(authUser);
    }
 
    return pathname;

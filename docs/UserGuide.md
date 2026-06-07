@@ -42,7 +42,7 @@ flowchart LR
     Manager --> Pricing[Pricing]
     Manager --> Reporting[Reporting and finance]
     Pharmacist[Pharmacist] --> Prescriptions[Prescriptions]
-    Pharmacist --> Returns[Returns/removals]
+    Warehouse --> Returns[Returns/removals]
     Warehouse[Warehouse Staff] --> Receiving[Receiving]
     Warehouse --> Quality[Quality]
     Warehouse --> Transfers[Transfers]
@@ -53,10 +53,12 @@ flowchart LR
 | --- | --- |
 | Platform Admin | Users, phân quyền, audit, giám sát hệ thống |
 | Pharmacy Manager | Sites, catalog, suppliers, pricing, procurement, reporting, finance, recalls |
-| Pharmacist | Quầy bán thuốc, thanh toán, cấp phát, xem tồn kho, trả hàng/loại bỏ |
-| Warehouse Staff | Receiving, quality, transfers, stocktake, adjustments |
+| Pharmacist | Quầy bán thuốc, thanh toán, cấp phát |
+| Warehouse Staff | Receiving, quality, transfers, returns/removals, stocktake, adjustments |
 
 User không phải Platform Admin còn bị giới hạn theo site được gán. User chỉ xem và thao tác dữ liệu thuộc phạm vi site của mình.
+
+Khi đăng nhập, user chỉ có role Pharmacist đi thẳng vào **Quầy bán thuốc**. Dashboard tổng quan dành cho quản trị hệ thống, quản lý vận hành và kho, không phải màn làm việc của dược sĩ quầy.
 
 ## Luồng sản phẩm chính
 
@@ -83,7 +85,7 @@ flowchart TD
 
 ## Tổng quan và báo cáo
 
-Dùng **Dashboard** để xem tổng quan vận hành, cảnh báo và hoạt động gần đây.
+Dùng **Dashboard** để xem tổng quan vận hành, cảnh báo và hoạt động gần đây. Dashboard dành cho Platform Admin, Pharmacy Manager và Warehouse Staff. Dược sĩ quầy làm việc trực tiếp trong **Quầy bán thuốc**.
 
 Dùng **Reporting** để xem rộng hơn về vận hành:
 
@@ -157,9 +159,9 @@ Use **Quality** to review newly received batches.
 
 ## Tồn kho
 
-Use **Inventory** to view balances, available quantity and history.
+Dùng **Inventory** để xem số lượng theo lô, vị trí lưu trữ và lịch sử thay đổi tồn kho. Đây là workspace dành cho Warehouse Staff hoặc Platform Admin, không phải màn hình của dược sĩ tại quầy.
 
-The correction form is available for allowed users and records controlled quantity corrections.
+Dược sĩ chỉ thấy tồn khả dụng trong **Quầy bán thuốc** theo nguồn bán đã gán cho quầy. Dược sĩ không cần biết toàn bộ SKU nằm ở vị trí nào trong cơ sở, và không được điều chỉnh số lượng tồn kho.
 
 ## Quầy bán thuốc và cấp phát
 
@@ -208,7 +210,7 @@ Self-approval is blocked for transfer approval.
 
 ## Trả hàng và loại khỏi tồn
 
-Use **Returns** for supplier returns, damaged goods, expired goods, recalled goods, or other operational removals from available stock.
+Dùng **Returns** để xử lý trả nhà cung cấp, hàng hư hỏng, hàng hết hạn, hàng thu hồi hoặc các trường hợp loại khỏi tồn kho. Đây là nghiệp vụ warehouse, không phải workflow khách trả hàng tại quầy.
 
 ## Kiểm kê và điều chỉnh
 
@@ -257,12 +259,12 @@ Dùng luồng này để demo local ngắn gọn:
 7. Mở **Quality**, release lô hàng mới.
 8. Mở **Inventory**, xem số lượng có thể dùng và lịch sử.
 9. Đăng nhập bằng tài khoản **Pharmacist**, mở **Quầy bán thuốc**, tạo phiếu bán, thanh toán, in hóa đơn và cấp phát.
-10. Open **Transfers**, show create/approve/ship/receive lifecycle if a second eligible account is available.
-11. Open **Returns**, show a return/removal reason.
-12. Open **Stocktake** and **Adjustments**, show count sessions and approval workflow.
-13. Open **Recalls**, create or inspect recall controls.
-14. Open **Reporting**, **Finance** and **Audit** to show visibility and traceability.
-15. Open **Users** to show role and site access management.
+10. Đăng nhập bằng tài khoản **Warehouse Staff**, mở **Transfers** để demo vòng đời tạo/duyệt/gửi/nhận nếu có tài khoản đủ điều kiện thứ hai.
+11. Mở **Returns** để demo lý do trả hàng hoặc loại khỏi tồn kho theo nghiệp vụ warehouse.
+12. Mở **Stocktake** và **Adjustments** để demo kiểm kê và duyệt điều chỉnh.
+13. Đăng nhập lại tài khoản quản lý/admin nếu cần, mở **Recalls** để xem kiểm soát thu hồi.
+14. Mở **Reporting**, **Finance** và **Audit** để xem khả năng quan sát và truy vết.
+15. Mở **Users** để xem quản lý role và site access.
 
 ## Lưu ý khi demo
 

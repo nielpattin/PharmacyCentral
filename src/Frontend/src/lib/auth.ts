@@ -117,16 +117,17 @@ export async function initializeAuth(): Promise<void> {
    setCurrentUser(null);
 }
 
-export async function login(credentials: LoginCredentials): Promise<void> {
+export async function login(credentials: LoginCredentials): Promise<AuthUser> {
    const user = await apiLogin({
       email: credentials.email.trim(),
       password: credentials.password,
    });
 
    setCurrentUser(user);
+   return user;
 }
 
-export async function setupFirstAdmin(credentials: FirstAdminSetupCredentials): Promise<void> {
+export async function setupFirstAdmin(credentials: FirstAdminSetupCredentials): Promise<AuthUser> {
    const user = await apiSetupFirstAdmin({
       email: credentials.email.trim(),
       password: credentials.password,
@@ -134,6 +135,7 @@ export async function setupFirstAdmin(credentials: FirstAdminSetupCredentials): 
    });
 
    setCurrentUser(user);
+   return user;
 }
 
 export async function logout(): Promise<void> {

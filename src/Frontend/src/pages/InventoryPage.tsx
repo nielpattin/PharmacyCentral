@@ -21,6 +21,7 @@ import {
 } from "../api/pharmacyClient";
 import { InventoryBalanceTable } from "../features/inventory/InventoryBalanceTable";
 import { useMountEffect } from "../hooks/useMountEffect";
+import { useAuth } from "../lib/auth";
 import { useT } from "../lib/i18n";
 import styles from "./InventoryPage.module.css";
 
@@ -97,6 +98,7 @@ function toIsoDateTime(value: string) {
 
 export default function InventoryPage() {
    const t = useT();
+   const authUser = useAuth();
    const [balances, setBalances] = useState<InventoryBalanceDto[]>([]);
    const [ledgerEntries, setLedgerEntries] = useState<StockLedgerEntryDto[]>([]);
    const [products, setProducts] = useState<ProductDto[]>([]);
@@ -135,6 +137,7 @@ export default function InventoryPage() {
    const isMovementQuantityValid = Number.isFinite(quantityDelta) && quantityDelta !== 0;
    const movementError = getMovementError(selectedBalance, movementForm, quantityDelta, t);
    const canSubmitMovement = selectedBalance !== null && isMovementQuantityValid && movementForm.reason.trim() !== "" && movementError === null;
+   const canControlInventory = authUser?.isPlatformAdmin === true || authUser?.roles.includes("Warehouse Staff") === true;
 
    useMountEffect(() => {
       void refreshData(defaultFilters, defaultLedgerFilters);
@@ -290,62 +293,63 @@ export default function InventoryPage() {
                   <div className="form-actions">
                      <Button variant="secondary" onClick={handleResetFilters}>{t("inventory.clearFilters")}</Button>
                   </div>
-                  {isLoading ? <EmptyState icon="…" title={t("inventory.loading")} description={t("inventory.fetching")} /> : balances.length === 0 ? <EmptyState icon="0" title={t("inventory.emptyTitle")} description={t("inventory.emptyDesc")} /> : <InventoryBalanceTable rows={balances} sites={sites} storageLocations={storageLocations} onUseBalance={handleUseBalance} />}
+                  {isLoading ? <EmptyState icon="…" title={t("inventory.loading")} description={t("inventory.fetching")} /> : balances.length === 0 ? <EmptyState icon="0" title={t("inventory.emptyTitle")} description={t("inventory.emptyDesc")} /> : <InventoryBalanceTable rows={balances} sites={sites} storageLocations={storageLocations} onUseBalance={canControlInventory ? handleUseBalance : undefined} />}
                </div>
             </section>
 
-            <div className={styles.inventoryOperationsGrid}>
-               <section className="card">
-                  <div className="section">
-                     <div className="section-header">
-                        <div><h2 className="section-title">{t("inventory.movementTitle")}</h2><p className="section-subtitle">{t("inventory.movementDesc")}</p></div>
-                        <Badge tone="warn">{t("inventory.manual")}</Badge>
-                     </div>
-                     <div className="entity-form">
-                        <Field label={t("inventory.movementBalance")} required>
-                           <select className="field-input" value={movementForm.balanceId} onChange={(event) => updateMovementForm({ ...movementForm, balanceId: event.target.value })}>
-                              <option value="">{t("inventory.selectBalance")}</option>
-                              {balances.map((balance) => (
-                                 <option key={balance.id} value={balance.id}>
-                                    {balance.productName} · {balance.batchNumber} · {siteName(sites, balance.siteId)} · {formatQuantity(balance.quantityOnHand)}
-                                 </option>
-                              ))}
-                           </select>
-                        </Field>
-                        <Field label={t("inventory.quantityDelta")} hint={t("inventory.quantityDeltaHint")} required>
-                           <input className="field-input" type="number" step="0.01" value={movementForm.quantityDelta} onChange={(event) => updateMovementForm({ ...movementForm, quantityDelta: event.target.value })} />
-                        </Field>
-                        <Field label={t("inventory.reason")} required>
-                           <input className="field-input" value={movementForm.reason} onChange={(event) => updateMovementForm({ ...movementForm, reason: event.target.value })} placeholder={t("inventory.reasonPlaceholder")} maxLength={200} />
-                        </Field>
-                        <Field label={t("inventory.occurredAt")}>
-                           <input className="field-input" type="datetime-local" value={movementForm.occurredAt} onChange={(event) => updateMovementForm({ ...movementForm, occurredAt: event.target.value })} />
-                        </Field>
-                        <Field label={t("inventory.notes")} className="field-wide">
-                           <textarea className="field-input field-textarea" value={movementForm.notes} onChange={(event) => updateMovementForm({ ...movementForm, notes: event.target.value })} placeholder={t("inventory.notesPlaceholder")} maxLength={1000} />
-                        </Field>
-                     </div>
-
-                     {selectedBalance !== null ? (
-                        <div className={styles.inventoryStockContext}>
-                           <div><span>{t("inventory.selectedBatch")}</span><strong>{selectedBalance.productName} · {selectedBalance.batchNumber}</strong></div>
-                           <div><span>{t("inventory.selectedLocation")}</span><strong>{siteName(sites, selectedBalance.siteId)} · {locationName(storageLocations, selectedBalance.storageLocationId)}</strong></div>
-                           <div><span>{t("inventory.quantityOnHand")}</span><strong>{formatQuantity(selectedBalance.quantityOnHand)}</strong></div>
-                           <div><span>{t("inventory.quantityReserved")}</span><strong>{formatQuantity(selectedBalance.quantityReserved)}</strong></div>
+            <div className={canControlInventory ? styles.inventoryOperationsGrid : styles.inventoryHistoryOnly}>
+               {canControlInventory ? (
+                  <section className="card">
+                     <div className="section">
+                        <div className="section-header">
+                           <div><h2 className="section-title">{t("inventory.movementTitle")}</h2><p className="section-subtitle">{t("inventory.movementDesc")}</p></div>
+                           <Badge tone="warn">{t("inventory.manual")}</Badge>
                         </div>
-                     ) : null}
+                        <div className="entity-form">
+                           <Field label={t("inventory.movementBalance")} required>
+                              <select className="field-input" value={movementForm.balanceId} onChange={(event) => updateMovementForm({ ...movementForm, balanceId: event.target.value })}>
+                                 <option value="">{t("inventory.selectBalance")}</option>
+                                 {balances.map((balance) => (
+                                    <option key={balance.id} value={balance.id}>
+                                       {balance.productName} · {balance.batchNumber} · {siteName(sites, balance.siteId)} · {formatQuantity(balance.quantityOnHand)}
+                                    </option>
+                                 ))}
+                              </select>
+                           </Field>
+                           <Field label={t("inventory.quantityDelta")} hint={t("inventory.quantityDeltaHint")} required>
+                              <input className="field-input" type="number" step="0.01" value={movementForm.quantityDelta} onChange={(event) => updateMovementForm({ ...movementForm, quantityDelta: event.target.value })} />
+                           </Field>
+                           <Field label={t("inventory.reason")} required>
+                              <input className="field-input" value={movementForm.reason} onChange={(event) => updateMovementForm({ ...movementForm, reason: event.target.value })} placeholder={t("inventory.reasonPlaceholder")} maxLength={200} />
+                           </Field>
+                           <Field label={t("inventory.occurredAt")}>
+                              <input className="field-input" type="datetime-local" value={movementForm.occurredAt} onChange={(event) => updateMovementForm({ ...movementForm, occurredAt: event.target.value })} />
+                           </Field>
+                           <Field label={t("inventory.notes")} className="field-wide">
+                              <textarea className="field-input field-textarea" value={movementForm.notes} onChange={(event) => updateMovementForm({ ...movementForm, notes: event.target.value })} placeholder={t("inventory.notesPlaceholder")} maxLength={1000} />
+                           </Field>
+                        </div>
 
-                     {movementError !== null ? <div className={`notice warning ${styles.inventoryMovementWarning}`}>{movementError}</div> : null}
+                        {selectedBalance !== null ? (
+                           <div className={styles.inventoryStockContext}>
+                              <div><span>{t("inventory.selectedBatch")}</span><strong>{selectedBalance.productName} · {selectedBalance.batchNumber}</strong></div>
+                              <div><span>{t("inventory.selectedLocation")}</span><strong>{siteName(sites, selectedBalance.siteId)} · {locationName(storageLocations, selectedBalance.storageLocationId)}</strong></div>
+                              <div><span>{t("inventory.quantityOnHand")}</span><strong>{formatQuantity(selectedBalance.quantityOnHand)}</strong></div>
+                              <div><span>{t("inventory.quantityReserved")}</span><strong>{formatQuantity(selectedBalance.quantityReserved)}</strong></div>
+                           </div>
+                        ) : null}
 
-                     <div className="form-actions">
-                        <Button onClick={() => void handleSubmitMovement()} disabled={!canSubmitMovement || isSubmittingMovement}>
-                           {isSubmittingMovement ? t("inventory.movementSubmitting") : t("inventory.movementSubmit")}
-                        </Button>
-                        <Button variant="secondary" onClick={handleResetMovementForm}>{t("common.reset")}</Button>
+                        {movementError !== null ? <div className={`notice warning ${styles.inventoryMovementWarning}`}>{movementError}</div> : null}
+
+                        <div className="form-actions">
+                           <Button onClick={() => void handleSubmitMovement()} disabled={!canSubmitMovement || isSubmittingMovement}>
+                              {isSubmittingMovement ? t("inventory.movementSubmitting") : t("inventory.movementSubmit")}
+                           </Button>
+                           <Button variant="secondary" onClick={handleResetMovementForm}>{t("common.reset")}</Button>
+                        </div>
                      </div>
-                  </div>
-               </section>
-
+                  </section>
+               ) : null}
                <section className="card">
                   <div className="section">
                      <div className="section-header">

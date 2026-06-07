@@ -100,7 +100,7 @@ internal sealed class CreateMovement : IEndpoint
             return Results.Created($"/api/inventory/ledger/{result.Value.Id}", result.Value);
         })
         .WithTags(Tags.Inventory)
-        .RequireAuthorization(Policies.AnyRole);
+        .RequireAuthorization(Policies.Warehouse);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

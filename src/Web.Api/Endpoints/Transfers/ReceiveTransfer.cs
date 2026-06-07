@@ -71,7 +71,7 @@ internal sealed class ReceiveTransfer : IEndpoint
             return result.IsFailure
                 ? Results.BadRequest(new { error = result.Error.Description, code = result.Error.Code })
                 : Results.Ok(result.Value);
-        }).WithTags(Tags.Transfers).RequireAuthorization(Policies.AnyRole);
+        }).WithTags(Tags.Transfers).RequireAuthorization(Policies.Warehouse);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

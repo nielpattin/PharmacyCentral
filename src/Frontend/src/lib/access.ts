@@ -22,16 +22,15 @@ type RouteAccess = {
    allowPlatformAdminOverride?: boolean;
 };
 
-const ALL_ROLES: RoleName[] = ["Platform Admin", "Pharmacy Manager", "Pharmacist", "Warehouse Staff"];
-const STORE_ROLES: RoleName[] = ["Pharmacist"];
-const COUNTER_SALE_ROLES: RoleName[] = STORE_ROLES;
+const DASHBOARD_ROLES: RoleName[] = ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"];
+const COUNTER_SALE_ROLES: RoleName[] = ["Pharmacist"];
 const MANAGEMENT_ROLES: RoleName[] = ["Platform Admin", "Pharmacy Manager"];
 const WAREHOUSE_ROLES: RoleName[] = ["Platform Admin", "Warehouse Staff"];
 
 export const ROUTE_ACCESS: RouteAccess[] = [
-   { path: "/dashboard", active: "dashboard", roles: ALL_ROLES },
+   { path: "/dashboard", active: "dashboard", roles: DASHBOARD_ROLES },
    { path: "/dashboard/prescriptions", active: "prescriptions", roles: COUNTER_SALE_ROLES, allowPlatformAdminOverride: false },
-   { path: "/dashboard/transfers", active: "transfers", roles: ALL_ROLES },
+   { path: "/dashboard/transfers", active: "transfers", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/sites", active: "sites", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/catalog", active: "catalog", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/pricing", active: "pricing", roles: MANAGEMENT_ROLES },
@@ -39,9 +38,9 @@ export const ROUTE_ACCESS: RouteAccess[] = [
    { path: "/dashboard/receiving", active: "receiving", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/procurement", active: "procurement", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/stocktake", active: "stocktake", roles: WAREHOUSE_ROLES },
-   { path: "/dashboard/inventory", active: "inventory", roles: ALL_ROLES },
+   { path: "/dashboard/inventory", active: "inventory", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/adjustments", active: "adjustments", roles: WAREHOUSE_ROLES },
-   { path: "/dashboard/returns", active: "returns", roles: STORE_ROLES, allowPlatformAdminOverride: false },
+   { path: "/dashboard/returns", active: "returns", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/quality", active: "quality", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/recalls", active: "recalls", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/reporting", active: "reporting", roles: MANAGEMENT_ROLES },
@@ -67,6 +66,18 @@ export function canAccessPath(user: AuthUser, pathname: string) {
    }
 
    return hasAnyRole(user, routeAccess.roles, routeAccess.allowPlatformAdminOverride);
+}
+
+export function isPharmacistOnlyUser(user: AuthUser) {
+   return user.roles.includes("Pharmacist") && !user.isPlatformAdmin && !user.roles.some((role) => role !== "Pharmacist");
+}
+
+export function getDefaultPathForUser(user: AuthUser) {
+   if (isPharmacistOnlyUser(user)) {
+      return "/dashboard/prescriptions";
+   }
+
+   return "/dashboard";
 }
 
 export function filterNavSections(user: AuthUser | null, sections: NavSection[]) {
