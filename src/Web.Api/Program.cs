@@ -75,6 +75,13 @@ app.Use(async (context, next) =>
         HttpMethods.IsPatch(context.Request.Method) ||
         HttpMethods.IsDelete(context.Request.Method))
     {
+        // Skip CSRF for the SePay webhook endpoint (authenticated by HMAC)
+        if (context.Request.Path.StartsWithSegments("/api/payments/sepay/webhook", StringComparison.OrdinalIgnoreCase))
+        {
+            await next();
+            return;
+        }
+
         IAntiforgery antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
         try
         {

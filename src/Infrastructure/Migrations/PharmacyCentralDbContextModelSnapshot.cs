@@ -690,6 +690,295 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.ToTable("stock_reservations", (string)null);
                 });
 
+            modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal?>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("InstructionsJson")
+                        .HasColumnType("text")
+                        .HasColumnName("instructions_json");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("method");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid>("PaymentInvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payment_invoice_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("ProviderFee")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("provider_fee");
+
+                    b.Property<string>("ProviderReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("provider_reference");
+
+                    b.Property<string>("ProviderTransactionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("provider_transaction_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaymentInvoiceId", "Status");
+
+                    b.HasIndex("ProviderTransactionId", "Provider");
+
+                    b.ToTable("payment_attempts", (string)null);
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentInvoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at_utc");
+
+                    b.Property<Guid?>("ConfirmedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("confirmed_by_user_id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("PaymentCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("payment_code");
+
+                    b.Property<Guid>("PrescriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prescription_id");
+
+                    b.Property<Guid>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("total_amount");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaymentCode")
+                        .IsUnique();
+
+                    b.HasIndex("PrescriptionId")
+                        .IsUnique();
+
+                    b.HasIndex("PrescriptionId", "Status");
+
+                    b.HasIndex("SiteId", "Status");
+
+                    b.ToTable("payment_invoices", (string)null);
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentInvoiceLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BatchNumberSnapshot")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("batch_number_snapshot");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("display_order");
+
+                    b.Property<decimal>("LineTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("line_total");
+
+                    b.Property<Guid>("PaymentInvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payment_invoice_id");
+
+                    b.Property<Guid?>("PrescriptionLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prescription_line_id");
+
+                    b.Property<Guid?>("ProductBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_batch_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("ProductNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("product_name_snapshot");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("quantity");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("unit_price");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("PaymentInvoiceId", "DisplayOrder");
+
+                    b.ToTable("payment_invoice_lines", (string)null);
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<Guid>("PaymentAttemptId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payment_attempt_id");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("ProviderMetadataJson")
+                        .HasColumnType("text")
+                        .HasColumnName("provider_metadata_json");
+
+                    b.Property<string>("ProviderTransactionId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("provider_transaction_id");
+
+                    b.Property<string>("RawProviderResponse")
+                        .HasColumnType("text")
+                        .HasColumnName("raw_provider_response");
+
+                    b.Property<string>("TransferType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("transfer_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaymentAttemptId");
+
+                    b.HasIndex("Provider", "PaymentAttemptId");
+
+                    b.HasIndex("Provider", "ProviderTransactionId")
+                        .IsUnique();
+
+                    b.ToTable("payment_transactions", (string)null);
+                });
+
             modelBuilder.Entity("PharmacyCentral.Domain.Prescriptions.Prescription", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2132,6 +2421,66 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.Navigation("StorageLocation");
                 });
 
+            modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentAttempt", b =>
+                {
+                    b.HasOne("PharmacyCentral.Domain.Payments.PaymentInvoice", "PaymentInvoice")
+                        .WithMany("Attempts")
+                        .HasForeignKey("PaymentInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PaymentInvoice");
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentInvoice", b =>
+                {
+                    b.HasOne("PharmacyCentral.Domain.Prescriptions.Prescription", "Prescription")
+                        .WithMany()
+                        .HasForeignKey("PrescriptionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.Sites.Site", "Site")
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Prescription");
+
+                    b.Navigation("Site");
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentInvoiceLine", b =>
+                {
+                    b.HasOne("PharmacyCentral.Domain.Payments.PaymentInvoice", "PaymentInvoice")
+                        .WithMany("Lines")
+                        .HasForeignKey("PaymentInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyCentral.Domain.Products.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PaymentInvoice");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentTransaction", b =>
+                {
+                    b.HasOne("PharmacyCentral.Domain.Payments.PaymentAttempt", "PaymentAttempt")
+                        .WithMany("Transactions")
+                        .HasForeignKey("PaymentAttemptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PaymentAttempt");
+                });
+
             modelBuilder.Entity("PharmacyCentral.Domain.Prescriptions.Prescription", b =>
                 {
                     b.HasOne("PharmacyCentral.Domain.Sites.Site", "Site")
@@ -2442,6 +2791,18 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.Navigation("InventoryBalances");
 
                     b.Navigation("StockLedgerEntries");
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentAttempt", b =>
+                {
+                    b.Navigation("Transactions");
+                });
+
+            modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentInvoice", b =>
+                {
+                    b.Navigation("Attempts");
+
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("PharmacyCentral.Domain.Prescriptions.Prescription", b =>

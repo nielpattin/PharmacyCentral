@@ -5,7 +5,9 @@ import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
-import { cancelPrescription, createPrescription, dispensePrescription, loadPrescription, loadPrescriptions, loadProducts, loadSites, loadStorageLocations, type PrescriptionCreateRequest, type PrescriptionDetails, type ProductDto, type SiteDto, type StorageLocationDto } from "../api/pharmacyClient";
+import { cancelPrescription, createPrescription, createPrescriptionPayment, dispensePrescription, getPaymentStatus, getPrintableInvoice, loadPrescription, loadPrescriptions, loadProducts, loadSites, loadStorageLocations, type PaymentDetails, type PrintableInvoiceDetails, type PrescriptionCreateRequest, type PrescriptionDetails, type ProductDto, type SiteDto, type StorageLocationDto } from "../api/pharmacyClient";
+import { PaymentPanel } from "../features/payments/PaymentPanel";
+import { PrintableInvoiceModal } from "../features/payments/PrintableInvoiceModal";
 import { PrescriptionDetail } from "../features/prescriptions/PrescriptionDetail";
 import { PrescriptionForm } from "../features/prescriptions/PrescriptionForm";
 import { PrescriptionTable } from "../features/prescriptions/PrescriptionTable";
@@ -28,6 +30,8 @@ export default function PrescriptionPage() {
    const [isSaving, setIsSaving] = useState(false);
    const [bannerError, setBannerError] = useState<string | null>(null);
    const [createToken, setCreateToken] = useState(0);
+   const [payment, setPayment] = useState<PaymentDetails | null>(null);
+   const [invoiceData, setInvoiceData] = useState<PrintableInvoiceDetails | null>(null);
 
    const selectedPrescription = useMemo(() => prescriptions.find((prescription) => prescription.id === selectedId) ?? null, [prescriptions, selectedId]);
    const visiblePrescriptions = useMemo(() => prescriptions.filter((prescription) => (siteFilter === "" || prescription.siteId === siteFilter) && (statusFilter === "" || prescription.status === statusFilter)), [prescriptions, siteFilter, statusFilter]);
@@ -56,9 +60,17 @@ export default function PrescriptionPage() {
    async function handleSelectPrescription(id: string) {
       setSelectedId(id);
       setBannerError(null);
+      setPayment(null);
       try {
          const detail = await loadPrescription(id);
          setPrescriptions((current) => current.some((prescription) => prescription.id === detail.id) ? current.map((prescription) => prescription.id === detail.id ? detail : prescription) : [detail, ...current]);
+         // Try to load existing payment for this prescription
+         try {
+            const paymentData = await createPrescriptionPayment(id);
+            setPayment(paymentData);
+         } catch {
+            // No payment exists yet, that's fine
+         }
       } catch (error) {
          setBannerError(error instanceof Error ? error.message : t("errors.loadPrescription"));
       }
@@ -117,6 +129,28 @@ export default function PrescriptionPage() {
       }
    }
 
+   async function handleCreatePayment() {
+      if (selectedPrescription === null) return;
+      const paymentData = await createPrescriptionPayment(selectedPrescription.id);
+      setPayment(paymentData);
+   }
+
+   async function handleRefreshPaymentStatus() {
+      if (payment === null) return;
+      const paymentData = await getPaymentStatus(payment.id);
+      setPayment(paymentData);
+   }
+
+   async function handleShowInvoice() {
+      if (payment === null) return;
+      try {
+         const invoice = await getPrintableInvoice(payment.id);
+         setInvoiceData(invoice);
+      } catch (error) {
+         setBannerError(error instanceof Error ? error.message : t("errors.loadPrescription"));
+      }
+   }
+
    return (
       <AppShell active="prescriptions" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.prescription") }]} />}>
          <div className="sites-page">
@@ -136,12 +170,23 @@ export default function PrescriptionPage() {
                      {selectedPrescription === null ? (
                         <PrescriptionForm key={`prescription-${createToken}`} initialValues={formValues} isSaving={isSaving} products={products} sites={sites} storageLocations={storageLocations} onSubmit={handleCreatePrescription} />
                      ) : (
-                        <PrescriptionDetail key={selectedPrescription.id} prescription={selectedPrescription} isSaving={isSaving} products={products} sites={sites} storageLocations={storageLocations} onDispense={handleDispensePrescription} onCancel={handleCancelPrescription} />
+                        <>
+                           <PrescriptionDetail key={selectedPrescription.id} prescription={selectedPrescription} isSaving={isSaving} products={products} sites={sites} storageLocations={storageLocations} onDispense={handleDispensePrescription} onCancel={handleCancelPrescription} />
+                           <PaymentPanel
+                              key={`payment-${selectedPrescription.id}`}
+                              payment={payment}
+                              onCreatePayment={handleCreatePayment}
+                              onRefreshStatus={handleRefreshPaymentStatus}
+                              onShowInvoice={handleShowInvoice}
+                              isBusy={false}
+                           />
+                        </>
                      )}
                   </div>
                </aside>
             </div>
          </div>
+         {invoiceData !== null ? <PrintableInvoiceModal invoice={invoiceData} onClose={() => setInvoiceData(null)} /> : null}
       </AppShell>
    );
 }

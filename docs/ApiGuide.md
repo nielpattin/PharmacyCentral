@@ -42,6 +42,8 @@ TOKEN=$(curl -ks -b "$COOKIE" -c "$COOKIE" "$BASE/auth/csrf" | jq -r .token)
 curl -k -b "$COOKIE" "$BASE/auth/me"
 ```
 
+Payment provider webhooks are the exception to the normal browser session flow. They do not use cookie authentication or CSRF because the caller is an external payment provider. Provider webhook endpoints must validate their configured signature before accepting a confirmation.
+
 ## Idempotency
 
 Prescription creation and dispensing accept an `Idempotency-Key` header. Reusing the same key for a successful request returns the same successful response instead of performing the operation twice.
@@ -51,6 +53,8 @@ Example:
 ```bash
 -H "Idempotency-Key: prescription-create-2026-01-01-001"
 ```
+
+Payment creation may use the same retry pattern where a UI action could be submitted more than once. Provider webhook confirmations must also be idempotent by provider transaction ID.
 
 ## Authorization model
 
@@ -97,6 +101,26 @@ Non-admin users can only access assigned-site data.
 | GET | `/api/dashboard/summary` |
 | GET | `/api/audit/logs` |
 | GET | `/api/finance/summary` | Finance valuation and operational reconciliation |
+
+### Payments and invoices
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/api/payments/prescriptions/{prescriptionId}` | Create or return a payment invoice for a prescription |
+| GET | `/api/payments/{paymentId}` | Get payment status and payment instructions |
+| GET | `/api/payments/{paymentId}/invoice` | Get printable invoice details |
+| POST | `/api/payments/sepay/webhook` | SePay provider webhook; no session/CSRF, protected by HMAC |
+
+Staff payment endpoints use Store policy and site access enforcement. The SePay webhook endpoint is public at the transport level but must verify the `x-SePay-Signature` HMAC-SHA256 header before mapping the provider payload into the neutral payment confirmation use case.
+
+Webhook handling requirements:
+
+- accept only inbound transfer confirmations;
+- match by payment code, provider and amount;
+- deduplicate by provider transaction ID;
+- update payment status atomically;
+- return `200 { "success": true }` quickly for accepted or duplicate confirmations;
+- avoid exposing secret values or raw provider internals in user-facing responses.
 
 ### Master data
 
@@ -160,6 +184,8 @@ Non-admin users can only access assigned-site data.
 | GET | `/api/prescriptions/{id}` |
 | POST | `/api/prescriptions/{id}/dispense` |
 | POST | `/api/prescriptions/{id}/cancel` |
+
+When payment is enabled and a prescription requires payment, dispensing is blocked until the related payment invoice is confirmed as paid.
 
 ### Transfers
 

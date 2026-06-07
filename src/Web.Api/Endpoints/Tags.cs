@@ -32,4 +32,6 @@ public static class Tags
 
     public const string Transfers = "Transfers";
     public const string Prescriptions = "Prescriptions";
+
+    public const string Payments = "Payments";
 }

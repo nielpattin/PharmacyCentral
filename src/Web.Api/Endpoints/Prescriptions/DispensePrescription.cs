@@ -32,6 +32,7 @@ internal sealed class DispensePrescription : IEndpoint
             IIdentityService identityService,
             DispensePrescriptionHandler handler,
             IApplicationDbContext dbContext,
+            IConfiguration configuration,
             CancellationToken cancellationToken) =>
         {
             AuthUserDetails? currentUser = await identityService.GetCurrentUserAsync(cancellationToken);
@@ -69,6 +70,7 @@ internal sealed class DispensePrescription : IEndpoint
             {
                 PrescriptionId = id,
                 DispensedByUserId = currentUser.Id,
+                RequirePayment = IsPaymentEnabled(configuration),
                 Lines = request.Lines.Select(line => new DispenseLineItem
                 {
                     PrescriptionLineId = line.PrescriptionLineId,
@@ -117,5 +119,11 @@ internal sealed class DispensePrescription : IEndpoint
         }
 
         return errors;
+    }
+
+    private static bool IsPaymentEnabled(IConfiguration configuration)
+    {
+        return configuration.GetValue<bool>("PHARMACY_PAYMENT_SEPAY_ENABLED")
+            || configuration.GetSection("PHARMACY_PAYMENT_SEPAY").GetValue<bool>("Enabled");
     }
 }

@@ -67,12 +67,14 @@ flowchart TD
     PO --> Receiving[Receive supplier delivery]
     Receiving --> Quality[Review batch quality]
     Quality --> Inventory[Inventory available for work]
-    Inventory --> Prescription[Dispense prescription]
+    Inventory --> Prescription[Prepare prescription]
+    Prescription --> Payment[Collect payment and print invoice]
+    Payment --> Dispense[Dispense prescription]
     Inventory --> Transfer[Transfer stock]
     Inventory --> Return[Return or remove stock]
     Inventory --> Stocktake[Stocktake and adjustment]
     Inventory --> Recall[Recall controls]
-    Prescription --> Dashboard[Dashboard reporting finance audit]
+    Dispense --> Dashboard[Dashboard reporting finance audit]
     Transfer --> Dashboard
     Return --> Dashboard
     Stocktake --> Dashboard
@@ -167,9 +169,30 @@ Basic flow:
 
 1. Create a prescription with patient and line details.
 2. The app holds available stock for the prescription.
-3. Dispense when ready.
-4. Dispensing consumes the held quantity and records activity.
-5. Cancel if the prescription should not proceed; cancellation releases held quantity.
+3. Create or open the payment panel for the prescription.
+4. Ask the customer to scan the QR code or complete the selected payment method.
+5. Confirm the payment status before dispensing when payment is required.
+6. Print the invoice from the payment panel when needed.
+7. Dispensing consumes the held quantity and records activity.
+8. Cancel if the prescription should not proceed; cancellation releases held quantity.
+
+
+## Payment and invoice
+
+Use the payment panel inside **Prescriptions** to collect payment before dispensing when the payment workflow is enabled.
+
+Basic flow:
+
+1. Open the prescription.
+2. Create a payment for the prescription.
+3. Show the customer the QR code, transfer content and total amount.
+4. Refresh or wait for the payment status to update after the customer pays.
+5. When the payment is confirmed, print the invoice if the customer needs a receipt.
+6. Continue dispensing from the same prescription screen.
+
+The printed invoice includes the pharmacy/site, invoice time, payment code, product lines, quantities, unit prices, total and payment status. It is intended for browser-based demo printing and does not require a physical printer integration.
+
+Development SePay Test mode can be used to validate the payment flow without a real customer transfer.
 
 ## Transfers
 
@@ -234,7 +257,7 @@ Use this path for a compact local demo:
 6. Open **Receiving**, record a delivery against the order.
 7. Open **Quality**, release the new batch.
 8. Open **Inventory**, show available quantity and history.
-9. Open **Prescriptions**, create and dispense a prescription.
+9. Open **Prescriptions**, create a prescription, collect payment, print the invoice and dispense.
 10. Open **Transfers**, show create/approve/ship/receive lifecycle if a second eligible account is available.
 11. Open **Returns**, show a return/removal reason.
 12. Open **Stocktake** and **Adjustments**, show count sessions and approval workflow.

@@ -78,6 +78,8 @@ PHARMACY_ADMIN_PASSWORD='Admin@123!' \
 node tests/product-api-verify.mjs
 ```
 
+Payment/webhook checks need the API to be reachable from SePay Test mode. For local development, expose only the API webhook path through the project-specific Cloudflare Tunnel described below.
+
 ## Local package shape
 
 The repository includes a local production-like package for validation and handoff. It does **not** push images, publish infrastructure or deploy to any external environment.
@@ -146,11 +148,55 @@ The compose file is for local package validation, health checks and handoff. It 
 
 Do not commit real secrets. Copy `deploy/pharmacycentral.env.example` to a local untracked file and replace values there.
 
+For SePay Test mode, keep the webhook secret only in local environment files or secure environment configuration:
+
+```env
+PHARMACY_PAYMENT_SEPAY_WEBHOOK_SECRET=replace_with_real_secret
+```
+
+Do not commit real `.env` files, Cloudflare credentials, or tunnel config containing machine-specific credentials.
+
 ## Database migration behavior
 
 `Web.Api` applies EF Core migrations on startup. The app container must have a valid `ConnectionStrings__PharmacyCentral` value before it starts.
 
 When a new migration is generated while Aspire is already running, rebuild and restart the API before product verification so the running API has the new schema-aware binaries.
+
+## SePay Test mode and Cloudflare Tunnel
+
+Use SePay Test mode to validate the payment confirmation flow without a real customer transfer. The local API receives SePay webhook calls through a project-local Cloudflare Tunnel.
+
+Project tunnel rules:
+
+- Use the project config at `.cloudflared/config.yml`.
+- Do not modify the global Cloudflare config under the user profile; it may be serving other projects.
+- Keep `.cloudflared/` ignored by Git.
+- Run the tunnel from the repository root with:
+
+```bash
+cloudflared tunnel --config .cloudflared/config.yml run pharmacycentral-sepay-dev
+```
+
+Expected dev webhook URL:
+
+```text
+https://sepay-dev.nielpat.cloud/api/payments/sepay/webhook
+```
+
+SePay webhook setup for development:
+
+```text
+Test mode: ON
+Event: Tiền vào
+Format: JSON
+Payment code prefix: PC
+Security: HMAC-SHA256
+Retry on server error: ON
+```
+
+If Aspire assigns a different API HTTPS port, update the project-local tunnel config so the ingress target points to the actual API endpoint. Use `noTLSVerify: true` for the local dev certificate only.
+
+Before using SePay's send-test feature, confirm the API is running and the payment webhook endpoint exists. A 404 response means the payment module has not been built or the running API is still on old binaries.
 
 ## CI behavior
 

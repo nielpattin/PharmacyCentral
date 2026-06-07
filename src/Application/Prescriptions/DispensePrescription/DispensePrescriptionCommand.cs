@@ -4,6 +4,7 @@ public sealed class DispensePrescriptionCommand
 {
     public Guid PrescriptionId { get; set; }
     public Guid DispensedByUserId { get; set; }
+    public bool RequirePayment { get; set; }
     public List<DispenseLineItem> Lines { get; set; } = [];
 }
 

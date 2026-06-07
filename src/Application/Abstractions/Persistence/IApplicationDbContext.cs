@@ -13,6 +13,7 @@ using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Suppliers;
 using PharmacyCentral.Domain.Transfers;
+using PharmacyCentral.Domain.Payments;
 
 namespace PharmacyCentral.Application.Abstractions.Persistence;
 
@@ -65,6 +66,14 @@ public interface IApplicationDbContext
     IQueryable<RecallAffectedBatch> RecallAffectedBatches { get; }
 
     IQueryable<Supplier> Suppliers { get; }
+
+    IQueryable<PaymentInvoice> PaymentInvoices { get; }
+
+    IQueryable<PaymentInvoiceLine> PaymentInvoiceLines { get; }
+
+    IQueryable<PaymentAttempt> PaymentAttempts { get; }
+
+    IQueryable<PaymentTransaction> PaymentTransactions { get; }
 
     Task<List<Site>> ListSitesAsync(IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
 
@@ -157,6 +166,16 @@ public interface IApplicationDbContext
     Task<bool> HasOverlappingPublishedProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveFrom, DateOnly? effectiveTo, Guid? excludePriceId = null, CancellationToken cancellationToken = default);
 
     Task<int> CountPrescriptionsWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
+
+    Task<PaymentInvoice?> GetPaymentInvoiceByPrescriptionIdAsync(Guid prescriptionId, CancellationToken cancellationToken = default);
+
+    Task<PaymentInvoice?> GetPaymentInvoiceByIdAsync(Guid paymentInvoiceId, CancellationToken cancellationToken = default);
+
+    Task<PaymentInvoice?> GetPaymentInvoiceByCodeAsync(string paymentCode, CancellationToken cancellationToken = default);
+
+    Task<bool> PaymentExistsForPrescriptionAsync(Guid prescriptionId, CancellationToken cancellationToken = default);
+
+    Task<PaymentTransaction?> GetPaymentTransactionByProviderTransactionIdAsync(string providerTransactionId, string provider, CancellationToken cancellationToken = default);
 
     Task<List<AuditLogEntry>> ListAuditLogEntriesAsync(Guid? userId = null, Guid? siteId = null, string? entityType = null, Guid? entityId = null, string? action = null, int limit = 100, CancellationToken cancellationToken = default);
 

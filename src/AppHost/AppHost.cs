@@ -21,6 +21,12 @@ IResourceBuilder<ProjectResource> api = builder.AddProject<Projects.Web_Api>("ap
 ApplyOptionalEnvironment(api, rootEnvironment, "PHARMACY_SEED_ADMIN_USER", "PharmacyCentral__Seeding__SeedAdminUser");
 ApplyOptionalEnvironment(api, rootEnvironment, "PHARMACY_SEED_DEMO_USERS", "PharmacyCentral__Seeding__SeedDemoUsers");
 ApplyOptionalEnvironment(api, rootEnvironment, "PHARMACY_SEED_BUSINESS_DATA", "PharmacyCentral__Seeding__SeedBusinessData");
+ApplyOptionalEnvironment(api, rootEnvironment, "PHARMACY_PAYMENT_SEPAY_ENABLED", "PHARMACY_PAYMENT_SEPAY_ENABLED");
+ApplyOptionalEnvironment(api, rootEnvironment, "PHARMACY_PAYMENT_SEPAY_BANK", "PHARMACY_PAYMENT_SEPAY_BANK");
+ApplyOptionalEnvironment(api, rootEnvironment, "PHARMACY_PAYMENT_SEPAY_ACCOUNT_NUMBER", "PHARMACY_PAYMENT_SEPAY_ACCOUNT_NUMBER");
+ApplyOptionalEnvironment(api, rootEnvironment, "PHARMACY_PAYMENT_SEPAY_PREFIX", "PHARMACY_PAYMENT_SEPAY_PREFIX");
+ApplyOptionalEnvironment(api, rootEnvironment, "PHARMACY_PAYMENT_SEPAY_QR_BASE_URL", "PHARMACY_PAYMENT_SEPAY_QR_BASE_URL");
+ApplyOptionalEnvironment(api, rootEnvironment, "PHARMACY_PAYMENT_SEPAY_WEBHOOK_SECRET", "PHARMACY_PAYMENT_SEPAY_WEBHOOK_SECRET");
 
 IResourceBuilder<Aspire.Hosting.JavaScript.ViteAppResource> frontend = builder.AddViteApp("frontend", "../Frontend")
     .WithPnpm()

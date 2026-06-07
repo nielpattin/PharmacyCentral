@@ -2,8 +2,10 @@ using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Audit;
 using PharmacyCentral.Application.Inventory.RecordStockMovement;
 using PharmacyCentral.Application.Inventory.Shared;
+using PharmacyCentral.Application.Payments.Shared;
 using PharmacyCentral.Application.Prescriptions.Shared;
 using PharmacyCentral.Application.Prescriptions;
+using PharmacyCentral.Domain.Payments;
 using PharmacyCentral.Domain.Prescriptions;
 using SharedKernel.Results;
 
@@ -38,6 +40,18 @@ public sealed class DispensePrescriptionHandler(IApplicationDbContext dbContext,
         if (batchIds.Distinct().Count() != batchIds.Count)
         {
             return PrescriptionErrors.DuplicateProductBatch(batchIds.GroupBy(batchId => batchId).First(group => group.Count() > 1).Key);
+        }
+
+        // Payment-before-dispense: when enabled, require a paid invoice before stock is dispensed.
+        var paymentInvoice = await dbContext.GetPaymentInvoiceByPrescriptionIdAsync(prescription.Id, cancellationToken);
+        if (command.RequirePayment && paymentInvoice is null)
+        {
+            return PaymentErrors.PaymentRequired(prescription.Id);
+        }
+
+        if (paymentInvoice is not null && paymentInvoice.Status != PaymentStatus.Paid)
+        {
+            return PaymentErrors.InvalidPaymentStatus(paymentInvoice.Status);
         }
 
         foreach (DispenseLineItem item in command.Lines)

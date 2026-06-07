@@ -44,6 +44,11 @@ using PharmacyCentral.Application.Recalls.CreateRecall;
 using PharmacyCentral.Application.Recalls.ListRecalls;
 using PharmacyCentral.Application.Recalls.UpdateAffectedBatch;
 using PharmacyCentral.Application.Recalls.UpdateRecallStatus;
+using PharmacyCentral.Application.Payments.ConfirmPayment;
+using PharmacyCentral.Application.Payments.CreatePrescriptionPayment;
+using PharmacyCentral.Application.Payments.GetPaymentStatus;
+using PharmacyCentral.Application.Payments.GetPrintableInvoice;
+using PharmacyCentral.Application.Payments.Shared;
 using PharmacyCentral.Application.Returns.CreateReturn;
 using PharmacyCentral.Application.Sites.CreateSite;
 using PharmacyCentral.Application.Sites.DeleteSite;
@@ -78,6 +83,7 @@ using PharmacyCentral.Application.Transfers.ReceiveTransfer;
 using PharmacyCentral.Application.Transfers.ShipTransfer;
 using PharmacyCentral.Infrastructure.Authorization;
 using PharmacyCentral.Infrastructure.Identity;
+using PharmacyCentral.Infrastructure.Payments.SePay;
 using PharmacyCentral.Infrastructure.Persistence;
 using PharmacyCentral.Infrastructure.Seeding;
 
@@ -242,6 +248,30 @@ public static class DependencyInjection
         services.AddScoped<CancelPrescriptionHandler>();
         services.AddScoped<GetPrescriptionByIdQueryHandler>();
         services.AddScoped<ListPrescriptionsQueryHandler>();
+        // Payment services
+        services.AddScoped<PaymentCodeGenerator>();
+        services.AddScoped<CreatePrescriptionPaymentHandler>();
+        services.AddScoped<GetPaymentStatusHandler>();
+        services.AddScoped<GetPrintableInvoiceHandler>();
+        services.AddScoped<ConfirmPaymentHandler>();
+
+        // SePay adapter
+        services.AddOptions<SePayOptions>()
+            .Bind(configuration.GetSection(SePayOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.PostConfigure<SePayOptions>(options =>
+        {
+            options.Enabled = configuration.GetValue<bool?>("PHARMACY_PAYMENT_SEPAY_ENABLED") ?? options.Enabled;
+            options.Bank = configuration.GetValue<string>("PHARMACY_PAYMENT_SEPAY_BANK") ?? options.Bank;
+            options.AccountNumber = configuration.GetValue<string>("PHARMACY_PAYMENT_SEPAY_ACCOUNT_NUMBER") ?? options.AccountNumber;
+            options.Prefix = configuration.GetValue<string>("PHARMACY_PAYMENT_SEPAY_PREFIX") ?? options.Prefix;
+            options.QrBaseUrl = configuration.GetValue<string>("PHARMACY_PAYMENT_SEPAY_QR_BASE_URL") ?? options.QrBaseUrl;
+            options.WebhookSecret = configuration.GetValue<string>("PHARMACY_PAYMENT_SEPAY_WEBHOOK_SECRET") ?? options.WebhookSecret;
+        });
+        services.AddScoped<SePayQrCodeGenerator>();
+        services.AddScoped<SePayWebhookVerifier>();
+
         services.AddHostedService<DatabaseSeederHostedService>();
 
         return services;

@@ -1,6 +1,9 @@
 # Product verification tests
 
-These tests exercise product behavior against a running PharmacyCentral Aspire stack. They are intentionally API-level tests: they verify user-visible workflows, access boundaries, and operational state changes without adding a separate test database schema.
+This folder contains two kinds of verification:
+
+- API-level product flow scripts that run against a running PharmacyCentral Aspire stack.
+- xUnit backend tests that verify payment/security logic directly in .NET.
 
 ## Prerequisites
 
@@ -12,7 +15,7 @@ These tests exercise product behavior against a running PharmacyCentral Aspire s
 
 2. Wait for the API resource to become healthy.
 
-## Run
+## Run API product flow
 
 ```bash
 node tests/product-api-verify.mjs
@@ -42,6 +45,14 @@ PHARMACY_SEED_DEMO_USERS=false
 PHARMACY_SEED_BUSINESS_DATA=false
 ```
 
+## Run xUnit backend tests
+
+```bash
+dotnet test PharmacyCentral.sln --artifacts-path .tmp/tests/dotnet-artifacts
+```
+
+Payment/invoice verification belongs here when the logic can be tested directly without a browser or external provider callback.
+
 ## Coverage
 
 The suite creates uniquely named test users and records, then verifies:
@@ -68,4 +79,6 @@ The fresh flow script additionally verifies the first operational order from a m
 
 The fresh flow also confirms that first-administrator setup is disabled after a Platform Admin exists. To manually validate the first-run administrator form, start with a disposable database and `PHARMACY_SEED_ADMIN_USER=false`.
 
-The script mutates only development data and does not create migrations or change schema.
+The scripts mutate only development data and do not create migrations or change schema.
+
+The xUnit backend tests cover payment code generation, invoice line snapshots, provider-neutral payment transaction shape, SePay HMAC verification and server-side QR URL generation.

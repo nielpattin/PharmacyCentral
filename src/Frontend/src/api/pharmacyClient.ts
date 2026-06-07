@@ -672,6 +672,51 @@ export type PrescriptionFilters = {
    limit?: number;
 };
 
+export type PaymentLineDetails = {
+   id: string;
+   productId: string;
+   productName: string;
+   unitPrice: number;
+   quantity: number;
+   lineTotal: number;
+   currency: string;
+};
+
+export type PaymentInstructionDetails = {
+   type: string;
+   qrImageUrl: string;
+   bankName: string;
+   accountNumber: string;
+   transferContent: string;
+};
+
+export type PaymentDetails = {
+   id: string;
+   paymentCode: string;
+   prescriptionId: string;
+   siteId: string;
+   totalAmount: number;
+   currency: string;
+   status: string;
+   createdAtUtc: string;
+   confirmedAtUtc: string | null;
+   paymentInstruction: PaymentInstructionDetails | null;
+   lines: PaymentLineDetails[];
+};
+
+export type PrintableInvoiceDetails = {
+   id: string;
+   paymentCode: string;
+   prescriptionId: string;
+   siteId: string;
+   totalAmount: number;
+   currency: string;
+   status: string;
+   createdAtUtc: string;
+   confirmedAtUtc: string | null;
+   lines: PaymentLineDetails[];
+};
+
 export type TransferFilters = {
    siteId?: string;
    status?: string;
@@ -1100,6 +1145,18 @@ export async function dispensePrescription(id: string, request: PrescriptionDisp
 
 export async function cancelPrescription(id: string) {
    return await requestJson<PrescriptionDetails>(`/api/prescriptions/${id}/cancel`, { method: "POST" });
+}
+
+export async function createPrescriptionPayment(prescriptionId: string) {
+   return await requestJson<PaymentDetails>(`/api/payments/prescriptions/${prescriptionId}`, { method: "POST" });
+}
+
+export async function getPaymentStatus(paymentId: string) {
+   return await requestJson<PaymentDetails>(`/api/payments/${paymentId}`);
+}
+
+export async function getPrintableInvoice(paymentId: string) {
+   return await requestJson<PrintableInvoiceDetails>(`/api/payments/${paymentId}/invoice`);
 }
 
 export async function loadStocktakeSessions(filters: StocktakeFilters = {}) {

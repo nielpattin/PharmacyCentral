@@ -3022,3 +3022,142 @@ tbody tr:nth-child(even):hover {
    grid-template-columns: minmax(0, 1fr);
 }
 }
+
+/* ─── Payment panel ─── */
+.payment-info {
+   display: grid;
+   gap: 8px;
+   padding: 12px 0;
+}
+.payment-qr-section {
+   display: grid;
+   gap: 12px;
+   padding: 12px 0;
+}
+.payment-qr-container {
+   text-align: center;
+}
+.payment-qr-image {
+   max-width: 200px;
+   height: auto;
+   border: 1px solid var(--line);
+   border-radius: 4px;
+}
+.payment-transfer-details {
+   display: grid;
+   gap: 6px;
+   font-size: 14px;
+}
+.payment-paid-message {
+   color: var(--ok);
+   font-weight: 600;
+}
+
+.payment-code, .payment-amount {
+   font-size: 15px;
+}
+
+.payment-code strong, .payment-amount strong {
+   color: var(--muted);
+}
+
+/* ─── Invoice modal and print styles ─── */
+.invoice-modal {
+   max-width: 600px;
+   width: 100%;
+}
+.invoice-header {
+   text-align: center;
+   margin-bottom: 20px;
+}
+.invoice-header h2 {
+   margin: 0;
+   font-size: 20px;
+   font-weight: 700;
+}
+.invoice-site {
+   margin: 4px 0 0;
+   color: var(--muted);
+   font-size: 14px;
+}
+.invoice-meta {
+   display: grid;
+   grid-template-columns: 1fr 1fr;
+   gap: 6px;
+   margin-bottom: 16px;
+   font-size: 13px;
+}
+.invoice-table {
+   width: 100%;
+   border-collapse: collapse;
+   margin-bottom: 16px;
+}
+.invoice-table th,
+.invoice-table td {
+   border: 1px solid var(--line);
+   padding: 8px;
+   text-align: left;
+   font-size: 13px;
+}
+.invoice-table th {
+   background: var(--surface-soft);
+   font-weight: 600;
+}
+.invoice-total {
+   text-align: right;
+   font-size: 16px;
+   margin-bottom: 16px;
+}
+.invoice-actions {
+   display: flex;
+   gap: 8px;
+   justify-content: flex-end;
+}
+
+.btn {
+   display: inline-flex;
+   align-items: center;
+   gap: 6px;
+   padding: 8px 16px;
+   border-radius: 4px;
+   font-size: 14px;
+   font-weight: 500;
+   cursor: pointer;
+   border: 1px solid var(--line);
+   background: var(--surface);
+   color: var(--text);
+}
+.btn-primary {
+   background: var(--primary);
+   color: white;
+   border-color: var(--primary);
+}
+.btn-secondary {
+   background: var(--surface);
+   color: var(--text);
+   border-color: var(--line);
+}
+
+@media print {
+   /* Hide everything except the invoice print area */
+   body * {
+      visibility: hidden;
+   }
+   .invoice-print-area,
+.invoice-print-area * {
+      visibility: visible;
+   }
+   .invoice-print-area {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+   }
+   .no-print {
+      display: none !important;
+   }
+   .invoice-table th,
+.invoice-table td {
+      border-color: #000;
+   }
+}

@@ -22,6 +22,7 @@ using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Suppliers;
 using PharmacyCentral.Domain.Transfers;
+using PharmacyCentral.Domain.Payments;
 using PharmacyCentral.Infrastructure.Identity;
 
 namespace PharmacyCentral.Infrastructure.Persistence;
@@ -83,6 +84,14 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<RecallAffectedBatch> RecallAffectedBatches => Set<RecallAffectedBatch>();
 
     public IQueryable<Supplier> Suppliers => Set<Supplier>();
+
+    public IQueryable<PaymentInvoice> PaymentInvoices => Set<PaymentInvoice>();
+
+    public IQueryable<PaymentInvoiceLine> PaymentInvoiceLines => Set<PaymentInvoiceLine>();
+
+    public IQueryable<PaymentAttempt> PaymentAttempts => Set<PaymentAttempt>();
+
+    public IQueryable<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
 
     async Task<List<Site>> IApplicationDbContext.ListSitesAsync(IReadOnlyCollection<Guid>? siteIds, CancellationToken cancellationToken)
     {
@@ -660,6 +669,47 @@ public sealed class PharmacyCentralDbContext
             && (excludePriceId == null || price.Id != excludePriceId)
             && price.EffectiveFrom <= requestedEnd
             && (price.EffectiveTo == null || price.EffectiveTo >= effectiveFrom), cancellationToken);
+    }
+
+    async Task<PaymentInvoice?> IApplicationDbContext.GetPaymentInvoiceByPrescriptionIdAsync(Guid prescriptionId, CancellationToken cancellationToken)
+    {
+        return await PaymentInvoices
+            .Include(invoice => invoice.Lines)
+            .ThenInclude(line => line.Product)
+            .Include(invoice => invoice.Attempts)
+            .ThenInclude(attempt => attempt.Transactions)
+            .SingleOrDefaultAsync(invoice => invoice.PrescriptionId == prescriptionId, cancellationToken);
+    }
+
+    async Task<PaymentInvoice?> IApplicationDbContext.GetPaymentInvoiceByIdAsync(Guid paymentInvoiceId, CancellationToken cancellationToken)
+    {
+        return await PaymentInvoices
+            .Include(invoice => invoice.Lines)
+            .ThenInclude(line => line.Product)
+            .Include(invoice => invoice.Attempts)
+            .ThenInclude(attempt => attempt.Transactions)
+            .SingleOrDefaultAsync(invoice => invoice.Id == paymentInvoiceId, cancellationToken);
+    }
+
+    async Task<PaymentInvoice?> IApplicationDbContext.GetPaymentInvoiceByCodeAsync(string paymentCode, CancellationToken cancellationToken)
+    {
+        return await PaymentInvoices
+            .Include(invoice => invoice.Lines)
+            .ThenInclude(line => line.Product)
+            .Include(invoice => invoice.Attempts)
+            .ThenInclude(attempt => attempt.Transactions)
+            .SingleOrDefaultAsync(invoice => invoice.PaymentCode == paymentCode, cancellationToken);
+    }
+
+    async Task<bool> IApplicationDbContext.PaymentExistsForPrescriptionAsync(Guid prescriptionId, CancellationToken cancellationToken)
+    {
+        return await PaymentInvoices.AnyAsync(invoice => invoice.PrescriptionId == prescriptionId, cancellationToken);
+    }
+
+    async Task<PaymentTransaction?> IApplicationDbContext.GetPaymentTransactionByProviderTransactionIdAsync(string providerTransactionId, string provider, CancellationToken cancellationToken)
+    {
+        return await PaymentTransactions.SingleOrDefaultAsync(
+            transaction => transaction.ProviderTransactionId == providerTransactionId && transaction.Provider == provider, cancellationToken);
     }
 
     async Task<int> IApplicationDbContext.CountPrescriptionsWithPrefixAsync(string prefix, CancellationToken cancellationToken)

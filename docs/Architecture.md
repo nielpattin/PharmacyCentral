@@ -49,6 +49,7 @@ flowchart TB
     Persistence --> Postgres[(PostgreSQL)]
     UseCases --> Audit[Audit activity]
     UseCases --> Reports[Dashboard Reporting Finance]
+    UseCases --> Payments[Payment and invoice workflow]
 ```
 
 ## Code architecture decision
@@ -78,6 +79,7 @@ flowchart BT
 - `Infrastructure` implements persistence, identity, authorization support and technical adapters.
 - `Web.Api` maps HTTP requests to application use cases and applies transport-level policy.
 - `Domain` and `Application` must not reference EF Core, ASP.NET Core, Web.Api, or Infrastructure.
+- Payment core must stay provider-neutral. External payment providers are adapters at the infrastructure/API boundary, not domain concepts.
 
 ## Vertical slice layout
 
@@ -101,6 +103,9 @@ src/Application/Inventory/RecordStockMovement/
 src/Application/Prescriptions/CreatePrescription/
 src/Application/Procurement/CreatePurchaseOrder/
 src/Application/Recalls/UpdateRecallStatus/
+src/Application/Payments/CreatePrescriptionPayment/
+src/Application/Payments/ConfirmPayment/
+src/Application/Payments/GetPrintableInvoice/
 ```
 
 Endpoint files are grouped under:
@@ -156,6 +161,7 @@ Site-bound list endpoints filter data by assigned site IDs for non-admin users. 
 | Stocktake/adjustments | Count sessions, variance posting and approval |
 | Recalls | Recall cases and affected batch action tracking |
 | Reporting/finance | Read-only operational visibility and valuation/reconciliation |
+| Payments/invoices | Provider-neutral payment invoice workflow, provider attempts, confirmations and printable invoices |
 | Audit | Business activity traceability |
 | Users | Internal user, role, site access and account controls |
 
@@ -191,6 +197,10 @@ A batch is operationally usable only when it has available quantity, is quality-
 - High-risk approvals block self-approval where required.
 - Critical business actions write audit activity.
 
+- Payment invoices snapshot line prices at creation time so printable invoices remain stable after price changes.
+- External payment confirmations are matched atomically by provider, payment code, amount and status.
+- Payment providers are integrated through adapters. SePay is the first provider adapter for VietQR and webhook confirmation.
+
 ## Data model overview
 
 ```mermaid
@@ -204,6 +214,10 @@ classDiagram
     PurchaseOrder "1" --> "many" PurchaseOrderLine
     PurchaseOrder "0..1" --> "many" GoodsReceipt
     Prescription "1" --> "many" PrescriptionLine
+    Prescription "0..many" --> "many" PaymentInvoice
+    PaymentInvoice "1" --> "many" PaymentInvoiceLine
+    PaymentInvoice "1" --> "many" PaymentAttempt
+    PaymentAttempt "1" --> "many" PaymentTransaction
     TransferOrder "1" --> "many" TransferOrderLine
     StocktakeSession "1" --> "many" CountSheetLine
     RecallCase "1" --> "many" AffectedBatch
@@ -232,6 +246,29 @@ When `PHARMACY_SEED_ADMIN_USER=false` and no Platform Admin exists, the login pa
 
 This keeps two supported paths: seeded development credentials for fast local work, and a first-run setup flow for validating a fresh workspace without demo users or business seed data.
 
-## Deferred product discussion
+## Payment and invoice architecture
 
-Payment, invoice capture, refunds and settlement posting are not implemented in the current baseline. The Finance workspace is read-only reconciliation and valuation. Treat cashier/payment workflow as a deferred product discussion until its business rules are selected.
+Payments are modeled as a provider-neutral business capability. The domain does not know about SePay, VietQR, webhook headers or any provider-specific payload shape. It only tracks invoices, invoice lines, payment attempts, transactions, provider identity and payment status.
+
+```mermaid
+flowchart LR
+    Prescription[Prescription] --> Invoice[Payment invoice]
+    Invoice --> Attempt[Payment attempt]
+    Attempt --> Provider[Provider adapter]
+    Provider --> SePay[SePay VietQR + webhook]
+    SePay --> Confirm[Neutral payment confirmation]
+    Confirm --> InvoicePaid[Invoice paid]
+    InvoicePaid --> Printable[Printable invoice]
+```
+
+SePay is the first provider adapter. Its responsibilities are generating provider-specific VietQR instructions, verifying `x-SePay-Signature`, parsing SePay webhook payloads, and mapping accepted inbound transfers to the neutral payment confirmation use case.
+
+Core rules:
+
+- `Domain/Payments` owns provider-neutral payment entities and statuses.
+- `Application/Payments` owns payment creation, confirmation, status lookup and printable invoice use cases.
+- `Infrastructure/Payments/SePay` owns SePay options, QR URL generation and HMAC verification.
+- `Web.Api/Endpoints/Payments` exposes staff payment endpoints plus the SePay webhook adapter.
+- Frontend screens render payment instructions returned by the API; they do not construct provider-specific QR URLs.
+
+Refunds, void flows and external settlement posting remain outside the first payment/invoice implementation unless explicitly scoped later.

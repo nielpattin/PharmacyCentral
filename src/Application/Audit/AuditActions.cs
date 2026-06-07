@@ -18,4 +18,6 @@ public static class AuditActions
     public const string Activated = "Activated";
 
     public const string Closed = "Closed";
+
+    public const string PaymentConfirmed = "PaymentConfirmed";
 }
