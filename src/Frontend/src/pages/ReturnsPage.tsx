@@ -15,8 +15,8 @@ import {
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Field } from "../components/ui/Field";
 import { useMountEffect } from "../hooks/useMountEffect";
@@ -67,11 +67,11 @@ function toApiDateTime(value: string) {
 }
 
 function siteName(sites: SiteDto[], siteId: string) {
-   return sites.find((site) => site.id === siteId)?.name ?? siteId;
+   return sites.find((site) => site.id === siteId)?.name ?? "—";
 }
 
 function locationName(locations: StorageLocationDto[], locationId: string) {
-   return locations.find((location) => location.id === locationId)?.name ?? locationId;
+   return locations.find((location) => location.id === locationId)?.name ?? "—";
 }
 
 function availableQuantity(balance: InventoryBalanceDto) {
@@ -118,14 +118,15 @@ export default function ReturnsPage() {
       [balances, form.balanceId],
    );
 
-   const recentReturns = useMemo(
-      () => ledgerEntries.filter(isReturnLedgerEntry).slice(0, 12),
-      [ledgerEntries],
-   );
+   const recentReturns = useMemo(() => ledgerEntries.filter(isReturnLedgerEntry).slice(0, 12), [ledgerEntries]);
 
    const quantity = Number(form.quantity);
    const selectedAvailable = selectedBalance === null ? 0 : availableQuantity(selectedBalance);
-   const canSubmit = selectedBalance !== null && Number.isFinite(quantity) && quantity > 0 && quantity <= selectedBalance.quantityOnHand;
+   const canSubmit =
+      selectedBalance !== null &&
+      Number.isFinite(quantity) &&
+      quantity > 0 &&
+      quantity <= selectedBalance.quantityOnHand;
 
    async function refreshData() {
       setIsLoading(true);
@@ -202,14 +203,19 @@ export default function ReturnsPage() {
    }
 
    return (
-      <AppShell active="returns" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.returns") }]} />}>
+      <AppShell
+         active="returns"
+         breadcrumb={
+            <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.returns") }]} />
+         }
+      >
          <div className={styles.returnsPage}>
             <PageHeader
                title={t("returns.title")}
                description={t("returns.description")}
                actions={
                   <div className="page-actions">
-                     <Button variant="secondary" onClick={() => void refreshData()}>
+                     <Button variant="outline" onClick={() => void refreshData()}>
                         {t("common.refresh")}
                      </Button>
                   </div>
@@ -218,7 +224,6 @@ export default function ReturnsPage() {
 
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
             {successMessage !== null ? <div className="notice success-note">{successMessage}</div> : null}
-
 
             <div className={styles.returnsGrid}>
                <section className="card">
@@ -231,11 +236,13 @@ export default function ReturnsPage() {
                      </div>
 
                      <div className="entity-form">
-                        <Field label={t("returns.product")}> 
+                        <Field label={t("returns.product")}>
                            <select
                               className="field-input"
                               value={form.productId}
-                              onChange={(event) => updateForm({ ...form, productId: event.target.value, balanceId: "" })}
+                              onChange={(event) =>
+                                 updateForm({ ...form, productId: event.target.value, balanceId: "" })
+                              }
                            >
                               <option value="">{t("returns.allProducts")}</option>
                               {products.map((product) => (
@@ -246,7 +253,7 @@ export default function ReturnsPage() {
                            </select>
                         </Field>
 
-                        <Field label={t("returns.balance")}> 
+                        <Field label={t("returns.balance")}>
                            <select
                               className="field-input"
                               value={form.balanceId}
@@ -256,13 +263,14 @@ export default function ReturnsPage() {
                               <option value="">{t("returns.selectBalance")}</option>
                               {filteredBalances.map((balance) => (
                                  <option key={balance.id} value={balance.id}>
-                                    {balance.productName} · {balance.batchNumber} · {siteName(sites, balance.siteId)} · {formatQuantity(balance.quantityOnHand)}
+                                    {balance.productName} · {balance.batchNumber} · {siteName(sites, balance.siteId)} ·{" "}
+                                    {formatQuantity(balance.quantityOnHand)}
                                  </option>
                               ))}
                            </select>
                         </Field>
 
-                        <Field label={t("returns.quantity")}> 
+                        <Field label={t("returns.quantity")}>
                            <input
                               className="field-input"
                               type="number"
@@ -273,7 +281,7 @@ export default function ReturnsPage() {
                            />
                         </Field>
 
-                        <Field label={t("returns.reason")}> 
+                        <Field label={t("returns.reason")}>
                            <select
                               className="field-input"
                               value={form.reason}
@@ -287,7 +295,7 @@ export default function ReturnsPage() {
                            </select>
                         </Field>
 
-                        <Field label={t("returns.destination")}> 
+                        <Field label={t("returns.destination")}>
                            <input
                               className="field-input"
                               value={form.destination}
@@ -296,7 +304,7 @@ export default function ReturnsPage() {
                            />
                         </Field>
 
-                        <Field label={t("returns.occurredAt")}> 
+                        <Field label={t("returns.occurredAt")}>
                            <input
                               className="field-input"
                               type="datetime-local"
@@ -305,7 +313,7 @@ export default function ReturnsPage() {
                            />
                         </Field>
 
-                        <Field label={t("returns.notes")} className="field-wide"> 
+                        <Field label={t("returns.notes")} className="field-wide">
                            <textarea
                               className="field-input field-textarea"
                               value={form.notes}
@@ -319,11 +327,16 @@ export default function ReturnsPage() {
                         <div className={styles.returnsStockContext}>
                            <div>
                               <span>{t("returns.selectedBatch")}</span>
-                              <strong>{selectedBalance.productName} · {selectedBalance.batchNumber}</strong>
+                              <strong>
+                                 {selectedBalance.productName} · {selectedBalance.batchNumber}
+                              </strong>
                            </div>
                            <div>
                               <span>{t("returns.selectedLocation")}</span>
-                              <strong>{siteName(sites, selectedBalance.siteId)} · {locationName(storageLocations, selectedBalance.storageLocationId)}</strong>
+                              <strong>
+                                 {siteName(sites, selectedBalance.siteId)} ·{" "}
+                                 {locationName(storageLocations, selectedBalance.storageLocationId)}
+                              </strong>
                            </div>
                            <div>
                               <span>{t("returns.onHand")}</span>
@@ -340,7 +353,7 @@ export default function ReturnsPage() {
                         <Button onClick={() => void handleSubmit()} disabled={!canSubmit || isSubmitting}>
                            {isSubmitting ? t("returns.submitting") : t("returns.submit")}
                         </Button>
-                        <Button variant="secondary" onClick={() => updateForm(defaultForm)} disabled={isSubmitting}>
+                        <Button variant="outline" onClick={() => updateForm(defaultForm)} disabled={isSubmitting}>
                            {t("common.reset")}
                         </Button>
                      </div>
@@ -354,7 +367,9 @@ export default function ReturnsPage() {
                            <h2 className="section-title">{t("returns.recentTitle")}</h2>
                            <p className="section-subtitle">{t("returns.recentDesc")}</p>
                         </div>
-                        <Badge tone="role">{recentReturns.length} {t("common.records")}</Badge>
+                        <Badge variant="outline">
+                           {recentReturns.length} {t("common.records")}
+                        </Badge>
                      </div>
 
                      {isLoading ? (
@@ -367,15 +382,25 @@ export default function ReturnsPage() {
                               <article key={entry.id} className={styles.returnsHistoryItem}>
                                  <div>
                                     <div className={styles.moduleHead}>
-                                       <Badge tone="warn">{t(`returns.movement.${entry.movementType}`)}</Badge>
+                                       <Badge variant="outline">{t(`returns.movement.${entry.movementType}`)}</Badge>
                                        <h3>{entry.productName}</h3>
                                     </div>
-                                    <p>{entry.batchNumber} · {siteName(sites, entry.siteId)} · {locationName(storageLocations, entry.storageLocationId)}</p>
-                                    <span>{entry.reason === null ? t("returns.noReason") : t(`returns.reason.${entry.reason}`)} · {entry.notes ?? t("common.noData")}</span>
+                                    <p>
+                                       {entry.batchNumber} · {siteName(sites, entry.siteId)} ·{" "}
+                                       {locationName(storageLocations, entry.storageLocationId)}
+                                    </p>
+                                    <span>
+                                       {entry.reason === null
+                                          ? t("returns.noReason")
+                                          : t(`returns.reason.${entry.reason}`)}{" "}
+                                       · {entry.notes ?? t("common.noData")}
+                                    </span>
                                  </div>
                                  <div className={styles.returnsHistoryMeta}>
                                     <strong>{formatQuantity(Math.abs(entry.quantityDelta))}</strong>
-                                    <span>{t("returns.balanceAfter", { value: formatQuantity(entry.balanceAfter) })}</span>
+                                    <span>
+                                       {t("returns.balanceAfter", { value: formatQuantity(entry.balanceAfter) })}
+                                    </span>
                                     <time>{new Date(entry.occurredAtUtc).toLocaleString()}</time>
                                  </div>
                               </article>
