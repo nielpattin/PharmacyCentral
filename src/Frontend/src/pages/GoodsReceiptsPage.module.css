@@ -1,70 +1,75 @@
-.sitesPage {
+.page {
    display: grid;
-   grid-template-rows: auto auto minmax(0, 1fr);
-   min-height: 0;
-   height: 100%;
+   grid-template-columns: minmax(0, 1fr);
+   gap: 14px;
+   align-content: start;
+   min-height: min-content;
+   padding-bottom: 20px;
 }
 
-.siteWorkbench {
+.page :global(.page-head) {
+   margin-bottom: 0;
+}
+
+.workbench {
    display: grid;
-   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 400px);
+   grid-template-columns: minmax(0, 1.2fr) minmax(340px, 440px);
    gap: 16px;
    align-items: start;
-   margin-top: 10px;
-   min-height: 0;
-   height: calc(100dvh - 180px);
-}
-
-.siteRegistry,
-.siteEditor {
    min-width: 0;
 }
 
-.siteRegistry {
+.card {
+   gap: 0;
+   padding: 0;
+   border-color: var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface);
+   box-shadow: none;
+}
+
+.cardHeader {
    display: flex;
-   flex-direction: column;
-   min-height: 0;
-   overflow: hidden;
-   height: 100%;
+   flex-direction: row;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: 12px;
+   padding: 14px;
+   border-bottom: 1px solid var(--line);
+   background: var(--surface-soft);
 }
 
-.siteRegistry :global(.section) {
-   display: flex;
-   flex-direction: column;
-   min-height: 0;
-   flex: 1;
-   overflow: hidden;
+.cardHeader h3,
+.cardHeader p {
+   margin: 0;
 }
 
-.siteRegistry :global(.table-wrap) {
-   flex: 1;
-   min-height: 0;
-   overflow: auto;
+.cardHeader p {
+   margin-top: 4px;
 }
 
-.siteEditor {
-   position: static;
-   height: 100%;
-   overflow: auto;
+.cardContent {
+   display: grid;
+   gap: 12px;
+   padding: 14px;
 }
 
-.siteEditor :global(.section) {
-   display: flex;
-   flex-direction: column;
-   height: 100%;
-   min-height: 0;
-   overflow: auto;
+.formContent {
+   padding: 0;
 }
 
-.siteEditor :global(.entity-form) {
-   margin-top: 10px;
+.toolbar {
+   max-width: 380px;
 }
 
-.siteEditor :global(.empty) {
-   margin-bottom: 10px;
+@media (max-width: 1100px) {
+   .workbench {
+      grid-template-columns: minmax(0, 1fr);
+   }
 }
 
-.siteSearch {
-   width: 100%;
-   max-width: 360px;
+@media (max-width: 720px) {
+   .cardHeader {
+      flex-direction: column;
+   }
 }

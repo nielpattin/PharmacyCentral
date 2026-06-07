@@ -3,10 +3,27 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/shadcn/card";
+import { Input } from "../components/shadcn/input";
 import { EmptyState } from "../components/ui/EmptyState";
-import { createGoodsReceipt, loadGoodsReceipts, loadProducts, loadPurchaseOrders, loadSites, loadStorageLocations, loadSuppliers, type GoodsReceiptDto, type GoodsReceiptUpsertRequest, type ProductDto, type PurchaseOrderDto, type SiteDto, type StorageLocationDto, type SupplierDto } from "../api/pharmacyClient";
+import {
+   createGoodsReceipt,
+   loadGoodsReceipts,
+   loadProducts,
+   loadPurchaseOrders,
+   loadSites,
+   loadStorageLocations,
+   loadSuppliers,
+   type GoodsReceiptDto,
+   type GoodsReceiptUpsertRequest,
+   type ProductDto,
+   type PurchaseOrderDto,
+   type SiteDto,
+   type StorageLocationDto,
+   type SupplierDto,
+} from "../api/pharmacyClient";
 import { GoodsReceiptForm } from "../features/goods-receipts/GoodsReceiptForm";
 import { GoodsReceiptTable } from "../features/goods-receipts/GoodsReceiptTable";
 import { useMountEffect } from "../hooks/useMountEffect";
@@ -29,15 +46,19 @@ export default function GoodsReceiptsPage() {
    const [isSaving, setIsSaving] = useState(false);
    const [createToken, setCreateToken] = useState(0);
 
-   const selectedGoodsReceipt = useMemo(() => receipts.find((receipt) => receipt.id === selectedGoodsReceiptId) ?? null, [receipts, selectedGoodsReceiptId]);
+   const selectedGoodsReceipt = useMemo(
+      () => receipts.find((receipt) => receipt.id === selectedGoodsReceiptId) ?? null,
+      [receipts, selectedGoodsReceiptId],
+   );
 
    const visibleReceipts = useMemo(() => {
       const normalizedQuery = query.trim().toLowerCase();
-      if (normalizedQuery === "") {
-         return receipts;
-      }
-
-      return receipts.filter((receipt) => [receipt.receiptNumber, receipt.status, receipt.notes ?? ""].some((value) => value.toLowerCase().includes(normalizedQuery)));
+      if (normalizedQuery === "") return receipts;
+      return receipts.filter((receipt) =>
+         [receipt.receiptNumber, receipt.status, receipt.notes ?? ""].some((value) =>
+            value.toLowerCase().includes(normalizedQuery),
+         ),
+      );
    }, [query, receipts]);
 
    const formValues = blankGoodsReceiptValues();
@@ -50,18 +71,26 @@ export default function GoodsReceiptsPage() {
    async function refreshData(preferredSelectedGoodsReceiptId?: string) {
       setIsLoading(true);
       setBannerError(null);
-
       try {
-         const [receiptData, productData, supplierData, siteData, storageLocationData, purchaseOrderData] = await Promise.all([loadGoodsReceipts(), loadProducts(), loadSuppliers(), loadSites(), loadStorageLocations(), loadPurchaseOrders({ limit: 200 })]);
+         const [receiptData, productData, supplierData, siteData, storageLocationData, purchaseOrderData] =
+            await Promise.all([
+               loadGoodsReceipts(),
+               loadProducts(),
+               loadSuppliers(),
+               loadSites(),
+               loadStorageLocations(),
+               loadPurchaseOrders({ limit: 200 }),
+            ]);
          setReceipts(receiptData);
          setProducts(productData);
          setSuppliers(supplierData);
          setSites(siteData);
          setStorageLocations(storageLocationData);
          setPurchaseOrders(purchaseOrderData);
-
          const nextSelectedGoodsReceiptId = preferredSelectedGoodsReceiptId ?? selectedGoodsReceiptId;
-         const resolvedSelectedGoodsReceiptId = receiptData.some((receipt) => receipt.id === nextSelectedGoodsReceiptId) ? nextSelectedGoodsReceiptId : (receiptData[0]?.id ?? "");
+         const resolvedSelectedGoodsReceiptId = receiptData.some((receipt) => receipt.id === nextSelectedGoodsReceiptId)
+            ? nextSelectedGoodsReceiptId
+            : (receiptData[0]?.id ?? "");
          setSelectedGoodsReceiptId(resolvedSelectedGoodsReceiptId);
       } catch (error) {
          setBannerError(error instanceof Error ? error.message : t("errors.loadGoodsReceipts"));
@@ -73,7 +102,6 @@ export default function GoodsReceiptsPage() {
    async function handleSaveGoodsReceipt(values: GoodsReceiptFormValues) {
       setIsSaving(true);
       setBannerError(null);
-
       try {
          const request: GoodsReceiptUpsertRequest = {
             supplierId: values.supplierId,
@@ -92,7 +120,6 @@ export default function GoodsReceiptsPage() {
                notes: line.notes.trim() || null,
             })),
          };
-
          const result = await createGoodsReceipt(request);
          await refreshData(result.id);
          setCreateToken((current) => current + 1);
@@ -109,29 +136,86 @@ export default function GoodsReceiptsPage() {
    }
 
    return (
-      <AppShell active="receiving" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.receiving") }]} />}>
-         <div className={styles.sitesPage}>
-            <PageHeader title={t("receiving.title")} actions={<div className="page-actions"><Button variant="primary" onClick={handleNewReceipt}>{t("receiving.newReceipt")}</Button></div>} />
+      <AppShell
+         active="receiving"
+         breadcrumb={
+            <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.receiving") }]} />
+         }
+      >
+         <div className={styles.page}>
+            <PageHeader
+               title={t("receiving.title")}
+               actions={
+                  <div className="page-actions">
+                     <Button onClick={handleNewReceipt}>{t("receiving.newReceipt")}</Button>
+                  </div>
+               }
+            />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
-            <div className={styles.siteWorkbench}>
-               <section className={`card ${styles.siteRegistry}`}>
-                  <div className="section">
-                     <div className="section-header">
-                        <div><h2 className="section-title">{t("receiving.registry")}</h2><p className="section-subtitle">{t("receiving.registryDesc")}</p></div>
-                        <Badge tone="role">{isLoading ? t("receiving.loadingState") : `${visibleReceipts.length} ${t("common.records")}`}</Badge>
+            <div className={styles.workbench}>
+               <Card className={styles.card}>
+                  <CardHeader className={styles.cardHeader}>
+                     <div>
+                        <CardTitle>{t("receiving.registry")}</CardTitle>
+                        <CardDescription>{t("receiving.registryDesc")}</CardDescription>
                      </div>
-                     <div className="section-toolbar">
-                        <input className={`field-input ${styles.siteSearch}`} type="search" placeholder={t("receiving.searchPlaceholder")} aria-label={t("receiving.searchPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)} />
+                     <Badge variant="outline">
+                        {isLoading ? t("receiving.loadingState") : `${visibleReceipts.length} ${t("common.records")}`}
+                     </Badge>
+                  </CardHeader>
+                  <CardContent className={styles.cardContent}>
+                     <div className={styles.toolbar}>
+                        <Input
+                           type="search"
+                           placeholder={t("receiving.searchPlaceholder")}
+                           aria-label={t("receiving.searchPlaceholder")}
+                           value={query}
+                           onChange={(event) => setQuery(event.target.value)}
+                        />
                      </div>
-                     {isLoading ? <EmptyState icon="…" title={t("receiving.loading")} description={t("receiving.fetching")} /> : receipts.length === 0 ? <EmptyState icon="0" title={t("receiving.emptyTitle")} description={t("receiving.emptyDesc")} /> : visibleReceipts.length === 0 ? <EmptyState icon="?" title={t("receiving.emptyTitle")} description={t("receiving.searchPlaceholder")} /> : <GoodsReceiptTable rows={visibleReceipts} selectedGoodsReceiptId={selectedGoodsReceipt?.id ?? ""} suppliers={suppliers} sites={sites} storageLocations={storageLocations} onSelectGoodsReceipt={setSelectedGoodsReceiptId} />}
-                  </div>
-               </section>
-               <aside className={`card ${styles.siteEditor}`}>
-                  <div className="section">
-                     <div className="section-header"><div><h2 className="section-title">{t("receiving.editor")}</h2><p className="section-subtitle">{t("receiving.editorDesc")}</p></div></div>
-                     <GoodsReceiptForm key={formKey} initialValues={formValues} isSaving={isSaving} products={products} purchaseOrders={purchaseOrders} suppliers={suppliers} sites={sites} storageLocations={storageLocations} onSubmit={handleSaveGoodsReceipt} />
-                  </div>
-               </aside>
+                     {isLoading ? (
+                        <EmptyState icon="…" title={t("receiving.loading")} description={t("receiving.fetching")} />
+                     ) : receipts.length === 0 ? (
+                        <EmptyState icon="0" title={t("receiving.emptyTitle")} description={t("receiving.emptyDesc")} />
+                     ) : visibleReceipts.length === 0 ? (
+                        <EmptyState
+                           icon="?"
+                           title={t("receiving.emptyTitle")}
+                           description={t("receiving.searchPlaceholder")}
+                        />
+                     ) : (
+                        <GoodsReceiptTable
+                           rows={visibleReceipts}
+                           selectedGoodsReceiptId={selectedGoodsReceipt?.id ?? ""}
+                           suppliers={suppliers}
+                           sites={sites}
+                           storageLocations={storageLocations}
+                           onSelectGoodsReceipt={setSelectedGoodsReceiptId}
+                        />
+                     )}
+                  </CardContent>
+               </Card>
+               <Card className={styles.card}>
+                  <CardHeader className={styles.cardHeader}>
+                     <div>
+                        <CardTitle>{t("receiving.editor")}</CardTitle>
+                        <CardDescription>{t("receiving.editorDesc")}</CardDescription>
+                     </div>
+                  </CardHeader>
+                  <CardContent className={styles.formContent}>
+                     <GoodsReceiptForm
+                        key={formKey}
+                        initialValues={formValues}
+                        isSaving={isSaving}
+                        products={products}
+                        purchaseOrders={purchaseOrders}
+                        suppliers={suppliers}
+                        sites={sites}
+                        storageLocations={storageLocations}
+                        onSubmit={handleSaveGoodsReceipt}
+                     />
+                  </CardContent>
+               </Card>
             </div>
          </div>
       </AppShell>
