@@ -3,6 +3,8 @@ namespace PharmacyCentral.Application.Products.CreateProduct;
 public sealed record CreateProductCommand
 {
     public string Sku { get; init; } = string.Empty;
+    public string? Barcode { get; init; }
+
 
     public string Name { get; init; } = string.Empty;
 

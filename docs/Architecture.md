@@ -8,18 +8,9 @@ Tài liệu này mô tả kiến trúc đang được triển khai trong Pharmac
 
 Pharmacy Central là một web app nội bộ duy nhất cho vận hành nhà thuốc và kho. Hệ thống dùng một React SPA, một backend ASP.NET Core, PostgreSQL và Aspire cho local orchestration.
 
-```mermaid
-flowchart LR
-    User[Internal users] --> Frontend[React SPA]
-    Frontend --> Api[ASP.NET Core Web.Api]
-    Api --> App[Application vertical slices]
-    App --> Domain[Domain model]
-    Api --> Infra[Infrastructure]
-    Infra --> Db[(PostgreSQL)]
-    Aspire[Aspire AppHost] --> Api
-    Aspire --> Frontend
-    Aspire --> Db
-```
+![Hình dạng hệ thống hiện tại](diagrams/architecture-diagram-01-hinh-dang-he-thong-hien-tai.png)
+
+*Nguồn chỉnh sửa: [architecture-diagram-01-hinh-dang-he-thong-hien-tai.drawio](diagrams/architecture-diagram-01-hinh-dang-he-thong-hien-tai.drawio).*
 
 ## Stack đang triển khai
 
@@ -38,19 +29,9 @@ Do not add stack claims to this document unless the library, service, or workflo
 
 ## Topology runtime
 
-```mermaid
-flowchart TB
-    Browser[Browser] --> Static[SPA assets]
-    Browser --> ApiRoutes[/api routes/]
-    ApiRoutes --> Auth[Auth + CSRF + role policy]
-    Auth --> SiteScope[Site access enforcement]
-    SiteScope --> UseCases[Application use cases]
-    UseCases --> Persistence[Infrastructure persistence]
-    Persistence --> Postgres[(PostgreSQL)]
-    UseCases --> Audit[Audit activity]
-    UseCases --> Reports[Dashboard Reporting Finance]
-    UseCases --> Payments[Payment and invoice workflow]
-```
+![Topology runtime](diagrams/architecture-diagram-02-topology-runtime.png)
+
+*Nguồn chỉnh sửa: [architecture-diagram-02-topology-runtime.drawio](diagrams/architecture-diagram-02-topology-runtime.drawio).*
 
 ## Quyết định kiến trúc code
 
@@ -60,17 +41,9 @@ Pharmacy Central uses a hybrid of:
 2. **Clean Architecture** — dependency direction protects domain/application logic from frameworks.
 3. **Vertical Slice Architecture** — each use case owns the code that changes together.
 
-```mermaid
-flowchart BT
-    AppHost --> WebApi[Web.Api]
-    WebApi --> Infrastructure
-    WebApi --> Application
-    Infrastructure --> Application
-    Infrastructure --> Domain
-    Application --> Domain
-    Application --> SharedKernel
-    Domain --> SharedKernel
-```
+![Quyết định kiến trúc code](diagrams/architecture-diagram-03-quyet-dinh-kien-truc-code.png)
+
+*Nguồn chỉnh sửa: [architecture-diagram-03-quyet-dinh-kien-truc-code.drawio](diagrams/architecture-diagram-03-quyet-dinh-kien-truc-code.drawio).*
 
 ### Quy tắc dependency
 
@@ -120,18 +93,9 @@ Endpoints should stay thin: auth policy, site access, request mapping, current-u
 
 The backend enforces both role policy and site access.
 
-```mermaid
-flowchart TD
-    Request[Request] --> Login{Authenticated?}
-    Login -- No --> R401[401]
-    Login -- Yes --> Role{Required role?}
-    Role -- No --> R403[403]
-    Role -- Yes --> Admin{Platform Admin?}
-    Admin -- Yes --> AllSites[All sites allowed]
-    Admin -- No --> Assigned{Site assigned to user?}
-    Assigned -- No --> Site403[403]
-    Assigned -- Yes --> Scoped[Scoped data only]
-```
+![Mô hình truy cập](diagrams/architecture-diagram-04-mo-hinh-truy-cap.png)
+
+*Nguồn chỉnh sửa: [architecture-diagram-04-mo-hinh-truy-cap.drawio](diagrams/architecture-diagram-04-mo-hinh-truy-cap.drawio).*
 
 | Policy area | Roles |
 | --- | --- |
@@ -158,6 +122,7 @@ Dashboard tổng quan không áp dụng cho user chỉ có role Pharmacist. User
 | Quality | Release/reject lô trước khi dùng trong vận hành |
 | Inventory | Workspace chi tiết cho Warehouse Staff/Platform Admin xem số lượng theo vị trí và lịch sử; dược sĩ chỉ thấy tồn khả dụng trong Quầy bán thuốc |
 | Quầy bán thuốc và cấp phát | Chỉ Pharmacist tạo phiếu bán hiện tại, giữ hàng, thanh toán, hủy và cấp phát |
+| Replenishment requests | Pharmacist gửi yêu cầu bổ sung hàng theo nguồn bán được gán; Warehouse Staff hoặc Platform Admin xem xét và xử lý |
 | Transfers | Nghiệp vụ warehouse cho tạo, duyệt, xuất, nhận và hủy điều chuyển giữa các vị trí |
 | Returns/removals | Nghiệp vụ warehouse cho trả nhà cung cấp, hàng hư hỏng, hàng hết hạn, thu hồi hoặc các trường hợp loại khỏi tồn |
 | Stocktake/adjustments | Count sessions, variance posting and approval |
@@ -169,20 +134,9 @@ Dashboard tổng quan không áp dụng cho user chỉ có role Pharmacist. User
 
 ## Kiểm soát lượng hàng có thể dùng
 
-```mermaid
-flowchart TD
-    Batch[Batch] --> Quality{Quality released?}
-    Batch --> Recall{Blocked by active recall?}
-    Balance[Balance] --> OnHand[On hand]
-    Balance --> Reserved[Reserved]
-    OnHand --> Available[Available]
-    Reserved --> Available
-    Quality -- No --> Block[Cannot use]
-    Recall -- Yes --> Block
-    Quality -- Yes --> Eligible[Eligible]
-    Recall -- No --> Eligible
-    Eligible --> Available
-```
+![Kiểm soát lượng hàng có thể dùng](diagrams/architecture-diagram-05-kiem-soat-luong-hang-co-the-dung.png)
+
+*Nguồn chỉnh sửa: [architecture-diagram-05-kiem-soat-luong-hang-co-the-dung.drawio](diagrams/architecture-diagram-05-kiem-soat-luong-hang-co-the-dung.drawio).*
 
 A batch is operationally usable only when it has available quantity, is quality-released, is not blocked by active recall, and the user has role/site access.
 
@@ -205,25 +159,9 @@ A batch is operationally usable only when it has available quantity, is quality-
 
 ## Tổng quan data model
 
-```mermaid
-classDiagram
-    Site "1" --> "many" StorageLocation
-    Site "1" --> "many" InventoryBalance
-    Product "1" --> "many" ProductBatch
-    ProductBatch "1" --> "many" InventoryBalance
-    Product "1" --> "many" ProductPrice
-    Supplier "1" --> "many" PurchaseOrder
-    PurchaseOrder "1" --> "many" PurchaseOrderLine
-    PurchaseOrder "0..1" --> "many" GoodsReceipt
-    Prescription "1" --> "many" PrescriptionLine
-    Prescription "0..many" --> "many" PaymentInvoice
-    PaymentInvoice "1" --> "many" PaymentInvoiceLine
-    PaymentInvoice "1" --> "many" PaymentAttempt
-    PaymentAttempt "1" --> "many" PaymentTransaction
-    TransferOrder "1" --> "many" TransferOrderLine
-    StocktakeSession "1" --> "many" CountSheetLine
-    RecallCase "1" --> "many" AffectedBatch
-```
+![Tổng quan data model](diagrams/architecture-diagram-06-tong-quan-data-model.png)
+
+*Nguồn chỉnh sửa: [architecture-diagram-06-tong-quan-data-model.drawio](diagrams/architecture-diagram-06-tong-quan-data-model.drawio).*
 
 ## Thực tế đóng gói và deployment
 
@@ -252,16 +190,9 @@ This keeps two supported paths: seeded development credentials for fast local wo
 
 Payments are modeled as a provider-neutral business capability. The domain does not know about SePay, VietQR, webhook headers or any provider-specific payload shape. It only tracks invoices, invoice lines, payment attempts, transactions, provider identity and payment status.
 
-```mermaid
-flowchart LR
-    Prescription[Prescription] --> Invoice[Payment invoice]
-    Invoice --> Attempt[Payment attempt]
-    Attempt --> Provider[Provider adapter]
-    Provider --> SePay[SePay VietQR + webhook]
-    SePay --> Confirm[Neutral payment confirmation]
-    Confirm --> InvoicePaid[Invoice paid]
-    InvoicePaid --> Printable[Printable invoice]
-```
+![Kiến trúc thanh toán và hóa đơn](diagrams/architecture-diagram-07-kien-truc-thanh-toan-va-hoa-don.png)
+
+*Nguồn chỉnh sửa: [architecture-diagram-07-kien-truc-thanh-toan-va-hoa-don.drawio](diagrams/architecture-diagram-07-kien-truc-thanh-toan-va-hoa-don.drawio).*
 
 SePay is the first provider adapter. Its responsibilities are generating provider-specific VietQR instructions, verifying `x-SePay-Signature`, parsing SePay webhook payloads, and mapping accepted inbound transfers to the neutral payment confirmation use case.
 

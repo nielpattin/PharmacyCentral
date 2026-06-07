@@ -22,6 +22,7 @@ public sealed class CreateProductCommandHandler(IApplicationDbContext dbContext,
         {
             Id = Guid.NewGuid(),
             Sku = sku,
+            Barcode = NormalizeOptional(command.Barcode),
             Name = command.Name.Trim(),
             Category = NormalizeOptional(command.Category),
             Unit = NormalizeOptional(command.Unit),

@@ -86,6 +86,7 @@ export type StorageLocationDto = {
 export type ProductDto = {
    id: string;
    sku: string;
+   barcode: string | null;
    name: string;
    category: string | null;
    unit: string | null;
@@ -400,6 +401,7 @@ export type StorageLocationUpsertRequest = {
 
 export type ProductUpsertRequest = {
    sku: string;
+   barcode: string;
    name: string;
    category: string;
    unit: string;
@@ -621,6 +623,7 @@ export type PrescriptionDetails = {
    prescriptionNumber: string;
    siteId: string;
    storageLocationId: string;
+   customerProfileId: string | null;
    patientName: string;
    patientPhone: string | null;
    doctorName: string | null;
@@ -700,8 +703,25 @@ export type PaymentDetails = {
    status: string;
    createdAtUtc: string;
    confirmedAtUtc: string | null;
+   refundedAtUtc: string | null;
+   refundReason: string | null;
    paymentInstruction: PaymentInstructionDetails | null;
    lines: PaymentLineDetails[];
+};
+
+export type CounterTransactionDetails = {
+   prescriptionId: string;
+   prescriptionNumber: string;
+   customerName: string;
+   customerPhone: string | null;
+   createdAtUtc: string;
+   prescriptionStatus: string;
+   paymentId: string | null;
+   paymentCode: string | null;
+   paymentStatus: string;
+   totalAmount: number | null;
+   currency: string | null;
+   canPrintInvoice: boolean;
 };
 
 export type PrintableInvoiceDetails = {
@@ -714,6 +734,8 @@ export type PrintableInvoiceDetails = {
    status: string;
    createdAtUtc: string;
    confirmedAtUtc: string | null;
+   refundedAtUtc: string | null;
+   refundReason: string | null;
    lines: PaymentLineDetails[];
 };
 
@@ -721,6 +743,51 @@ export type TransferFilters = {
    siteId?: string;
    status?: string;
    limit?: number;
+};
+
+export type ReplenishmentRequestLineDetails = {
+   id: string;
+   replenishmentRequestId: string;
+   productId: string;
+   requestedQuantity: number;
+   reason: string;
+   notes: string | null;
+};
+
+export type ReplenishmentRequestDetails = {
+   id: string;
+   requestNumber: string;
+   siteId: string;
+   storageLocationId: string;
+   status: string;
+   requestedByUserId: string | null;
+   reviewedByUserId: string | null;
+   reviewedAtUtc: string | null;
+   reviewNotes: string | null;
+   notes: string | null;
+   createdAtUtc: string;
+   updatedAtUtc: string;
+   lines: ReplenishmentRequestLineDetails[];
+};
+
+export type ReplenishmentRequestFilters = {
+   siteId?: string;
+   status?: string;
+   limit?: number;
+};
+
+export type ReplenishmentRequestLineCreateRequest = {
+   productId: string;
+   requestedQuantity: number;
+   reason: string | null;
+   notes: string | null;
+};
+
+export type ReplenishmentRequestCreateRequest = {
+   siteId: string;
+   storageLocationId: string;
+   notes: string | null;
+   lines: ReplenishmentRequestLineCreateRequest[];
 };
 
 export type StocktakeFilters = {
@@ -1155,8 +1222,79 @@ export async function getPaymentStatus(paymentId: string) {
    return await requestJson<PaymentDetails>(`/api/payments/${paymentId}`);
 }
 
+export async function confirmCounterPayment(paymentId: string, method: "Cash" | "ManualTransfer") {
+   return await requestJson<PaymentDetails>(`/api/payments/${paymentId}/confirm-counter`, {
+      method: "POST",
+      body: JSON.stringify({ method }),
+   });
+}
+
+export async function refundPayment(paymentId: string, reason: string) {
+   return await requestJson<PaymentDetails>(`/api/payments/${paymentId}/refund`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+   });
+}
+
 export async function getPrintableInvoice(paymentId: string) {
    return await requestJson<PrintableInvoiceDetails>(`/api/payments/${paymentId}/invoice`);
+}
+
+export type CounterTransactionFilters = {
+   siteId?: string;
+   date?: string;
+   paymentStatus?: string;
+   limit?: number;
+};
+
+function buildCounterTransactionQuery(filters: CounterTransactionFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.siteId !== undefined && filters.siteId !== "") query.set("siteId", filters.siteId);
+   if (filters.date !== undefined && filters.date !== "") query.set("date", filters.date);
+   if (filters.paymentStatus !== undefined && filters.paymentStatus !== "") query.set("paymentStatus", filters.paymentStatus);
+   if (filters.limit !== undefined) query.set("limit", String(filters.limit));
+   return query.size === 0 ? "" : `?${query}`;
+}
+
+export async function loadCounterTransactions(filters: CounterTransactionFilters = {}) {
+   return await requestJson<CounterTransactionDetails[]>(`/api/counter-transactions${buildCounterTransactionQuery(filters)}`);
+}
+
+function buildReplenishmentRequestQuery(filters: ReplenishmentRequestFilters = {}) {
+   const query = new URLSearchParams();
+   if (filters.siteId !== undefined && filters.siteId !== "") query.set("siteId", filters.siteId);
+   if (filters.status !== undefined && filters.status !== "") query.set("status", filters.status);
+   if (filters.limit !== undefined) query.set("limit", String(filters.limit));
+   return query.size === 0 ? "" : `?${query}`;
+}
+
+export async function loadReplenishmentRequests(filters: ReplenishmentRequestFilters = {}) {
+   return await requestJson<ReplenishmentRequestDetails[]>(`/api/replenishment-requests${buildReplenishmentRequestQuery(filters)}`);
+}
+
+export async function createReplenishmentRequest(request: ReplenishmentRequestCreateRequest) {
+   return await requestJson<ReplenishmentRequestDetails>("/api/replenishment-requests", {
+      method: "POST",
+      body: JSON.stringify(request),
+   });
+}
+
+export async function approveReplenishmentRequest(id: string, reviewNotes: string | null) {
+   return await requestJson<ReplenishmentRequestDetails>(`/api/replenishment-requests/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ reviewNotes }),
+   });
+}
+
+export async function rejectReplenishmentRequest(id: string, reviewNotes: string | null) {
+   return await requestJson<ReplenishmentRequestDetails>(`/api/replenishment-requests/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reviewNotes }),
+   });
+}
+
+export async function cancelReplenishmentRequest(id: string) {
+   return await requestJson<ReplenishmentRequestDetails>(`/api/replenishment-requests/${id}/cancel`, { method: "POST" });
 }
 
 export async function loadStocktakeSessions(filters: StocktakeFilters = {}) {

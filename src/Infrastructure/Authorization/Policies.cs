@@ -13,4 +13,6 @@ public static class Policies
     public const string CounterSale = "CounterSale";
 
     public const string Warehouse = "Warehouse";
+
+    public const string Replenishment = "Replenishment";
 }

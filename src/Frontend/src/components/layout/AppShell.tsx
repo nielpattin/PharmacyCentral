@@ -49,7 +49,7 @@ import type { SidebarActiveKey } from "../../lib/sidebar";
 
 type AppShellProps = {
    active: SidebarActiveKey;
-   breadcrumb: ReactNode;
+   breadcrumb?: ReactNode;
    children: ReactNode;
 };
 
@@ -65,6 +65,8 @@ type ShellNavProps = {
 
 const accountAvatarUrl = "https://api.dicebear.com/9.x/notionists/svg?seed=pharmacy-staff&backgroundColor=b6e3f4";
 let sidebarScrollTop = 0;
+const prefersReducedMotion =
+   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function BrandBlock() {
    const t = useT();
@@ -98,12 +100,16 @@ function ShellNav({ active, isLoggedIn, navIcons, sections, variant }: ShellNavP
                      const link = (
                         <a key={item.href} className={isActive ? "active" : undefined} href={item.href}>
                            {isActive && (
-                              <motion.span
-                                 layoutId={activeLayoutId}
-                                 className="sidebar-nav-active-indicator"
-                                 transition={activeIndicatorTransition}
-                                 aria-hidden="true"
-                              />
+                              prefersReducedMotion ? (
+                                 <span className="sidebar-nav-active-indicator" aria-hidden="true" />
+                              ) : (
+                                 <motion.span
+                                    layoutId={activeLayoutId}
+                                    className="sidebar-nav-active-indicator"
+                                    transition={activeIndicatorTransition}
+                                    aria-hidden="true"
+                                 />
+                              )
                            )}
                            <span className="sidebar-nav-icon" aria-hidden="true">
                               {navIcons[item.key]}
@@ -127,7 +133,7 @@ function ShellNav({ active, isLoggedIn, navIcons, sections, variant }: ShellNavP
    );
 }
 
-export function AppShell({ active, breadcrumb, children }: AppShellProps) {
+export function AppShell({ active, children }: AppShellProps) {
    const authUser = useAuth();
    const language = useLanguage();
    const t = useT();
@@ -145,8 +151,10 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
 
    const navIcons: NavIconMap = {
       dashboard: <LayoutDashboard size={16} strokeWidth={2} />,
+      pharmacistOverview: <ClipboardList size={16} strokeWidth={2} />,
       prescriptions: <FileText size={16} strokeWidth={2} />,
       transfers: <ArrowLeftRight size={16} strokeWidth={2} />,
+      replenishment: <Package size={16} strokeWidth={2} />,
       sites: <Building2 size={16} strokeWidth={2} />,
       catalog: <ShoppingBag size={16} strokeWidth={2} />,
       pricing: <ShoppingBag size={16} strokeWidth={2} />,
@@ -171,8 +179,10 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
          label: t("nav.operations"),
          items: [
             { key: "dashboard" as const, href: "/dashboard", label: t("nav.dashboard") },
+            { key: "pharmacistOverview" as const, href: "/dashboard/pharmacist", label: t("nav.pharmacistOverview") },
             { key: "prescriptions" as const, href: "/dashboard/prescriptions", label: t("nav.prescription") },
             { key: "transfers" as const, href: "/dashboard/transfers", label: t("nav.transfer") },
+            { key: "replenishment" as const, href: "/dashboard/replenishment-requests", label: t("nav.replenishment") },
          ],
       },
       {
@@ -268,7 +278,6 @@ export function AppShell({ active, breadcrumb, children }: AppShellProps) {
                            </div>
                         </SheetContent>
                      </Sheet>
-                     <div className="breadcrumb">{breadcrumb}</div>
                   </div>
 
                   <DropdownMenu>

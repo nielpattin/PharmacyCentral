@@ -11,6 +11,8 @@ import styles from "./PaymentPanel.module.css";
 type PaymentPanelProps = {
    payment: PaymentDetails | null;
    onCreatePayment: () => Promise<void>;
+   onConfirmCounterPayment: (method: "Cash" | "ManualTransfer") => Promise<void>;
+   onRefundPayment: (reason: string) => Promise<void>;
    onRefreshStatus: () => Promise<void>;
    onShowInvoice: () => void;
    isBusy: boolean;
@@ -18,11 +20,19 @@ type PaymentPanelProps = {
 
 function paymentStatusVariant(status: string) {
    if (status === "Paid") return "secondary" as const;
-   if (status === "Failed" || status === "Expired") return "destructive" as const;
+   if (status === "Failed" || status === "Expired" || status === "Refunded") return "destructive" as const;
    return "outline" as const;
 }
 
-export function PaymentPanel({ payment, onCreatePayment, onRefreshStatus, onShowInvoice, isBusy }: PaymentPanelProps) {
+export function PaymentPanel({
+   payment,
+   onCreatePayment,
+   onConfirmCounterPayment,
+   onRefundPayment,
+   onRefreshStatus,
+   onShowInvoice,
+   isBusy,
+}: PaymentPanelProps) {
    const t = useT();
    const [error, setError] = useState<string | null>(null);
    const stateKey = payment === null ? "not-created" : payment.status;
@@ -40,6 +50,34 @@ export function PaymentPanel({ payment, onCreatePayment, onRefreshStatus, onShow
       setError(null);
       try {
          await onRefreshStatus();
+      } catch (errorValue) {
+         setError(errorValue instanceof Error ? errorValue.message : String(errorValue));
+      }
+   }
+
+   async function confirmCounterPayment(method: "Cash" | "ManualTransfer") {
+      setError(null);
+      try {
+         if (payment === null) {
+            await onCreatePayment();
+            return;
+         }
+
+         await onConfirmCounterPayment(method);
+      } catch (errorValue) {
+         setError(mapPaymentError(errorValue, t));
+      }
+   }
+
+   async function refundPayment() {
+      if (payment === null) return;
+
+      const reason = window.prompt(t("payment.refundReasonPrompt"));
+      if (reason === null || reason.trim() === "") return;
+
+      setError(null);
+      try {
+         await onRefundPayment(reason.trim());
       } catch (errorValue) {
          setError(errorValue instanceof Error ? errorValue.message : String(errorValue));
       }
@@ -126,9 +164,45 @@ export function PaymentPanel({ payment, onCreatePayment, onRefreshStatus, onShow
                            </div>
                         ) : null}
 
+                        {payment.status === "Pending" ? (
+                           <div className={styles.counterPaymentBox}>
+                              <p className={styles.counterPaymentTitle}>{t("payment.counterPaymentTitle")}</p>
+                              <div className={styles.paymentFormActions}>
+                                 <Button
+                                    variant="outline"
+                                    onClick={() => void confirmCounterPayment("Cash")}
+                                    disabled={isBusy}
+                                 >
+                                    {t("payment.confirmCash")}
+                                 </Button>
+                                 <Button
+                                    variant="outline"
+                                    onClick={() => void confirmCounterPayment("ManualTransfer")}
+                                    disabled={isBusy}
+                                 >
+                                    {t("payment.confirmManualTransfer")}
+                                 </Button>
+                              </div>
+                           </div>
+                        ) : null}
+
                         {payment.status === "Paid" ? (
                            <div className={styles.paymentFormActions}>
                               <p className={styles.paymentPaidMessage}>{t("payment.paidMessage")}</p>
+                              <Button variant="outline" onClick={() => void refundPayment()} disabled={isBusy}>
+                                 {t("payment.refund")}
+                              </Button>
+                              <Button onClick={onShowInvoice}>{t("payment.viewInvoice")}</Button>
+                           </div>
+                        ) : null}
+
+                        {payment.status === "Refunded" ? (
+                           <div className={styles.paymentFormActions}>
+                              <p className={styles.paymentPaidMessage}>
+                                 {payment.refundReason !== null
+                                    ? t("payment.refundedMessageWithReason", { reason: payment.refundReason })
+                                    : t("payment.refundedMessage")}
+                              </p>
                               <Button onClick={onShowInvoice}>{t("payment.viewInvoice")}</Button>
                            </div>
                         ) : null}

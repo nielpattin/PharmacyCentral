@@ -20,4 +20,5 @@ public static class AuditActions
     public const string Closed = "Closed";
 
     public const string PaymentConfirmed = "PaymentConfirmed";
+    public const string Refunded = "Refunded";
 }

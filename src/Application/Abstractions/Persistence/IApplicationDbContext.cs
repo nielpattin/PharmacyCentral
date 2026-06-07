@@ -1,5 +1,7 @@
 using PharmacyCentral.Application.Dashboard.Shared;
 using PharmacyCentral.Application.Finance.Shared;
+using PharmacyCentral.Application.Prescriptions.ListCounterTransactions;
+using PharmacyCentral.Domain.Customers;
 using PharmacyCentral.Domain.Audit;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
@@ -13,12 +15,14 @@ using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Suppliers;
 using PharmacyCentral.Domain.Transfers;
+using PharmacyCentral.Domain.Replenishment;
 using PharmacyCentral.Domain.Payments;
 
 namespace PharmacyCentral.Application.Abstractions.Persistence;
 
 public interface IApplicationDbContext
 {
+    IQueryable<CustomerProfile> CustomerProfiles { get; }
     IQueryable<AuditLogEntry> AuditLogEntries { get; }
 
     IQueryable<Site> Sites { get; }
@@ -74,6 +78,10 @@ public interface IApplicationDbContext
     IQueryable<PaymentAttempt> PaymentAttempts { get; }
 
     IQueryable<PaymentTransaction> PaymentTransactions { get; }
+
+    IQueryable<ReplenishmentRequest> ReplenishmentRequests { get; }
+
+    IQueryable<ReplenishmentRequestLine> ReplenishmentRequestLines { get; }
 
     Task<List<Site>> ListSitesAsync(IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
 
@@ -164,6 +172,15 @@ public interface IApplicationDbContext
     Task<ProductPrice?> GetActiveProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveDate, CancellationToken cancellationToken = default);
 
     Task<bool> HasOverlappingPublishedProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveFrom, DateOnly? effectiveTo, Guid? excludePriceId = null, CancellationToken cancellationToken = default);
+    Task<CustomerProfile?> GetCustomerProfileByPhoneAsync(string normalizedPhoneNumber, CancellationToken cancellationToken = default);
+
+    Task<List<Prescription>> ListCustomerPrescriptionsAsync(Guid customerProfileId, int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<List<CounterTransactionDetails>> ListCounterTransactionsAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, DateOnly? date, string? paymentStatus, int limit, CancellationToken cancellationToken = default);
+
+    Task<List<ReplenishmentRequest>> ListReplenishmentRequestsAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken = default);
+
+    Task<ReplenishmentRequest?> GetReplenishmentRequestByIdAsync(Guid replenishmentRequestId, CancellationToken cancellationToken = default);
 
     Task<int> CountPrescriptionsWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
 

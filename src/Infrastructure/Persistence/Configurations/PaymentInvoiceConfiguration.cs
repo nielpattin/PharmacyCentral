@@ -20,9 +20,12 @@ internal sealed class PaymentInvoiceConfiguration : IEntityTypeConfiguration<Pay
         builder.Property(invoice => invoice.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
         builder.Property(invoice => invoice.Status).HasColumnName("status").HasMaxLength(40).IsRequired();
         builder.Property(invoice => invoice.Notes).HasColumnName("notes").HasMaxLength(1000);
+        builder.Property(invoice => invoice.RefundReason).HasColumnName("refund_reason").HasMaxLength(1000);
         builder.Property(invoice => invoice.CreatedByUserId).HasColumnName("created_by_user_id");
         builder.Property(invoice => invoice.ConfirmedByUserId).HasColumnName("confirmed_by_user_id");
         builder.Property(invoice => invoice.ConfirmedAtUtc).HasColumnName("confirmed_at_utc");
+        builder.Property(invoice => invoice.RefundedByUserId).HasColumnName("refunded_by_user_id");
+        builder.Property(invoice => invoice.RefundedAtUtc).HasColumnName("refunded_at_utc");
         builder.Property(invoice => invoice.CreatedAtUtc).HasColumnName("created_at_utc");
         builder.Property(invoice => invoice.UpdatedAtUtc).HasColumnName("updated_at_utc");
 

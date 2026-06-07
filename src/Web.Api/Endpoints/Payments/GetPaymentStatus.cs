@@ -55,7 +55,7 @@ internal sealed class GetPaymentStatus : IEndpoint
                 details = new PaymentDetails(
                     details.Id, details.PaymentCode, details.PrescriptionId, details.SiteId,
                     details.TotalAmount, details.Currency, details.Status,
-                    details.CreatedAtUtc, details.ConfirmedAtUtc, instruction, details.Lines);
+                    details.CreatedAtUtc, details.ConfirmedAtUtc, details.RefundedAtUtc, details.RefundReason, instruction, details.Lines);
             }
 
             return Results.Ok(details);

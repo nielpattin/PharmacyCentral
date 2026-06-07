@@ -12,6 +12,8 @@ public sealed record PaymentDetails(
     string Status,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ConfirmedAtUtc,
+    DateTimeOffset? RefundedAtUtc,
+    string? RefundReason,
     PaymentInstructionDetails? PaymentInstruction,
     IReadOnlyList<PaymentLineDetails> Lines)
 {
@@ -25,6 +27,8 @@ public sealed record PaymentDetails(
         invoice.Status,
         invoice.CreatedAtUtc,
         invoice.ConfirmedAtUtc,
+        invoice.RefundedAtUtc,
+        invoice.RefundReason,
         instruction,
         invoice.Lines.Select(PaymentLineDetails.From).ToList());
 }
@@ -67,6 +71,8 @@ public sealed record PrintableInvoiceDetails(
     string Status,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ConfirmedAtUtc,
+    DateTimeOffset? RefundedAtUtc,
+    string? RefundReason,
     IReadOnlyList<PaymentLineDetails> Lines)
 {
     public static PrintableInvoiceDetails From(Domain.Payments.PaymentInvoice invoice) => new(
@@ -79,5 +85,7 @@ public sealed record PrintableInvoiceDetails(
         invoice.Status,
         invoice.CreatedAtUtc,
         invoice.ConfirmedAtUtc,
+        invoice.RefundedAtUtc,
+        invoice.RefundReason,
         invoice.Lines.Select(PaymentLineDetails.From).ToList());
 }

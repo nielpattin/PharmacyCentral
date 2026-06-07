@@ -70,6 +70,43 @@ public sealed class PaymentWorkflowTests
     }
 
     [Fact]
+    public void PaymentInvoice_can_confirm_counter_cash_payment()
+    {
+        Guid staffId = Guid.NewGuid();
+        PaymentInvoice invoice = CreatePendingInvoice();
+
+        invoice.ConfirmAtCounter(PaymentMethod.Cash, staffId);
+
+        Assert.Equal(PaymentStatus.Paid, invoice.Status);
+        Assert.Equal(staffId, invoice.ConfirmedByUserId);
+        Assert.NotNull(invoice.ConfirmedAtUtc);
+        PaymentAttempt attempt = Assert.Single(invoice.Attempts);
+        Assert.Equal(PaymentProvider.Cash, attempt.Provider);
+        Assert.Equal(PaymentMethod.Cash, attempt.Method);
+        Assert.Equal(PaymentStatus.Paid, attempt.Status);
+        Assert.Equal(invoice.TotalAmount, attempt.Amount);
+        PaymentTransaction transaction = Assert.Single(attempt.Transactions);
+        Assert.Equal(PaymentProvider.Cash, transaction.Provider);
+        Assert.Equal(invoice.TotalAmount, transaction.Amount);
+        Assert.Equal("in", transaction.TransferType);
+    }
+
+    [Fact]
+    public void PaymentInvoice_can_record_simple_refund()
+    {
+        Guid staffId = Guid.NewGuid();
+        PaymentInvoice invoice = CreatePendingInvoice();
+        invoice.ConfirmAtCounter(PaymentMethod.Cash, staffId);
+
+        invoice.Refund("Khách yêu cầu hoàn tiền", staffId);
+
+        Assert.Equal(PaymentStatus.Refunded, invoice.Status);
+        Assert.Equal("Khách yêu cầu hoàn tiền", invoice.RefundReason);
+        Assert.Equal(staffId, invoice.RefundedByUserId);
+        Assert.NotNull(invoice.RefundedAtUtc);
+    }
+
+    [Fact]
     public void SePayWebhookVerifier_accepts_valid_hmac_signature()
     {
         const string secret = "test-secret";
@@ -124,6 +161,21 @@ public sealed class PaymentWorkflowTests
         Assert.Contains("bank=MB", result.QrImageUrl);
         Assert.Contains("amount=25000", result.QrImageUrl);
         Assert.Contains("des=PCABC12345", result.QrImageUrl);
+    }
+
+    private static PaymentInvoice CreatePendingInvoice()
+    {
+        return new PaymentInvoice
+        {
+            Id = Guid.NewGuid(),
+            PaymentCode = "PCABC12345",
+            PrescriptionId = Guid.NewGuid(),
+            SiteId = Guid.NewGuid(),
+            TotalAmount = 25_000,
+            Currency = "VND",
+            Status = PaymentStatus.Pending,
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        };
     }
 
     private static SePayWebhookVerifier CreateVerifier(string secret)

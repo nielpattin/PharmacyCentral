@@ -3,6 +3,8 @@ namespace PharmacyCentral.Application.Products.UpdateProduct;
 public sealed record UpdateProductCommand
 {
     public string Sku { get; init; } = string.Empty;
+    public string? Barcode { get; init; }
+
 
     public string Name { get; init; } = string.Empty;
 

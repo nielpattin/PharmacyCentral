@@ -16,6 +16,7 @@ internal sealed class PrescriptionConfiguration : IEntityTypeConfiguration<Presc
         builder.Property(prescription => prescription.PrescriptionNumber).HasColumnName("prescription_number").HasMaxLength(50).IsRequired();
         builder.Property(prescription => prescription.SiteId).HasColumnName("site_id");
         builder.Property(prescription => prescription.StorageLocationId).HasColumnName("storage_location_id");
+        builder.Property(prescription => prescription.CustomerProfileId).HasColumnName("customer_profile_id");
         builder.Property(prescription => prescription.PatientName).HasColumnName("patient_name").HasMaxLength(200).IsRequired();
         builder.Property(prescription => prescription.PatientPhone).HasColumnName("patient_phone").HasMaxLength(50);
         builder.Property(prescription => prescription.DoctorName).HasColumnName("doctor_name").HasMaxLength(200);
@@ -31,6 +32,7 @@ internal sealed class PrescriptionConfiguration : IEntityTypeConfiguration<Presc
 
         builder.HasIndex(prescription => prescription.PrescriptionNumber).IsUnique();
         builder.HasIndex(prescription => new { prescription.SiteId, prescription.Status });
+        builder.HasIndex(prescription => prescription.CustomerProfileId);
 
         builder.HasOne(prescription => prescription.Site)
             .WithMany()
@@ -41,6 +43,11 @@ internal sealed class PrescriptionConfiguration : IEntityTypeConfiguration<Presc
             .WithMany()
             .HasForeignKey(prescription => prescription.StorageLocationId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(prescription => prescription.CustomerProfile)
+            .WithMany()
+            .HasForeignKey(prescription => prescription.CustomerProfileId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasMany(prescription => prescription.Lines)
             .WithOne(line => line.Prescription)

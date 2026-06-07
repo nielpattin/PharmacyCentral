@@ -88,12 +88,10 @@ export function PrescriptionDetail({
    };
 
    function validateDispense() {
-      const invalidLine = dispenseValues.lines.findIndex(
-         (line) =>
-            line.productBatchId.trim() === "" ||
-            Number(line.dispensedQuantity) <= 0 ||
-            Number.isNaN(Number(line.dispensedQuantity)),
-      );
+      const invalidLine = dispenseValues.lines.findIndex((line) => {
+         const quantity = Number(line.dispensedQuantity);
+         return line.productBatchId.trim() === "" || !Number.isInteger(quantity) || quantity <= 0;
+      });
       return invalidLine >= 0 ? t("prescription.validationDispenseLine", { line: invalidLine + 1 }) : null;
    }
 
@@ -180,8 +178,9 @@ export function PrescriptionDetail({
                                  <label className={styles.medicineLabel}>{t("prescription.dispensedQuantity")}</label>
                                  <Input
                                     type="number"
-                                    min="0.01"
-                                    step="0.01"
+                                    min="1"
+                                    step="1"
+                                    inputMode="numeric"
                                     value={value.dispensedQuantity}
                                     onChange={(event) => updateLine(line.id, { dispensedQuantity: event.target.value })}
                                  />

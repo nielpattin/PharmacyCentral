@@ -25,6 +25,7 @@ public sealed class UpdateProductCommandHandler(IApplicationDbContext dbContext,
         }
 
         product.Sku = sku;
+        product.Barcode = NormalizeOptional(command.Barcode);
         product.Name = command.Name.Trim();
         product.Category = NormalizeOptional(command.Category);
         product.Unit = NormalizeOptional(command.Unit);

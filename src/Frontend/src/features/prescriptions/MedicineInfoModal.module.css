@@ -1,0 +1,125 @@
+.modal {
+   width: min(680px, calc(100vw - 32px));
+   max-width: 680px;
+}
+
+.motionContent {
+   display: grid;
+   gap: 16px;
+}
+
+.header {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: 12px;
+}
+
+.header h2,
+.header p {
+   margin: 0;
+}
+
+.header h2 {
+   color: var(--text);
+   font-size: 1.1rem;
+   font-weight: 800;
+}
+
+.header p {
+   margin-top: 3px;
+   color: var(--muted);
+   font-size: 14px;
+}
+
+.detailsGrid {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 10px;
+   margin: 0;
+}
+
+.detailsGrid div {
+   display: grid;
+   gap: 3px;
+   padding: 10px;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface-soft);
+}
+
+.detailsGrid dt {
+   color: var(--muted);
+   font-size: 14px;
+   font-weight: 800;
+   letter-spacing: 0.04em;
+   text-transform: uppercase;
+}
+
+.detailsGrid dd {
+   margin: 0;
+   color: var(--text);
+   font-size: 14px;
+   font-weight: 700;
+}
+
+.section {
+   display: grid;
+   gap: 8px;
+}
+
+.section h3 {
+   margin: 0;
+   color: var(--text);
+   font-size: 14px;
+   font-weight: 800;
+}
+
+.batchList,
+.notesList {
+   display: grid;
+   gap: 7px;
+   margin: 0;
+   padding: 0;
+   list-style: none;
+}
+
+.batchRow {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 8px;
+   padding: 8px 10px;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+}
+
+.batchRow span {
+   color: var(--text);
+   font-size: 14px;
+   font-weight: 800;
+}
+
+.notesList li {
+   padding: 8px 10px;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+   color: var(--text);
+   font-size: 14px;
+}
+
+.muted {
+   margin: 0;
+   color: var(--muted);
+   font-size: 14px;
+}
+
+@media (max-width: 640px) {
+   .detailsGrid {
+      grid-template-columns: 1fr;
+   }
+
+   .header {
+      flex-direction: column;
+   }
+}

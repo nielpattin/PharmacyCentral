@@ -5,8 +5,10 @@ using Microsoft.EntityFrameworkCore;
 using PharmacyCentral.Application.Abstractions.Persistence;
 using PharmacyCentral.Application.Audit.Shared;
 using PharmacyCentral.Application.Dashboard.Shared;
+using PharmacyCentral.Domain.Customers;
 using PharmacyCentral.Application.Finance.Shared;
 using PharmacyCentral.Application.Prescriptions;
+using PharmacyCentral.Application.Prescriptions.ListCounterTransactions;
 using PharmacyCentral.Application.Stocktakes;
 using PharmacyCentral.Application.Transfers;
 using PharmacyCentral.Domain.Audit;
@@ -23,6 +25,7 @@ using PharmacyCentral.Domain.StorageLocations;
 using PharmacyCentral.Domain.Suppliers;
 using PharmacyCentral.Domain.Transfers;
 using PharmacyCentral.Domain.Payments;
+using PharmacyCentral.Domain.Replenishment;
 using PharmacyCentral.Infrastructure.Identity;
 
 namespace PharmacyCentral.Infrastructure.Persistence;
@@ -37,6 +40,7 @@ public sealed class PharmacyCentralDbContext
 
     public DbSet<UserSiteScope> UserSiteScopes => Set<UserSiteScope>();
 
+    public IQueryable<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
     public IQueryable<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
 
     public IQueryable<Site> Sites => Set<Site>();
@@ -92,6 +96,10 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<PaymentAttempt> PaymentAttempts => Set<PaymentAttempt>();
 
     public IQueryable<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+
+    public IQueryable<ReplenishmentRequest> ReplenishmentRequests => Set<ReplenishmentRequest>();
+
+    public IQueryable<ReplenishmentRequestLine> ReplenishmentRequestLines => Set<ReplenishmentRequestLine>();
 
     async Task<List<Site>> IApplicationDbContext.ListSitesAsync(IReadOnlyCollection<Guid>? siteIds, CancellationToken cancellationToken)
     {
@@ -599,6 +607,54 @@ public sealed class PharmacyCentralDbContext
             .SingleOrDefaultAsync(prescription => prescription.Id == prescriptionId, cancellationToken);
     }
 
+    async Task<List<CounterTransactionDetails>> IApplicationDbContext.ListCounterTransactionsAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, DateOnly? date, string? paymentStatus, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<Prescription> query = Prescriptions;
+
+        if (siteId is not null)
+        {
+            query = query.Where(prescription => prescription.SiteId == siteId);
+        }
+
+        if (siteIds is not null)
+        {
+            query = query.Where(prescription => siteIds.Contains(prescription.SiteId));
+        }
+
+        if (date is not null)
+        {
+            DateTimeOffset fromUtc = date.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            DateTimeOffset toUtc = date.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+            query = query.Where(prescription => prescription.CreatedAtUtc >= fromUtc && prescription.CreatedAtUtc <= toUtc);
+        }
+
+        IQueryable<PaymentInvoice> invoiceQuery = PaymentInvoices;
+
+        if (!string.IsNullOrWhiteSpace(paymentStatus))
+        {
+            invoiceQuery = invoiceQuery.Where(invoice => invoice.Status == paymentStatus);
+            query = query.Where(prescription => invoiceQuery.Any(invoice => invoice.PrescriptionId == prescription.Id));
+        }
+
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+
+        List<Prescription> prescriptions = await query
+            .OrderByDescending(prescription => prescription.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+
+        Guid[] prescriptionIds = prescriptions.Select(prescription => prescription.Id).ToArray();
+        List<PaymentInvoice> invoices = await PaymentInvoices
+            .Where(invoice => prescriptionIds.Contains(invoice.PrescriptionId))
+            .ToListAsync(cancellationToken);
+
+        return prescriptions
+            .Select(prescription => CounterTransactionDetails.From(
+                prescription,
+                invoices.FirstOrDefault(invoice => invoice.PrescriptionId == prescription.Id)))
+            .ToList();
+    }
+
     async Task<List<ProductPrice>> IApplicationDbContext.ListProductPricesAsync(Guid? productId, Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
     {
         IQueryable<ProductPrice> query = ProductPrices
@@ -669,6 +725,57 @@ public sealed class PharmacyCentralDbContext
             && (excludePriceId == null || price.Id != excludePriceId)
             && price.EffectiveFrom <= requestedEnd
             && (price.EffectiveTo == null || price.EffectiveTo >= effectiveFrom), cancellationToken);
+    }
+
+    async Task<CustomerProfile?> IApplicationDbContext.GetCustomerProfileByPhoneAsync(string normalizedPhoneNumber, CancellationToken cancellationToken)
+    {
+        return await CustomerProfiles.SingleOrDefaultAsync(customer => customer.NormalizedPhoneNumber == normalizedPhoneNumber, cancellationToken);
+    }
+
+    async Task<List<Prescription>> IApplicationDbContext.ListCustomerPrescriptionsAsync(Guid customerProfileId, int limit, CancellationToken cancellationToken)
+    {
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+        return await Prescriptions
+            .Include(prescription => prescription.Lines)
+            .Where(prescription => prescription.CustomerProfileId == customerProfileId)
+            .OrderByDescending(prescription => prescription.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<List<ReplenishmentRequest>> IApplicationDbContext.ListReplenishmentRequestsAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
+    {
+        IQueryable<ReplenishmentRequest> query = ReplenishmentRequests
+            .Include(request => request.Lines);
+
+        if (siteId is not null)
+        {
+            query = query.Where(request => request.SiteId == siteId);
+        }
+
+        if (siteIds is not null)
+        {
+            query = query.Where(request => siteIds.Contains(request.SiteId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(request => request.Status == status);
+        }
+
+        int boundedLimit = Math.Clamp(limit, 1, 500);
+
+        return await query
+            .OrderByDescending(request => request.CreatedAtUtc)
+            .Take(boundedLimit)
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task<ReplenishmentRequest?> IApplicationDbContext.GetReplenishmentRequestByIdAsync(Guid replenishmentRequestId, CancellationToken cancellationToken)
+    {
+        return await ReplenishmentRequests
+            .Include(request => request.Lines)
+            .SingleOrDefaultAsync(request => request.Id == replenishmentRequestId, cancellationToken);
     }
 
     async Task<PaymentInvoice?> IApplicationDbContext.GetPaymentInvoiceByPrescriptionIdAsync(Guid prescriptionId, CancellationToken cancellationToken)
@@ -1051,6 +1158,16 @@ public sealed class PharmacyCentralDbContext
             ChangeTracker.Entries<TransferOrder>(),
             order => order.CreatedAtUtc = now,
             order => order.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<CustomerProfile>(),
+            customer => customer.CreatedAtUtc = now,
+            customer => customer.UpdatedAtUtc = now);
+
+        ApplyTimestamps(
+            ChangeTracker.Entries<ReplenishmentRequest>(),
+            request => request.CreatedAtUtc = now,
+            request => request.UpdatedAtUtc = now);
 
         ApplyTimestamps(
             ChangeTracker.Entries<Prescription>(),

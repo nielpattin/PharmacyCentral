@@ -34,27 +34,16 @@ Các tài khoản seed chỉ dùng cho môi trường local development/demo.
 
 Pharmacy Central có bốn role nghiệp vụ. Platform Admin quản trị hệ thống, không phải nhân sự đứng tại hiệu thuốc. Dược sĩ mới là người xử lý giao dịch tại quầy bán thuốc.
 
-```mermaid
-flowchart LR
-    Admin[Platform Admin] --> Users[Users and access]
-    Admin --> Audit[Audit]
-    Manager[Pharmacy Manager] --> Procurement[Procurement]
-    Manager --> Pricing[Pricing]
-    Manager --> Reporting[Reporting and finance]
-    Pharmacist[Pharmacist] --> Prescriptions[Prescriptions]
-    Warehouse --> Returns[Returns/removals]
-    Warehouse[Warehouse Staff] --> Receiving[Receiving]
-    Warehouse --> Quality[Quality]
-    Warehouse --> Transfers[Transfers]
-    Warehouse --> Stocktake[Stocktake and adjustments]
-```
+![App không phải app admin-only](diagrams/userguide-diagram-01-app-khong-phai-app-admin-only.png)
+
+*Nguồn chỉnh sửa: [userguide-diagram-01-app-khong-phai-app-admin-only.drawio](diagrams/userguide-diagram-01-app-khong-phai-app-admin-only.drawio).*
 
 | Role | Workspace chính |
 | --- | --- |
 | Platform Admin | Users, phân quyền, audit, giám sát hệ thống |
 | Pharmacy Manager | Sites, catalog, suppliers, pricing, procurement, reporting, finance, recalls |
-| Pharmacist | Quầy bán thuốc, thanh toán, cấp phát |
-| Warehouse Staff | Receiving, quality, transfers, returns/removals, stocktake, adjustments |
+| Pharmacist | Quầy bán thuốc, thanh toán, cấp phát, gửi yêu cầu bổ sung hàng |
+| Warehouse Staff | Receiving, quality, transfers, replenishment requests, returns/removals, stocktake, adjustments |
 
 User không phải Platform Admin còn bị giới hạn theo site được gán. User chỉ xem và thao tác dữ liệu thuộc phạm vi site của mình.
 
@@ -62,26 +51,9 @@ Khi đăng nhập, user chỉ có role Pharmacist đi thẳng vào **Quầy bán
 
 ## Luồng sản phẩm chính
 
-```mermaid
-flowchart TD
-    Setup[Thiết lập cơ sở vị trí sản phẩm nhà cung cấp] --> Pricing[Publish giá bán]
-    Setup --> PO[Tạo và duyệt đơn mua]
-    PO --> Receiving[Nhận hàng từ nhà cung cấp]
-    Receiving --> Quality[Kiểm tra chất lượng lô]
-    Quality --> Inventory[Tồn kho sẵn sàng vận hành]
-    Inventory --> Prescription[Tạo phiếu bán tại quầy]
-    Prescription --> Payment[Thu tiền và in hóa đơn]
-    Payment --> Dispense[Cấp phát thuốc]
-    Inventory --> Transfer[Điều chuyển tồn]
-    Inventory --> Return[Trả hàng hoặc loại khỏi tồn]
-    Inventory --> Stocktake[Kiểm kê và điều chỉnh]
-    Inventory --> Recall[Kiểm soát thu hồi]
-    Dispense --> Dashboard[Tổng quan báo cáo tài chính audit]
-    Transfer --> Dashboard
-    Return --> Dashboard
-    Stocktake --> Dashboard
-    Recall --> Dashboard
-```
+![Luồng sản phẩm chính](diagrams/userguide-diagram-02-luong-san-pham-chinh.png)
+
+*Nguồn chỉnh sửa: [userguide-diagram-02-luong-san-pham-chinh.drawio](diagrams/userguide-diagram-02-luong-san-pham-chinh.drawio).*
 
 ## Tổng quan và báo cáo
 

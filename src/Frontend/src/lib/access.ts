@@ -30,12 +30,19 @@ const WAREHOUSE_ROLES: RoleName[] = ["Platform Admin", "Warehouse Staff"];
 export const ROUTE_ACCESS: RouteAccess[] = [
    { path: "/dashboard", active: "dashboard", roles: DASHBOARD_ROLES },
    {
+      path: "/dashboard/pharmacist",
+      active: "pharmacistOverview",
+      roles: COUNTER_SALE_ROLES,
+      allowPlatformAdminOverride: false,
+   },
+   {
       path: "/dashboard/prescriptions",
       active: "prescriptions",
       roles: COUNTER_SALE_ROLES,
       allowPlatformAdminOverride: false,
    },
    { path: "/dashboard/transfers", active: "transfers", roles: WAREHOUSE_ROLES },
+   { path: "/dashboard/replenishment-requests", active: "replenishment", roles: ["Platform Admin", "Pharmacist", "Warehouse Staff"] },
    { path: "/dashboard/sites", active: "sites", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/catalog", active: "catalog", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/pricing", active: "pricing", roles: MANAGEMENT_ROLES },
@@ -81,7 +88,7 @@ export function isPharmacistOnlyUser(user: AuthUser) {
 
 export function getDefaultPathForUser(user: AuthUser) {
    if (isPharmacistOnlyUser(user)) {
-      return "/dashboard/prescriptions";
+      return "/dashboard/pharmacist";
    }
 
    return "/dashboard";

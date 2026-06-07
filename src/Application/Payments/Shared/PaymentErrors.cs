@@ -30,4 +30,7 @@ internal static class PaymentErrors
 
     public static Error ProviderTransactionDuplicate(string transactionId) =>
         new("payments.duplicate_transaction", $"Provider transaction '{transactionId}' has already been processed.");
+
+    public static Error RefundReasonRequired() =>
+        new("payments.refund_reason_required", "Refund reason is required.");
 }

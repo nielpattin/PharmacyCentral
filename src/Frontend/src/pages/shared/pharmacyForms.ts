@@ -80,6 +80,7 @@ export function storageLocationValuesFromDto(location: StorageLocationDto): Stor
 export function blankProductValues(): ProductFormValues {
    return {
       sku: "",
+      barcode: "",
       name: "",
       category: "",
       unit: "",
@@ -93,6 +94,7 @@ export function blankProductValues(): ProductFormValues {
 export function productValuesFromDto(product: ProductDto): ProductFormValues {
    return {
       sku: product.sku,
+      barcode: product.barcode ?? "",
       name: product.name,
       category: product.category ?? "",
       unit: product.unit ?? "",
@@ -158,6 +160,7 @@ export function areStorageLocationFormValuesEqual(left: StorageLocationFormValue
 export function areProductFormValuesEqual(left: ProductFormValues, right: ProductFormValues) {
    return (
       left.sku === right.sku &&
+      left.barcode === right.barcode &&
       left.name === right.name &&
       left.category === right.category &&
       left.unit === right.unit &&

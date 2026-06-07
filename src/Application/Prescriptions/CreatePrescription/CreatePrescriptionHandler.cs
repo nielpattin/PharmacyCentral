@@ -4,6 +4,7 @@ using PharmacyCentral.Application.Inventory;
 using PharmacyCentral.Application.Inventory.Shared;
 using PharmacyCentral.Application.Prescriptions.Shared;
 using PharmacyCentral.Application.Prescriptions;
+using PharmacyCentral.Domain.Customers;
 using PharmacyCentral.Domain.Prescriptions;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.StorageLocations;
@@ -47,6 +48,9 @@ public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, A
         }
 
         string prescriptionNumber = await GeneratePrescriptionNumberAsync(cancellationToken);
+        string patientName = command.PatientName.Trim();
+        string? patientPhone = NormalizeOptional(command.PatientPhone);
+        CustomerProfile? customerProfile = await ResolveCustomerProfileAsync(patientName, patientPhone, cancellationToken);
 
         Prescription prescription = new()
         {
@@ -54,8 +58,10 @@ public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, A
             PrescriptionNumber = prescriptionNumber,
             SiteId = command.SiteId,
             StorageLocationId = command.StorageLocationId,
-            PatientName = command.PatientName.Trim(),
-            PatientPhone = NormalizeOptional(command.PatientPhone),
+            CustomerProfileId = customerProfile?.Id,
+            CustomerProfile = customerProfile,
+            PatientName = patientName,
+            PatientPhone = patientPhone,
             DoctorName = NormalizeOptional(command.DoctorName),
             DoctorLicense = NormalizeOptional(command.DoctorLicense),
             Status = PrescriptionStatus.Pending,
@@ -102,6 +108,42 @@ public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, A
         }
 
         return PrescriptionDetails.From(prescription);
+    }
+
+    private async Task<CustomerProfile?> ResolveCustomerProfileAsync(string patientName, string? patientPhone, CancellationToken cancellationToken)
+    {
+        string normalizedPhoneNumber = CustomerProfile.NormalizePhoneNumber(patientPhone);
+        if (normalizedPhoneNumber.Length == 0)
+        {
+            return null;
+        }
+
+        CustomerProfile? existing = await dbContext.GetCustomerProfileByPhoneAsync(normalizedPhoneNumber, cancellationToken);
+        if (existing is not null)
+        {
+            if (!string.Equals(existing.Name, patientName, StringComparison.Ordinal))
+            {
+                existing.Name = patientName;
+            }
+
+            if (!string.Equals(existing.PhoneNumber, patientPhone, StringComparison.Ordinal))
+            {
+                existing.PhoneNumber = patientPhone;
+            }
+
+            return existing;
+        }
+
+        CustomerProfile customerProfile = new()
+        {
+            Id = Guid.NewGuid(),
+            Name = patientName,
+            PhoneNumber = patientPhone,
+            NormalizedPhoneNumber = normalizedPhoneNumber
+        };
+
+        await dbContext.AddAsync(customerProfile, cancellationToken);
+        return customerProfile;
     }
 
     private async Task<string> GeneratePrescriptionNumberAsync(CancellationToken cancellationToken)

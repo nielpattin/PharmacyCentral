@@ -187,6 +187,19 @@ Yêu cầu xử lý webhook:
 
 Khi payment được bật và phiếu bán cần thanh toán, thao tác cấp phát bị chặn cho đến khi hóa đơn thanh toán liên quan được xác nhận đã thanh toán.
 
+### Yêu cầu bổ sung hàng
+
+| Method | Path |
+| --- | --- |
+| GET | `/api/replenishment-requests` |
+| POST | `/api/replenishment-requests` |
+| GET | `/api/replenishment-requests/{id}` |
+| POST | `/api/replenishment-requests/{id}/approve` |
+| POST | `/api/replenishment-requests/{id}/reject` |
+| POST | `/api/replenishment-requests/{id}/cancel` |
+
+Dược sĩ tạo và hủy yêu cầu của mình khi còn chờ xử lý. Warehouse Staff hoặc Platform Admin duyệt hoặc từ chối yêu cầu trong phạm vi site được phép. Pharmacy Manager không dùng nhóm endpoint này.
+
 ### Điều chuyển
 
 | Method | Path |

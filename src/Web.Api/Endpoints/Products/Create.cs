@@ -11,6 +11,8 @@ internal sealed class Create : IEndpoint
     public sealed class Request
     {
         public string Sku { get; set; } = string.Empty;
+        public string? Barcode { get; set; }
+
 
         public string Name { get; set; } = string.Empty;
 
@@ -43,6 +45,7 @@ internal sealed class Create : IEndpoint
             CreateProductCommand command = new()
             {
                 Sku = request.Sku,
+                Barcode = request.Barcode,
                 Name = request.Name,
                 Category = request.Category,
                 Unit = request.Unit,
@@ -73,6 +76,7 @@ internal sealed class Create : IEndpoint
         AddRequired(errors, nameof(request.Sku), request.Sku);
         AddRequired(errors, nameof(request.Name), request.Name);
         AddMaxLength(errors, nameof(request.Sku), request.Sku, 50);
+        AddMaxLength(errors, nameof(request.Barcode), request.Barcode, 100);
         AddMaxLength(errors, nameof(request.Name), request.Name, 200);
         AddMaxLength(errors, nameof(request.Category), request.Category, 100);
         AddMaxLength(errors, nameof(request.Unit), request.Unit, 50);

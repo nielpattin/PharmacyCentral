@@ -19,4 +19,5 @@ public static class AuditEntityTypes
     public const string RecallCase = "RecallCase";
 
     public const string PaymentInvoice = "PaymentInvoice";
+    public const string ReplenishmentRequest = "ReplenishmentRequest";
 }

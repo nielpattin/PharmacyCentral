@@ -201,12 +201,12 @@
    position: relative;
    display: flex;
    flex: 0 0 auto;
-   justify-content: space-between;
+   justify-content: flex-end;
    align-items: center;
    gap: 12px;
-   margin-bottom: 16px;
-   padding-bottom: 12px;
-   border-bottom: 1px solid var(--line);
+   margin-bottom: 10px;
+   padding-bottom: 0;
+   border-bottom: 0;
    color: var(--muted);
    font-size: 0.875rem;
    overflow: visible;

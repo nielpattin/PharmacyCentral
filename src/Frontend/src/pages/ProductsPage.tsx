@@ -51,6 +51,7 @@ export default function ProductsPage() {
       return products.filter((product) =>
          [
             product.sku,
+            product.barcode ?? "",
             product.name,
             product.category ?? "",
             product.unit ?? "",
@@ -107,6 +108,7 @@ export default function ProductsPage() {
       try {
          const request: ProductUpsertRequest = {
             sku: normalizeText(values.sku),
+            barcode: values.barcode.trim(),
             name: normalizeText(values.name),
             category: values.category.trim(),
             unit: values.unit.trim(),

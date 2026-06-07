@@ -22,6 +22,8 @@ import StocktakePage from "./pages/StocktakePage";
 import StockAdjustmentPage from "./pages/StockAdjustmentPage";
 import TransferPage from "./pages/TransferPage";
 import PrescriptionPage from "./pages/PrescriptionPage";
+import PharmacistOverviewPage from "./pages/PharmacistOverviewPage";
+import ReplenishmentRequestPage from "./pages/ReplenishmentRequestPage";
 import ReportingPage from "./pages/ReportingPage";
 import FinancePage from "./pages/FinancePage";
 import ReturnsPage from "./pages/ReturnsPage";
@@ -144,6 +146,9 @@ export default function App() {
       case "/dashboard":
          page = <DashboardPage />;
          break;
+      case "/dashboard/pharmacist":
+         page = <PharmacistOverviewPage />;
+         break;
       case "/dashboard/sites":
          page = <SitesPage />;
          break;
@@ -170,6 +175,9 @@ export default function App() {
          break;
       case "/dashboard/prescriptions":
          page = <PrescriptionPage />;
+         break;
+      case "/dashboard/replenishment-requests":
+         page = <ReplenishmentRequestPage />;
          break;
 
       case "/dashboard/inventory":

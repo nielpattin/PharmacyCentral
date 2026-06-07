@@ -1,24 +1,27 @@
 import { useMemo, useState } from "react";
 import styles from "./PrescriptionPage.module.css";
 import { AppShell } from "../components/layout/AppShell";
-import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Button } from "../components/shadcn/button";
 import { Card } from "../components/shadcn/card";
 import {
    cancelPrescription,
+   confirmCounterPayment,
    createPrescription,
    createPrescriptionPayment,
    dispensePrescription,
    getPaymentStatus,
    getPrintableInvoice,
+   loadCounterTransactions,
    loadInventoryBalances,
    loadPrescriptions,
    loadProductPrices,
    loadProducts,
    loadSites,
    loadStorageLocations,
+   refundPayment,
    type InventoryBalanceDto,
+   type CounterTransactionDetails,
    type PaymentDetails,
    type PrintableInvoiceDetails,
    type PrescriptionCreateRequest,
@@ -57,6 +60,9 @@ export default function PrescriptionPage() {
    const [isPaymentBusy, setIsPaymentBusy] = useState(false);
    const [balances, setBalances] = useState<InventoryBalanceDto[]>([]);
    const [prices, setPrices] = useState<ProductPriceDto[]>([]);
+   const [transactions, setTransactions] = useState<CounterTransactionDetails[]>([]);
+   const [activeCounterTab, setActiveCounterTab] = useState<"create" | "history">("create");
+   const [transactionFilter, setTransactionFilter] = useState<"all" | "today" | "Pending" | "Paid" | "Cancelled" | "Refunded">("today");
    const selectedPrescription = useMemo(
       () => prescriptions.find((prescription) => prescription.id === selectedId) ?? null,
       [prescriptions, selectedId],
@@ -100,6 +106,32 @@ export default function PrescriptionPage() {
       [invoiceData, sites, t],
    );
 
+   const visibleTransactions = useMemo(() => {
+      if (transactionFilter === "all") {
+         return transactions;
+      }
+
+      if (transactionFilter === "today") {
+         const today = new Date().toDateString();
+         return transactions.filter((transaction) => new Date(transaction.createdAtUtc).toDateString() === today);
+      }
+
+      if (transactionFilter === "Cancelled") {
+         return transactions.filter((transaction) => transaction.prescriptionStatus === "Cancelled");
+      }
+
+      return transactions.filter((transaction) => transaction.paymentStatus === transactionFilter);
+   }, [transactions, transactionFilter]);
+
+
+   function formatTransactionAmount(transaction: CounterTransactionDetails) {
+      if (transaction.totalAmount === null || transaction.currency === null) {
+         return t("counterSale.notAvailable");
+      }
+
+      return `${transaction.totalAmount.toLocaleString()} ${transaction.currency}`;
+   }
+
    useMountEffect(() => {
       void refreshData();
    });
@@ -107,13 +139,14 @@ export default function PrescriptionPage() {
    async function refreshData(preferredSelectedId?: string) {
       setBannerError(null);
       try {
-         const [prescriptionData, siteData, locationData, productData, balanceData, priceData] = await Promise.all([
+         const [prescriptionData, siteData, locationData, productData, balanceData, priceData, transactionData] = await Promise.all([
             loadPrescriptions({ limit: 100 }),
             loadSites(),
             loadStorageLocations(),
             loadProducts(),
             loadInventoryBalances(),
             loadProductPrices({ status: "Published", limit: 200 }),
+            loadCounterTransactions({ limit: 100 }),
          ]);
          setPrescriptions(prescriptionData);
          setSites(siteData);
@@ -121,6 +154,7 @@ export default function PrescriptionPage() {
          setProducts(productData);
          setBalances(balanceData);
          setPrices(priceData);
+         setTransactions(transactionData);
          setSelectedId(
             preferredSelectedId !== undefined && prescriptionData.some((p) => p.id === preferredSelectedId)
                ? preferredSelectedId
@@ -221,6 +255,28 @@ export default function PrescriptionPage() {
       }
    }
 
+   async function handleConfirmCounterPayment(method: "Cash" | "ManualTransfer") {
+      if (payment === null) return;
+      setIsPaymentBusy(true);
+      try {
+         const paymentData = await confirmCounterPayment(payment.id, method);
+         setPayment(paymentData);
+      } finally {
+         setIsPaymentBusy(false);
+      }
+   }
+
+   async function handleRefundPayment(reason: string) {
+      if (payment === null) return;
+      setIsPaymentBusy(true);
+      try {
+         const paymentData = await refundPayment(payment.id, reason);
+         setPayment(paymentData);
+      } finally {
+         setIsPaymentBusy(false);
+      }
+   }
+
    async function handleShowInvoice() {
       if (payment === null) return;
       setIsPaymentBusy(true);
@@ -234,45 +290,69 @@ export default function PrescriptionPage() {
       }
    }
 
+   async function handleOpenTransaction(transaction: CounterTransactionDetails) {
+      setSelectedId(transaction.prescriptionId);
+      setActiveCounterTab("create");
+      setInvoiceData(null);
+
+      if (transaction.paymentId === null) {
+         setPayment(null);
+         return;
+      }
+
+      setIsPaymentBusy(true);
+      try {
+         const paymentData = await getPaymentStatus(transaction.paymentId);
+         setPayment(paymentData);
+      } finally {
+         setIsPaymentBusy(false);
+      }
+   }
+
+   async function handleShowTransactionInvoice(transaction: CounterTransactionDetails) {
+      if (transaction.paymentId === null) return;
+
+      setIsPaymentBusy(true);
+      try {
+         const invoice = await getPrintableInvoice(transaction.paymentId);
+         setInvoiceData(invoice);
+      } catch (error) {
+         setBannerError(error instanceof Error ? error.message : t("errors.loadPrescription"));
+      } finally {
+         setIsPaymentBusy(false);
+      }
+   }
+
    return (
-      <AppShell
-         active="prescriptions"
-         breadcrumb={
-            <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("counterSale.title") }]} />
-         }
-      >
+      <AppShell active="prescriptions">
          <div className={styles.workspace}>
             <div className={styles.commandBar}>
-               <PageHeader
-                  title={t("counterSale.title")}
-                  actions={
-                     <div className="page-actions">
-                        <Button
-                           onClick={() => {
-                              setSelectedId("");
-                              setCreateToken((current) => current + 1);
-                              setPayment(null);
-                              setInvoiceData(null);
-                           }}
-                        >
-                           {t("counterSale.newTicket")}
-                        </Button>
-                     </div>
-                  }
-               />
+               <div className={styles.commandHeader}>
+                  <PageHeader title={t("counterSale.title")} />
+                  <div className={styles.counterTabs} role="tablist" aria-label={t("counterSale.tabsLabel")}>
+                     <Button
+                        type="button"
+                        variant={activeCounterTab === "create" ? "default" : "outline"}
+                        onClick={() => setActiveCounterTab("create")}
+                     >
+                        {t("counterSale.createTransactionTab")}
+                     </Button>
+                     <Button
+                        type="button"
+                        variant={activeCounterTab === "history" ? "default" : "outline"}
+                        onClick={() => setActiveCounterTab("history")}
+                     >
+                        {t("counterSale.transactionHistoryTab")}
+                     </Button>
+                  </div>
+               </div>
                {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
             </div>
 
-            <div className={styles.counterWorkbench}>
-               <Card className={styles.counterTicket}>
+            {activeCounterTab === "create" ? (
+               <div className={`${styles.counterWorkbench}${selectedPrescription === null ? ` ${styles.createWorkbench}` : ""}`}>
                   {selectedPrescription === null ? (
-                     <>
-                        <div className={`flex items-start justify-between gap-3 ${styles.editorHeader}`}>
-                           <div>
-                              <h2 className="m-0 text-sm font-semibold text-foreground">{t("prescription.editor")}</h2>
-                              <p className="mt-1 text-sm text-muted-foreground">{t("prescription.editorDesc")}</p>
-                           </div>
-                        </div>
+                     <div className={styles.counterTicket}>
                         <PrescriptionForm
                            key={`prescription-${createToken}-${defaultSource.siteId}-${defaultSource.storageLocationId}`}
                            initialValues={formValues}
@@ -284,35 +364,104 @@ export default function PrescriptionPage() {
                            prices={prices}
                            onSubmit={handleCreatePrescription}
                         />
-                     </>
+                     </div>
                   ) : (
-                     <PrescriptionDetail
-                        key={selectedPrescription.id}
-                        prescription={selectedPrescription}
-                        isSaving={isSaving}
-                        products={products}
-                        sites={sites}
-                        storageLocations={storageLocations}
-                        balances={balances}
-                        onDispense={handleDispensePrescription}
-                        onCancel={handleCancelPrescription}
-                     />
+                     <Card className={styles.counterTicket}>
+                        <PrescriptionDetail
+                           key={selectedPrescription.id}
+                           prescription={selectedPrescription}
+                           isSaving={isSaving}
+                           products={products}
+                           sites={sites}
+                           storageLocations={storageLocations}
+                           balances={balances}
+                           onDispense={handleDispensePrescription}
+                           onCancel={handleCancelPrescription}
+                        />
+                     </Card>
                   )}
+                  {selectedPrescription !== null ? (
+                     <aside className={styles.counterCheckout}>
+                        <PaymentPanel
+                           key={`payment-${selectedPrescription.id}`}
+                           payment={payment}
+                           onCreatePayment={handleCreatePayment}
+                           onConfirmCounterPayment={handleConfirmCounterPayment}
+                           onRefundPayment={handleRefundPayment}
+                           onRefreshStatus={handleRefreshPaymentStatus}
+                           onShowInvoice={handleShowInvoice}
+                           isBusy={isPaymentBusy}
+                        />
+                     </aside>
+                  ) : null}
+               </div>
+            ) : (
+               <Card className={styles.historyCard}>
+                  <div className={styles.historyHeader}>
+                     <div>
+                        <h2>{t("counterSale.transactionHistoryTab")}</h2>
+                        <p>{t("counterSale.transactionHistoryDesc")}</p>
+                     </div>
+                  </div>
+                  <div className={styles.historyFilters}>
+                     {(["today", "all", "Pending", "Paid", "Cancelled", "Refunded"] as const).map((filter) => (
+                        <Button
+                           key={filter}
+                           type="button"
+                           variant={transactionFilter === filter ? "default" : "outline"}
+                           onClick={() => setTransactionFilter(filter)}
+                        >
+                           {t(`counterSale.transactionFilter.${filter}`)}
+                        </Button>
+                     ))}
+                  </div>
+                  <div className={styles.historyTableWrap}>
+                     <table className={styles.historyTable}>
+                        <thead>
+                           <tr>
+                              <th>{t("counterSale.transactionCode")}</th>
+                              <th>{t("counterSale.customer")}</th>
+                              <th>{t("counterSale.transactionDate")}</th>
+                              <th>{t("counterSale.paymentStatus")}</th>
+                              <th>{t("counterSale.totalAmount")}</th>
+                              <th>{t("common.actions")}</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {visibleTransactions.map((transaction) => (
+                              <tr key={transaction.prescriptionId}>
+                                 <td>{transaction.prescriptionNumber}</td>
+                                 <td>
+                                    <strong>{transaction.customerName}</strong>
+                                    {transaction.customerPhone !== null ? <span>{transaction.customerPhone}</span> : null}
+                                 </td>
+                                 <td>{new Date(transaction.createdAtUtc).toLocaleDateString()}</td>
+                                 <td>{t(`payment.status.${transaction.paymentStatus}`)}</td>
+                                 <td>{formatTransactionAmount(transaction)}</td>
+                                 <td>
+                                    <div className={styles.historyActions}>
+                                       <Button type="button" variant="outline" onClick={() => void handleOpenTransaction(transaction)}>
+                                          {t("counterSale.openTransaction")}
+                                       </Button>
+                                       <Button
+                                          type="button"
+                                          disabled={!transaction.canPrintInvoice}
+                                          onClick={() => void handleShowTransactionInvoice(transaction)}
+                                       >
+                                          {t("counterSale.reprintInvoice")}
+                                       </Button>
+                                    </div>
+                                 </td>
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                     {visibleTransactions.length === 0 ? (
+                        <div className={styles.historyEmpty}>{t("counterSale.noTransactions")}</div>
+                     ) : null}
+                  </div>
                </Card>
-
-               {selectedPrescription !== null ? (
-                  <aside className={styles.counterCheckout}>
-                     <PaymentPanel
-                        key={`payment-${selectedPrescription.id}`}
-                        payment={payment}
-                        onCreatePayment={handleCreatePayment}
-                        onRefreshStatus={handleRefreshPaymentStatus}
-                        onShowInvoice={handleShowInvoice}
-                        isBusy={isPaymentBusy}
-                     />
-                  </aside>
-               ) : null}
-            </div>
+            )}
 
             {invoiceData !== null ? (
                <PrintableInvoiceModal

@@ -26,6 +26,7 @@ using PharmacyCentral.Application.Prescriptions.CreatePrescription;
 using PharmacyCentral.Application.Prescriptions.DispensePrescription;
 using PharmacyCentral.Application.Prescriptions.GetPrescriptionById;
 using PharmacyCentral.Application.Prescriptions.ListPrescriptions;
+using PharmacyCentral.Application.Prescriptions.ListCounterTransactions;
 using PharmacyCentral.Application.Pricing.CreatePrice;
 using PharmacyCentral.Application.Pricing.GetActivePrice;
 using PharmacyCentral.Application.Pricing.ListPrices;
@@ -49,7 +50,14 @@ using PharmacyCentral.Application.Payments.CreatePrescriptionPayment;
 using PharmacyCentral.Application.Payments.GetPaymentStatus;
 using PharmacyCentral.Application.Payments.GetPrintableInvoice;
 using PharmacyCentral.Application.Payments.Shared;
+using PharmacyCentral.Application.Payments.ConfirmCounterPayment;
+using PharmacyCentral.Application.Payments.RefundPayment;
 using PharmacyCentral.Application.Returns.CreateReturn;
+using PharmacyCentral.Application.Replenishment.CancelReplenishmentRequest;
+using PharmacyCentral.Application.Replenishment.CreateReplenishmentRequest;
+using PharmacyCentral.Application.Replenishment.GetReplenishmentRequestById;
+using PharmacyCentral.Application.Replenishment.ListReplenishmentRequests;
+using PharmacyCentral.Application.Replenishment.ReviewReplenishmentRequest;
 using PharmacyCentral.Application.Sites.CreateSite;
 using PharmacyCentral.Application.Sites.DeleteSite;
 using PharmacyCentral.Application.Sites.GetSiteById;
@@ -172,7 +180,9 @@ public static class DependencyInjection
             .AddPolicy(Policies.CounterSale, policy =>
                 policy.RequireRole("Pharmacist"))
             .AddPolicy(Policies.Warehouse, policy =>
-                policy.RequireRole("Platform Admin", "Warehouse Staff"));
+                policy.RequireRole("Platform Admin", "Warehouse Staff"))
+            .AddPolicy(Policies.Replenishment, policy =>
+                policy.RequireRole("Platform Admin", "Pharmacist", "Warehouse Staff"));
 
         services.AddScoped<IAuthorizationHandler, SiteScopeAuthorizationHandler>();
         services.AddScoped<IIdentityService, IdentityService>();
@@ -248,12 +258,20 @@ public static class DependencyInjection
         services.AddScoped<CancelPrescriptionHandler>();
         services.AddScoped<GetPrescriptionByIdQueryHandler>();
         services.AddScoped<ListPrescriptionsQueryHandler>();
+        services.AddScoped<ListCounterTransactionsQueryHandler>();
+        services.AddScoped<CreateReplenishmentRequestHandler>();
+        services.AddScoped<GetReplenishmentRequestByIdHandler>();
+        services.AddScoped<ListReplenishmentRequestsHandler>();
+        services.AddScoped<ReviewReplenishmentRequestHandler>();
+        services.AddScoped<CancelReplenishmentRequestHandler>();
         // Payment services
         services.AddScoped<PaymentCodeGenerator>();
         services.AddScoped<CreatePrescriptionPaymentHandler>();
         services.AddScoped<GetPaymentStatusHandler>();
         services.AddScoped<GetPrintableInvoiceHandler>();
         services.AddScoped<ConfirmPaymentHandler>();
+        services.AddScoped<ConfirmCounterPaymentHandler>();
+        services.AddScoped<RefundPaymentHandler>();
 
         // SePay adapter
         services.AddOptions<SePayOptions>()

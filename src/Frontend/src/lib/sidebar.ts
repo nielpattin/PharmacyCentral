@@ -1,7 +1,9 @@
 export type SidebarActiveKey =
    | "dashboard"
+   | "pharmacistOverview"
    | "prescriptions"
    | "transfers"
+   | "replenishment"
    | "sites"
    | "catalog"
    | "pricing"
