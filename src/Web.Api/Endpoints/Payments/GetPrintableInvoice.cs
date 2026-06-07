@@ -39,6 +39,6 @@ internal sealed class GetPrintableInvoice : IEndpoint
             }
 
             return Results.Ok(result.Value);
-        }).WithTags(Tags.Payments).RequireAuthorization(Policies.Store);
+        }).WithTags(Tags.Payments).RequireAuthorization(Policies.CounterSale);
     }
 }

@@ -87,7 +87,7 @@ internal sealed class DispensePrescription : IEndpoint
 
             await IdempotencyEndpointHelper.RecordAsync(dbContext, idempotencyKey, idempotencyScope, currentUser.Id, StatusCodes.Status200OK, result.Value, cancellationToken);
             return Results.Ok(result.Value);
-        }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.Store);
+        }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.CounterSale);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

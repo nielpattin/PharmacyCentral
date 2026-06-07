@@ -33,6 +33,6 @@ internal sealed class GetPrescription : IEndpoint
             return EndpointSiteAccess.CanAccessSite(currentUser, result.Value.SiteId)
                 ? Results.Ok(result.Value)
                 : EndpointSiteAccess.ForbidSiteAccess();
-        }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.Store);
+        }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.CounterSale);
     }
 }

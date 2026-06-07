@@ -97,7 +97,7 @@ internal sealed class CreatePrescription : IEndpoint
 
             await IdempotencyEndpointHelper.RecordAsync(dbContext, idempotencyKey, idempotencyScope, currentUser.Id, StatusCodes.Status201Created, result.Value, cancellationToken);
             return Results.Created($"/api/prescriptions/{result.Value.Id}", result.Value);
-        }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.Store);
+        }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.CounterSale);
     }
 
     private static Dictionary<string, string[]> Validate(Request request)

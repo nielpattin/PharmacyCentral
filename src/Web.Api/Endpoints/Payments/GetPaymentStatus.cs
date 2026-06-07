@@ -59,6 +59,6 @@ internal sealed class GetPaymentStatus : IEndpoint
             }
 
             return Results.Ok(details);
-        }).WithTags(Tags.Payments).RequireAuthorization(Policies.Store);
+        }).WithTags(Tags.Payments).RequireAuthorization(Policies.CounterSale);
     }
 }

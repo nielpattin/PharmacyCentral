@@ -19,16 +19,18 @@ type RouteAccess = {
    path: string;
    active: SidebarActiveKey;
    roles: RoleName[];
+   allowPlatformAdminOverride?: boolean;
 };
 
 const ALL_ROLES: RoleName[] = ["Platform Admin", "Pharmacy Manager", "Pharmacist", "Warehouse Staff"];
-const STORE_ROLES: RoleName[] = ["Platform Admin", "Pharmacy Manager", "Pharmacist"];
+const STORE_ROLES: RoleName[] = ["Pharmacist"];
+const COUNTER_SALE_ROLES: RoleName[] = STORE_ROLES;
 const MANAGEMENT_ROLES: RoleName[] = ["Platform Admin", "Pharmacy Manager"];
 const WAREHOUSE_ROLES: RoleName[] = ["Platform Admin", "Warehouse Staff"];
 
 export const ROUTE_ACCESS: RouteAccess[] = [
    { path: "/dashboard", active: "dashboard", roles: ALL_ROLES },
-   { path: "/dashboard/prescriptions", active: "prescriptions", roles: STORE_ROLES },
+   { path: "/dashboard/prescriptions", active: "prescriptions", roles: COUNTER_SALE_ROLES, allowPlatformAdminOverride: false },
    { path: "/dashboard/transfers", active: "transfers", roles: ALL_ROLES },
    { path: "/dashboard/sites", active: "sites", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/catalog", active: "catalog", roles: MANAGEMENT_ROLES },
@@ -39,7 +41,7 @@ export const ROUTE_ACCESS: RouteAccess[] = [
    { path: "/dashboard/stocktake", active: "stocktake", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/inventory", active: "inventory", roles: ALL_ROLES },
    { path: "/dashboard/adjustments", active: "adjustments", roles: WAREHOUSE_ROLES },
-   { path: "/dashboard/returns", active: "returns", roles: STORE_ROLES },
+   { path: "/dashboard/returns", active: "returns", roles: STORE_ROLES, allowPlatformAdminOverride: false },
    { path: "/dashboard/quality", active: "quality", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/recalls", active: "recalls", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/reporting", active: "reporting", roles: MANAGEMENT_ROLES },
@@ -50,8 +52,8 @@ export const ROUTE_ACCESS: RouteAccess[] = [
 
 const STORAGE_LOCATIONS_PATH = /^\/dashboard\/sites\/[^/]+\/storage-locations$/;
 
-function hasAnyRole(user: AuthUser, roles: RoleName[]) {
-   return user.isPlatformAdmin || roles.some((role) => user.roles.includes(role));
+function hasAnyRole(user: AuthUser, roles: RoleName[], allowPlatformAdminOverride = true) {
+   return (allowPlatformAdminOverride && user.isPlatformAdmin) || roles.some((role) => user.roles.includes(role));
 }
 
 export function canAccessPath(user: AuthUser, pathname: string) {
@@ -64,7 +66,7 @@ export function canAccessPath(user: AuthUser, pathname: string) {
       return true;
    }
 
-   return hasAnyRole(user, routeAccess.roles);
+   return hasAnyRole(user, routeAccess.roles, routeAccess.allowPlatformAdminOverride);
 }
 
 export function filterNavSections(user: AuthUser | null, sections: NavSection[]) {

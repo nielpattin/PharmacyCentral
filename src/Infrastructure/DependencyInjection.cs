@@ -170,7 +170,9 @@ public static class DependencyInjection
             .AddPolicy(Policies.SiteScopedAccess, policy =>
                 policy.Requirements.Add(new SiteScopeRequirement()))
             .AddPolicy(Policies.Store, policy =>
-                policy.RequireRole("Platform Admin", "Pharmacy Manager", "Pharmacist"))
+                policy.RequireRole("Pharmacist"))
+            .AddPolicy(Policies.CounterSale, policy =>
+                policy.RequireRole("Pharmacist"))
             .AddPolicy(Policies.Warehouse, policy =>
                 policy.RequireRole("Platform Admin", "Warehouse Staff"));
 

@@ -47,6 +47,6 @@ internal sealed class CancelPrescription : IEndpoint
             return result.IsFailure
                 ? Results.BadRequest(new { error = result.Error.Description, code = result.Error.Code })
                 : Results.Ok(result.Value);
-        }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.Store);
+        }).WithTags(Tags.Prescriptions).RequireAuthorization(Policies.CounterSale);
     }
 }
