@@ -1,23 +1,30 @@
 .ticket {
    display: flex;
-   flex-direction: column;
    min-height: 0;
+   flex-direction: column;
+   gap: 0;
+   padding: 0;
+   border-color: var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface);
+   box-shadow: none;
 }
 
 .ticketHeader {
    display: flex;
-   justify-content: space-between;
-   align-items: flex-start;
-   gap: 12px;
-   padding: 10px 14px;
-   background: var(--surface-soft);
-   border-bottom: 1px solid var(--line);
+   flex-direction: row;
    flex-shrink: 0;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: 12px;
+   padding: 12px 14px;
+   border-bottom: 1px solid var(--line);
+   background: var(--surface-soft);
 }
 
 .ticketInfo {
-   min-width: 0;
    display: flex;
+   min-width: 0;
    flex-direction: column;
    gap: 2px;
 }
@@ -25,57 +32,55 @@
 .ticketNumber {
    margin: 0;
    font-size: 1.05rem;
-   font-weight: 700;
+   font-weight: 800;
 }
 
 .ticketPatient {
    margin: 0;
-   font-size: 0.9rem;
-   font-weight: 600;
    color: var(--text);
+   font-size: 0.9rem;
+   font-weight: 700;
 }
 
 .ticketMeta {
    margin: 0;
-   font-size: 0.78rem;
    color: var(--muted);
+   font-size: 0.78rem;
    line-height: 1.4;
 }
 
 .ticketLines {
+   display: flex;
    flex: none;
+   flex-direction: column;
+   gap: 7px;
+   padding: 12px 14px 10px;
+}
+
+.medicineCard {
    display: flex;
    flex-direction: column;
    gap: 6px;
-   padding: 10px 14px 8px;
-}
-
-/* Medicine cards */
-.medicineCard {
-   padding: 8px 10px;
-   border-radius: 6px;
+   padding: 9px 10px;
    border: 1px solid var(--line);
+   border-radius: var(--radius-md);
    background: var(--surface);
-   display: flex;
-   flex-direction: column;
-   gap: 3px;
 }
 
 .medicineCardHeader {
    display: flex;
+   align-items: center;
    justify-content: space-between;
-   align-items: baseline;
    gap: 8px;
 }
 
 .medicineProduct {
-   font-weight: 600;
-   font-size: 0.85rem;
-}
-
-.medicinePrescribed {
-   font-size: 0.78rem;
-   color: var(--muted);
+   min-width: 0;
+   overflow: hidden;
+   color: var(--text);
+   font-size: 0.88rem;
+   font-weight: 800;
+   text-overflow: ellipsis;
    white-space: nowrap;
 }
 
@@ -83,65 +88,70 @@
    display: flex;
    flex-wrap: wrap;
    gap: 6px;
-   font-size: 0.78rem;
    color: var(--muted);
+   font-size: 0.78rem;
 }
 
 .medicineDispensedInfo {
-   font-size: 0.75rem;
    color: var(--muted);
+   font-size: 0.75rem;
 }
 
 .medicineDispenseControls {
    display: grid;
-   grid-template-columns: 1fr 80px;
-   gap: 6px;
+   grid-template-columns: 1fr 92px;
+   gap: 8px;
    align-items: end;
-   padding-top: 4px;
+   padding-top: 6px;
    border-top: 1px solid var(--line);
 }
 
 .medicineLabel {
    display: block;
-   font-size: 0.68rem;
-   font-weight: 600;
-   text-transform: uppercase;
-   letter-spacing: 0.06em;
+   margin-bottom: 3px;
    color: var(--muted);
-   margin-bottom: 1px;
+   font-size: 0.68rem;
+   font-weight: 800;
+   letter-spacing: 0.06em;
+   text-transform: uppercase;
 }
 
-.batchField :global(.field-input) {
+.batchField :global(.field-input),
+.qtyField input {
    width: 100%;
 }
 
-.qtyField :global(.field-input) {
-   width: 100%;
-}
-
-/* Bottom action bar */
 .ticketActions {
    display: flex;
-   justify-content: space-between;
-   align-items: center;
-   gap: 8px;
-   padding: 8px 14px 10px;
-   border-top: 1px solid var(--line);
-   margin-top: 0;
    flex-shrink: 0;
+   align-items: center;
+   justify-content: space-between;
+   gap: 8px;
+   padding: 10px 14px;
+   border-top: 1px solid var(--line);
    background: var(--surface-soft);
 }
 
 .ticketActionsLeft,
 .ticketActionsRight {
    display: flex;
-   gap: 8px;
    align-items: center;
+   gap: 8px;
 }
 
-/* Responsive */
 @media (max-width: 720px) {
    .medicineDispenseControls {
       grid-template-columns: 1fr;
+   }
+
+   .ticketActions {
+      align-items: stretch;
+      flex-direction: column;
+   }
+
+   .ticketActionsLeft,
+   .ticketActionsRight {
+      width: 100%;
+      justify-content: flex-end;
    }
 }

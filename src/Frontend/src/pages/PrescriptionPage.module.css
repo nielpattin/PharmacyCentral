@@ -34,8 +34,13 @@
 .counterTicket {
    display: flex;
    flex-direction: column;
-   padding: 0;
+   gap: 0;
    min-height: 0;
+   padding: 0;
+   border-color: var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface);
+   box-shadow: none;
    overflow: visible;
 }
 
