@@ -3,8 +3,8 @@ import { loadFinanceSummary, loadSites, type FinanceSummaryDto, type SiteDto } f
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Field } from "../components/ui/Field";
 import { useMountEffect } from "../hooks/useMountEffect";
@@ -72,16 +72,15 @@ export default function FinancePage() {
       return sites.find((site) => site.id === siteId)?.name ?? siteId;
    }, [siteId, sites, t]);
 
-   useMountEffect(() => { void refresh(); });
+   useMountEffect(() => {
+      void refresh();
+   });
 
    async function refresh() {
       setIsLoading(true);
       setError(null);
       try {
-         const [siteData, financeData] = await Promise.all([
-            loadSites(),
-            loadFinanceSummary({ siteId, from, to }),
-         ]);
+         const [siteData, financeData] = await Promise.all([loadSites(), loadFinanceSummary({ siteId, from, to })]);
          setSites(siteData);
          setSummary(financeData);
       } catch (caught) {
@@ -92,9 +91,17 @@ export default function FinancePage() {
    }
 
    return (
-      <AppShell active="finance" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.finance") }]} />}>
+      <AppShell
+         active="finance"
+         breadcrumb={
+            <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.finance") }]} />
+         }
+      >
          <div className={styles.financePage}>
-            <PageHeader title={t("finance.title")} actions={<Button variant="primary" onClick={() => void refresh()}>{t("common.refresh")}</Button>} />
+            <PageHeader
+               title={t("finance.title")}
+               actions={<Button onClick={() => void refresh()}>{t("common.refresh")}</Button>}
+            />
             {error !== null ? <div className="notice danger-note">{error}</div> : null}
 
             <section className="card">
@@ -104,52 +111,140 @@ export default function FinancePage() {
                         <h2 className="section-title">{t("finance.filters")}</h2>
                         <p className="section-subtitle">{t("finance.filtersDesc")}</p>
                      </div>
-                     <Badge tone="role">{sourceLabel}</Badge>
+                     <Badge variant="outline">{sourceLabel}</Badge>
                   </div>
                   <div className={`form-grid ${styles.financeFilterGrid}`}>
                      <Field label={t("common.site")}>
-                        <select className="field-input" value={siteId} onChange={(event) => setSiteId(event.target.value)}>
+                        <select
+                           className="field-input"
+                           value={siteId}
+                           onChange={(event) => setSiteId(event.target.value)}
+                        >
                            <option value="">{t("finance.allSites")}</option>
-                           {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+                           {sites.map((site) => (
+                              <option key={site.id} value={site.id}>
+                                 {site.name}
+                              </option>
+                           ))}
                         </select>
                      </Field>
-                     <Field label={t("finance.from")}><input className="field-input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></Field>
-                     <Field label={t("finance.to")}><input className="field-input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></Field>
+                     <Field label={t("finance.from")}>
+                        <input
+                           className="field-input"
+                           type="date"
+                           value={from}
+                           onChange={(event) => setFrom(event.target.value)}
+                        />
+                     </Field>
+                     <Field label={t("finance.to")}>
+                        <input
+                           className="field-input"
+                           type="date"
+                           value={to}
+                           onChange={(event) => setTo(event.target.value)}
+                        />
+                     </Field>
                   </div>
                </div>
             </section>
 
-            {isLoading || summary === null ? <EmptyState icon="…" title={t("common.loading")} description={t("finance.loadingDesc")} /> : (
+            {isLoading || summary === null ? (
+               <EmptyState icon="…" title={t("common.loading")} description={t("finance.loadingDesc")} />
+            ) : (
                <>
                   <section className={styles.financeKpiGrid}>
                      <FinanceStat label={t("finance.inventoryValue")} value={formatMoney(summary.inventoryValue)} />
                      <FinanceStat label={t("finance.reservedValue")} value={formatMoney(summary.reservedValue)} />
-                     <FinanceStat label={t("finance.quantityOnHand")} value={formatQuantity(summary.totalQuantityOnHand)} />
-                     <FinanceStat label={t("finance.missingPrices")} value={String(summary.missingPriceCount)} tone={summary.missingPriceCount > 0 ? "warn" : "ok"} />
+                     <FinanceStat
+                        label={t("finance.quantityOnHand")}
+                        value={formatQuantity(summary.totalQuantityOnHand)}
+                     />
+                     <FinanceStat
+                        label={t("finance.missingPrices")}
+                        value={String(summary.missingPriceCount)}
+                        tone={summary.missingPriceCount > 0 ? "outline" : "secondary"}
+                     />
                   </section>
 
                   <div className={styles.financeGrid}>
                      <section className="card">
                         <div className="section">
-                           <div className="section-header"><div><h2 className="section-title">{t("finance.reconciliation")}</h2><p className="section-subtitle">{t("finance.reconciliationDesc")}</p></div></div>
+                           <div className="section-header">
+                              <div>
+                                 <h2 className="section-title">{t("finance.reconciliation")}</h2>
+                                 <p className="section-subtitle">{t("finance.reconciliationDesc")}</p>
+                              </div>
+                           </div>
                            <div className={styles.financeReconGrid}>
-                              <FinanceStat label={t("finance.receipts")} value={`${summary.receiptCount} · ${formatQuantity(summary.receiptQuantity)}`} />
-                              <FinanceStat label={t("finance.dispensed")} value={formatQuantity(summary.dispensedQuantity)} />
-                              <FinanceStat label={t("finance.returns") } value={formatQuantity(summary.returnQuantity)} />
-                              <FinanceStat label={t("finance.adjustments")} value={formatQuantity(summary.adjustmentQuantity)} />
-                              <FinanceStat label={t("finance.transferOut")} value={formatQuantity(summary.transferOutQuantity)} />
-                              <FinanceStat label={t("finance.transferIn")} value={formatQuantity(summary.transferInQuantity)} />
+                              <FinanceStat
+                                 label={t("finance.receipts")}
+                                 value={`${summary.receiptCount} · ${formatQuantity(summary.receiptQuantity)}`}
+                              />
+                              <FinanceStat
+                                 label={t("finance.dispensed")}
+                                 value={formatQuantity(summary.dispensedQuantity)}
+                              />
+                              <FinanceStat
+                                 label={t("finance.returns")}
+                                 value={formatQuantity(summary.returnQuantity)}
+                              />
+                              <FinanceStat
+                                 label={t("finance.adjustments")}
+                                 value={formatQuantity(summary.adjustmentQuantity)}
+                              />
+                              <FinanceStat
+                                 label={t("finance.transferOut")}
+                                 value={formatQuantity(summary.transferOutQuantity)}
+                              />
+                              <FinanceStat
+                                 label={t("finance.transferIn")}
+                                 value={formatQuantity(summary.transferInQuantity)}
+                              />
                            </div>
                         </div>
                      </section>
 
                      <section className="card">
                         <div className="section">
-                           <div className="section-header"><div><h2 className="section-title">{t("finance.activity")}</h2><p className="section-subtitle">{t("finance.activityDesc")}</p></div></div>
-                           {summary.activityLines.length === 0 ? <EmptyState icon="0" title={t("finance.noActivity")} description={t("finance.noActivityDesc")} /> : (
-                              <div className={styles.tableShell}><table className={styles.dataTable}><thead><tr><th>{t("finance.activityType")}</th><th>{t("finance.count")}</th><th>{t("finance.in")}</th><th>{t("finance.out")}</th><th>{t("finance.latest")}</th></tr></thead><tbody>{summary.activityLines.map((line) => (
-                                 <tr key={line.activityType}><td><strong>{formatActivityType(line.activityType, t)}</strong></td><td>{line.count}</td><td>{formatQuantity(line.quantityIn)}</td><td>{formatQuantity(line.quantityOut)}</td><td>{formatDateTime(line.latestActivityAtUtc)}</td></tr>
-                              ))}</tbody></table></div>
+                           <div className="section-header">
+                              <div>
+                                 <h2 className="section-title">{t("finance.activity")}</h2>
+                                 <p className="section-subtitle">{t("finance.activityDesc")}</p>
+                              </div>
+                           </div>
+                           {summary.activityLines.length === 0 ? (
+                              <EmptyState
+                                 icon="0"
+                                 title={t("finance.noActivity")}
+                                 description={t("finance.noActivityDesc")}
+                              />
+                           ) : (
+                              <div className={styles.tableShell}>
+                                 <table className={styles.dataTable}>
+                                    <thead>
+                                       <tr>
+                                          <th>{t("finance.activityType")}</th>
+                                          <th>{t("finance.count")}</th>
+                                          <th>{t("finance.in")}</th>
+                                          <th>{t("finance.out")}</th>
+                                          <th>{t("finance.latest")}</th>
+                                       </tr>
+                                    </thead>
+                                    <tbody>
+                                       {summary.activityLines.map((line) => (
+                                          <tr key={line.activityType}>
+                                             <td>
+                                                <strong>{formatActivityType(line.activityType, t)}</strong>
+                                             </td>
+                                             <td>{line.count}</td>
+                                             <td>{formatQuantity(line.quantityIn)}</td>
+                                             <td>{formatQuantity(line.quantityOut)}</td>
+                                             <td>{formatDateTime(line.latestActivityAtUtc)}</td>
+                                          </tr>
+                                       ))}
+                                    </tbody>
+                                 </table>
+                              </div>
                            )}
                         </div>
                      </section>
@@ -157,11 +252,71 @@ export default function FinancePage() {
 
                   <section className="card">
                      <div className="section">
-                        <div className="section-header"><div><h2 className="section-title">{t("finance.valuation")}</h2><p className="section-subtitle">{t("finance.valuationDesc")}</p></div><Badge tone="role">{summary.balanceCount} {t("common.records")}</Badge></div>
-                        {summary.valuationLines.length === 0 ? <EmptyState icon="0" title={t("finance.noValuation")} description={t("finance.noValuationDesc")} /> : (
-                           <div className={styles.tableShell}><table className={`${styles.dataTable} ${styles.financeValuationTable}`}><thead><tr><th>{t("finance.product")}</th><th>{t("finance.location")}</th><th>{t("finance.quantity")}</th><th>{t("finance.unitPrice")}</th><th>{t("finance.value")}</th><th>{t("finance.priceSource")}</th></tr></thead><tbody>{summary.valuationLines.map((line) => (
-                              <tr key={`${line.productBatchId}-${line.storageLocationId}`}><td><strong>{line.productSku}</strong><span className={`muted-text ${styles.block}`}>{line.productName} · {line.batchNumber}</span></td><td>{line.siteName}<span className={`muted-text ${styles.block}`}>{line.storageLocationName}</span></td><td>{formatQuantity(line.quantityOnHand)}<span className={`muted-text ${styles.block}`}>{t("finance.reservedShort")} {formatQuantity(line.quantityReserved)}</span></td><td>{line.unitPrice === null ? "—" : formatMoney(line.unitPrice, line.currency)}</td><td>{formatMoney(line.valueOnHand, line.currency)}</td><td><Badge tone={line.priceStatus === "Missing" ? "warn" : "ok"}>{line.priceStatus}</Badge></td></tr>
-                           ))}</tbody></table></div>
+                        <div className="section-header">
+                           <div>
+                              <h2 className="section-title">{t("finance.valuation")}</h2>
+                              <p className="section-subtitle">{t("finance.valuationDesc")}</p>
+                           </div>
+                           <Badge variant="outline">
+                              {summary.balanceCount} {t("common.records")}
+                           </Badge>
+                        </div>
+                        {summary.valuationLines.length === 0 ? (
+                           <EmptyState
+                              icon="0"
+                              title={t("finance.noValuation")}
+                              description={t("finance.noValuationDesc")}
+                           />
+                        ) : (
+                           <div className={styles.tableShell}>
+                              <table className={`${styles.dataTable} ${styles.financeValuationTable}`}>
+                                 <thead>
+                                    <tr>
+                                       <th>{t("finance.product")}</th>
+                                       <th>{t("finance.location")}</th>
+                                       <th>{t("finance.quantity")}</th>
+                                       <th>{t("finance.unitPrice")}</th>
+                                       <th>{t("finance.value")}</th>
+                                       <th>{t("finance.priceSource")}</th>
+                                    </tr>
+                                 </thead>
+                                 <tbody>
+                                    {summary.valuationLines.map((line) => (
+                                       <tr key={`${line.productBatchId}-${line.storageLocationId}`}>
+                                          <td>
+                                             <strong>{line.productSku}</strong>
+                                             <span className={`muted-text ${styles.block}`}>
+                                                {line.productName} · {line.batchNumber}
+                                             </span>
+                                          </td>
+                                          <td>
+                                             {line.siteName}
+                                             <span className={`muted-text ${styles.block}`}>
+                                                {line.storageLocationName}
+                                             </span>
+                                          </td>
+                                          <td>
+                                             {formatQuantity(line.quantityOnHand)}
+                                             <span className={`muted-text ${styles.block}`}>
+                                                {t("finance.reservedShort")} {formatQuantity(line.quantityReserved)}
+                                             </span>
+                                          </td>
+                                          <td>
+                                             {line.unitPrice === null
+                                                ? "—"
+                                                : formatMoney(line.unitPrice, line.currency)}
+                                          </td>
+                                          <td>{formatMoney(line.valueOnHand, line.currency)}</td>
+                                          <td>
+                                             <Badge variant={line.priceStatus === "Missing" ? "outline" : "secondary"}>
+                                                {line.priceStatus}
+                                             </Badge>
+                                          </td>
+                                       </tr>
+                                    ))}
+                                 </tbody>
+                              </table>
+                           </div>
                         )}
                      </div>
                   </section>
@@ -172,6 +327,20 @@ export default function FinancePage() {
    );
 }
 
-function FinanceStat({ label, value, tone = "role" }: { label: string; value: string; tone?: "role" | "ok" | "warn" }) {
-   return <div className={`${styles.financeStat} card`}><span>{label}</span><strong>{value}</strong><Badge tone={tone}>{label}</Badge></div>;
+function FinanceStat({
+   label,
+   value,
+   tone = "outline",
+}: {
+   label: string;
+   value: string;
+   tone?: "outline" | "secondary" | "destructive";
+}) {
+   return (
+      <div className={`${styles.financeStat} card`}>
+         <span>{label}</span>
+         <strong>{value}</strong>
+         <Badge variant={tone}>{label}</Badge>
+      </div>
+   );
 }

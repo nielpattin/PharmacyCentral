@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "../../components/ui/Button";
+import { Button } from "../../components/shadcn/button";
 import { Field } from "../../components/ui/Field";
 import { useT } from "../../lib/i18n";
 import { areProductFormValuesEqual, type ProductFormValues } from "../../pages/shared/pharmacyForms";
@@ -106,14 +106,23 @@ export function ProductForm({ mode, initialValues, isSaving, onSubmit, onDelete 
          </div>
 
          <div className="form-actions">
-            <Button variant="primary" type="submit" disabled={isSaving || !isDirty}>
-               {isSaving ? t("products.saving") : mode === "create" ? t("products.createButton") : t("products.saveButton")}
+            <Button type="submit" disabled={isSaving || !isDirty}>
+               {isSaving
+                  ? t("products.saving")
+                  : mode === "create"
+                    ? t("products.createButton")
+                    : t("products.saveButton")}
             </Button>
-            <Button variant="secondary" type="button" onClick={() => setValues(baselineValues)} disabled={isSaving || !isDirty}>
+            <Button
+               variant="outline"
+               type="button"
+               onClick={() => setValues(baselineValues)}
+               disabled={isSaving || !isDirty}
+            >
                {t("products.reset")}
             </Button>
             {mode === "edit" && onDelete !== undefined ? (
-               <Button variant="danger" type="button" onClick={() => void onDelete()} disabled={isSaving}>
+               <Button variant="destructive" type="button" onClick={() => void onDelete()} disabled={isSaving}>
                   {t("products.deleteButton")}
                </Button>
             ) : null}

@@ -3,8 +3,8 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { navigate } from "../lib/router";
 import {
@@ -164,9 +164,7 @@ export default function SitesPage() {
                title={t("sites.title")}
                actions={
                   <div className="page-actions">
-                     <Button variant="primary" onClick={handleNewSite}>
-                        {t("common.newSite")}
-                     </Button>
+                     <Button onClick={handleNewSite}>{t("common.newSite")}</Button>
                   </div>
                }
             />
@@ -181,7 +179,7 @@ export default function SitesPage() {
                            <h2 className="section-title">{t("sites.registry")}</h2>
                            <p className="section-subtitle">{t("sites.registryDesc")}</p>
                         </div>
-                        <Badge tone="role">
+                        <Badge variant="outline">
                            {isLoading ? t("sites.loadingState") : `${visibleSites.length} ${t("sites.records")}`}
                         </Badge>
                      </div>

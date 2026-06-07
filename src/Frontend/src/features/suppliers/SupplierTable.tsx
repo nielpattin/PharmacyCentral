@@ -1,8 +1,8 @@
-import { Badge } from "../../components/ui/Badge";
-import { Button } from "../../components/ui/Button";
+import { Badge } from "../../components/shadcn/badge";
+import { Button } from "../../components/shadcn/button";
 import type { SupplierDto } from "../../api/pharmacyClient";
 import { useT } from "../../lib/i18n";
-import { formatValue, statusTone } from "../../pages/shared/pharmacyForms";
+import { formatValue } from "../../pages/shared/pharmacyForms";
 
 type SupplierTableProps = {
    rows: SupplierDto[];
@@ -49,7 +49,7 @@ export function SupplierTable({ rows, selectedSupplierId, onSelectSupplier, onDe
                         <td>{formatValue(supplier.contactName)}</td>
                         <td>{formatValue(supplier.phone)}</td>
                         <td>
-                           <Badge tone={statusTone(supplier.status)}>
+                           <Badge variant={supplier.status === "Active" ? "secondary" : "destructive"}>
                               {supplier.status === "Active" ? t("status.active") : t("status.inactive")}
                            </Badge>
                         </td>
@@ -57,7 +57,7 @@ export function SupplierTable({ rows, selectedSupplierId, onSelectSupplier, onDe
                            <div className="table-actions">
                               <Button
                                  size="sm"
-                                 variant="danger"
+                                 variant="destructive"
                                  onClick={(event) => {
                                     event.stopPropagation();
                                     onDeleteSupplier(supplier.id);

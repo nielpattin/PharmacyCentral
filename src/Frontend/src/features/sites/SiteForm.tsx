@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "../../components/ui/Button";
+import { Button } from "../../components/shadcn/button";
 import { Field } from "../../components/ui/Field";
 import { useT } from "../../lib/i18n";
 import { normalizeSiteTypeValue, siteTypeLabel, siteTypeOptions } from "../../pages/shared/pharmacyTypes";
@@ -112,11 +112,11 @@ export function SiteForm({ mode, initialValues, isSaving, onSubmit, onDelete }: 
          </div>
 
          <div className="form-actions">
-            <Button variant="primary" type="submit" disabled={isSaving || !isDirty}>
+            <Button type="submit" disabled={isSaving || !isDirty}>
                {isSaving ? t("sites.saving") : mode === "create" ? t("sites.createButton") : t("sites.saveButton")}
             </Button>
             <Button
-               variant="secondary"
+               variant="outline"
                type="button"
                onClick={() => setValues(baselineValues)}
                disabled={isSaving || !isDirty}
@@ -124,7 +124,7 @@ export function SiteForm({ mode, initialValues, isSaving, onSubmit, onDelete }: 
                {t("sites.reset")}
             </Button>
             {mode === "edit" && onDelete !== undefined ? (
-               <Button variant="danger" type="button" onClick={() => void onDelete()} disabled={isSaving}>
+               <Button variant="destructive" type="button" onClick={() => void onDelete()} disabled={isSaving}>
                   {t("sites.deleteButton")}
                </Button>
             ) : null}

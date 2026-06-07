@@ -14,8 +14,8 @@ import {
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
@@ -39,9 +39,9 @@ const expiringWindowDays = 30;
 const lowAvailableThreshold = 10;
 
 function auditActionTone(action: string) {
-   if (action === "Deleted" || action === "Cancelled") return "bad";
-   if (action === "Updated") return "warn";
-   return "ok";
+   if (action === "Deleted" || action === "Cancelled") return "destructive";
+   if (action === "Updated") return "outline";
+   return "secondary";
 }
 
 function daysUntil(date: string) {
@@ -115,7 +115,15 @@ function ReportingStat({ label, value }: { label: string; value: string | number
    );
 }
 
-function ReportingSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+function ReportingSection({
+   title,
+   description,
+   children,
+}: {
+   title: string;
+   description: string;
+   children: ReactNode;
+}) {
    return (
       <section className={`card ${styles.dashboardSection}`}>
          <div className="section">
@@ -146,16 +154,24 @@ function ReportingSourceStrip({ lastLoadedAt }: { lastLoadedAt: Date | null }) {
                </p>
             </div>
             <div className={styles.reportingSourceBadges} aria-label={t("reporting.sourceTitle")}>
-               <Badge tone="role">{t("reporting.sourceDashboard")}</Badge>
-               <Badge tone="role">{t("reporting.sourceInventory")}</Badge>
-               <Badge tone="role">{t("reporting.sourceAudit")}</Badge>
+               <Badge variant="outline">{t("reporting.sourceDashboard")}</Badge>
+               <Badge variant="outline">{t("reporting.sourceInventory")}</Badge>
+               <Badge variant="outline">{t("reporting.sourceAudit")}</Badge>
             </div>
          </div>
       </section>
    );
 }
 
-function CountList({ items, emptyTitle, emptyDescription }: { items: CountSummary[]; emptyTitle: string; emptyDescription: string }) {
+function CountList({
+   items,
+   emptyTitle,
+   emptyDescription,
+}: {
+   items: CountSummary[];
+   emptyTitle: string;
+   emptyDescription: string;
+}) {
    if (items.length === 0) {
       return <EmptyState icon="0" title={emptyTitle} description={emptyDescription} />;
    }
@@ -170,7 +186,7 @@ function CountList({ items, emptyTitle, emptyDescription }: { items: CountSummar
                   </div>
                </div>
                <div className={styles.moduleActions}>
-                  <Badge tone="role">{formatQuantity(item.count)}</Badge>
+                  <Badge variant="outline">{formatQuantity(item.count)}</Badge>
                </div>
             </article>
          ))}
@@ -181,7 +197,9 @@ function CountList({ items, emptyTitle, emptyDescription }: { items: CountSummar
 function RecentAuditList({ logs, sites }: { logs: AuditLogEntryDto[]; sites: SiteDto[] }) {
    const t = useT();
    const siteName = (siteId: string | null) =>
-      siteId === null ? t("audit.system") : (sites.find((site) => site.id === siteId)?.name ?? t("reporting.unknownSite"));
+      siteId === null
+         ? t("audit.system")
+         : (sites.find((site) => site.id === siteId)?.name ?? t("reporting.unknownSite"));
 
    if (logs.length === 0) {
       return <EmptyState icon="0" title={t("reporting.noActivityTitle")} description={t("reporting.noActivityDesc")} />;
@@ -193,7 +211,7 @@ function RecentAuditList({ logs, sites }: { logs: AuditLogEntryDto[]; sites: Sit
             <article key={entry.id} className={styles.dashboardActivityItem}>
                <div>
                   <div className={styles.moduleHead}>
-                     <Badge tone={auditActionTone(entry.action)}>{t(`audit.action.${entry.action}`)}</Badge>
+                     <Badge variant={auditActionTone(entry.action)}>{t(`audit.action.${entry.action}`)}</Badge>
                      <h3>{t(`audit.entity.${entry.entityType}`)}</h3>
                   </div>
                   <p>{formatAuditSummary(t, entry.summary, entry.entityId ?? t("common.noData"))}</p>
@@ -206,7 +224,15 @@ function RecentAuditList({ logs, sites }: { logs: AuditLogEntryDto[]; sites: Sit
    );
 }
 
-function InventoryRiskTable({ balances, sites, storageLocations }: { balances: InventoryBalanceDto[]; sites: SiteDto[]; storageLocations: StorageLocationDto[] }) {
+function InventoryRiskTable({
+   balances,
+   sites,
+   storageLocations,
+}: {
+   balances: InventoryBalanceDto[];
+   sites: SiteDto[];
+   storageLocations: StorageLocationDto[];
+}) {
    const t = useT();
    const riskRows: InventoryRiskRow[] = balances
       .map((balance) => {
@@ -228,7 +254,13 @@ function InventoryRiskTable({ balances, sites, storageLocations }: { balances: I
       storageLocations.find((location) => location.id === locationId)?.name ?? t("reporting.unknownLocation");
 
    if (riskRows.length === 0) {
-      return <EmptyState icon="✓" title={t("reporting.noInventoryRiskTitle")} description={t("reporting.noInventoryRiskDesc")} />;
+      return (
+         <EmptyState
+            icon="✓"
+            title={t("reporting.noInventoryRiskTitle")}
+            description={t("reporting.noInventoryRiskDesc")}
+         />
+      );
    }
 
    return (
@@ -261,7 +293,9 @@ function InventoryRiskTable({ balances, sites, storageLocations }: { balances: I
                         </td>
                         <td>
                            <div className={styles.reportingTablePrimary}>{siteName(row.balance.siteId)}</div>
-                           <div className={styles.reportingTableMuted}>{locationName(row.balance.storageLocationId)}</div>
+                           <div className={styles.reportingTableMuted}>
+                              {locationName(row.balance.storageLocationId)}
+                           </div>
                         </td>
                         <td>
                            <div className={styles.reportingTablePrimary}>{formatQuantity(available)}</div>
@@ -274,7 +308,7 @@ function InventoryRiskTable({ balances, sites, storageLocations }: { balances: I
                         </td>
                         <td>{new Date(row.balance.expiryDate).toLocaleDateString()}</td>
                         <td>
-                           <Badge tone={row.level === "both" ? "bad" : "warn"}>{riskLabel}</Badge>
+                           <Badge variant={row.level === "both" ? "destructive" : "outline"}>{riskLabel}</Badge>
                         </td>
                      </tr>
                   );
@@ -343,7 +377,9 @@ export default function ReportingPage() {
    return (
       <AppShell
          active="reporting"
-         breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.reporting") }]} />}
+         breadcrumb={
+            <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.reporting") }]} />
+         }
       >
          <div className={styles.reportingPage}>
             <PageHeader
@@ -357,7 +393,7 @@ export default function ReportingPage() {
                      <a className="btn secondary" href="/dashboard/audit">
                         {t("reporting.openAudit")}
                      </a>
-                     <Button variant="secondary" onClick={() => void refreshData()}>
+                     <Button variant="outline" onClick={() => void refreshData()}>
                         {t("common.refresh")}
                      </Button>
                   </div>
@@ -385,10 +421,22 @@ export default function ReportingPage() {
                      <div className={`${styles.statRow} ${styles.dashboardStatRow} ${styles.reportingKpiRow}`}>
                         <ReportingStat label={t("dashboard.totalSites")} value={metric(summary.totalSites)} />
                         <ReportingStat label={t("dashboard.totalProducts")} value={metric(summary.totalProducts)} />
-                        <ReportingStat label={t("dashboard.quantityOnHand")} value={metric(summary.totalQuantityOnHand)} />
-                        <ReportingStat label={t("dashboard.quantityReserved")} value={metric(summary.totalQuantityReserved)} />
-                        <ReportingStat label={t("dashboard.pendingTransfers")} value={metric(summary.pendingTransferCount)} />
-                        <ReportingStat label={t("dashboard.openPrescriptions")} value={metric(summary.openPrescriptionCount)} />
+                        <ReportingStat
+                           label={t("dashboard.quantityOnHand")}
+                           value={metric(summary.totalQuantityOnHand)}
+                        />
+                        <ReportingStat
+                           label={t("dashboard.quantityReserved")}
+                           value={metric(summary.totalQuantityReserved)}
+                        />
+                        <ReportingStat
+                           label={t("dashboard.pendingTransfers")}
+                           value={metric(summary.pendingTransferCount)}
+                        />
+                        <ReportingStat
+                           label={t("dashboard.openPrescriptions")}
+                           value={metric(summary.openPrescriptionCount)}
+                        />
                      </div>
                   </ReportingSection>
 
@@ -398,7 +446,10 @@ export default function ReportingPage() {
                         <ReportingStat label={t("reporting.liveOnHand")} value={formatQuantity(totalOnHand)} />
                         <ReportingStat label={t("reporting.liveReserved")} value={formatQuantity(totalReserved)} />
                         <ReportingStat label={t("reporting.lowStockBatches")} value={formatQuantity(lowStockCount)} />
-                        <ReportingStat label={t("reporting.nearExpiryBatches")} value={formatQuantity(nearExpiryCount)} />
+                        <ReportingStat
+                           label={t("reporting.nearExpiryBatches")}
+                           value={formatQuantity(nearExpiryCount)}
+                        />
                      </div>
                      <div className={styles.reportingSectionBlock}>
                         <InventoryRiskTable balances={balances} sites={sites} storageLocations={storageLocations} />
@@ -406,16 +457,33 @@ export default function ReportingPage() {
                   </ReportingSection>
 
                   <div className={styles.reportingGrid}>
-                     <ReportingSection title={t("reporting.activityByAction")} description={t("reporting.activityByActionDesc")}>
-                        <CountList items={actionSummaries} emptyTitle={t("reporting.noActivityTitle")} emptyDescription={t("reporting.noActivityDesc")} />
+                     <ReportingSection
+                        title={t("reporting.activityByAction")}
+                        description={t("reporting.activityByActionDesc")}
+                     >
+                        <CountList
+                           items={actionSummaries}
+                           emptyTitle={t("reporting.noActivityTitle")}
+                           emptyDescription={t("reporting.noActivityDesc")}
+                        />
                      </ReportingSection>
 
-                     <ReportingSection title={t("reporting.activityByEntity")} description={t("reporting.activityByEntityDesc")}>
-                        <CountList items={entitySummaries} emptyTitle={t("reporting.noActivityTitle")} emptyDescription={t("reporting.noActivityDesc")} />
+                     <ReportingSection
+                        title={t("reporting.activityByEntity")}
+                        description={t("reporting.activityByEntityDesc")}
+                     >
+                        <CountList
+                           items={entitySummaries}
+                           emptyTitle={t("reporting.noActivityTitle")}
+                           emptyDescription={t("reporting.noActivityDesc")}
+                        />
                      </ReportingSection>
                   </div>
 
-                  <ReportingSection title={t("reporting.recentActivity")} description={t("reporting.recentActivityDesc")}>
+                  <ReportingSection
+                     title={t("reporting.recentActivity")}
+                     description={t("reporting.recentActivityDesc")}
+                  >
                      <RecentAuditList logs={auditLogs} sites={sites} />
                   </ReportingSection>
                </>

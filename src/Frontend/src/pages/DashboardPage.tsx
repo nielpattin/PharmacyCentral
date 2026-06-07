@@ -47,9 +47,9 @@ const CHART_COLORS = {
 };
 
 function auditActionTone(action: string) {
-   if (action === "Deleted" || action === "Cancelled") return "bad";
-   if (action === "Updated") return "warn";
-   return "ok";
+   if (action === "Deleted" || action === "Cancelled") return "destructive";
+   if (action === "Updated") return "outline";
+   return "secondary";
 }
 
 function computeHealth(summary: DashboardSummaryDto | null) {

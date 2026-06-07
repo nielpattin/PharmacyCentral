@@ -1,10 +1,21 @@
 import { useMemo, useState } from "react";
-import { createAdminUser, loadAdminRoles, loadAdminUsers, loadSites, resetAdminUserPassword, revokeAdminUserSessions, updateAdminUserAccess, type AdminUserCreateRequest, type AdminUserDetails, type SiteDto } from "../api/pharmacyClient";
+import {
+   createAdminUser,
+   loadAdminRoles,
+   loadAdminUsers,
+   loadSites,
+   resetAdminUserPassword,
+   revokeAdminUserSessions,
+   updateAdminUserAccess,
+   type AdminUserCreateRequest,
+   type AdminUserDetails,
+   type SiteDto,
+} from "../api/pharmacyClient";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Field } from "../components/ui/Field";
 import { useMountEffect } from "../hooks/useMountEffect";
@@ -60,18 +71,27 @@ export default function UserManagementPage() {
    const [banner, setBanner] = useState<string | null>(null);
    const [notice, setNotice] = useState<string | null>(null);
 
-   const selectedUser = useMemo(() => users.find((user) => user.id === selectedUserId) ?? null, [selectedUserId, users]);
+   const selectedUser = useMemo(
+      () => users.find((user) => user.id === selectedUserId) ?? null,
+      [selectedUserId, users],
+   );
    const normalizedSearch = search.trim().toLowerCase();
    const visibleUsers = useMemo(
-      () => users.filter((user) => {
-         const matchesSearch = normalizedSearch.length === 0 || user.email.toLowerCase().includes(normalizedSearch) || user.displayName.toLowerCase().includes(normalizedSearch);
-         const matchesRole = roleFilter === "" || user.roles.includes(roleFilter);
-         return matchesSearch && matchesRole;
-      }),
+      () =>
+         users.filter((user) => {
+            const matchesSearch =
+               normalizedSearch.length === 0 ||
+               user.email.toLowerCase().includes(normalizedSearch) ||
+               user.displayName.toLowerCase().includes(normalizedSearch);
+            const matchesRole = roleFilter === "" || user.roles.includes(roleFilter);
+            return matchesSearch && matchesRole;
+         }),
       [normalizedSearch, roleFilter, users],
    );
 
-   useMountEffect(() => { void refreshData(); });
+   useMountEffect(() => {
+      void refreshData();
+   });
 
    async function refreshData(preferredUserId?: string) {
       setIsLoading(true);
@@ -111,7 +131,11 @@ export default function UserManagementPage() {
    }
 
    function validateCreateForm() {
-      if (createForm.email.trim().length === 0 || createForm.displayName.trim().length === 0 || createForm.password.trim().length === 0) {
+      if (
+         createForm.email.trim().length === 0 ||
+         createForm.displayName.trim().length === 0 ||
+         createForm.password.trim().length === 0
+      ) {
          return t("users.validation.account");
       }
 
@@ -220,9 +244,15 @@ export default function UserManagementPage() {
    }
 
    return (
-      <AppShell active="users" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.users") }]} />}>
+      <AppShell
+         active="users"
+         breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.users") }]} />}
+      >
          <div className={styles.usersPage}>
-            <PageHeader title={t("users.title")} actions={<Button variant="primary" onClick={() => void refreshData()}>{t("common.refresh")}</Button>} />
+            <PageHeader
+               title={t("users.title")}
+               actions={<Button onClick={() => void refreshData()}>{t("common.refresh")}</Button>}
+            />
             {banner !== null ? <div className="notice danger-note">{banner}</div> : null}
             {notice !== null ? <div className="notice success-note">{notice}</div> : null}
 
@@ -235,25 +265,74 @@ export default function UserManagementPage() {
                      </div>
                   </div>
                   <div className={`form-grid ${styles.usersCreateGrid}`}>
-                     <Field label={t("users.email")} required><input className="field-input" value={createForm.email} onChange={(event) => setCreateForm({ ...createForm, email: event.target.value })} /></Field>
-                     <Field label={t("users.displayName")} required><input className="field-input" value={createForm.displayName} onChange={(event) => setCreateForm({ ...createForm, displayName: event.target.value })} /></Field>
-                     <Field label={t("users.password")} required hint={t("users.passwordHint")}><input className="field-input" type="password" value={createForm.password} onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })} /></Field>
+                     <Field label={t("users.email")} required>
+                        <input
+                           className="field-input"
+                           value={createForm.email}
+                           onChange={(event) => setCreateForm({ ...createForm, email: event.target.value })}
+                        />
+                     </Field>
+                     <Field label={t("users.displayName")} required>
+                        <input
+                           className="field-input"
+                           value={createForm.displayName}
+                           onChange={(event) => setCreateForm({ ...createForm, displayName: event.target.value })}
+                        />
+                     </Field>
+                     <Field label={t("users.password")} required hint={t("users.passwordHint")}>
+                        <input
+                           className="field-input"
+                           type="password"
+                           value={createForm.password}
+                           onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })}
+                        />
+                     </Field>
                   </div>
                   <div className={styles.usersAccessGrid}>
                      <div>
                         <h3 className="section-kicker">{t("users.roles")}</h3>
-							<div className={styles.choiceGrid}>
-								{roles.map((role) => <label key={role} className={styles.choicePill}><input type="checkbox" checked={createForm.roles.includes(role)} onChange={() => setCreateForm({ ...createForm, roles: toggleValue(createForm.roles, role) })} />{role}</label>)}
+                        <div className={styles.choiceGrid}>
+                           {roles.map((role) => (
+                              <label key={role} className={styles.choicePill}>
+                                 <input
+                                    type="checkbox"
+                                    checked={createForm.roles.includes(role)}
+                                    onChange={() =>
+                                       setCreateForm({ ...createForm, roles: toggleValue(createForm.roles, role) })
+                                    }
+                                 />
+                                 {role}
+                              </label>
+                           ))}
                         </div>
                      </div>
                      <div>
                         <h3 className="section-kicker">{t("users.siteAccess")}</h3>
-							<div className={styles.choiceGrid}>
-								{sites.map((site) => <label key={site.id} className={styles.choicePill}><input type="checkbox" checked={createForm.siteIds.includes(site.id)} onChange={() => setCreateForm({ ...createForm, siteIds: toggleValue(createForm.siteIds, site.id) })} />{site.name}</label>)}
+                        <div className={styles.choiceGrid}>
+                           {sites.map((site) => (
+                              <label key={site.id} className={styles.choicePill}>
+                                 <input
+                                    type="checkbox"
+                                    checked={createForm.siteIds.includes(site.id)}
+                                    onChange={() =>
+                                       setCreateForm({
+                                          ...createForm,
+                                          siteIds: toggleValue(createForm.siteIds, site.id),
+                                       })
+                                    }
+                                 />
+                                 {site.name}
+                              </label>
+                           ))}
                         </div>
                      </div>
                   </div>
-                  <div className="form-actions"><Button variant="primary" disabled={isSaving} onClick={() => void handleCreateUser()}>{isSaving ? t("common.saving") : t("users.createButton")}</Button><Button onClick={() => setCreateForm(blankCreateForm)}>{t("common.reset")}</Button></div>
+                  <div className="form-actions">
+                     <Button disabled={isSaving} onClick={() => void handleCreateUser()}>
+                        {isSaving ? t("common.saving") : t("users.createButton")}
+                     </Button>
+                     <Button onClick={() => setCreateForm(blankCreateForm)}>{t("common.reset")}</Button>
+                  </div>
                </div>
             </section>
 
@@ -265,14 +344,70 @@ export default function UserManagementPage() {
                            <h2 className="section-title">{t("users.registryTitle")}</h2>
                            <p className="section-subtitle">{t("users.registryDesc")}</p>
                         </div>
-                        <Badge tone="role">{isLoading ? t("common.loading") : `${visibleUsers.length} ${t("common.records")}`}</Badge>
+                        <Badge variant="outline">
+                           {isLoading ? t("common.loading") : `${visibleUsers.length} ${t("common.records")}`}
+                        </Badge>
                      </div>
-                     <div className={`section-toolbar ${styles.usersToolbar}`}><input className="field-input" placeholder={t("users.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} /><select className="field-input" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}><option value="">{t("users.allRoles")}</option>{roles.map((role) => <option key={role} value={role}>{role}</option>)}</select></div>
-                     {isLoading ? <EmptyState icon="…" title={t("users.loading")} description={t("users.fetching")} /> : visibleUsers.length === 0 ? <EmptyState icon="0" title={t("users.emptyTitle")} description={t("users.emptyDesc")} /> : (
+                     <div className={`section-toolbar ${styles.usersToolbar}`}>
+                        <input
+                           className="field-input"
+                           placeholder={t("users.searchPlaceholder")}
+                           value={search}
+                           onChange={(event) => setSearch(event.target.value)}
+                        />
+                        <select
+                           className="field-input"
+                           value={roleFilter}
+                           onChange={(event) => setRoleFilter(event.target.value)}
+                        >
+                           <option value="">{t("users.allRoles")}</option>
+                           {roles.map((role) => (
+                              <option key={role} value={role}>
+                                 {role}
+                              </option>
+                           ))}
+                        </select>
+                     </div>
+                     {isLoading ? (
+                        <EmptyState icon="…" title={t("users.loading")} description={t("users.fetching")} />
+                     ) : visibleUsers.length === 0 ? (
+                        <EmptyState icon="0" title={t("users.emptyTitle")} description={t("users.emptyDesc")} />
+                     ) : (
                         <div className="table-wrap">
                            <table className={`selectable-table ${styles.usersTable}`}>
-                              <thead><tr><th>{t("users.user")}</th><th>{t("users.roles")}</th><th>{t("users.siteAccess")}</th><th>{t("users.createdOn")}</th><th>{t("common.actions")}</th></tr></thead>
-                              <tbody>{visibleUsers.map((user) => <tr key={user.id} className={selectedUserId === user.id ? "selected" : undefined}><td><strong>{user.displayName}</strong><span className={styles.tableMuted}>{user.email}</span></td><td>{user.roles.map((role) => <Badge key={role} tone="role">{role}</Badge>)}</td><td>{siteSummary(user.siteIds)}</td><td>{formatDateTime(user.createdAtUtc)}</td><td><Button size="sm" onClick={() => selectUser(user)}>{t("users.review")}</Button></td></tr>)}</tbody>
+                              <thead>
+                                 <tr>
+                                    <th>{t("users.user")}</th>
+                                    <th>{t("users.roles")}</th>
+                                    <th>{t("users.siteAccess")}</th>
+                                    <th>{t("users.createdOn")}</th>
+                                    <th>{t("common.actions")}</th>
+                                 </tr>
+                              </thead>
+                              <tbody>
+                                 {visibleUsers.map((user) => (
+                                    <tr key={user.id} className={selectedUserId === user.id ? "selected" : undefined}>
+                                       <td>
+                                          <strong>{user.displayName}</strong>
+                                          <span className={styles.tableMuted}>{user.email}</span>
+                                       </td>
+                                       <td>
+                                          {user.roles.map((role) => (
+                                             <Badge key={role} variant="outline">
+                                                {role}
+                                             </Badge>
+                                          ))}
+                                       </td>
+                                       <td>{siteSummary(user.siteIds)}</td>
+                                       <td>{formatDateTime(user.createdAtUtc)}</td>
+                                       <td>
+                                          <Button size="sm" onClick={() => selectUser(user)}>
+                                             {t("users.review")}
+                                          </Button>
+                                       </td>
+                                    </tr>
+                                 ))}
+                              </tbody>
                            </table>
                         </div>
                      )}
@@ -287,36 +422,96 @@ export default function UserManagementPage() {
                            <p className="section-subtitle">{t("users.editorDesc")}</p>
                         </div>
                      </div>
-                     {selectedUser === null ? <EmptyState icon="?" title={t("users.noSelectionTitle")} description={t("users.noSelectionDesc")} /> : (
+                     {selectedUser === null ? (
+                        <EmptyState
+                           icon="?"
+                           title={t("users.noSelectionTitle")}
+                           description={t("users.noSelectionDesc")}
+                        />
+                     ) : (
                         <div className={styles.usersEditor}>
                            <div className={styles.detailStack}>
-                              <div><span>{t("users.displayName")}</span><strong>{selectedUser.displayName}</strong></div>
-                              <div><span>{t("users.email")}</span><strong>{selectedUser.email}</strong></div>
-                              <div><span>{t("users.updatedOn")}</span><strong>{formatDateTime(selectedUser.updatedAtUtc)}</strong></div>
+                              <div>
+                                 <span>{t("users.displayName")}</span>
+                                 <strong>{selectedUser.displayName}</strong>
+                              </div>
+                              <div>
+                                 <span>{t("users.email")}</span>
+                                 <strong>{selectedUser.email}</strong>
+                              </div>
+                              <div>
+                                 <span>{t("users.updatedOn")}</span>
+                                 <strong>{formatDateTime(selectedUser.updatedAtUtc)}</strong>
+                              </div>
                            </div>
                            <div>
                               <h3 className="section-kicker">{t("users.roles")}</h3>
-							<div className={styles.choiceGrid}>
-								{roles.map((role) => <label key={role} className={styles.choicePill}><input type="checkbox" checked={accessForm.roles.includes(role)} onChange={() => setAccessForm({ ...accessForm, roles: toggleValue(accessForm.roles, role) })} />{role}</label>)}
+                              <div className={styles.choiceGrid}>
+                                 {roles.map((role) => (
+                                    <label key={role} className={styles.choicePill}>
+                                       <input
+                                          type="checkbox"
+                                          checked={accessForm.roles.includes(role)}
+                                          onChange={() =>
+                                             setAccessForm({
+                                                ...accessForm,
+                                                roles: toggleValue(accessForm.roles, role),
+                                             })
+                                          }
+                                       />
+                                       {role}
+                                    </label>
+                                 ))}
                               </div>
                            </div>
                            <div>
                               <h3 className="section-kicker">{t("users.siteAccess")}</h3>
-							<div className={styles.choiceGrid}>
-								{sites.map((site) => <label key={site.id} className={styles.choicePill}><input type="checkbox" checked={accessForm.siteIds.includes(site.id)} onChange={() => setAccessForm({ ...accessForm, siteIds: toggleValue(accessForm.siteIds, site.id) })} />{site.name}</label>)}
+                              <div className={styles.choiceGrid}>
+                                 {sites.map((site) => (
+                                    <label key={site.id} className={styles.choicePill}>
+                                       <input
+                                          type="checkbox"
+                                          checked={accessForm.siteIds.includes(site.id)}
+                                          onChange={() =>
+                                             setAccessForm({
+                                                ...accessForm,
+                                                siteIds: toggleValue(accessForm.siteIds, site.id),
+                                             })
+                                          }
+                                       />
+                                       {site.name}
+                                    </label>
+                                 ))}
                               </div>
                            </div>
                            <div>
                               <h3 className="section-kicker">{t("users.security")}</h3>
                               <Field label={t("users.newPassword")} hint={t("users.newPasswordHint")}>
-                                 <input className="field-input" type="password" value={passwordForm.newPassword} onChange={(event) => setPasswordForm({ newPassword: event.target.value })} />
+                                 <input
+                                    className="field-input"
+                                    type="password"
+                                    value={passwordForm.newPassword}
+                                    onChange={(event) => setPasswordForm({ newPassword: event.target.value })}
+                                 />
                               </Field>
                               <div className="form-actions">
-                                 <Button disabled={isSaving} onClick={() => void handleResetPassword()}>{t("users.resetPassword")}</Button>
-                                 <Button variant="danger" disabled={isSaving} onClick={() => void handleRevokeSessions()}>{t("users.revokeSessions")}</Button>
+                                 <Button disabled={isSaving} onClick={() => void handleResetPassword()}>
+                                    {t("users.resetPassword")}
+                                 </Button>
+                                 <Button
+                                    variant="destructive"
+                                    disabled={isSaving}
+                                    onClick={() => void handleRevokeSessions()}
+                                 >
+                                    {t("users.revokeSessions")}
+                                 </Button>
                               </div>
                            </div>
-                           <div className="form-actions"><Button variant="primary" disabled={isSaving} onClick={() => void handleSaveAccess()}>{isSaving ? t("common.saving") : t("users.saveAccess")}</Button></div>
+                           <div className="form-actions">
+                              <Button disabled={isSaving} onClick={() => void handleSaveAccess()}>
+                                 {isSaving ? t("common.saving") : t("users.saveAccess")}
+                              </Button>
+                           </div>
                         </div>
                      )}
                   </div>

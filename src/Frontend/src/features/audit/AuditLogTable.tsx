@@ -1,13 +1,13 @@
-import { Badge } from "../../components/ui/Badge";
+import { Badge } from "../../components/shadcn/badge";
 import type { AuditLogEntryDto, SiteDto } from "../../api/pharmacyClient";
 import { useT } from "../../lib/i18n";
 import { formatAuditSummary } from "../../lib/auditDisplay";
 import styles from "./AuditLogTable.module.css";
 
 function auditActionTone(action: string) {
-   if (action === "Deleted" || action === "Cancelled") return "bad";
-   if (action === "Updated") return "warn";
-   return "ok";
+   if (action === "Deleted" || action === "Cancelled") return "destructive";
+   if (action === "Updated") return "outline";
+   return "secondary";
 }
 
 function shortId(id: string | null) {
@@ -58,7 +58,7 @@ export function AuditLogTable({ rows, selectedId = "", sites, onSelect }: AuditL
                      >
                         <td>{new Date(log.occurredAtUtc).toLocaleString()}</td>
                         <td>
-                           <Badge tone={auditActionTone(log.action)}>{t(`audit.action.${log.action}`)}</Badge>
+                           <Badge variant={auditActionTone(log.action)}>{t(`audit.action.${log.action}`)}</Badge>
                         </td>
                         <td>{t(`audit.entity.${log.entityType}`)}</td>
                         <td>{formatAuditSummary(t, log.summary, log.entityId ?? t("common.noData"))}</td>

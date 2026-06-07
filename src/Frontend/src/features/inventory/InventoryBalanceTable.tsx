@@ -12,7 +12,11 @@ export type InventoryBalanceTableProps = {
 export function InventoryBalanceTable({ rows, sites, storageLocations, onUseBalance }: InventoryBalanceTableProps) {
    const t = useT();
    const sortedRows = useMemo(
-      () => [...rows].sort((left, right) => left.productSku.localeCompare(right.productSku) || left.expiryDate.localeCompare(right.expiryDate)),
+      () =>
+         [...rows].sort(
+            (left, right) =>
+               left.productSku.localeCompare(right.productSku) || left.expiryDate.localeCompare(right.expiryDate),
+         ),
       [rows],
    );
 

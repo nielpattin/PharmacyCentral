@@ -1,8 +1,8 @@
-import { Badge } from "../../components/ui/Badge";
-import { Button } from "../../components/ui/Button";
+import { Badge } from "../../components/shadcn/badge";
+import { Button } from "../../components/shadcn/button";
 import type { ProductDto } from "../../api/pharmacyClient";
 import { useT } from "../../lib/i18n";
-import { formatValue, statusTone } from "../../pages/shared/pharmacyForms";
+import { formatValue } from "../../pages/shared/pharmacyForms";
 
 type ProductTableProps = {
    rows: ProductDto[];
@@ -49,7 +49,7 @@ export function ProductTable({ rows, selectedProductId, onSelectProduct, onDelet
                         <td>{formatValue(product.category)}</td>
                         <td>{formatValue(product.unit)}</td>
                         <td>
-                           <Badge tone={statusTone(product.status)}>
+                           <Badge variant={product.status === "Active" ? "secondary" : "destructive"}>
                               {product.status === "Active" ? t("status.active") : t("status.inactive")}
                            </Badge>
                         </td>
@@ -57,7 +57,7 @@ export function ProductTable({ rows, selectedProductId, onSelectProduct, onDelet
                            <div className="table-actions">
                               <Button
                                  size="sm"
-                                 variant="danger"
+                                 variant="destructive"
                                  onClick={(event) => {
                                     event.stopPropagation();
                                     onDeleteProduct(product.id);

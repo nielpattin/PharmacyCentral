@@ -3,8 +3,8 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
 import { EmptyState } from "../components/ui/EmptyState";
 import {
    createStorageLocation,
@@ -24,7 +24,6 @@ import {
    blankStorageLocationValues,
    normalizeText,
    parseCapacity,
-   statusTone,
    storageLocationValuesFromDto,
    type StorageLocationFormValues,
 } from "./shared/pharmacyForms";
@@ -205,10 +204,10 @@ export default function StorageLocationsPage({ siteId }: StorageLocationsPagePro
             }
             actions={
                <div className="page-actions">
-                  <Button variant="secondary" onClick={() => void refreshData()}>
+                  <Button variant="outline" onClick={() => void refreshData()}>
                      {t("storage.refresh")}
                   </Button>
-                  <Button variant="primary" onClick={handleNewStorageLocation} disabled={selectedSite === null}>
+                  <Button onClick={handleNewStorageLocation} disabled={selectedSite === null}>
                      {t("storage.newLocation")}
                   </Button>
                </div>
@@ -230,7 +229,7 @@ export default function StorageLocationsPage({ siteId }: StorageLocationsPagePro
                            <h2 className="section-title">{t("storage.linked")}</h2>
                            <p className="section-subtitle">{t("storage.linkedDesc", { code: selectedSite.code })}</p>
                         </div>
-                        <Badge tone={statusTone(selectedSite.status)}>
+                        <Badge variant={selectedSite.status === "Active" ? "secondary" : "destructive"}>
                            {selectedSite.status === "Active" ? t("status.active") : t("status.inactive")}
                         </Badge>
                      </div>

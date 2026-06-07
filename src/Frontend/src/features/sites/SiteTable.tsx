@@ -1,5 +1,5 @@
-import { Badge } from "../../components/ui/Badge";
-import { Button } from "../../components/ui/Button";
+import { Badge } from "../../components/shadcn/badge";
+import { Button } from "../../components/shadcn/button";
 import type { SiteDto } from "../../api/pharmacyClient";
 import { useT } from "../../lib/i18n";
 import { siteTypeLabel } from "../../pages/shared/pharmacyTypes";
@@ -13,7 +13,7 @@ type SiteTableProps = {
 };
 
 function statusTone(status: string) {
-   return status === "Active" ? "ok" : "bad";
+   return status === "Active" ? "secondary" : "destructive";
 }
 
 export function SiteTable({
@@ -58,7 +58,7 @@ export function SiteTable({
                         <td>{site.name}</td>
                         <td>{siteTypeLabel(site.siteType, t)}</td>
                         <td>
-                           <Badge tone={statusTone(site.status)}>
+                           <Badge variant={statusTone(site.status)}>
                               {site.status === "Active" ? t("status.active") : t("status.inactive")}
                            </Badge>
                         </td>
@@ -66,7 +66,7 @@ export function SiteTable({
                            <div className="table-actions">
                               <Button
                                  size="sm"
-                                 variant="secondary"
+                                 variant="outline"
                                  onClick={(event) => {
                                     event.stopPropagation();
                                     onOpenStorageLocations(site.id);
@@ -76,7 +76,7 @@ export function SiteTable({
                               </Button>
                               <Button
                                  size="sm"
-                                 variant="danger"
+                                 variant="destructive"
                                  onClick={(event) => {
                                     event.stopPropagation();
                                     onDeleteSite(site.id);

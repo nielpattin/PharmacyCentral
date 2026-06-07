@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
 import { EmptyState } from "../components/ui/EmptyState";
 import {
    loadAuditLogs,
@@ -69,9 +69,9 @@ function toAuditLogFilters(values: AuditLogFilterValues): AuditLogFilters {
 }
 
 function auditActionTone(action: string) {
-   if (action === "Deleted" || action === "Cancelled") return "bad";
-   if (action === "Updated") return "warn";
-   return "ok";
+   if (action === "Deleted" || action === "Cancelled") return "destructive";
+   if (action === "Updated") return "outline";
+   return "secondary";
 }
 
 function formatDetails(details: string | null) {
@@ -152,7 +152,7 @@ export default function AuditPage() {
                description={t("audit.description")}
                actions={
                   <div className="page-actions">
-                     <Button variant="secondary" onClick={() => void refreshData()}>
+                     <Button variant="outline" onClick={() => void refreshData()}>
                         {t("common.refresh")}
                      </Button>
                   </div>
@@ -169,7 +169,7 @@ export default function AuditPage() {
                            <h2 className="section-title">{t("audit.registry")}</h2>
                            <p className="section-subtitle">{t("audit.registryDesc")}</p>
                         </div>
-                        <Badge tone="role">
+                        <Badge variant="outline">
                            {isLoading ? t("audit.loadingState") : `${logs.length} ${t("common.records")}`}
                         </Badge>
                      </div>
@@ -237,10 +237,8 @@ export default function AuditPage() {
                      </div>
 
                      <div className={`section-header-actions ${styles.auditFilterActions}`}>
-                        <Button variant="primary" onClick={handleApplyFilters}>
-                           {t("audit.applyFilters")}
-                        </Button>
-                        <Button variant="secondary" onClick={handleClearFilters}>
+                        <Button onClick={handleApplyFilters}>{t("audit.applyFilters")}</Button>
+                        <Button variant="outline" onClick={handleClearFilters}>
                            {t("audit.clearFilters")}
                         </Button>
                      </div>
@@ -271,13 +269,17 @@ export default function AuditPage() {
                            <div className="section-header">
                               <div>
                                  <h3 className="section-title">
-                                    {formatAuditSummary(t, selectedLog.summary, selectedLog.entityId ?? t("common.noData"))}
+                                    {formatAuditSummary(
+                                       t,
+                                       selectedLog.summary,
+                                       selectedLog.entityId ?? t("common.noData"),
+                                    )}
                                  </h3>
                                  <p className="section-subtitle">
                                     {new Date(selectedLog.occurredAtUtc).toLocaleString()}
                                  </p>
                               </div>
-                              <Badge tone={auditActionTone(selectedLog.action)}>
+                              <Badge variant={auditActionTone(selectedLog.action)}>
                                  {t(`audit.action.${selectedLog.action}`)}
                               </Badge>
                            </div>

@@ -1,6 +1,6 @@
 import styles from "./StorageLocationTable.module.css";
-import { Badge } from "../../components/ui/Badge";
-import { Button } from "../../components/ui/Button";
+import { Badge } from "../../components/shadcn/badge";
+import { Button } from "../../components/shadcn/button";
 import type { StorageLocationDto } from "../../api/pharmacyClient";
 import { useLanguage, useT } from "../../lib/i18n";
 import { storageLocationTypeLabel } from "../../pages/shared/pharmacyTypes";
@@ -13,7 +13,7 @@ type StorageLocationTableProps = {
 };
 
 function statusTone(status: string) {
-   return status === "Active" ? "ok" : "bad";
+   return status === "Active" ? "secondary" : "destructive";
 }
 
 function formatCapacity(capacity: number | null, language: "en" | "vi") {
@@ -64,14 +64,14 @@ export function StorageLocationTable({
                         <td>{storageLocationTypeLabel(location.locationType, t)}</td>
                         <td>{formatCapacity(location.capacity, language)}</td>
                         <td>
-                           <Badge tone={statusTone(location.status)}>
+                           <Badge variant={statusTone(location.status)}>
                               {location.status === "Active" ? t("status.active") : t("status.inactive")}
                            </Badge>
                         </td>
                         <td>
                            <Button
                               size="sm"
-                              variant="danger"
+                              variant="destructive"
                               onClick={(event) => {
                                  event.stopPropagation();
                                  onDeleteStorageLocation(location.id);

@@ -1,12 +1,12 @@
-import { Badge } from "../../components/ui/Badge";
+import { Badge } from "../../components/shadcn/badge";
 import type { PrescriptionDetails, SiteDto } from "../../api/pharmacyClient";
 import { useT } from "../../lib/i18n";
 
 function prescriptionStatusTone(status: string) {
-   if (status === "Draft") return "role";
-   if (status === "Dispensed") return "ok";
-   if (status === "Cancelled") return "bad";
-   return "warn";
+   if (status === "Draft") return "outline";
+   if (status === "Dispensed") return "secondary";
+   if (status === "Cancelled") return "destructive";
+   return "outline";
 }
 
 type PrescriptionTableProps = {
@@ -23,16 +23,40 @@ export function PrescriptionTable({ rows, selectedId = "", sites, onSelect }: Pr
    return (
       <div className="table-wrap">
          <table className="selectable-table sites-table">
-            <thead><tr><th>{t("prescription.prescriptionNumber")}</th><th>{t("prescription.patient")}</th><th>{t("prescription.site")}</th><th>{t("prescription.status")}</th><th>{t("prescription.created")}</th></tr></thead>
+            <thead>
+               <tr>
+                  <th>{t("prescription.prescriptionNumber")}</th>
+                  <th>{t("prescription.patient")}</th>
+                  <th>{t("prescription.site")}</th>
+                  <th>{t("prescription.status")}</th>
+                  <th>{t("prescription.created")}</th>
+               </tr>
+            </thead>
             <tbody>
                {rows.map((prescription) => {
                   const isSelected = selectedId === prescription.id;
                   return (
-                     <tr key={prescription.id} className={isSelected ? "is-selected" : undefined} role="button" tabIndex={0} onClick={() => onSelect(prescription.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(prescription.id); } }}>
+                     <tr
+                        key={prescription.id}
+                        className={isSelected ? "is-selected" : undefined}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onSelect(prescription.id)}
+                        onKeyDown={(event) => {
+                           if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              onSelect(prescription.id);
+                           }
+                        }}
+                     >
                         <td>{prescription.prescriptionNumber}</td>
                         <td>{prescription.patientName}</td>
                         <td>{siteName(prescription.siteId)}</td>
-                        <td><Badge tone={prescriptionStatusTone(prescription.status)}>{t(`prescription.status.${prescription.status}`)}</Badge></td>
+                        <td>
+                           <Badge variant={prescriptionStatusTone(prescription.status)}>
+                              {t(`prescription.status.${prescription.status}`)}
+                           </Badge>
+                        </td>
                         <td>{new Date(prescription.createdAtUtc).toLocaleDateString()}</td>
                      </tr>
                   );

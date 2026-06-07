@@ -3,15 +3,27 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
 import { EmptyState } from "../components/ui/EmptyState";
-import { createProduct, deleteProduct, loadProducts, updateProduct, type ProductDto, type ProductUpsertRequest } from "../api/pharmacyClient";
+import {
+   createProduct,
+   deleteProduct,
+   loadProducts,
+   updateProduct,
+   type ProductDto,
+   type ProductUpsertRequest,
+} from "../api/pharmacyClient";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
 import { ProductForm } from "../features/products/ProductForm";
 import { ProductTable } from "../features/products/ProductTable";
-import { blankProductValues, normalizeText, productValuesFromDto, type ProductFormValues } from "./shared/pharmacyForms";
+import {
+   blankProductValues,
+   normalizeText,
+   productValuesFromDto,
+   type ProductFormValues,
+} from "./shared/pharmacyForms";
 
 export default function ProductsPage() {
    const t = useT();
@@ -25,7 +37,10 @@ export default function ProductsPage() {
    const [isDeleting, setIsDeleting] = useState(false);
    const [createToken, setCreateToken] = useState(0);
 
-   const selectedProduct = useMemo(() => products.find((product) => product.id === selectedProductId) ?? null, [products, selectedProductId]);
+   const selectedProduct = useMemo(
+      () => products.find((product) => product.id === selectedProductId) ?? null,
+      [products, selectedProductId],
+   );
 
    const visibleProducts = useMemo(() => {
       const normalizedQuery = query.trim().toLowerCase();
@@ -34,15 +49,23 @@ export default function ProductsPage() {
       }
 
       return products.filter((product) =>
-         [product.sku, product.name, product.category ?? "", product.unit ?? "", product.manufacturer ?? "", product.status, product.notes ?? ""].some((value) =>
-            value.toLowerCase().includes(normalizedQuery),
-         ),
+         [
+            product.sku,
+            product.name,
+            product.category ?? "",
+            product.unit ?? "",
+            product.manufacturer ?? "",
+            product.status,
+            product.notes ?? "",
+         ].some((value) => value.toLowerCase().includes(normalizedQuery)),
       );
    }, [products, query]);
 
-   const editorProduct = editorTargetId === null ? null : (products.find((product) => product.id === editorTargetId) ?? selectedProduct);
+   const editorProduct =
+      editorTargetId === null ? null : (products.find((product) => product.id === editorTargetId) ?? selectedProduct);
    const editorMode = editorTargetId === null ? "create" : "edit";
-   const formValues: ProductFormValues = editorProduct === null ? blankProductValues() : productValuesFromDto(editorProduct);
+   const formValues: ProductFormValues =
+      editorProduct === null ? blankProductValues() : productValuesFromDto(editorProduct);
    const formKey = `${editorTargetId ?? `new-product-${createToken}`}-${JSON.stringify(formValues)}`;
 
    useMountEffect(() => {
@@ -93,7 +116,8 @@ export default function ProductsPage() {
             isActive: values.isActive,
          };
 
-         const result = editorTargetId === null ? await createProduct(request) : await updateProduct(editorTargetId, request);
+         const result =
+            editorTargetId === null ? await createProduct(request) : await updateProduct(editorTargetId, request);
          await refreshProducts(result.id);
          setEditorTargetId(result.id);
       } catch (error) {
@@ -134,27 +158,80 @@ export default function ProductsPage() {
    }
 
    return (
-      <AppShell active="catalog" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.catalog") }]} />}>
+      <AppShell
+         active="catalog"
+         breadcrumb={
+            <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.catalog") }]} />
+         }
+      >
          <div className={styles.sitesPage}>
-            <PageHeader title={t("products.title")} actions={<div className="page-actions"><Button variant="primary" onClick={handleNewProduct}>{t("products.newProduct")}</Button></div>} />
+            <PageHeader
+               title={t("products.title")}
+               actions={
+                  <div className="page-actions">
+                     <Button onClick={handleNewProduct}>{t("products.newProduct")}</Button>
+                  </div>
+               }
+            />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
             <div className={styles.siteWorkbench}>
                <section className={`card ${styles.siteRegistry}`}>
                   <div className="section">
                      <div className="section-header">
-                        <div><h2 className="section-title">{t("products.registry")}</h2><p className="section-subtitle">{t("products.registryDesc")}</p></div>
-                        <Badge tone="role">{isLoading ? t("products.loadingState") : `${visibleProducts.length} ${t("common.records")}`}</Badge>
+                        <div>
+                           <h2 className="section-title">{t("products.registry")}</h2>
+                           <p className="section-subtitle">{t("products.registryDesc")}</p>
+                        </div>
+                        <Badge variant="outline">
+                           {isLoading ? t("products.loadingState") : `${visibleProducts.length} ${t("common.records")}`}
+                        </Badge>
                      </div>
                      <div className="section-toolbar">
-                        <input className={`field-input ${styles.siteSearch}`} type="search" placeholder={t("products.searchPlaceholder")} aria-label={t("products.searchPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)} />
+                        <input
+                           className={`field-input ${styles.siteSearch}`}
+                           type="search"
+                           placeholder={t("products.searchPlaceholder")}
+                           aria-label={t("products.searchPlaceholder")}
+                           value={query}
+                           onChange={(event) => setQuery(event.target.value)}
+                        />
                      </div>
-                     {isLoading ? <EmptyState icon="…" title={t("products.loading")} description={t("products.fetching")} /> : products.length === 0 ? <EmptyState icon="0" title={t("products.emptyTitle")} description={t("products.emptyDesc")} /> : visibleProducts.length === 0 ? <EmptyState icon="?" title={t("products.emptyTitle")} description={t("products.searchPlaceholder")} /> : <ProductTable rows={visibleProducts} selectedProductId={selectedProduct?.id ?? ""} onSelectProduct={handleSelectProduct} onDeleteProduct={(productId) => void handleDeleteProduct(productId)} />}
+                     {isLoading ? (
+                        <EmptyState icon="…" title={t("products.loading")} description={t("products.fetching")} />
+                     ) : products.length === 0 ? (
+                        <EmptyState icon="0" title={t("products.emptyTitle")} description={t("products.emptyDesc")} />
+                     ) : visibleProducts.length === 0 ? (
+                        <EmptyState
+                           icon="?"
+                           title={t("products.emptyTitle")}
+                           description={t("products.searchPlaceholder")}
+                        />
+                     ) : (
+                        <ProductTable
+                           rows={visibleProducts}
+                           selectedProductId={selectedProduct?.id ?? ""}
+                           onSelectProduct={handleSelectProduct}
+                           onDeleteProduct={(productId) => void handleDeleteProduct(productId)}
+                        />
+                     )}
                   </div>
                </section>
                <aside className={`card ${styles.siteEditor}`}>
                   <div className="section">
-                     <div className="section-header"><div><h2 className="section-title">{t("products.editor")}</h2><p className="section-subtitle">{t("products.editorDesc")}</p></div></div>
-                     <ProductForm key={formKey} mode={editorMode} initialValues={formValues} isSaving={isSaving || isDeleting} onSubmit={handleSaveProduct} onDelete={editorProduct !== null ? () => handleDeleteProduct(editorProduct.id) : undefined} />
+                     <div className="section-header">
+                        <div>
+                           <h2 className="section-title">{t("products.editor")}</h2>
+                           <p className="section-subtitle">{t("products.editorDesc")}</p>
+                        </div>
+                     </div>
+                     <ProductForm
+                        key={formKey}
+                        mode={editorMode}
+                        initialValues={formValues}
+                        isSaving={isSaving || isDeleting}
+                        onSubmit={handleSaveProduct}
+                        onDelete={editorProduct !== null ? () => handleDeleteProduct(editorProduct.id) : undefined}
+                     />
                   </div>
                </aside>
             </div>

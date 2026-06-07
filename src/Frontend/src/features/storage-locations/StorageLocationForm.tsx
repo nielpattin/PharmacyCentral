@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "../../components/ui/Button";
+import { Button } from "../../components/shadcn/button";
 import { Field } from "../../components/ui/Field";
 import type { SiteDto } from "../../api/pharmacyClient";
 import { useT } from "../../lib/i18n";
@@ -142,7 +142,7 @@ export function StorageLocationForm({
          </div>
 
          <div className="form-actions">
-            <Button variant="primary" type="submit" disabled={isSaving || !isDirty}>
+            <Button type="submit" disabled={isSaving || !isDirty}>
                {isSaving
                   ? t("storage.saving")
                   : mode === "create"
@@ -150,7 +150,7 @@ export function StorageLocationForm({
                     : t("storage.saveButton")}
             </Button>
             <Button
-               variant="secondary"
+               variant="outline"
                type="button"
                onClick={() => setValues(baselineValues)}
                disabled={isSaving || !isDirty}
@@ -158,7 +158,7 @@ export function StorageLocationForm({
                {t("storage.reset")}
             </Button>
             {mode === "edit" && onDelete !== undefined ? (
-               <Button variant="danger" type="button" onClick={() => void onDelete()} disabled={isSaving}>
+               <Button variant="destructive" type="button" onClick={() => void onDelete()} disabled={isSaving}>
                   {t("storage.deleteButton")}
                </Button>
             ) : null}
