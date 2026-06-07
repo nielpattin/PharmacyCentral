@@ -21,6 +21,7 @@ import {
 } from "../api/pharmacyClient";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./RecallPage.module.css";
 
 type RecallForm = {
    recallNumber: string;
@@ -141,13 +142,13 @@ export default function RecallPage() {
          active="recalls"
          breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.recalls") }]} />}
       >
-         <div className="reporting-page recall-page">
+         <div className={`${styles.reportingPage} ${styles.recallPage}`}>
             <PageHeader title={t("recalls.title")} description={t("recalls.description")} actions={<Button onClick={() => void refresh()}>{t("common.refresh")}</Button>} />
 
             {bannerError !== null ? <div className="form-banner error">{bannerError}</div> : null}
             {successMessage !== null ? <div className="form-banner success">{successMessage}</div> : null}
 
-            <section className="card section recall-form-card">
+            <section className={`card section ${styles.recallFormCard}`}>
                <div className="section-head">
                   <div>
                      <h2>{t("recalls.newTitle")}</h2>
@@ -200,10 +201,10 @@ export default function RecallPage() {
                   </div>
                </div>
                {isLoading ? <p>{t("common.loading")}</p> : recalls.length === 0 ? <EmptyState icon={<AlertTriangle size={20} />} title={t("recalls.emptyTitle")} description={t("recalls.emptyDescription")} /> : (
-                  <div className="recall-list">
+                  <div className={styles.recallList}>
                      {recalls.map((recall) => (
-                        <article key={recall.id} className="recall-card">
-                           <div className="recall-card-head">
+                        <article key={recall.id} className={styles.recallCard}>
+                           <div className={styles.recallCardHead}>
                               <div>
                                  <h3>{recall.recallNumber} · {recall.title}</h3>
                                  <p>{recall.reason}</p>

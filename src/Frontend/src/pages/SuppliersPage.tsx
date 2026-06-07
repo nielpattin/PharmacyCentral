@@ -1,3 +1,4 @@
+import styles from "./SuppliersPage.module.css";
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
@@ -135,23 +136,23 @@ export default function SuppliersPage() {
 
    return (
       <AppShell active="supplier" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.supplier") }]} />}>
-         <div className="sites-page">
+         <div className={styles.sitesPage}>
             <PageHeader title={t("suppliers.title")} actions={<div className="page-actions"><Button variant="primary" onClick={handleNewSupplier}>{t("suppliers.newSupplier")}</Button></div>} />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
-            <div className="site-workbench">
-               <section className="card site-registry">
+            <div className={styles.siteWorkbench}>
+               <section className={`card ${styles.siteRegistry}`}>
                   <div className="section">
                      <div className="section-header">
                         <div><h2 className="section-title">{t("suppliers.registry")}</h2><p className="section-subtitle">{t("suppliers.registryDesc")}</p></div>
                         <Badge tone="role">{isLoading ? t("suppliers.loadingState") : `${visibleSuppliers.length} ${t("common.records")}`}</Badge>
                      </div>
                      <div className="section-toolbar">
-                        <input className="field-input site-search" type="search" placeholder={t("suppliers.searchPlaceholder")} aria-label={t("suppliers.searchPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)} />
+                        <input className={`field-input ${styles.siteSearch}`} type="search" placeholder={t("suppliers.searchPlaceholder")} aria-label={t("suppliers.searchPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)} />
                      </div>
                      {isLoading ? <EmptyState icon="…" title={t("suppliers.loading")} description={t("suppliers.fetching")} /> : suppliers.length === 0 ? <EmptyState icon="0" title={t("suppliers.emptyTitle")} description={t("suppliers.emptyDesc")} /> : visibleSuppliers.length === 0 ? <EmptyState icon="?" title={t("suppliers.emptyTitle")} description={t("suppliers.searchPlaceholder")} /> : <SupplierTable rows={visibleSuppliers} selectedSupplierId={selectedSupplier?.id ?? ""} onSelectSupplier={handleSelectSupplier} onDeleteSupplier={(supplierId) => void handleDeleteSupplier(supplierId)} />}
                   </div>
                </section>
-               <aside className="card site-editor">
+               <aside className={`card ${styles.siteEditor}`}>
                   <div className="section">
                      <div className="section-header"><div><h2 className="section-title">{t("suppliers.editor")}</h2><p className="section-subtitle">{t("suppliers.editorDesc")}</p></div></div>
                      <SupplierForm key={formKey} mode={editorMode} initialValues={formValues} isSaving={isSaving || isDeleting} onSubmit={handleSaveSupplier} onDelete={editorSupplier !== null ? () => handleDeleteSupplier(editorSupplier.id) : undefined} />

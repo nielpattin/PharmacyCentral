@@ -9,6 +9,7 @@ import { Field } from "../components/ui/Field";
 import { approvePurchaseOrder, cancelPurchaseOrder, createPurchaseOrder, loadProducts, loadPurchaseOrders, loadSites, loadSuppliers, type ProductDto, type PurchaseOrderDto, type SiteDto, type SupplierDto } from "../api/pharmacyClient";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./ProcurementPage.module.css";
 
 const blankLine = () => ({ productId: "", orderedQuantity: "", notes: "" });
 
@@ -88,10 +89,10 @@ export default function ProcurementPage() {
 
    return (
       <AppShell active="procurement" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.procurement") }]} />}>
-         <div className="reporting-page procurement-page">
+         <div className={`${styles.reportingPage} procurement-page`}>
             <PageHeader title={t("procurement.title")} actions={<Button variant="secondary" onClick={() => void refreshData()}>{t("common.refresh")}</Button>} />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
-            <div className="reporting-grid">
+            <div className={styles.reportingGrid}>
                <section className="card section">
                   <div className="section-header"><div><h2 className="section-title">{t("procurement.orders")}</h2><p className="section-subtitle">{t("procurement.ordersDesc")}</p></div><Badge tone="role">{orders.length} {t("common.records")}</Badge></div>
                   {isLoading ? <EmptyState icon="…" title={t("common.loading")} description={t("procurement.loadingDesc")} /> : orders.length === 0 ? <EmptyState icon="0" title={t("procurement.emptyTitle")} description={t("procurement.emptyDesc")} /> : (

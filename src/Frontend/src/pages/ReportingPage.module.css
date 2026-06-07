@@ -1,0 +1,176 @@
+.reportingPage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-content: start;
+  min-height: min-content;
+  padding-bottom: 20px;
+}
+
+.reportingPage :global(.page-head) {
+  margin-bottom: 0;
+}
+
+.reportingPage :global(.dashboard-section) {
+  margin-top: 0;
+}
+
+/* ─── KPI row ─── */
+
+.reportingKpiRow {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.reportingRiskSummary {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+/* ─── Section block ─── */
+
+.reportingSectionBlock {
+  margin-top: 14px;
+}
+
+/* ─── Source strip ─── */
+
+.reportingSourceStrip {
+  background: var(--surface-soft);
+}
+
+.reportingSourceContent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.reportingSourceBadges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ─── Risk table ─── */
+
+.reportingRiskTable {
+  table-layout: fixed;
+  min-width: 760px;
+}
+
+@media (max-width: 720px) {
+  .reportingRiskTable {
+    min-width: 760px;
+  }
+}
+
+.reportingRiskTable th:first-child,
+.reportingRiskTable td:first-child {
+  width: 30%;
+}
+
+.reportingRiskTable th:nth-child(2),
+.reportingRiskTable td:nth-child(2) {
+  width: 30%;
+}
+
+.reportingRiskTable th:nth-child(3),
+.reportingRiskTable td:nth-child(3) {
+  width: 110px;
+  text-align: right;
+}
+
+.reportingRiskTable th:nth-child(4),
+.reportingRiskTable td:nth-child(4) {
+  width: 130px;
+}
+
+.reportingRiskTable th:nth-child(5),
+.reportingRiskTable td:nth-child(5) {
+  width: 160px;
+}
+
+/* ─── Table cell helpers ─── */
+
+.reportingTablePrimary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.reportingTableMuted {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.813rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Count row ─── */
+
+.reportingCountRow :global(.module-head) {
+  margin-bottom: 0;
+}
+
+/* ─── Dashboard activity list (used in RecentAuditList) ─── */
+
+.dashboardActivityList {
+  display: grid;
+  gap: 0;
+}
+
+.dashboardActivityItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.dashboardActivityItem:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.dashboardActivityItem p,
+.dashboardActivityItem span {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.dashboardActivityItem time {
+  color: var(--muted);
+  font-size: 0.813rem;
+  white-space: nowrap;
+}
+
+/* ─── Reporting grid (two-column) ─── */
+
+.reportingGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 420px);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+/* ─── Responsive ─── */
+
+@media (max-width: 1100px) {
+  .reportingGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reportingSourceContent {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reportingSourceBadges {
+    justify-content: flex-start;
+  }
+}

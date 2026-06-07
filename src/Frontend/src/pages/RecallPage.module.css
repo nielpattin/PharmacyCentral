@@ -1,0 +1,43 @@
+.reportingPage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-content: start;
+  min-height: min-content;
+  padding-bottom: 20px;
+}
+
+.reportingPage :global(.page-head) {
+  margin-bottom: 0;
+}
+
+.recallPage .recallFormCard {
+  align-self: start;
+}
+
+.recallList {
+  display: grid;
+  gap: 16px;
+}
+
+.recallCard {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.recallCardHead {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+@media (max-width: 760px) {
+  .recallCardHead {
+    display: grid;
+  }
+}

@@ -19,6 +19,7 @@ import {
 } from "../api/pharmacyClient";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./QualityPage.module.css";
 
 type ReviewForm = {
    batchId: string;
@@ -128,7 +129,7 @@ export default function QualityPage() {
          active="quality"
          breadcrumb={<Breadcrumbs items={[{ label: t("nav.dashboard"), href: "/dashboard" }, { label: t("nav.quality") }]} />}
       >
-         <main className="quality-page stack-page">
+         <main className={`${styles.qualityPage} stack-page`}>
             <PageHeader
                title={t("quality.title")}
                description={t("quality.description")}
@@ -196,7 +197,7 @@ export default function QualityPage() {
                )}
             </section>
 
-            <section className="card section quality-review-card">
+            <section className={`card section ${styles.qualityReviewCard}`}>
                <div className="section-heading">
                   <div>
                      <h2>{t("quality.reviewTitle")}</h2>
@@ -222,7 +223,7 @@ export default function QualityPage() {
                </div>
 
                {selectedBalance !== null ? (
-                  <div className="quality-context">
+                  <div className={styles.qualityContext}>
                      <strong>{selectedBalance.productName}</strong>
                      <span>{selectedBalance.batchNumber}</span>
                      <span>{siteName(sites, selectedBalance.siteId)}</span>

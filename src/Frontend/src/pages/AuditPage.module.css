@@ -1,0 +1,125 @@
+.sitesPage {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+}
+
+.siteWorkbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 400px);
+  gap: 16px;
+  align-items: start;
+  margin-top: 10px;
+  min-height: 0;
+  height: calc(100dvh - 180px);
+}
+
+.auditWorkbench {
+  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 420px);
+}
+
+.siteRegistry,
+.siteEditor {
+  min-width: 0;
+}
+
+.siteRegistry {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  height: 100%;
+}
+
+.siteRegistry :global(.section) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.siteRegistry :global(.table-wrap) {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.siteEditor {
+  position: static;
+  height: 100%;
+  overflow: auto;
+}
+
+.siteEditor :global(.section) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.siteEditor :global(.entity-form) {
+  margin-top: 10px;
+}
+
+.siteEditor :global(.empty) {
+  margin-bottom: 10px;
+}
+
+.auditFilterGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.auditFilterActions {
+  margin-bottom: 10px;
+}
+
+.auditDetailGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.auditDetailList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.auditDetailList div {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.auditDetailList dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auditDetailList dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.auditDetailsPre {
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  font-size: 0.813rem;
+}

@@ -1,11 +1,12 @@
+import styles from "./NotFoundPage.module.css";
 import { useT } from "../lib/i18n";
 
 export default function NotFoundPage() {
    const t = useT();
 
    return (
-      <main className="login-page">
-         <section className="login-card card">
+      <main className={styles.page}>
+         <section className={`${styles.card} card`}>
             <div className="section">
                <div className="section-kicker">404</div>
                <h1>{t("notFound.title")}</h1>

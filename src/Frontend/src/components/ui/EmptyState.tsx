@@ -1,3 +1,4 @@
+import styles from "./EmptyState.module.css";
 import type { ReactNode } from "react";
 
 type EmptyStateProps = {
@@ -8,8 +9,8 @@ type EmptyStateProps = {
 
 export function EmptyState({ icon, title, description }: EmptyStateProps) {
    return (
-      <div className="empty">
-         <div className="empty-icon">{icon}</div>
+      <div className={styles.empty}>
+         <div className={styles.icon}>{icon}</div>
          <p>{title}</p>
          <span>{description}</span>
       </div>

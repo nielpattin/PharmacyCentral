@@ -22,6 +22,7 @@ import {
 import { InventoryBalanceTable } from "../features/inventory/InventoryBalanceTable";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./InventoryPage.module.css";
 
 type InventoryFilters = {
    productId: string;
@@ -251,7 +252,7 @@ export default function InventoryPage() {
 
    return (
       <AppShell active="inventory" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.inventory") }]} />}>
-         <div className="inventory-page">
+         <div className={styles.inventoryPage}>
             <PageHeader title={t("inventory.title")} actions={<div className="page-actions"><Button variant="secondary" onClick={() => void refreshData()}>{t("common.refresh")}</Button></div>} />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
             {successMessage !== null ? <div className="notice success-note">{successMessage}</div> : null}
@@ -293,7 +294,7 @@ export default function InventoryPage() {
                </div>
             </section>
 
-            <div className="inventory-operations-grid">
+            <div className={styles.inventoryOperationsGrid}>
                <section className="card">
                   <div className="section">
                      <div className="section-header">
@@ -326,7 +327,7 @@ export default function InventoryPage() {
                      </div>
 
                      {selectedBalance !== null ? (
-                        <div className="inventory-stock-context">
+                        <div className={styles.inventoryStockContext}>
                            <div><span>{t("inventory.selectedBatch")}</span><strong>{selectedBalance.productName} · {selectedBalance.batchNumber}</strong></div>
                            <div><span>{t("inventory.selectedLocation")}</span><strong>{siteName(sites, selectedBalance.siteId)} · {locationName(storageLocations, selectedBalance.storageLocationId)}</strong></div>
                            <div><span>{t("inventory.quantityOnHand")}</span><strong>{formatQuantity(selectedBalance.quantityOnHand)}</strong></div>
@@ -334,7 +335,7 @@ export default function InventoryPage() {
                         </div>
                      ) : null}
 
-                     {movementError !== null ? <div className="notice warning inventory-movement-warning">{movementError}</div> : null}
+                     {movementError !== null ? <div className={`notice warning ${styles.inventoryMovementWarning}`}>{movementError}</div> : null}
 
                      <div className="form-actions">
                         <Button onClick={() => void handleSubmitMovement()} disabled={!canSubmitMovement || isSubmittingMovement}>
@@ -351,7 +352,7 @@ export default function InventoryPage() {
                         <div><h2 className="section-title">{t("inventory.ledgerTitle")}</h2><p className="section-subtitle">{t("inventory.ledgerDesc")}</p></div>
                         <Badge tone="role">{ledgerEntries.length} {t("common.records")}</Badge>
                      </div>
-                     <div className="form-grid inventory-ledger-filters">
+                     <div className={`form-grid ${styles.inventoryLedgerFilters}`}>
                         <Field label={t("inventory.productFilter")}>
                            <select className="field-input" value={ledgerFilters.productId} onChange={(event) => updateLedgerFilters({ ...ledgerFilters, productId: event.target.value })}>
                               <option value="">{t("inventory.allProducts")}</option>
@@ -376,7 +377,7 @@ export default function InventoryPage() {
                            </select>
                         </Field>
                      </div>
-                     <div className="form-actions inventory-ledger-actions">
+                     <div className={`form-actions ${styles.inventoryLedgerActions}`}>
                         <Button variant="secondary" onClick={handleResetLedgerFilters}>{t("inventory.clearLedgerFilters")}</Button>
                      </div>
                      {isLoading ? <EmptyState icon="…" title={t("inventory.ledgerLoading")} description={t("inventory.ledgerFetching")} /> : ledgerEntries.length === 0 ? <EmptyState icon="0" title={t("inventory.ledgerEmptyTitle")} description={t("inventory.ledgerEmptyDesc")} /> : <InventoryLedgerTable entries={ledgerEntries} sites={sites} storageLocations={storageLocations} />}
@@ -416,8 +417,8 @@ function InventoryLedgerTable({ entries, sites, storageLocations }: { entries: S
    const t = useT();
 
    return (
-      <div className="table-wrap inventory-ledger-table-wrap">
-         <table className="data-table inventory-ledger-table">
+      <div className="table-wrap">
+         <table className={styles.inventoryLedgerTable}>
             <thead>
                <tr>
                   <th>{t("inventory.productName")}</th>
@@ -433,12 +434,12 @@ function InventoryLedgerTable({ entries, sites, storageLocations }: { entries: S
                {entries.map((entry) => (
                   <tr key={entry.id}>
                      <td>
-                        <div className="table-strong">{entry.productName}</div>
-                        <div className="table-muted">{entry.productSku} · {entry.batchNumber}</div>
+                        <div className={styles.tableStrong}>{entry.productName}</div>
+                        <div className={styles.tableMuted}>{entry.productSku} · {entry.batchNumber}</div>
                      </td>
                      <td>
-                        <div className="table-strong">{siteName(sites, entry.siteId)}</div>
-                        <div className="table-muted">{locationName(storageLocations, entry.storageLocationId)}</div>
+                        <div className={styles.tableStrong}>{siteName(sites, entry.siteId)}</div>
+                        <div className={styles.tableMuted}>{locationName(storageLocations, entry.storageLocationId)}</div>
                      </td>
                      <td>{formatMovementType(entry.movementType)}</td>
                      <td><Badge tone={entry.quantityDelta >= 0 ? "ok" : "warn"}>{formatQuantity(entry.quantityDelta)}</Badge></td>

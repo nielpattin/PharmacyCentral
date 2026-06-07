@@ -20,6 +20,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
 import { formatAuditSummary } from "../lib/auditDisplay";
+import styles from "./ReportingPage.module.css";
 
 type CountSummary = {
    label: string;
@@ -107,7 +108,7 @@ function formatOptionalDateTime(value: Date | null) {
 
 function ReportingStat({ label, value }: { label: string; value: string | number }) {
    return (
-      <div className="stat reporting-stat">
+      <div className={`stat ${styles.reportingStat}`}>
          <span>{label}</span>
          <strong>{value}</strong>
       </div>
@@ -116,7 +117,7 @@ function ReportingStat({ label, value }: { label: string; value: string | number
 
 function ReportingSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
    return (
-      <section className="card dashboard-section">
+      <section className={`card ${styles.dashboardSection}`}>
          <div className="section">
             <div className="section-header">
                <div>
@@ -134,8 +135,8 @@ function ReportingSourceStrip({ lastLoadedAt }: { lastLoadedAt: Date | null }) {
    const t = useT();
 
    return (
-      <section className="card dashboard-section reporting-source-strip">
-         <div className="section reporting-source-content">
+      <section className={`card ${styles.dashboardSection} ${styles.reportingSourceStrip}`}>
+         <div className={`section ${styles.reportingSourceContent}`}>
             <div>
                <h2 className="section-title">{t("reporting.sourceTitle")}</h2>
                <p className="section-subtitle">
@@ -144,7 +145,7 @@ function ReportingSourceStrip({ lastLoadedAt }: { lastLoadedAt: Date | null }) {
                      : t("reporting.sourceDescWithTime", { time: formatOptionalDateTime(lastLoadedAt) })}
                </p>
             </div>
-            <div className="reporting-source-badges" aria-label={t("reporting.sourceTitle")}>
+            <div className={styles.reportingSourceBadges} aria-label={t("reporting.sourceTitle")}>
                <Badge tone="role">{t("reporting.sourceDashboard")}</Badge>
                <Badge tone="role">{t("reporting.sourceInventory")}</Badge>
                <Badge tone="role">{t("reporting.sourceAudit")}</Badge>
@@ -160,15 +161,15 @@ function CountList({ items, emptyTitle, emptyDescription }: { items: CountSummar
    }
 
    return (
-      <div className="module-list reporting-count-list">
+      <div className={`${styles.moduleList} ${styles.reportingCountList}`}>
          {items.map((item) => (
-            <article key={item.label} className="module-row reporting-count-row">
-               <div className="module-copy">
-                  <div className="module-head">
+            <article key={item.label} className={`${styles.moduleRow} ${styles.reportingCountRow}`}>
+               <div className={styles.moduleCopy}>
+                  <div className={styles.moduleHead}>
                      <h3>{item.label}</h3>
                   </div>
                </div>
-               <div className="module-actions">
+               <div className={styles.moduleActions}>
                   <Badge tone="role">{formatQuantity(item.count)}</Badge>
                </div>
             </article>
@@ -187,11 +188,11 @@ function RecentAuditList({ logs, sites }: { logs: AuditLogEntryDto[]; sites: Sit
    }
 
    return (
-      <div className="dashboard-activity-list">
+      <div className={styles.dashboardActivityList}>
          {logs.slice(0, 6).map((entry) => (
-            <article key={entry.id} className="dashboard-activity-item">
+            <article key={entry.id} className={styles.dashboardActivityItem}>
                <div>
-                  <div className="module-head">
+                  <div className={styles.moduleHead}>
                      <Badge tone={auditActionTone(entry.action)}>{t(`audit.action.${entry.action}`)}</Badge>
                      <h3>{t(`audit.entity.${entry.entityType}`)}</h3>
                   </div>
@@ -231,8 +232,8 @@ function InventoryRiskTable({ balances, sites, storageLocations }: { balances: I
    }
 
    return (
-      <div className="table-wrap reporting-risk-table-wrap">
-         <table className="reporting-risk-table">
+      <div className={`table-wrap ${styles.reportingRiskTableWrap}`}>
+         <table className={styles.reportingRiskTable}>
             <thead>
                <tr>
                   <th>{t("reporting.product")}</th>
@@ -255,16 +256,16 @@ function InventoryRiskTable({ balances, sites, storageLocations }: { balances: I
                   return (
                      <tr key={row.balance.id}>
                         <td>
-                           <div className="reporting-table-primary">{row.balance.productName}</div>
-                           <div className="reporting-table-muted">{row.balance.batchNumber}</div>
+                           <div className={styles.reportingTablePrimary}>{row.balance.productName}</div>
+                           <div className={styles.reportingTableMuted}>{row.balance.batchNumber}</div>
                         </td>
                         <td>
-                           <div className="reporting-table-primary">{siteName(row.balance.siteId)}</div>
-                           <div className="reporting-table-muted">{locationName(row.balance.storageLocationId)}</div>
+                           <div className={styles.reportingTablePrimary}>{siteName(row.balance.siteId)}</div>
+                           <div className={styles.reportingTableMuted}>{locationName(row.balance.storageLocationId)}</div>
                         </td>
                         <td>
-                           <div className="reporting-table-primary">{formatQuantity(available)}</div>
-                           <div className="reporting-table-muted">
+                           <div className={styles.reportingTablePrimary}>{formatQuantity(available)}</div>
+                           <div className={styles.reportingTableMuted}>
                               {t("reporting.stockPosition", {
                                  onHand: formatQuantity(row.balance.quantityOnHand),
                                  reserved: formatQuantity(row.balance.quantityReserved),
@@ -344,7 +345,7 @@ export default function ReportingPage() {
          active="reporting"
          breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.reporting") }]} />}
       >
-         <div className="reporting-page">
+         <div className={styles.reportingPage}>
             <PageHeader
                title={t("reporting.title")}
                description={t("reporting.description")}
@@ -367,13 +368,13 @@ export default function ReportingPage() {
             <ReportingSourceStrip lastLoadedAt={lastLoadedAt} />
 
             {isLoading ? (
-               <section className="card dashboard-section">
+               <section className={`card ${styles.dashboardSection}`}>
                   <div className="section">
                      <EmptyState icon="…" title={t("reporting.loading")} description={t("reporting.fetching")} />
                   </div>
                </section>
             ) : summary === null ? (
-               <section className="card dashboard-section">
+               <section className={`card ${styles.dashboardSection}`}>
                   <div className="section">
                      <EmptyState icon="0" title={t("reporting.emptyTitle")} description={t("reporting.emptyDesc")} />
                   </div>
@@ -381,7 +382,7 @@ export default function ReportingPage() {
             ) : (
                <>
                   <ReportingSection title={t("reporting.kpiTitle")} description={t("reporting.kpiDesc")}>
-                     <div className="stat-row dashboard-stat-row reporting-kpi-row">
+                     <div className={`${styles.statRow} ${styles.dashboardStatRow} ${styles.reportingKpiRow}`}>
                         <ReportingStat label={t("dashboard.totalSites")} value={metric(summary.totalSites)} />
                         <ReportingStat label={t("dashboard.totalProducts")} value={metric(summary.totalProducts)} />
                         <ReportingStat label={t("dashboard.quantityOnHand")} value={metric(summary.totalQuantityOnHand)} />
@@ -392,19 +393,19 @@ export default function ReportingPage() {
                   </ReportingSection>
 
                   <ReportingSection title={t("reporting.inventoryTitle")} description={t("reporting.inventoryDesc")}>
-                     <div className="stat-row dashboard-stat-row reporting-risk-summary">
+                     <div className={`${styles.statRow} ${styles.dashboardStatRow} ${styles.reportingRiskSummary}`}>
                         <ReportingStat label={t("reporting.totalBatches")} value={formatQuantity(totalBatches)} />
                         <ReportingStat label={t("reporting.liveOnHand")} value={formatQuantity(totalOnHand)} />
                         <ReportingStat label={t("reporting.liveReserved")} value={formatQuantity(totalReserved)} />
                         <ReportingStat label={t("reporting.lowStockBatches")} value={formatQuantity(lowStockCount)} />
                         <ReportingStat label={t("reporting.nearExpiryBatches")} value={formatQuantity(nearExpiryCount)} />
                      </div>
-                     <div className="reporting-section-block">
+                     <div className={styles.reportingSectionBlock}>
                         <InventoryRiskTable balances={balances} sites={sites} storageLocations={storageLocations} />
                      </div>
                   </ReportingSection>
 
-                  <div className="reporting-grid">
+                  <div className={styles.reportingGrid}>
                      <ReportingSection title={t("reporting.activityByAction")} description={t("reporting.activityByActionDesc")}>
                         <CountList items={actionSummaries} emptyTitle={t("reporting.noActivityTitle")} emptyDescription={t("reporting.noActivityDesc")} />
                      </ReportingSection>

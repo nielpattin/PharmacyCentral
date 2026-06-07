@@ -1,0 +1,62 @@
+/* Workspace layout */
+.workspace {
+   display: flex;
+   flex-direction: column;
+   min-height: 0;
+   height: 100%;
+}
+
+.commandBar {
+   display: grid;
+   gap: 10px;
+}
+
+.commandBar :global(.page-head) {
+   margin-bottom: 0;
+}
+
+.commandBar :global(.notice) {
+   margin-bottom: 0;
+}
+
+/* Counter workbench (2-col) */
+.counterWorkbench {
+   display: grid;
+   grid-template-columns: minmax(520px, 1fr) 340px;
+   gap: 16px;
+   margin-top: 10px;
+   flex: 1;
+   min-height: 0;
+   overflow: auto;
+}
+
+/* Active ticket card */
+.counterTicket {
+   display: flex;
+   flex-direction: column;
+   padding: 0;
+   min-height: 0;
+   overflow: visible;
+}
+
+.editorHeader {
+   padding: 14px 14px 0;
+   margin-bottom: 0;
+}
+
+/* Checkout rail */
+.counterCheckout {
+   min-width: 0;
+   height: auto;
+   align-self: stretch;
+   display: flex;
+   flex-direction: column;
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+   .counterWorkbench {
+      grid-template-columns: minmax(0, 1fr);
+      height: auto;
+   }
+}

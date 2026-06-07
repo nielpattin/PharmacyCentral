@@ -1,0 +1,81 @@
+.btn {
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 8px;
+   min-height: 36px;
+   padding: 0 12px;
+   border: 1px solid transparent;
+   border-radius: 4px;
+   font-weight: 700;
+   font-size: 0.875rem;
+   cursor: pointer;
+   text-decoration: none;
+   transition-property: background-color, border-color, color, transform;
+   transition-duration: 140ms;
+   transition-timing-function: var(--ease);
+}
+
+.btn:focus-visible {
+   outline: 2px solid var(--primary);
+   outline-offset: 2px;
+}
+
+.btn:active {
+   transform: scale(0.98);
+}
+
+.primary {
+   background: var(--primary);
+   border-color: var(--primary);
+   color: white;
+}
+
+.primary:hover {
+   background: var(--primary-dark);
+   border-color: var(--primary-dark);
+}
+
+.secondary {
+   background: var(--surface);
+   border-color: var(--line);
+   color: var(--text);
+}
+
+.secondary:hover {
+   background: var(--surface-soft);
+}
+
+.ghost {
+   background: transparent;
+   border-color: var(--line);
+   color: var(--muted);
+}
+
+.ghost:hover {
+   background: var(--surface-soft);
+   color: var(--text);
+}
+
+.danger {
+   background: var(--danger);
+   border-color: var(--danger);
+   color: white;
+}
+
+.danger:hover {
+   background: oklch(0.52 0.2 30);
+   border-color: oklch(0.52 0.2 30);
+}
+
+.btnSm {
+   min-height: 30px;
+   padding: 0 10px;
+   font-size: 0.8rem;
+}
+
+.btn:disabled {
+   cursor: not-allowed;
+   opacity: 0.62;
+   transform: none;
+}

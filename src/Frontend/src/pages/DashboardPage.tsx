@@ -8,6 +8,7 @@ import {
    AlertTriangle, Clock, Truck, Pill, ClipboardList, SlidersHorizontal,
    Building2, ChevronRight, Package, Tags, DollarSign, ArrowUpRight,
 } from "lucide-react";
+import styles from "./DashboardPage.module.css";
 import { AppShell } from "../components/layout/AppShell";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
@@ -89,16 +90,16 @@ function DashCard({
 }) {
    return (
       <motion.div
-         className="dash-card"
+         className={styles.dashCard}
          initial={{ opacity: 0, y: 12 }}
          animate={{ opacity: 1, y: 0 }}
          transition={{ duration: 0.18, delay: index * 0.04, ease: [0.2, 0, 0, 1] }}
       >
-         <div className="dash-card-header">
-            <h2 className="dash-card-title">{title}</h2>
-            <p className="dash-card-subtitle">{description}</p>
+         <div className={styles.dashCardHeader}>
+            <h2 className={styles.dashCardTitle}>{title}</h2>
+            <p className={styles.dashCardSubtitle}>{description}</p>
          </div>
-         <div className="dash-card-body">{children}</div>
+         <div className={styles.dashCardBody}>{children}</div>
       </motion.div>
    );
 }
@@ -108,7 +109,7 @@ function DashCard({
 function SkeletonBlock({ height = 80 }: { height?: number }) {
    return (
       <div
-         className="dash-skeleton"
+         className={styles.dashSkeleton}
          style={{ height, width: "100%", marginBottom: 6 }}
       />
    );
@@ -136,50 +137,50 @@ function OperationalHealthBand({
 
    return (
       <motion.div
-         className="ops-health-band"
+         className={styles.opsHealthBand}
          initial={{ opacity: 0, y: 8 }}
          animate={{ opacity: 1, y: 0 }}
          transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
       >
-         <div className="ops-health-inner">
-            <div className="ops-status-row">
-               <div className="ops-status-indicator">
+         <div className={styles.opsHealthInner}>
+            <div className={styles.opsStatusRow}>
+               <div className={styles.opsStatusIndicator}>
                   <motion.span
-                     className={`ops-status-dot ${status}`}
+                     className={`${styles.opsStatusDot} ${styles[status]}`}
                      initial={{ scale: 0 }}
                      animate={{ scale: 1 }}
                      transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
                   />
-                  <span className="ops-status-label">
+                  <span className={styles.opsStatusLabel}>
                      {isLoading || summary === null ? "..." : statusLabel}
                   </span>
                </div>
-               <span className="ops-status-count">
+               <span className={styles.opsStatusCount}>
                   {isLoading || summary === null ? "" : t("dashboard.attentionCount", { count: attentionTotal })}
                </span>
             </div>
 
             <motion.div
-               className="ops-fact-row"
+               className={styles.opsFactRow}
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
                transition={{ duration: 0.18, delay: 0.06 }}
             >
-               <div className="ops-fact">
-                  <span className="ops-fact-label">{t("dashboard.attentionItems")}</span>
-                  <strong className={`ops-fact-value ${attentionTotal > 0 ? "warn-color" : "good-color"}`}>
+               <div className={styles.opsFact}>
+                  <span className={styles.opsFactLabel}>{t("dashboard.attentionItems")}</span>
+                  <strong className={`${styles.opsFactValue} ${attentionTotal > 0 ? styles.warnColor : styles.goodColor}`}>
                      {isLoading || summary === null ? "..." : attentionTotal}
                   </strong>
                </div>
-               <div className="ops-fact">
-                  <span className="ops-fact-label">{t("dashboard.serviceWork")}</span>
-                  <strong className={`ops-fact-value ${serviceWork > 0 ? "warn-color" : "good-color"}`}>
+               <div className={styles.opsFact}>
+                  <span className={styles.opsFactLabel}>{t("dashboard.serviceWork")}</span>
+                  <strong className={`${styles.opsFactValue} ${serviceWork > 0 ? styles.warnColor : styles.goodColor}`}>
                      {isLoading || summary === null ? "..." : serviceWork}
                   </strong>
                </div>
-               <div className="ops-fact">
-                  <span className="ops-fact-label">{t("dashboard.stockRisk")}</span>
-                  <strong className={`ops-fact-value ${stockRisk > 0 ? "bad-color" : "good-color"}`}>
+               <div className={styles.opsFact}>
+                  <span className={styles.opsFactLabel}>{t("dashboard.stockRisk")}</span>
+                  <strong className={`${styles.opsFactValue} ${stockRisk > 0 ? styles.badColor : styles.goodColor}`}>
                      {isLoading || summary === null ? "..." : stockRisk}
                   </strong>
                </div>
@@ -269,7 +270,7 @@ function PriorityQueue({
 
    if (isLoading || summary === null) {
       return (
-         <div className="dash-card-body">
+         <div className={styles.dashCardBody}>
             {Array.from({ length: 4 }).map((_, i) => (
                <SkeletonBlock key={i} height={48} />
             ))}
@@ -281,7 +282,7 @@ function PriorityQueue({
 
    if (totalAttention === 0) {
       return (
-         <div className="dash-card-body">
+         <div className={styles.dashCardBody}>
             <EmptyState
                icon="0"
                title={t("dashboard.healthy")}
@@ -292,7 +293,7 @@ function PriorityQueue({
    }
 
    return (
-      <div className="priority-queue">
+      <div className={styles.priorityQueue}>
          <AnimatePresence mode="popLayout">
             {items
                .filter((item) => item.count > 0)
@@ -300,7 +301,7 @@ function PriorityQueue({
                   <motion.a
                      key={item.key}
                      href={item.href}
-                     className="priority-item"
+                     className={styles.priorityItem}
                      layout
                      initial={{ opacity: 0, x: -8 }}
                      animate={{ opacity: 1, x: 0 }}
@@ -308,15 +309,15 @@ function PriorityQueue({
                      transition={{ duration: 0.16, delay: i * 0.03, ease: [0.2, 0, 0, 1] }}
                      whileTap={{ scale: 0.98 }}
                   >
-                     <span className={`priority-icon ${item.severity}`}>
+                     <span className={`${styles.priorityIcon} ${styles[item.severity]}`}>
                         {item.icon}
                      </span>
-                     <div className="priority-label-col">
-                        <span className="priority-label">{item.label}</span>
-                        <span className="priority-hint">{item.hint}</span>
+                     <div className={styles.priorityLabelCol}>
+                        <span className={styles.priorityLabel}>{item.label}</span>
+                        <span className={styles.priorityHint}>{item.hint}</span>
                      </div>
                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                        <span className={`priority-count ${item.severity}`}>
+                        <span className={`${styles.priorityCount} ${styles[item.severity]}`}>
                            {item.count}
                         </span>
                         <ChevronRight
@@ -371,7 +372,7 @@ function AttentionBreakdown({
    }
 
    return (
-      <div className="attention-bars">
+      <div className={styles.attentionBars}>
          <AnimatePresence>
             {items
                .filter((i) => i.count > 0)
@@ -380,18 +381,18 @@ function AttentionBreakdown({
                   return (
                      <motion.div
                         key={item.key}
-                        className="attention-bar-row"
+                        className={styles.attentionBarRow}
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.14, delay: idx * 0.03, ease: [0.2, 0, 0, 1] }}
                      >
-                        <div className="attention-bar-header">
-                           <span className="attention-bar-label">{item.label}</span>
-                           <span className="attention-bar-count">{item.count}</span>
+                        <div className={styles.attentionBarHeader}>
+                           <span className={styles.attentionBarLabel}>{item.label}</span>
+                           <span className={styles.attentionBarCount}>{item.count}</span>
                         </div>
-                        <div className="attention-bar-track">
+                        <div className={styles.attentionBarTrack}>
                            <motion.div
-                              className={`attention-bar-fill ${item.severity}`}
+                              className={`${styles.attentionBarFill} ${styles[item.severity]}`}
                               initial={{ width: 0 }}
                               animate={{ width: `${Math.max(pct, 6)}%` }}
                               transition={{ duration: 0.25, delay: idx * 0.04, ease: [0.2, 0, 0, 1] }}
@@ -426,7 +427,7 @@ function InventoryPositionChart({
    }
 
    return (
-      <div className="inventory-chart-wrap" style={{ height: 120 }}>
+      <div className={styles.inventoryChartWrap} style={{ height: 120 }}>
          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
                <XAxis
@@ -494,7 +495,7 @@ function WorkloadChart({
    }
 
    return (
-      <div className="flow-chart-wrap" style={{ height: 180 }}>
+      <div className={styles.flowChartWrap} style={{ height: 180 }}>
          <ResponsiveContainer width="100%" height="100%">
             <BarChart
                data={data}
@@ -540,7 +541,7 @@ function NetworkCoveragePanel({
 
    if (isLoading || summary === null) {
       return (
-         <div className="dash-card-body">
+         <div className={styles.dashCardBody}>
             <SkeletonBlock height={40} />
             <SkeletonBlock height={40} />
             <SkeletonBlock height={36} />
@@ -556,49 +557,49 @@ function NetworkCoveragePanel({
       : 0;
 
    return (
-      <div className="network-panel" style={{ gap: 8 }}>
-         <div className="network-row">
-            <div className="network-row-header">
-               <span className="network-row-label">{t("dashboard.activeSitesLabel")}</span>
-               <span className="network-row-count">
+      <div className={styles.networkPanel} style={{ gap: 8 }}>
+         <div className={styles.networkRow}>
+            <div className={styles.networkRowHeader}>
+               <span className={styles.networkRowLabel}>{t("dashboard.activeSitesLabel")}</span>
+               <span className={styles.networkRowCount}>
                   {metric(summary.activeSites)} / {metric(summary.totalSites)}
                </span>
             </div>
-            <div className="network-bar">
+            <div className={styles.networkBar}>
                <motion.div
-                  className="network-bar-fill"
+                  className={styles.networkBarFill}
                   initial={{ width: 0 }}
                   animate={{ width: `${sitePct}%` }}
                   transition={{ duration: 0.3, ease: [0.2, 0, 0, 1] }}
                />
             </div>
          </div>
-         <div className="network-row">
-            <div className="network-row-header">
-               <span className="network-row-label">{t("dashboard.activeLocationsLabel")}</span>
-               <span className="network-row-count">
+         <div className={styles.networkRow}>
+            <div className={styles.networkRowHeader}>
+               <span className={styles.networkRowLabel}>{t("dashboard.activeLocationsLabel")}</span>
+               <span className={styles.networkRowCount}>
                   {metric(summary.activeStorageLocations)} / {metric(summary.totalStorageLocations)}
                </span>
             </div>
-            <div className="network-bar">
+            <div className={styles.networkBar}>
                <motion.div
-                  className="network-bar-fill"
+                  className={styles.networkBarFill}
                   initial={{ width: 0 }}
                   animate={{ width: `${locPct}%` }}
                   transition={{ duration: 0.3, ease: [0.2, 0, 0, 1], delay: 0.06 }}
                />
             </div>
          </div>
-         <div className="network-secondary" style={{ paddingTop: 6, marginTop: 6 }}>
-            <div className="network-secondary-item">
-               <span className="network-secondary-label">{t("dashboard.totalProducts")}</span>
-               <span className="network-secondary-value">
+         <div className={styles.networkSecondary} style={{ paddingTop: 6, marginTop: 6 }}>
+            <div className={styles.networkSecondaryItem}>
+               <span className={styles.networkSecondaryLabel}>{t("dashboard.totalProducts")}</span>
+               <span className={styles.networkSecondaryValue}>
                   {metric(summary.totalProducts)}
                </span>
             </div>
-            <div className="network-secondary-item">
-               <span className="network-secondary-label">{t("dashboard.totalSuppliers")}</span>
-               <span className="network-secondary-value">
+            <div className={styles.networkSecondaryItem}>
+               <span className={styles.networkSecondaryLabel}>{t("dashboard.totalSuppliers")}</span>
+               <span className={styles.networkSecondaryValue}>
                   {metric(summary.totalSuppliers)}
                </span>
             </div>
@@ -627,7 +628,7 @@ function DashboardActivityFeed({
 
    if (isLoading || summary === null) {
       return (
-         <div className="dash-card-body">
+         <div className={styles.dashCardBody}>
             {Array.from({ length: 3 }).map((_, i) => (
                <SkeletonBlock key={i} height={48} />
             ))}
@@ -637,9 +638,9 @@ function DashboardActivityFeed({
 
    if (activity.length === 0) {
       return (
-         <div className="dash-card-body">
-            <div className="activity-feed-empty">
-               <span className="activity-feed-empty-text">
+         <div className={styles.dashCardBody}>
+            <div className={styles.activityFeedEmpty}>
+               <span className={styles.activityFeedEmptyText}>
                   {t("dashboard.activityCompactEmpty")}
                </span>
                {authUser?.isPlatformAdmin ? (
@@ -653,18 +654,18 @@ function DashboardActivityFeed({
    }
 
    return (
-      <div className="activity-feed">
+      <div className={styles.activityFeed}>
          <AnimatePresence mode="popLayout">
             {activity.slice(0, 3).map((entry, i) => (
                <motion.article
                   key={entry.id}
-                  className="activity-feed-item"
+                  className={styles.activityFeedItem}
                   layout
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.12, delay: i * 0.02, ease: [0.2, 0, 0, 1] }}
                >
-                  <div className="activity-feed-top">
+                  <div className={styles.activityFeedTop}>
                      <Badge tone={auditActionTone(entry.action)}>
                         {t(`audit.action.${entry.action}`)}
                      </Badge>
@@ -672,10 +673,10 @@ function DashboardActivityFeed({
                         {t(`audit.entity.${entry.entityType}`)}
                      </span>
                   </div>
-                  <p className="activity-feed-summary">
+                  <p className={styles.activityFeedSummary}>
                      {formatAuditSummary(t, entry.summary, entry.entityId ?? t("common.noData"))}
                   </p>
-                  <div className="activity-feed-meta">
+                  <div className={styles.activityFeedMeta}>
                      <span>{siteName(entry.siteId)}</span>
                      <span>·</span>
                      <time>{new Date(entry.occurredAtUtc).toLocaleString()}</time>
@@ -726,20 +727,20 @@ function TodayWorkMix({
    }
 
    return (
-      <div className="today-work-mix">
+      <div className={styles.todayWorkMix}>
          {items
             .filter((i) => i.count > 0)
             .map((item) => {
                const pct = Math.round((item.count / maxCount) * 100);
                return (
-                  <div key={item.key} className="today-mix-row">
-                     <div className="today-mix-header">
-                        <span className="today-mix-label">{item.label}</span>
-                        <span className="today-mix-count">{item.count}</span>
+                  <div key={item.key} className={styles.todayMixRow}>
+                     <div className={styles.todayMixHeader}>
+                        <span className={styles.todayMixLabel}>{item.label}</span>
+                        <span className={styles.todayMixCount}>{item.count}</span>
                      </div>
-                     <div className="today-mix-track">
+                     <div className={styles.todayMixTrack}>
                         <div
-                           className={`today-mix-fill ${item.severity}`}
+                           className={`${styles.todayMixFill} ${styles[item.severity]}`}
                            style={{ width: `${Math.max(pct, 4)}%` }}
                         />
                      </div>
@@ -811,7 +812,7 @@ export default function DashboardPage() {
                <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.dashboard") }]} />
             }
          >
-            <div className="dashboard-page">
+            <div className={styles.dashboardPage}>
                <PageHeader
                   title={t("dashboard.title")}
                   description={t("dashboard.description")}
@@ -851,13 +852,13 @@ export default function DashboardPage() {
                <OperationalHealthBand summary={summary} isLoading={isLoading} />
 
                {/* ─── Tab bar ─── */}
-               <nav className="dash-tabs" role="tablist">
+               <nav className={styles.dashTabs} role="tablist">
                   {TAB_IDS.map((id) => (
                      <button
                         key={id}
                         role="tab"
                         aria-selected={activeTab === id}
-                        className={`dash-tab${activeTab === id ? " active" : ""}`}
+                        className={`${styles.dashTab}${activeTab === id ? ` ${styles.active}` : ""}`}
                         onClick={() => setActiveTab(id)}
                      >
                         {t(tabKey(id))}
@@ -869,15 +870,15 @@ export default function DashboardPage() {
                <AnimatePresence mode="wait">
                   <motion.div
                      key={activeTab}
-                     className="tab-body"
+                     className={styles.tabBody}
                      initial={{ opacity: 0, y: 8 }}
                      animate={{ opacity: 1, y: 0 }}
                      exit={{ opacity: 0, y: -4 }}
                      transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }}
                   >
                      {activeTab === "today" &&
-                        <div className="today-grid">
-                           <div className="today-main">
+                        <div className={styles.todayGrid}>
+                           <div className={styles.todayMain}>
                               <DashCard
                                  title={t("dashboard.priorityQueue")}
                                  description={t("dashboard.priorityQueueDesc")}
@@ -886,7 +887,7 @@ export default function DashboardPage() {
                                  <PriorityQueue summary={summary} isLoading={isLoading} />
                               </DashCard>
                            </div>
-                           <div className="today-side">
+                           <div className={styles.todaySide}>
                               <DashCard
                                  title={t("dashboard.todayWorkMix")}
                                  description={t("dashboard.todayWorkMixDesc")}
@@ -910,8 +911,8 @@ export default function DashboardPage() {
                         </div>}
 
                      {activeTab === "stock" &&
-                        <div className="stock-grid">
-                           <div className="stock-main">
+                        <div className={styles.stockGrid}>
+                           <div className={styles.stockMain}>
                               <DashCard
                                  title={t("dashboard.attentionMix")}
                                  description={t("dashboard.attentionMixDesc")}
@@ -927,22 +928,22 @@ export default function DashboardPage() {
                                  <InventoryPositionChart summary={summary} isLoading={isLoading} />
                               </DashCard>
                            </div>
-                           <div className="stock-side">
+                           <div className={styles.stockSide}>
                               <DashCard
                                  title={t("dashboard.stockRisk")}
                                  description=""
                                  index={1}
                               >
-                                 <div className="stock-risk-cards">
-                                    <div className="ops-fact">
-                                       <span className="ops-fact-label">{t("dashboard.lowStockBatches")}</span>
-                                       <strong className={`ops-fact-value ${(summary?.lowStockBatchCount ?? 0) > 0 ? "bad-color" : "good-color"}`}>
+                                 <div className={styles.stockRiskCards}>
+                                    <div className={styles.opsFact}>
+                                       <span className={styles.opsFactLabel}>{t("dashboard.lowStockBatches")}</span>
+                                       <strong className={`${styles.opsFactValue} ${(summary?.lowStockBatchCount ?? 0) > 0 ? styles.badColor : styles.goodColor}`}>
                                           {metric(summary?.lowStockBatchCount)}
                                        </strong>
                                     </div>
-                                    <div className="ops-fact">
-                                       <span className="ops-fact-label">{t("dashboard.expiringBatches")}</span>
-                                       <strong className={`ops-fact-value ${(summary?.expiringBatchCount ?? 0) > 0 ? "bad-color" : "good-color"}`}>
+                                    <div className={styles.opsFact}>
+                                       <span className={styles.opsFactLabel}>{t("dashboard.expiringBatches")}</span>
+                                       <strong className={`${styles.opsFactValue} ${(summary?.expiringBatchCount ?? 0) > 0 ? styles.badColor : styles.goodColor}`}>
                                           {metric(summary?.expiringBatchCount)}
                                        </strong>
                                     </div>
@@ -959,8 +960,8 @@ export default function DashboardPage() {
                         </div>}
 
                      {activeTab === "flow" &&
-                        <div className="flow-grid">
-                           <div className="today-main">
+                        <div className={styles.flowGrid}>
+                           <div className={styles.todayMain}>
                               <DashCard
                                  title={t("dashboard.attentionMix")}
                                  description={t("dashboard.attentionMixDesc")}
@@ -969,30 +970,30 @@ export default function DashboardPage() {
                                  <WorkloadChart summary={summary} isLoading={isLoading} />
                               </DashCard>
                            </div>
-                           <div className="today-side">
+                           <div className={styles.todaySide}>
                               <DashCard
                                  title={t("dashboard.quickActions")}
                                  description={t("dashboard.quickActionsDesc")}
                                  index={1}
                               >
-                                 <div className="action-link-grid">
-                                    <a href="/dashboard/prescriptions" className="action-link-item">
-                                       <span className="action-link-icon"><Pill /></span>
+                                 <div className={styles.actionLinkGrid}>
+                                    <a href="/dashboard/prescriptions" className={styles.actionLinkItem}>
+                                       <span className={styles.actionLinkIcon}><Pill /></span>
                                        {t("dashboard.prescription")}
                                        <ArrowUpRight size={14} style={{ marginLeft: "auto", color: "var(--muted-soft)" }} />
                                     </a>
-                                    <a href="/dashboard/transfers" className="action-link-item">
-                                       <span className="action-link-icon"><Truck /></span>
+                                    <a href="/dashboard/transfers" className={styles.actionLinkItem}>
+                                       <span className={styles.actionLinkIcon}><Truck /></span>
                                        {t("dashboard.transfer")}
                                        <ArrowUpRight size={14} style={{ marginLeft: "auto", color: "var(--muted-soft)" }} />
                                     </a>
-                                    <a href="/dashboard/stocktake" className="action-link-item">
-                                       <span className="action-link-icon"><ClipboardList /></span>
+                                    <a href="/dashboard/stocktake" className={styles.actionLinkItem}>
+                                       <span className={styles.actionLinkIcon}><ClipboardList /></span>
                                        {t("dashboard.openStocktakes")}
                                        <ArrowUpRight size={14} style={{ marginLeft: "auto", color: "var(--muted-soft)" }} />
                                     </a>
-                                    <a href="/dashboard/adjustments" className="action-link-item">
-                                       <span className="action-link-icon"><SlidersHorizontal /></span>
+                                    <a href="/dashboard/adjustments" className={styles.actionLinkItem}>
+                                       <span className={styles.actionLinkIcon}><SlidersHorizontal /></span>
                                        {t("dashboard.pendingAdjustments")}
                                        <ArrowUpRight size={14} style={{ marginLeft: "auto", color: "var(--muted-soft)" }} />
                                     </a>
@@ -1002,8 +1003,8 @@ export default function DashboardPage() {
                         </div>}
 
                      {activeTab === "network" &&
-                        <div className="network-grid">
-                           <div className="today-main">
+                        <div className={styles.networkGrid}>
+                           <div className={styles.todayMain}>
                               <DashCard
                                  title={t("dashboard.networkCoverage")}
                                  description={t("dashboard.networkCoverageDesc")}
@@ -1012,30 +1013,30 @@ export default function DashboardPage() {
                                  <NetworkCoveragePanel summary={summary} isLoading={isLoading} metric={metric} />
                               </DashCard>
                            </div>
-                           <div className="today-side">
+                           <div className={styles.todaySide}>
                               <DashCard
                                  title={t("dashboard.quickActions")}
                                  description={t("dashboard.quickActionsDesc")}
                                  index={1}
                               >
-                                 <div className="network-links">
-                                    <a href="/dashboard/sites" className="action-link-item">
-                                       <span className="action-link-icon"><Building2 /></span>
+                                 <div className={styles.networkLinks}>
+                                    <a href="/dashboard/sites" className={styles.actionLinkItem}>
+                                       <span className={styles.actionLinkIcon}><Building2 /></span>
                                        {t("dashboard.sites")}
                                        <ArrowUpRight size={14} style={{ marginLeft: "auto", color: "var(--muted-soft)" }} />
                                     </a>
-                                    <a href="/dashboard/catalog" className="action-link-item">
-                                       <span className="action-link-icon"><Package /></span>
+                                    <a href="/dashboard/catalog" className={styles.actionLinkItem}>
+                                       <span className={styles.actionLinkIcon}><Package /></span>
                                        {t("nav.catalog")}
                                        <ArrowUpRight size={14} style={{ marginLeft: "auto", color: "var(--muted-soft)" }} />
                                     </a>
-                                    <a href="/dashboard/supplier" className="action-link-item">
-                                       <span className="action-link-icon"><Tags /></span>
+                                    <a href="/dashboard/supplier" className={styles.actionLinkItem}>
+                                       <span className={styles.actionLinkIcon}><Tags /></span>
                                        {t("nav.supplier")}
                                        <ArrowUpRight size={14} style={{ marginLeft: "auto", color: "var(--muted-soft)" }} />
                                     </a>
-                                    <a href="/dashboard/pricing" className="action-link-item">
-                                       <span className="action-link-icon"><DollarSign /></span>
+                                    <a href="/dashboard/pricing" className={styles.actionLinkItem}>
+                                       <span className={styles.actionLinkIcon}><DollarSign /></span>
                                        {t("nav.pricing")}
                                        <ArrowUpRight size={14} style={{ marginLeft: "auto", color: "var(--muted-soft)" }} />
                                     </a>

@@ -1,0 +1,50 @@
+.loadingPage {
+   position: relative;
+   isolation: isolate;
+   display: grid;
+   place-items: center;
+   min-height: 100vh;
+   min-height: 100dvh;
+   padding: 28px 18px;
+   overflow: hidden;
+   background:
+      linear-gradient(180deg, oklch(0.15 0.035 256) 0 42%, transparent 42%),
+      linear-gradient(135deg, oklch(0.965 0.006 256), oklch(0.94 0.008 256));
+}
+
+.loadingPage::before,
+.loadingPage::after {
+   content: "";
+   position: absolute;
+   z-index: 0;
+   pointer-events: none;
+}
+
+.loadingPage::before {
+   width: min(92vw, 1040px);
+   height: 1px;
+   inset-block-start: 42%;
+   inset-inline-start: 50%;
+   transform: translateX(-50%);
+   background: oklch(1 0 0 / 0.18);
+}
+
+.loadingPage::after {
+   width: min(92vw, 1040px);
+   height: 1px;
+   inset-block-start: calc(42% + 8px);
+   inset-inline-start: 50%;
+   transform: translateX(-50%);
+   background: color-mix(in oklch, var(--primary) 56%, transparent);
+}
+
+.loadingCard {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr);
+   width: min(100%, 520px);
+   min-height: 320px;
+   overflow: hidden;
+   border-color: oklch(0.82 0.014 256);
+   background: var(--surface);
+   box-shadow: 0 28px 80px oklch(0.14 0.035 256 / 0.2), 0 2px 8px oklch(0 0 0 / 0.05);
+}

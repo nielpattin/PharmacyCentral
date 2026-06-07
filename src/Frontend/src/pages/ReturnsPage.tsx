@@ -21,6 +21,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Field } from "../components/ui/Field";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./ReturnsPage.module.css";
 
 type ReturnReason = "ReturnToSupplier" | "Damaged" | "Expired" | "Recalled" | "InventoryRemoval";
 
@@ -202,7 +203,7 @@ export default function ReturnsPage() {
 
    return (
       <AppShell active="returns" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.returns") }]} />}>
-         <div className="returns-page">
+         <div className={styles.returnsPage}>
             <PageHeader
                title={t("returns.title")}
                description={t("returns.description")}
@@ -219,7 +220,7 @@ export default function ReturnsPage() {
             {successMessage !== null ? <div className="notice success-note">{successMessage}</div> : null}
 
 
-            <div className="returns-grid">
+            <div className={styles.returnsGrid}>
                <section className="card">
                   <div className="section">
                      <div className="section-header">
@@ -315,7 +316,7 @@ export default function ReturnsPage() {
                      </div>
 
                      {selectedBalance !== null ? (
-                        <div className="returns-stock-context">
+                        <div className={styles.returnsStockContext}>
                            <div>
                               <span>{t("returns.selectedBatch")}</span>
                               <strong>{selectedBalance.productName} · {selectedBalance.batchNumber}</strong>
@@ -361,18 +362,18 @@ export default function ReturnsPage() {
                      ) : recentReturns.length === 0 ? (
                         <EmptyState icon="0" title={t("returns.emptyTitle")} description={t("returns.emptyDesc")} />
                      ) : (
-                        <div className="returns-history-list">
+                        <div className={styles.returnsHistoryList}>
                            {recentReturns.map((entry) => (
-                              <article key={entry.id} className="returns-history-item">
+                              <article key={entry.id} className={styles.returnsHistoryItem}>
                                  <div>
-                                    <div className="module-head">
+                                    <div className={styles.moduleHead}>
                                        <Badge tone="warn">{t(`returns.movement.${entry.movementType}`)}</Badge>
                                        <h3>{entry.productName}</h3>
                                     </div>
                                     <p>{entry.batchNumber} · {siteName(sites, entry.siteId)} · {locationName(storageLocations, entry.storageLocationId)}</p>
                                     <span>{entry.reason === null ? t("returns.noReason") : t(`returns.reason.${entry.reason}`)} · {entry.notes ?? t("common.noData")}</span>
                                  </div>
-                                 <div className="returns-history-meta">
+                                 <div className={styles.returnsHistoryMeta}>
                                     <strong>{formatQuantity(Math.abs(entry.quantityDelta))}</strong>
                                     <span>{t("returns.balanceAfter", { value: formatQuantity(entry.balanceAfter) })}</span>
                                     <time>{new Date(entry.occurredAtUtc).toLocaleString()}</time>

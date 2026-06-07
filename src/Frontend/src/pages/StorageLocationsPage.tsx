@@ -1,3 +1,4 @@
+import styles from "./StorageLocationsPage.module.css";
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
@@ -221,7 +222,7 @@ export default function StorageLocationsPage({ siteId }: StorageLocationsPagePro
                <EmptyState icon="?" title={t("storage.siteNotFound")} description={t("storage.useBackToSites")} />
             </div>
          ) : (
-            <div className="split split-crud" style={{ marginTop: "14px" }}>
+            <div className={`${styles.split} ${styles.splitCrud}`} style={{ marginTop: "14px" }}>
                <section className="card">
                   <div className="section">
                      <div className="section-header">

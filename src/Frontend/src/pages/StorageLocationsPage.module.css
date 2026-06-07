@@ -1,0 +1,17 @@
+.sitesPage {
+   display: grid;
+   grid-template-rows: auto auto minmax(0, 1fr);
+   min-height: 0;
+   height: 100%;
+}
+
+.split {
+   display: grid;
+   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 380px);
+   gap: 16px;
+   align-items: start;
+}
+
+.splitCrud {
+   align-items: start;
+}

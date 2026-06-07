@@ -1,3 +1,4 @@
+import styles from "./GoodsReceiptsPage.module.css";
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
@@ -109,23 +110,23 @@ export default function GoodsReceiptsPage() {
 
    return (
       <AppShell active="receiving" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.receiving") }]} />}>
-         <div className="sites-page">
+         <div className={styles.sitesPage}>
             <PageHeader title={t("receiving.title")} actions={<div className="page-actions"><Button variant="primary" onClick={handleNewReceipt}>{t("receiving.newReceipt")}</Button></div>} />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
-            <div className="site-workbench">
-               <section className="card site-registry">
+            <div className={styles.siteWorkbench}>
+               <section className={`card ${styles.siteRegistry}`}>
                   <div className="section">
                      <div className="section-header">
                         <div><h2 className="section-title">{t("receiving.registry")}</h2><p className="section-subtitle">{t("receiving.registryDesc")}</p></div>
                         <Badge tone="role">{isLoading ? t("receiving.loadingState") : `${visibleReceipts.length} ${t("common.records")}`}</Badge>
                      </div>
                      <div className="section-toolbar">
-                        <input className="field-input site-search" type="search" placeholder={t("receiving.searchPlaceholder")} aria-label={t("receiving.searchPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)} />
+                        <input className={`field-input ${styles.siteSearch}`} type="search" placeholder={t("receiving.searchPlaceholder")} aria-label={t("receiving.searchPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)} />
                      </div>
                      {isLoading ? <EmptyState icon="…" title={t("receiving.loading")} description={t("receiving.fetching")} /> : receipts.length === 0 ? <EmptyState icon="0" title={t("receiving.emptyTitle")} description={t("receiving.emptyDesc")} /> : visibleReceipts.length === 0 ? <EmptyState icon="?" title={t("receiving.emptyTitle")} description={t("receiving.searchPlaceholder")} /> : <GoodsReceiptTable rows={visibleReceipts} selectedGoodsReceiptId={selectedGoodsReceipt?.id ?? ""} suppliers={suppliers} sites={sites} storageLocations={storageLocations} onSelectGoodsReceipt={setSelectedGoodsReceiptId} />}
                   </div>
                </section>
-               <aside className="card site-editor">
+               <aside className={`card ${styles.siteEditor}`}>
                   <div className="section">
                      <div className="section-header"><div><h2 className="section-title">{t("receiving.editor")}</h2><p className="section-subtitle">{t("receiving.editorDesc")}</p></div></div>
                      <GoodsReceiptForm key={formKey} initialValues={formValues} isSaving={isSaving} products={products} purchaseOrders={purchaseOrders} suppliers={suppliers} sites={sites} storageLocations={storageLocations} onSubmit={handleSaveGoodsReceipt} />

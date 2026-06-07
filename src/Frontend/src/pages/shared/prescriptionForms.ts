@@ -9,11 +9,11 @@ export function blankPrescriptionLineValues(): PrescriptionLineFormValues {
    return { productId: "", prescribedQuantity: "", dosage: "", frequency: "", duration: "", notes: "" };
 }
 
-export function blankPrescriptionValues(): PrescriptionFormValues {
+export function blankPrescriptionValues(defaultPatientName = "", defaults?: { siteId?: string; storageLocationId?: string }): PrescriptionFormValues {
    return {
-      siteId: "",
-      storageLocationId: "",
-      patientName: "",
+      siteId: defaults?.siteId ?? "",
+      storageLocationId: defaults?.storageLocationId ?? "",
+      patientName: defaultPatientName,
       patientPhone: "",
       doctorName: "",
       doctorLicense: "",

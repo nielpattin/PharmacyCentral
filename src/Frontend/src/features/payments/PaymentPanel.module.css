@@ -1,0 +1,107 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 10px;
+  margin-top: 0;
+}
+
+/* ── Checkout empty state (payment === null) ── */
+.checkoutEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 28px 16px;
+  min-height: 100px;
+}
+
+.checkoutEmptyIcon {
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--muted-soft);
+}
+
+.checkoutEmpty h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.checkoutEmpty p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  max-width: 220px;
+}
+
+.checkoutFormActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  padding-top: 4px;
+  margin-top: 0;
+}
+
+/* ── Payment info ── */
+.paymentInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 0;
+  font-size: 0.85rem;
+}
+
+.paymentCode,
+.paymentAmount {
+  font-size: 15px;
+}
+
+.paymentCode strong,
+.paymentAmount strong {
+  color: var(--muted);
+}
+
+/* ── QR section ── */
+.paymentQrSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.paymentQrContainer {
+  text-align: center;
+}
+
+.paymentQrImage {
+  max-width: 200px;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.paymentTransferDetails {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+/* ── Form actions within payment panel ── */
+.paymentFormActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 0;
+}
+
+/* ── Paid message ── */
+.paymentPaidMessage {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--success-text);
+  font-weight: 600;
+}

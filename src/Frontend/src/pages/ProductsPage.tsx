@@ -1,3 +1,4 @@
+import styles from "./ProductsPage.module.css";
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
@@ -134,23 +135,23 @@ export default function ProductsPage() {
 
    return (
       <AppShell active="catalog" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.catalog") }]} />}>
-         <div className="sites-page">
+         <div className={styles.sitesPage}>
             <PageHeader title={t("products.title")} actions={<div className="page-actions"><Button variant="primary" onClick={handleNewProduct}>{t("products.newProduct")}</Button></div>} />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
-            <div className="site-workbench">
-               <section className="card site-registry">
+            <div className={styles.siteWorkbench}>
+               <section className={`card ${styles.siteRegistry}`}>
                   <div className="section">
                      <div className="section-header">
                         <div><h2 className="section-title">{t("products.registry")}</h2><p className="section-subtitle">{t("products.registryDesc")}</p></div>
                         <Badge tone="role">{isLoading ? t("products.loadingState") : `${visibleProducts.length} ${t("common.records")}`}</Badge>
                      </div>
                      <div className="section-toolbar">
-                        <input className="field-input site-search" type="search" placeholder={t("products.searchPlaceholder")} aria-label={t("products.searchPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)} />
+                        <input className={`field-input ${styles.siteSearch}`} type="search" placeholder={t("products.searchPlaceholder")} aria-label={t("products.searchPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)} />
                      </div>
                      {isLoading ? <EmptyState icon="…" title={t("products.loading")} description={t("products.fetching")} /> : products.length === 0 ? <EmptyState icon="0" title={t("products.emptyTitle")} description={t("products.emptyDesc")} /> : visibleProducts.length === 0 ? <EmptyState icon="?" title={t("products.emptyTitle")} description={t("products.searchPlaceholder")} /> : <ProductTable rows={visibleProducts} selectedProductId={selectedProduct?.id ?? ""} onSelectProduct={handleSelectProduct} onDeleteProduct={(productId) => void handleDeleteProduct(productId)} />}
                   </div>
                </section>
-               <aside className="card site-editor">
+               <aside className={`card ${styles.siteEditor}`}>
                   <div className="section">
                      <div className="section-header"><div><h2 className="section-title">{t("products.editor")}</h2><p className="section-subtitle">{t("products.editorDesc")}</p></div></div>
                      <ProductForm key={formKey} mode={editorMode} initialValues={formValues} isSaving={isSaving || isDeleting} onSubmit={handleSaveProduct} onDelete={editorProduct !== null ? () => handleDeleteProduct(editorProduct.id) : undefined} />

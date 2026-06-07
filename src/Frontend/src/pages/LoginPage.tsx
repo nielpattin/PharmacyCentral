@@ -5,6 +5,7 @@ import { login, validateLoginCredentials, getPostLoginRedirectPath, setPostLogin
 import { navigate, usePathname } from "../lib/router";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { setLanguage, useLanguage, useT } from "../lib/i18n";
+import styles from "./LoginPage.module.css";
 
 type LoginFieldErrors = { email?: string; password?: string };
 type SetupFieldErrors = LoginFieldErrors & { displayName?: string };
@@ -146,37 +147,37 @@ export default function LoginPage() {
    }
 
    return (
-      <main className="login-page">
-         <div aria-hidden="true" className="login-bg-orb" />
-         <section className="login-panel" aria-label={requiresAdminSetup ? t("auth.setupTitle") : t("auth.title")}>
-            <div className="login-card card">
-               <header className="login-card-header">
-                  <div className="login-brand-row">
-                     <img className="brand-mark" src="/brandmark.png" alt="" />
+      <main className={styles.page}>
+         <div aria-hidden="true" className={styles.bgOrb} />
+         <section className={styles.panel} aria-label={requiresAdminSetup ? t("auth.setupTitle") : t("auth.title")}>
+            <div className={`${styles.loginCard} card`}>
+               <header className={styles.cardHeader}>
+                  <div className={styles.brandRow}>
+                     <img className={styles.brandMark} src="/brandmark.png" alt="" />
                      <div>
                         <h1>{requiresAdminSetup ? t("auth.setupTitle") : t("auth.title")}</h1>
-                        {requiresAdminSetup ? <p className="login-tagline">{t("auth.setupSubtitle")}</p> : null}
+                        {requiresAdminSetup ? <p className={styles.tagline}>{t("auth.setupSubtitle")}</p> : null}
                      </div>
                   </div>
                </header>
 
-               <div className="login-card-body">
+               <div className={styles.cardBody}>
                   {formError !== null ? (
-                     <div className="notice danger-note login-notice">
+                     <div className={`notice danger-note ${styles.formNotice}`}>
                         <AlertCircle aria-hidden="true" size={16} />
                         <span>{formError}</span>
                      </div>
                   ) : null}
-                  {isSetupStatusLoading ? <div className="notice login-notice">{t("common.loading")}</div> : null}
+                  {isSetupStatusLoading ? <div className={`notice ${styles.formNotice}`}>{t("common.loading")}</div> : null}
 
                   {requiresAdminSetup ? (
                      <>
-                     <h2 className="login-form-title">{t("auth.setupFormTitle")}</h2>
-                     <form className="login-form" onSubmit={handleSetupSubmit}>
+                     <h2 className={styles.formTitle}>{t("auth.setupFormTitle")}</h2>
+                     <form className={styles.form} onSubmit={handleSetupSubmit}>
                         <label className="field">
                            <span className="field-label">{t("auth.displayName")}</span>
-                           <span className="login-input-wrap has-icon">
-                              <UserRound className="login-input-icon" aria-hidden="true" size={18} />
+                           <span className={`${styles.inputWrap} ${styles.hasIcon}`}>
+                              <UserRound className={styles.inputIcon} aria-hidden="true" size={18} />
                               <input
                                  className="field-input"
                                  autoFocus
@@ -197,8 +198,8 @@ export default function LoginPage() {
 
                         <label className="field">
                            <span className="field-label">{t("auth.email")}</span>
-                           <span className="login-input-wrap has-icon">
-                              <Mail className="login-input-icon" aria-hidden="true" size={18} />
+                           <span className={`${styles.inputWrap} ${styles.hasIcon}`}>
+                              <Mail className={styles.inputIcon} aria-hidden="true" size={18} />
                               <input
                                  className="field-input"
                                  type="email"
@@ -218,8 +219,8 @@ export default function LoginPage() {
 
                         <label className="field">
                            <span className="field-label">{t("auth.password")}</span>
-                           <span className="login-input-wrap has-icon has-action">
-                              <LockKeyhole className="login-input-icon" aria-hidden="true" size={18} />
+                           <span className={`${styles.inputWrap} ${styles.hasIcon} ${styles.hasAction}`}>
+                              <LockKeyhole className={styles.inputIcon} aria-hidden="true" size={18} />
                               <input
                                  className="field-input"
                                  type={showPassword ? "text" : "password"}
@@ -233,14 +234,14 @@ export default function LoginPage() {
                                  aria-invalid={setupFieldErrors.password !== undefined}
                                  aria-describedby={setupFieldErrors.password !== undefined ? "setup-password-error" : undefined}
                               />
-                              <button type="button" className="login-input-action" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")} aria-pressed={showPassword}>
+                              <button type="button" className={styles.inputAction} onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")} aria-pressed={showPassword}>
                                  {showPassword ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
                               </button>
                            </span>
                            {setupFieldErrors.password !== undefined ? <span id="setup-password-error" className="field-error">{setupFieldErrors.password}</span> : null}
                         </label>
 
-                        <button className="btn primary login-submit" type="submit" disabled={isSubmitting || isSetupStatusLoading}>
+                        <button className={`btn primary ${styles.submit}`} type="submit" disabled={isSubmitting || isSetupStatusLoading}>
                            <span>{isSubmitting ? t("auth.settingUp") : t("auth.createFirstAdmin")}</span>
                            <LogIn aria-hidden="true" size={18} />
                         </button>
@@ -248,12 +249,12 @@ export default function LoginPage() {
                      </>
                   ) : (
                      <>
-                     <h2 className="login-form-title">{t("auth.formTitle")}</h2>
-                     <form className="login-form" onSubmit={handleSubmit}>
+                     <h2 className={styles.formTitle}>{t("auth.formTitle")}</h2>
+                     <form className={styles.form} onSubmit={handleSubmit}>
                         <label className="field">
                            <span className="field-label">{t("auth.email")}</span>
-                           <span className="login-input-wrap has-icon">
-                              <Mail className="login-input-icon" aria-hidden="true" size={18} />
+                           <span className={`${styles.inputWrap} ${styles.hasIcon}`}>
+                              <Mail className={styles.inputIcon} aria-hidden="true" size={18} />
                               <input
                                  className="field-input"
                                  autoFocus
@@ -274,8 +275,8 @@ export default function LoginPage() {
 
                         <label className="field">
                            <span className="field-label">{t("auth.password")}</span>
-                           <span className="login-input-wrap has-icon has-action">
-                              <LockKeyhole className="login-input-icon" aria-hidden="true" size={18} />
+                           <span className={`${styles.inputWrap} ${styles.hasIcon} ${styles.hasAction}`}>
+                              <LockKeyhole className={styles.inputIcon} aria-hidden="true" size={18} />
                               <input
                                  className="field-input"
                                  type={showPassword ? "text" : "password"}
@@ -289,14 +290,14 @@ export default function LoginPage() {
                                  aria-invalid={fieldErrors.password !== undefined}
                                  aria-describedby={fieldErrors.password !== undefined ? "login-password-error" : undefined}
                               />
-                              <button type="button" className="login-input-action" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")} aria-pressed={showPassword}>
+                              <button type="button" className={styles.inputAction} onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")} aria-pressed={showPassword}>
                                  {showPassword ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
                               </button>
                            </span>
                            {fieldErrors.password !== undefined ? <span id="login-password-error" className="field-error">{fieldErrors.password}</span> : null}
                         </label>
 
-                        <button className="btn primary login-submit" type="submit" disabled={isSubmitting || isSetupStatusLoading}>
+                        <button className={`btn primary ${styles.submit}`} type="submit" disabled={isSubmitting || isSetupStatusLoading}>
                            <span>{isSubmitting ? t("auth.signingIn") : t("auth.signIn")}</span>
                            <LogIn aria-hidden="true" size={18} />
                         </button>
@@ -305,8 +306,8 @@ export default function LoginPage() {
                   )}
 
                </div>
-               <footer className="login-card-footer">
-                  <label className="login-language" aria-label={t("language.switch")}>
+               <footer className={styles.cardFooter}>
+                  <label className={styles.language} aria-label={t("language.switch")}>
                      <Globe2 aria-hidden="true" size={16} />
                      <select value={language} onChange={(event) => setLanguage(event.target.value === "vi" ? "vi" : "en")}>
                         <option value="en">English</option>

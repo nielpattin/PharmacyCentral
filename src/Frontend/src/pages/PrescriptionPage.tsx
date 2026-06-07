@@ -1,76 +1,74 @@
 import { useMemo, useState } from "react";
+import styles from "./PrescriptionPage.module.css";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
-import { EmptyState } from "../components/ui/EmptyState";
-import { cancelPrescription, createPrescription, createPrescriptionPayment, dispensePrescription, getPaymentStatus, getPrintableInvoice, loadPrescription, loadPrescriptions, loadProducts, loadSites, loadStorageLocations, type PaymentDetails, type PrintableInvoiceDetails, type PrescriptionCreateRequest, type PrescriptionDetails, type ProductDto, type SiteDto, type StorageLocationDto } from "../api/pharmacyClient";
+import { cancelPrescription, createPrescription, createPrescriptionPayment, dispensePrescription, getPaymentStatus, getPrintableInvoice, loadInventoryBalances, loadPrescriptions, loadProductPrices, loadProducts, loadSites, loadStorageLocations, type InventoryBalanceDto, type PaymentDetails, type PrintableInvoiceDetails, type PrescriptionCreateRequest, type PrescriptionDetails, type ProductDto, type ProductPriceDto, type SiteDto, type StorageLocationDto } from "../api/pharmacyClient";
 import { PaymentPanel } from "../features/payments/PaymentPanel";
 import { PrintableInvoiceModal } from "../features/payments/PrintableInvoiceModal";
 import { PrescriptionDetail } from "../features/prescriptions/PrescriptionDetail";
 import { PrescriptionForm } from "../features/prescriptions/PrescriptionForm";
-import { PrescriptionTable } from "../features/prescriptions/PrescriptionTable";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import { useAuth } from "../lib/auth";
 import { blankPrescriptionValues, type DispenseFormValues, type PrescriptionFormValues } from "./shared/prescriptionForms";
 
-const PRESCRIPTION_STATUSES = ["Draft", "Pending", "Dispensed", "PartiallyDispensed", "Cancelled"];
-
 export default function PrescriptionPage() {
+   const authUser = useAuth();
    const t = useT();
    const [prescriptions, setPrescriptions] = useState<PrescriptionDetails[]>([]);
    const [sites, setSites] = useState<SiteDto[]>([]);
    const [storageLocations, setStorageLocations] = useState<StorageLocationDto[]>([]);
    const [products, setProducts] = useState<ProductDto[]>([]);
    const [selectedId, setSelectedId] = useState("");
-   const [siteFilter, setSiteFilter] = useState("");
-   const [statusFilter, setStatusFilter] = useState("");
-   const [isLoading, setIsLoading] = useState(true);
    const [isSaving, setIsSaving] = useState(false);
    const [bannerError, setBannerError] = useState<string | null>(null);
    const [createToken, setCreateToken] = useState(0);
    const [payment, setPayment] = useState<PaymentDetails | null>(null);
    const [invoiceData, setInvoiceData] = useState<PrintableInvoiceDetails | null>(null);
-
+   const [isPaymentBusy, setIsPaymentBusy] = useState(false);
+   const [balances, setBalances] = useState<InventoryBalanceDto[]>([]);
+   const [prices, setPrices] = useState<ProductPriceDto[]>([]);
    const selectedPrescription = useMemo(() => prescriptions.find((prescription) => prescription.id === selectedId) ?? null, [prescriptions, selectedId]);
-   const visiblePrescriptions = useMemo(() => prescriptions.filter((prescription) => (siteFilter === "" || prescription.siteId === siteFilter) && (statusFilter === "" || prescription.status === statusFilter)), [prescriptions, siteFilter, statusFilter]);
-   const formValues = blankPrescriptionValues();
+
+   const defaultSource = useMemo(() => {
+      const userSites = authUser !== null && !authUser.isPlatformAdmin
+         ? sites.filter((s) => authUser.siteIds.includes(s.id))
+         : sites;
+      const defaultSite = userSites.find((s) => s.isActive) ?? userSites[0] ?? null;
+      if (defaultSite === null) {
+         return { siteId: "", storageLocationId: "", siteName: "", storageLocationName: "", sourceMissing: true };
+      }
+      const siteLocations = storageLocations.filter((l) => l.siteId === defaultSite.id);
+      const defaultLocation = siteLocations.find((l) => l.isActive) ?? siteLocations[0] ?? null;
+      if (defaultLocation === null) {
+         return { siteId: defaultSite.id, storageLocationId: "", siteName: defaultSite.name, storageLocationName: "", sourceMissing: true };
+      }
+      return {
+         siteId: defaultSite.id,
+         storageLocationId: defaultLocation.id,
+         siteName: defaultSite.name,
+         storageLocationName: defaultLocation.name,
+         sourceMissing: false,
+      };
+   }, [sites, storageLocations, authUser]);
+   const formValues = blankPrescriptionValues(t("counterSale.walkInCustomer"), { siteId: defaultSource.siteId, storageLocationId: defaultSource.storageLocationId });
+   const invoiceSiteName = useMemo(() => invoiceData === null ? "" : (sites.find((site) => site.id === invoiceData.siteId)?.name ?? t("counterSale.unknownSite")), [invoiceData, sites, t]);
 
    useMountEffect(() => { void refreshData(); });
 
    async function refreshData(preferredSelectedId?: string) {
-      setIsLoading(true);
       setBannerError(null);
       try {
-         const [prescriptionData, siteData, locationData, productData] = await Promise.all([loadPrescriptions({ limit: 100 }), loadSites(), loadStorageLocations(), loadProducts()]);
+         const [prescriptionData, siteData, locationData, productData, balanceData, priceData] = await Promise.all([loadPrescriptions({ limit: 100 }), loadSites(), loadStorageLocations(), loadProducts(), loadInventoryBalances(), loadProductPrices({ status: "Published", limit: 200 })]);
          setPrescriptions(prescriptionData);
          setSites(siteData);
          setStorageLocations(locationData);
          setProducts(productData);
-         const nextSelectedId = preferredSelectedId ?? selectedId;
-         setSelectedId(prescriptionData.some((prescription) => prescription.id === nextSelectedId) ? nextSelectedId : (prescriptionData[0]?.id ?? ""));
-      } catch (error) {
-         setBannerError(error instanceof Error ? error.message : t("errors.loadPrescription"));
-      } finally {
-         setIsLoading(false);
-      }
-   }
-
-   async function handleSelectPrescription(id: string) {
-      setSelectedId(id);
-      setBannerError(null);
-      setPayment(null);
-      try {
-         const detail = await loadPrescription(id);
-         setPrescriptions((current) => current.some((prescription) => prescription.id === detail.id) ? current.map((prescription) => prescription.id === detail.id ? detail : prescription) : [detail, ...current]);
-         // Try to load existing payment for this prescription
-         try {
-            const paymentData = await createPrescriptionPayment(id);
-            setPayment(paymentData);
-         } catch {
-            // No payment exists yet, that's fine
-         }
+         setBalances(balanceData);
+         setPrices(priceData);
+         setSelectedId(preferredSelectedId !== undefined && prescriptionData.some((p) => p.id === preferredSelectedId) ? preferredSelectedId : "");
       } catch (error) {
          setBannerError(error instanceof Error ? error.message : t("errors.loadPrescription"));
       }
@@ -91,6 +89,8 @@ export default function PrescriptionPage() {
             lines: values.lines.map((line) => ({ productId: line.productId, prescribedQuantity: Number(line.prescribedQuantity), dosage: line.dosage?.trim() || null, frequency: line.frequency?.trim() || null, duration: line.duration?.trim() || null, notes: line.notes?.trim() || null })),
          };
          const result = await createPrescription(request);
+         setPayment(null);
+         setInvoiceData(null);
          await refreshData(result.id);
          setCreateToken((current) => current + 1);
       } catch (error) {
@@ -131,62 +131,75 @@ export default function PrescriptionPage() {
 
    async function handleCreatePayment() {
       if (selectedPrescription === null) return;
-      const paymentData = await createPrescriptionPayment(selectedPrescription.id);
-      setPayment(paymentData);
+      setIsPaymentBusy(true);
+      try {
+         const paymentData = await createPrescriptionPayment(selectedPrescription.id);
+         setPayment(paymentData);
+      } finally {
+         setIsPaymentBusy(false);
+      }
    }
 
    async function handleRefreshPaymentStatus() {
       if (payment === null) return;
-      const paymentData = await getPaymentStatus(payment.id);
-      setPayment(paymentData);
+      setIsPaymentBusy(true);
+      try {
+         const paymentData = await getPaymentStatus(payment.id);
+         setPayment(paymentData);
+      } finally {
+         setIsPaymentBusy(false);
+      }
    }
 
    async function handleShowInvoice() {
       if (payment === null) return;
+      setIsPaymentBusy(true);
       try {
          const invoice = await getPrintableInvoice(payment.id);
          setInvoiceData(invoice);
       } catch (error) {
          setBannerError(error instanceof Error ? error.message : t("errors.loadPrescription"));
+      } finally {
+         setIsPaymentBusy(false);
       }
    }
 
    return (
-      <AppShell active="prescriptions" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.prescription") }]} />}>
-         <div className="sites-page">
-            <PageHeader title={t("prescription.title")} actions={<div className="page-actions"><Button variant="primary" onClick={() => { setSelectedId(""); setCreateToken((current) => current + 1); }}>{t("prescription.newPrescription")}</Button></div>} />
-            {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
-            <div className="site-workbench">
-               <section className="card site-registry">
-                  <div className="section">
-                     <div className="section-header"><div><h2 className="section-title">{t("prescription.registry")}</h2><p className="section-subtitle">{t("prescription.registryDesc")}</p></div><Badge tone="role">{isLoading ? t("prescription.loadingState") : `${visiblePrescriptions.length} ${t("common.records")}`}</Badge></div>
-                     <div className="section-toolbar"><select className="field-input" value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="">{t("prescription.allSites")}</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select><select className="field-input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">{t("prescription.allStatuses")}</option>{PRESCRIPTION_STATUSES.map((status) => <option key={status} value={status}>{t(`prescription.status.${status}`)}</option>)}</select></div>
-                     {isLoading ? <EmptyState icon="…" title={t("prescription.loading")} description={t("prescription.fetching")} /> : visiblePrescriptions.length === 0 ? <EmptyState icon="0" title={t("prescription.emptyTitle")} description={t("prescription.emptyDesc")} /> : <PrescriptionTable rows={visiblePrescriptions} selectedId={selectedId} sites={sites} onSelect={(id) => { void handleSelectPrescription(id); }} />}
-                  </div>
-               </section>
-               <aside className="card site-editor">
-                  <div className="section">
-                     <div className="section-header"><div><h2 className="section-title">{t("prescription.editor")}</h2><p className="section-subtitle">{t("prescription.editorDesc")}</p></div></div>
-                     {selectedPrescription === null ? (
-                        <PrescriptionForm key={`prescription-${createToken}`} initialValues={formValues} isSaving={isSaving} products={products} sites={sites} storageLocations={storageLocations} onSubmit={handleCreatePrescription} />
-                     ) : (
-                        <>
-                           <PrescriptionDetail key={selectedPrescription.id} prescription={selectedPrescription} isSaving={isSaving} products={products} sites={sites} storageLocations={storageLocations} onDispense={handleDispensePrescription} onCancel={handleCancelPrescription} />
-                           <PaymentPanel
-                              key={`payment-${selectedPrescription.id}`}
-                              payment={payment}
-                              onCreatePayment={handleCreatePayment}
-                              onRefreshStatus={handleRefreshPaymentStatus}
-                              onShowInvoice={handleShowInvoice}
-                              isBusy={false}
-                           />
-                        </>
-                     )}
-                  </div>
-               </aside>
+      <AppShell active="prescriptions" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("counterSale.title") }]} />}>
+         <div className={styles.workspace}>
+            <div className={styles.commandBar}>
+               <PageHeader title={t("counterSale.title")} actions={<div className="page-actions"><Button variant="primary" onClick={() => { setSelectedId(""); setCreateToken((current) => current + 1); setPayment(null); setInvoiceData(null); }}>{t("counterSale.newTicket")}</Button></div>} />
+               {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
             </div>
+
+            <div className={styles.counterWorkbench}>
+               <section className={`card ${styles.counterTicket}`}>
+                  {selectedPrescription === null ? (
+                     <>
+                        <div className={`section-header ${styles.editorHeader}`}><div><h2 className="section-title">{t("prescription.editor")}</h2><p className="section-subtitle">{t("prescription.editorDesc")}</p></div></div>
+                        <PrescriptionForm key={`prescription-${createToken}-${defaultSource.siteId}-${defaultSource.storageLocationId}`} initialValues={formValues} isSaving={isSaving} products={products} sites={sites} storageLocations={storageLocations} balances={balances} prices={prices} onSubmit={handleCreatePrescription} />
+                     </>
+                  ) : (
+                     <PrescriptionDetail key={selectedPrescription.id} prescription={selectedPrescription} isSaving={isSaving} products={products} sites={sites} storageLocations={storageLocations} balances={balances} onDispense={handleDispensePrescription} onCancel={handleCancelPrescription} />
+                  )}
+               </section>
+
+               {selectedPrescription !== null ? (
+                  <aside className={styles.counterCheckout}>
+                     <PaymentPanel
+                        key={`payment-${selectedPrescription.id}`}
+                        payment={payment}
+                        onCreatePayment={handleCreatePayment}
+                        onRefreshStatus={handleRefreshPaymentStatus}
+                        onShowInvoice={handleShowInvoice}
+                        isBusy={isPaymentBusy}
+                     />
+                  </aside>
+               ) : null}
+            </div>
+
+            {invoiceData !== null ? <PrintableInvoiceModal invoice={invoiceData} siteName={invoiceSiteName} onClose={() => setInvoiceData(null)} /> : null}
          </div>
-         {invoiceData !== null ? <PrintableInvoiceModal invoice={invoiceData} onClose={() => setInvoiceData(null)} /> : null}
       </AppShell>
    );
 }

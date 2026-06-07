@@ -12,6 +12,7 @@ import { StocktakeSessionForm } from "../features/stocktakes/StocktakeSessionFor
 import { StocktakeSessionTable } from "../features/stocktakes/StocktakeSessionTable";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./StocktakePage.module.css";
 import { blankStocktakeSessionValues, type CountSheetFormValues, type StocktakeSessionFormValues } from "./shared/stocktakeForms";
 
 function stocktakeStatusTone(status: string) {
@@ -111,18 +112,18 @@ export default function StocktakePage() {
 
    return (
       <AppShell active="stocktake" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.stocktake") }]} />}>
-         <div className="sites-page">
+         <div className={styles.sitesPage}>
             <PageHeader title={t("stocktake.title")} actions={<div className="page-actions"><Button variant="primary" onClick={() => { setSelectedId(""); setCreateToken((current) => current + 1); }}>{t("stocktake.newSession")}</Button></div>} />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
-            <div className="site-workbench">
-               <section className="card site-registry">
+            <div className={styles.siteWorkbench}>
+               <section className={`card ${styles.siteRegistry}`}>
                   <div className="section">
                      <div className="section-header"><div><h2 className="section-title">{t("stocktake.registry")}</h2><p className="section-subtitle">{t("stocktake.registryDesc")}</p></div><Badge tone="role">{isLoading ? t("stocktake.loadingState") : `${visibleSessions.length} ${t("common.records")}`}</Badge></div>
                      <div className="section-toolbar"><select className="field-input" value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="">{t("stocktake.allSites")}</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select><select className="field-input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">{t("stocktake.allStatuses")}</option>{["Draft", "InProgress", "Completed", "Cancelled"].map((status) => <option key={status} value={status}>{t(`stocktake.status.${status}`)}</option>)}</select></div>
                      {isLoading ? <EmptyState icon="…" title={t("stocktake.loading")} description={t("stocktake.fetching")} /> : visibleSessions.length === 0 ? <EmptyState icon="0" title={t("stocktake.emptyTitle")} description={t("stocktake.emptyDesc")} /> : <StocktakeSessionTable rows={visibleSessions} selectedId={selectedId} sites={sites} storageLocations={storageLocations} onSelect={setSelectedId} />}
                   </div>
                </section>
-               <aside className="card site-editor">
+               <aside className={`card ${styles.siteEditor}`}>
                   <div className="section">
                      <div className="section-header">
                         <div><h2 className="section-title">{t("stocktake.editor")}</h2><p className="section-subtitle">{t("stocktake.editorDesc")}</p></div>

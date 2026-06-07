@@ -1,3 +1,4 @@
+import styles from "./Breadcrumbs.module.css";
 import type { ReactNode } from "react";
 
 type BreadcrumbItem = {
@@ -15,10 +16,10 @@ export function Breadcrumbs({ items }: BreadcrumbsProps) {
          {items.map((item, index) => (
             <span
                key={index}
-               className={index === items.length - 1 ? "breadcrumb-item breadcrumb-item--current" : "breadcrumb-item"}
+               className={index === items.length - 1 ? styles.current : undefined}
             >
                {index > 0 ? (
-                  <span className="breadcrumb-separator" aria-hidden="true">
+                  <span className={styles.separator} aria-hidden="true">
                      /
                   </span>
                ) : null}

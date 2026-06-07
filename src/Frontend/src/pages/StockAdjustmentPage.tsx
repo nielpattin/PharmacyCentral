@@ -23,6 +23,7 @@ import {
 } from "../api/pharmacyClient";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./StockAdjustmentPage.module.css";
 
 type AdjustmentFilters = {
    siteId: string;
@@ -224,7 +225,7 @@ export default function StockAdjustmentPage() {
 
    return (
       <AppShell active="adjustments" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.adjustments") }]} />}>
-         <div className="adjustments-page">
+         <div className={styles.adjustmentsPage}>
             <PageHeader title={t("adjustments.title")} actions={<div className="page-actions"><Button variant="secondary" onClick={() => void refreshData()}>{t("common.refresh")}</Button></div>} />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
             {successMessage !== null ? <div className="notice success-note">{successMessage}</div> : null}
@@ -262,7 +263,7 @@ export default function StockAdjustmentPage() {
                   </div>
 
                   {selectedBalance !== null ? (
-                     <div className="adjustments-stock-context">
+                     <div className={styles.adjustmentsStockContext}>
                         <div><span>{t("adjustments.product")}</span><strong>{selectedBalance.productSku} · {selectedBalance.productName}</strong></div>
                         <div><span>{t("adjustments.batch")}</span><strong>{selectedBalance.batchNumber}</strong></div>
                         <div><span>{t("adjustments.site")}</span><strong>{siteName(selectedBalance.siteId)}</strong></div>
@@ -278,7 +279,7 @@ export default function StockAdjustmentPage() {
                </div>
             </section>
 
-            <div className="adjustments-grid">
+            <div className={styles.adjustmentsGrid}>
                <section className="card">
                   <div className="section">
                      <div className="section-header">
@@ -288,7 +289,7 @@ export default function StockAdjustmentPage() {
                         </div>
                         <Badge tone={pendingCount > 0 ? "warn" : "ok"}>{pendingCount} {t("adjustments.pending")}</Badge>
                      </div>
-                     <div className="section-toolbar adjustments-toolbar">
+                     <div className={`section-toolbar ${styles.adjustmentsToolbar}`}>
                         <select className="field-input" value={filters.siteId} onChange={(event) => updateFilters({ ...filters, siteId: event.target.value })}>
                            <option value="">{t("adjustments.allSites")}</option>
                            {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
@@ -304,7 +305,7 @@ export default function StockAdjustmentPage() {
                      </div>
                      {isLoading ? <EmptyState icon="…" title={t("adjustments.loading")} description={t("adjustments.fetching")} /> : adjustments.length === 0 ? <EmptyState icon="0" title={t("adjustments.emptyTitle")} description={t("adjustments.emptyDesc")} /> : (
                         <div className="table-wrap">
-                           <table className="selectable-table sites-table adjustments-table">
+                           <table className={`selectable-table sites-table ${styles.adjustmentsTable}`}>
                               <thead>
                                  <tr>
                                     <th>{t("adjustments.product")}</th>
@@ -318,8 +319,8 @@ export default function StockAdjustmentPage() {
                               <tbody>
                                  {adjustments.map((adjustment) => (
                                     <tr key={adjustment.id} className={adjustment.id === selectedId ? "selected" : undefined}>
-                                       <td><strong>{productName(adjustment.productId)}</strong><span className="table-muted">{t("adjustments.createdAt", { value: formatDateTime(adjustment.createdAtUtc) })}</span></td>
-                                       <td><strong>{siteName(adjustment.siteId)}</strong><span className="table-muted">{storageLocationName(adjustment.storageLocationId)}</span></td>
+                                       <td><strong>{productName(adjustment.productId)}</strong><span className={styles.tableMuted}>{t("adjustments.createdAt", { value: formatDateTime(adjustment.createdAtUtc) })}</span></td>
+                                       <td><strong>{siteName(adjustment.siteId)}</strong><span className={styles.tableMuted}>{storageLocationName(adjustment.storageLocationId)}</span></td>
                                        <td>{t(`adjustments.type.${adjustment.adjustmentType}`)}</td>
                                        <td>{adjustment.quantity}</td>
                                        <td><Badge tone={adjustmentStatusTone(adjustment.status)}>{t(`adjustments.status.${adjustment.status}`)}</Badge></td>
@@ -344,7 +345,7 @@ export default function StockAdjustmentPage() {
                      {selectedAdjustment === null ? (
                         <EmptyState icon="?" title={t("adjustments.noSelectionTitle")} description={t("adjustments.noSelectionDesc")} />
                      ) : (
-                        <div className="entity-form adjustments-detail">
+                        <div className={`entity-form ${styles.adjustmentsDetail}`}>
                            <div className="section-header">
                               <div>
                                  <h3 className="section-title">{productName(selectedAdjustment.productId)}</h3>
@@ -352,7 +353,7 @@ export default function StockAdjustmentPage() {
                               </div>
                               <Badge tone={adjustmentStatusTone(selectedAdjustment.status)}>{t(`adjustments.status.${selectedAdjustment.status}`)}</Badge>
                            </div>
-                           <div className="adjustments-detail-grid">
+                           <div className={styles.adjustmentsDetailGrid}>
                               <div><span>{t("adjustments.type")}</span><strong>{t(`adjustments.type.${selectedAdjustment.adjustmentType}`)}</strong></div>
                               <div><span>{t("adjustments.quantity")}</span><strong>{selectedAdjustment.quantity}</strong></div>
                               <div><span>{t("adjustments.createdBy")}</span><strong>{accountReference(selectedAdjustment.createdByUserId) ?? t("adjustments.notRecorded")}</strong></div>
@@ -360,12 +361,12 @@ export default function StockAdjustmentPage() {
                               <div><span>{t("adjustments.createdOn")}</span><strong>{formatDateTime(selectedAdjustment.createdAtUtc)}</strong></div>
                               <div><span>{t("adjustments.approvedOn")}</span><strong>{formatDateTime(selectedAdjustment.approvedAtUtc) || t("adjustments.notApproved")}</strong></div>
                            </div>
-                           <div className="adjustments-note-block">
+							<div className={styles.adjustmentsNoteBlock}>
                               <span>{t("adjustments.reason")}</span>
                               <p>{selectedAdjustment.reason}</p>
                            </div>
                            {selectedAdjustment.notes !== null ? (
-                              <div className="adjustments-note-block">
+								<div className={styles.adjustmentsNoteBlock}>
                                  <span>{t("adjustments.notes")}</span>
                                  <p>{selectedAdjustment.notes}</p>
                               </div>

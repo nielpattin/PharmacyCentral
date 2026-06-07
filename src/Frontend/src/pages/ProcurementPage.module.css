@@ -1,0 +1,26 @@
+.reportingPage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-content: start;
+  min-height: min-content;
+  padding-bottom: 20px;
+}
+
+.reportingPage :global(.page-head) {
+  margin-bottom: 0;
+}
+
+.reportingGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 420px);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .reportingGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

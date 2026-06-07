@@ -9,6 +9,7 @@ import { Field } from "../components/ui/Field";
 import { archiveProductPrice, createProductPrice, loadProductPrices, loadProducts, loadSites, publishProductPrice, type ProductDto, type ProductPriceDto, type SiteDto } from "../api/pharmacyClient";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./PricingPage.module.css";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -118,10 +119,10 @@ export default function PricingPage() {
 
    return (
       <AppShell active="pricing" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.pricing") }]} />}>
-         <div className="reporting-page">
+         <div className={styles.reportingPage}>
             <PageHeader title={t("pricing.title")} actions={<Button variant="secondary" onClick={() => void refreshData()}>{t("common.refresh")}</Button>} />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
-            <div className="reporting-grid">
+            <div className={styles.reportingGrid}>
                <section className="card section">
                   <div className="section-header"><div><h2 className="section-title">{t("pricing.priceList")}</h2><p className="section-subtitle">{t("pricing.priceListDesc")}</p></div><Badge tone="role">{prices.length} {t("common.records")}</Badge></div>
                   {isLoading ? <EmptyState icon="…" title={t("common.loading")} description={t("pricing.loadingDesc")} /> : prices.length === 0 ? <EmptyState icon="0" title={t("pricing.emptyTitle")} description={t("pricing.emptyDesc")} /> : (

@@ -1,43 +1,45 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { PrintableInvoiceDetails } from "../../api/pharmacyClient";
+import { Button } from "../../components/ui/Button";
+import { useMountEffect } from "../../hooks/useMountEffect";
 import { useT } from "../../lib/i18n";
+import styles from "./PrintableInvoiceModal.module.css";
 
 type PrintableInvoiceModalProps = {
    invoice: PrintableInvoiceDetails;
    onClose: () => void;
+   siteName: string;
 };
 
-export function PrintableInvoiceModal({ invoice, onClose }: PrintableInvoiceModalProps) {
+export function PrintableInvoiceModal({ invoice, siteName, onClose }: PrintableInvoiceModalProps) {
    const t = useT();
    const printRef = useRef<HTMLDivElement>(null);
 
-   useEffect(() => {
+   useMountEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
          if (event.key === "Escape") onClose();
       };
       window.addEventListener("keydown", handleKeyDown);
       return () => window.removeEventListener("keydown", handleKeyDown);
-   }, [onClose]);
-
-   const siteName = invoice.siteId;
+   });
 
    return (
       <div className="modal-overlay" onClick={onClose}>
-         <div className="modal-content invoice-modal" onClick={(e) => e.stopPropagation()} ref={printRef}>
-            <div className="invoice-print-area">
-               <div className="invoice-header">
+         <div className={`modal-content ${styles.invoiceModal}`} onClick={(e) => e.stopPropagation()} ref={printRef}>
+            <div className={styles.invoicePrintArea}>
+               <div className={styles.invoiceHeader}>
                   <h2>{t("invoice.title")}</h2>
-                  <p className="invoice-site">{t("invoice.site")}: {siteName}</p>
+                  <p className={styles.invoiceSite}>{t("invoice.site")}: {siteName}</p>
                </div>
 
-               <div className="invoice-meta">
+               <div className={styles.invoiceMeta}>
                   <div><strong>{t("invoice.paymentCode")}:</strong> {invoice.paymentCode}</div>
                   <div><strong>{t("invoice.date")}:</strong> {new Date(invoice.createdAtUtc).toLocaleString()}</div>
                   <div><strong>{t("invoice.status")}:</strong> {t(`payment.status.${invoice.status}`)}</div>
                   {invoice.confirmedAtUtc !== null ? <div><strong>{t("invoice.confirmedAt")}:</strong> {new Date(invoice.confirmedAtUtc).toLocaleString()}</div> : null}
                </div>
 
-               <table className="invoice-table">
+               <table className={styles.invoiceTable}>
                   <thead>
                      <tr>
                         <th>{t("invoice.product")}</th>
@@ -58,13 +60,13 @@ export function PrintableInvoiceModal({ invoice, onClose }: PrintableInvoiceModa
                   </tbody>
                </table>
 
-               <div className="invoice-total">
+               <div className={styles.invoiceTotal}>
                   <strong>{t("invoice.grandTotal")}:</strong> {invoice.totalAmount.toLocaleString()} {invoice.currency}
                </div>
 
-               <div className="invoice-actions no-print">
-                  <button className="btn btn-primary" onClick={() => window.print()}>{t("invoice.print")}</button>
-                  <button className="btn btn-secondary" onClick={onClose}>{t("common.close")}</button>
+               <div className={`${styles.invoiceActions} ${styles.noPrint}`}>
+                  <Button variant="primary" onClick={() => window.print()}>{t("invoice.print")}</Button>
+                  <Button variant="secondary" onClick={onClose}>{t("common.close")}</Button>
                </div>
             </div>
          </div>

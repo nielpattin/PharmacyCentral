@@ -1,3 +1,4 @@
+import styles from "./StorageLocationTable.module.css";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import type { StorageLocationDto } from "../../api/pharmacyClient";
@@ -30,7 +31,7 @@ export function StorageLocationTable({
 
    return (
       <div className="table-wrap">
-         <table className="selectable-table storage-table">
+         <table className={`selectable-table ${styles.storageTable}`}>
             <thead>
                <tr>
                   <th>{t("sites.code")}</th>

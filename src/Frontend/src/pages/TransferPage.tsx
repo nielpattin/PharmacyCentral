@@ -11,6 +11,7 @@ import { TransferOrderForm } from "../features/transfers/TransferOrderForm";
 import { TransferOrderTable } from "../features/transfers/TransferOrderTable";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./TransferPage.module.css";
 import { blankTransferOrderValues, type TransferOrderFormValues, type TransferReceiveFormValues, type TransferShipFormValues } from "./shared/transferForms";
 
 const TRANSFER_STATUSES = ["Draft", "PendingApproval", "Approved", "InTransit", "Received", "Cancelled"];
@@ -148,18 +149,18 @@ export default function TransferPage() {
 
    return (
       <AppShell active="transfers" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.transfer") }]} />}>
-         <div className="sites-page">
+         <div className={styles.sitesPage}>
             <PageHeader title={t("transfer.title")} actions={<div className="page-actions"><Button variant="primary" onClick={() => { setSelectedId(""); setCreateToken((current) => current + 1); }}>{t("transfer.newOrder")}</Button></div>} />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
-            <div className="site-workbench">
-               <section className="card site-registry">
+            <div className={styles.siteWorkbench}>
+               <section className={`card ${styles.siteRegistry}`}>
                   <div className="section">
                      <div className="section-header"><div><h2 className="section-title">{t("transfer.registry")}</h2><p className="section-subtitle">{t("transfer.registryDesc")}</p></div><Badge tone="role">{isLoading ? t("transfer.loadingState") : `${visibleTransfers.length} ${t("common.records")}`}</Badge></div>
                      <div className="section-toolbar"><select className="field-input" value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}><option value="">{t("transfer.allSites")}</option>{sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}</select><select className="field-input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">{t("transfer.allStatuses")}</option>{TRANSFER_STATUSES.map((status) => <option key={status} value={status}>{t(`transfer.status.${status}`)}</option>)}</select></div>
                      {isLoading ? <EmptyState icon="…" title={t("transfer.loading")} description={t("transfer.fetching")} /> : visibleTransfers.length === 0 ? <EmptyState icon="0" title={t("transfer.emptyTitle")} description={t("transfer.emptyDesc")} /> : <TransferOrderTable rows={visibleTransfers} selectedId={selectedId} sites={sites} storageLocations={storageLocations} onSelect={(id) => { void handleSelectTransfer(id); }} />}
                   </div>
                </section>
-               <aside className="card site-editor">
+               <aside className={`card ${styles.siteEditor}`}>
                   <div className="section">
                      <div className="section-header"><div><h2 className="section-title">{t("transfer.editor")}</h2><p className="section-subtitle">{t("transfer.editorDesc")}</p></div></div>
                      {selectedTransfer === null ? (

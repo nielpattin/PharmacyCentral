@@ -1,0 +1,267 @@
+.page {
+   position: relative;
+   isolation: isolate;
+   display: grid;
+   place-items: center;
+   min-height: 100vh;
+   min-height: 100dvh;
+   padding: 28px 18px;
+   overflow: hidden;
+   background:
+      linear-gradient(180deg, oklch(0.15 0.035 256) 0 42%, transparent 42%),
+      linear-gradient(135deg, oklch(0.965 0.006 256), oklch(0.94 0.008 256));
+}
+
+.page::before,
+.page::after {
+   content: "";
+   position: absolute;
+   z-index: 0;
+   pointer-events: none;
+}
+
+.page::before {
+   width: min(92vw, 1040px);
+   height: 1px;
+   inset-block-start: 42%;
+   inset-inline-start: 50%;
+   transform: translateX(-50%);
+   background: oklch(1 0 0 / 0.18);
+}
+
+.page::after {
+   width: min(92vw, 1040px);
+   height: 1px;
+   inset-block-start: calc(42% + 8px);
+   inset-inline-start: 50%;
+   transform: translateX(-50%);
+   background: color-mix(in oklch, var(--primary) 56%, transparent);
+}
+
+.bgOrb {
+   display: none;
+}
+
+.panel {
+   position: relative;
+   isolation: isolate;
+   z-index: 1;
+   display: grid;
+   width: min(100%, 880px);
+}
+
+.panel::before {
+   content: "";
+   position: absolute;
+   inset: -12px 18px 18px -12px;
+   z-index: -1;
+   border-radius: var(--radius-lg);
+   background: var(--primary);
+   opacity: 0.96;
+}
+
+.loginCard {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) 420px;
+   grid-template-areas:
+      "header body"
+      "footer body";
+   width: min(100%, 880px);
+   min-height: 438px;
+   overflow: hidden;
+   border-color: oklch(0.82 0.014 256);
+   background: var(--surface);
+   box-shadow: 0 28px 80px oklch(0.14 0.035 256 / 0.2), 0 2px 8px oklch(0 0 0 / 0.05);
+}
+
+.cardHeader {
+   grid-area: header;
+   padding: 34px 34px 26px;
+   border-bottom: 0;
+   background: oklch(0.15 0.035 256);
+   color: white;
+}
+
+.brandRow {
+   display: grid;
+   gap: 20px;
+   align-content: start;
+}
+
+.brandRow h1 {
+   margin: 0;
+   max-width: 12ch;
+   font-size: 2.45rem;
+   line-height: 0.96;
+   letter-spacing: -0.055em;
+   font-weight: 850;
+}
+
+.brandMark {
+   width: 60px;
+   height: 60px;
+   border-radius: 14px;
+   background: oklch(1 0 0 / 0.96);
+   box-shadow: none;
+}
+
+.tagline {
+   margin-top: 10px;
+   max-width: 28ch;
+   color: oklch(0.88 0.012 256);
+   font-size: 0.813rem;
+   line-height: 1.5;
+}
+
+.cardBody {
+   grid-area: body;
+   display: grid;
+   align-content: center;
+   padding: 36px 34px;
+   background: linear-gradient(180deg, oklch(1 0 0), oklch(0.985 0.004 256));
+}
+
+.formTitle {
+   margin: 0 0 18px;
+   color: var(--muted);
+   font-size: 0.75rem;
+   font-weight: 800;
+   letter-spacing: 0.12em;
+   line-height: 1.2;
+   text-transform: uppercase;
+}
+
+.formNotice {
+   display: flex;
+   align-items: flex-start;
+   gap: 8px;
+   margin-bottom: 12px;
+}
+
+.formNotice svg {
+   flex: 0 0 auto;
+   margin-top: 2px;
+}
+
+.form {
+   display: grid;
+   gap: 15px;
+}
+
+.inputWrap {
+   position: relative;
+   display: flex;
+   align-items: center;
+}
+
+.inputWrap :global(.field-input) {
+   min-height: 44px;
+   border-color: oklch(0.82 0.008 260);
+   background: oklch(0.998 0.002 256);
+   transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease), background-color 140ms var(--ease);
+}
+
+.inputWrap :global(.field-input):hover {
+   border-color: color-mix(in oklch, var(--primary) 30%, oklch(0.82 0.008 260));
+}
+
+.inputWrap :global(.field-input):focus {
+   border-color: var(--primary);
+   outline: 0;
+   box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 18%, transparent);
+}
+
+.inputWrap :global(.field-input[aria-invalid="true"]) {
+   border-color: var(--danger);
+   background: color-mix(in oklch, var(--danger-soft) 62%, white);
+}
+
+.hasIcon :global(.field-input) {
+   padding-left: 38px;
+}
+
+.hasAction :global(.field-input) {
+   padding-right: 44px;
+}
+
+.inputIcon {
+   position: absolute;
+   left: 12px;
+   z-index: 1;
+   color: var(--muted-soft);
+   pointer-events: none;
+}
+
+.inputAction {
+   position: absolute;
+   right: 4px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   min-width: 36px;
+   min-height: 30px;
+   padding: 0;
+   border: 1px solid transparent;
+   border-radius: var(--radius-sm);
+   background: transparent;
+   color: var(--muted-soft);
+   transition: color 140ms var(--ease), background-color 140ms var(--ease);
+}
+
+.inputAction:hover {
+   color: var(--primary);
+   background: var(--surface-soft);
+}
+
+.inputAction:focus-visible {
+   outline: 2px solid var(--primary);
+   outline-offset: 2px;
+}
+
+.submit {
+   width: 100%;
+   min-height: 44px;
+   justify-content: center;
+}
+
+.cardFooter {
+   grid-area: footer;
+   align-self: end;
+   padding: 20px 34px 30px;
+   border-top: 0;
+   display: flex;
+   justify-content: flex-start;
+   background: oklch(0.15 0.035 256);
+}
+
+.language {
+   position: relative;
+   display: inline-flex;
+   align-items: center;
+   flex: 0 0 auto;
+   color: oklch(0.84 0.016 256);
+}
+
+.language svg {
+   position: absolute;
+   left: 10px;
+   pointer-events: none;
+}
+
+.language select {
+   min-height: 36px;
+   padding: 6px 10px 6px 34px;
+   border: 1px solid oklch(1 0 0 / 0.16);
+   border-radius: var(--radius-sm);
+   background: oklch(1 0 0 / 0.06);
+   color: oklch(0.92 0.01 256);
+   font-size: 0.75rem;
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.language select:focus {
+   border-color: oklch(1 0 0 / 0.58);
+   outline: 2px solid oklch(0.52 0.18 256 / 0.55);
+   outline-offset: 1px;
+}

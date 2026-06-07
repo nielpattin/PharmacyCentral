@@ -1,0 +1,70 @@
+.sitesPage {
+   display: grid;
+   grid-template-rows: auto auto minmax(0, 1fr);
+   min-height: 0;
+   height: 100%;
+}
+
+.siteWorkbench {
+   display: grid;
+   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 400px);
+   gap: 16px;
+   align-items: start;
+   margin-top: 10px;
+   min-height: 0;
+   height: calc(100dvh - 180px);
+}
+
+.siteRegistry,
+.siteEditor {
+   min-width: 0;
+}
+
+.siteRegistry {
+   display: flex;
+   flex-direction: column;
+   min-height: 0;
+   overflow: hidden;
+   height: 100%;
+}
+
+.siteRegistry :global(.section) {
+   display: flex;
+   flex-direction: column;
+   min-height: 0;
+   flex: 1;
+   overflow: hidden;
+}
+
+.siteRegistry :global(.table-wrap) {
+   flex: 1;
+   min-height: 0;
+   overflow: auto;
+}
+
+.siteEditor {
+   position: static;
+   height: 100%;
+   overflow: auto;
+}
+
+.siteEditor :global(.section) {
+   display: flex;
+   flex-direction: column;
+   height: 100%;
+   min-height: 0;
+   overflow: auto;
+}
+
+.siteEditor :global(.entity-form) {
+   margin-top: 10px;
+}
+
+.siteEditor :global(.empty) {
+   margin-bottom: 10px;
+}
+
+.siteSearch {
+   width: 100%;
+   max-width: 360px;
+}

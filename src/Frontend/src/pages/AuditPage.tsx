@@ -15,6 +15,7 @@ import {
 import { AuditLogTable } from "../features/audit/AuditLogTable";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./AuditPage.module.css";
 import { formatAuditSummary } from "../lib/auditDisplay";
 
 const AUDIT_ACTIONS = [
@@ -145,7 +146,7 @@ export default function AuditPage() {
          active="audit"
          breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.audit") }]} />}
       >
-         <div className="sites-page">
+         <div className={styles.sitesPage}>
             <PageHeader
                title={t("audit.title")}
                description={t("audit.description")}
@@ -160,8 +161,8 @@ export default function AuditPage() {
 
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
 
-            <div className="site-workbench audit-workbench">
-               <section className="card site-registry">
+            <div className={`${styles.siteWorkbench} ${styles.auditWorkbench}`}>
+               <section className={`card ${styles.siteRegistry}`}>
                   <div className="section">
                      <div className="section-header">
                         <div>
@@ -173,7 +174,7 @@ export default function AuditPage() {
                         </Badge>
                      </div>
 
-                     <div className="audit-filter-grid">
+                     <div className={styles.auditFilterGrid}>
                         <select
                            className="field-input"
                            value={filters.siteId}
@@ -235,7 +236,7 @@ export default function AuditPage() {
                         </select>
                      </div>
 
-                     <div className="section-header-actions audit-filter-actions">
+                     <div className={`section-header-actions ${styles.auditFilterActions}`}>
                         <Button variant="primary" onClick={handleApplyFilters}>
                            {t("audit.applyFilters")}
                         </Button>
@@ -254,7 +255,7 @@ export default function AuditPage() {
                   </div>
                </section>
 
-               <aside className="card site-editor">
+               <aside className={`card ${styles.siteEditor}`}>
                   <div className="section">
                      <div className="section-header">
                         <div>
@@ -266,7 +267,7 @@ export default function AuditPage() {
                      {selectedLog === null ? (
                         <EmptyState icon="0" title={t("audit.emptyTitle")} description={t("audit.emptyDesc")} />
                      ) : (
-                        <div className="entity-form audit-detail-grid">
+                        <div className={`entity-form ${styles.auditDetailGrid}`}>
                            <div className="section-header">
                               <div>
                                  <h3 className="section-title">
@@ -280,7 +281,7 @@ export default function AuditPage() {
                                  {t(`audit.action.${selectedLog.action}`)}
                               </Badge>
                            </div>
-                           <dl className="audit-detail-list">
+                           <dl className={styles.auditDetailList}>
                               <div>
                                  <dt>{t("audit.entityType")}</dt>
                                  <dd>{t(`audit.entity.${selectedLog.entityType}`)}</dd>
@@ -307,7 +308,7 @@ export default function AuditPage() {
                               {details === "" ? (
                                  <p className="section-subtitle">{t("common.noData")}</p>
                               ) : (
-                                 <pre className="audit-details-pre">{details}</pre>
+                                 <pre className={styles.auditDetailsPre}>{details}</pre>
                               )}
                            </div>
                         </div>

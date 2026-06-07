@@ -9,6 +9,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Field } from "../components/ui/Field";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
+import styles from "./FinancePage.module.css";
 
 function today() {
    return new Date().toISOString().slice(0, 10);
@@ -92,7 +93,7 @@ export default function FinancePage() {
 
    return (
       <AppShell active="finance" breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.finance") }]} />}>
-         <div className="finance-page">
+         <div className={styles.financePage}>
             <PageHeader title={t("finance.title")} actions={<Button variant="primary" onClick={() => void refresh()}>{t("common.refresh")}</Button>} />
             {error !== null ? <div className="notice danger-note">{error}</div> : null}
 
@@ -105,7 +106,7 @@ export default function FinancePage() {
                      </div>
                      <Badge tone="role">{sourceLabel}</Badge>
                   </div>
-                  <div className="form-grid finance-filter-grid">
+                  <div className={`form-grid ${styles.financeFilterGrid}`}>
                      <Field label={t("common.site")}>
                         <select className="field-input" value={siteId} onChange={(event) => setSiteId(event.target.value)}>
                            <option value="">{t("finance.allSites")}</option>
@@ -120,18 +121,18 @@ export default function FinancePage() {
 
             {isLoading || summary === null ? <EmptyState icon="…" title={t("common.loading")} description={t("finance.loadingDesc")} /> : (
                <>
-                  <section className="finance-kpi-grid">
+                  <section className={styles.financeKpiGrid}>
                      <FinanceStat label={t("finance.inventoryValue")} value={formatMoney(summary.inventoryValue)} />
                      <FinanceStat label={t("finance.reservedValue")} value={formatMoney(summary.reservedValue)} />
                      <FinanceStat label={t("finance.quantityOnHand")} value={formatQuantity(summary.totalQuantityOnHand)} />
                      <FinanceStat label={t("finance.missingPrices")} value={String(summary.missingPriceCount)} tone={summary.missingPriceCount > 0 ? "warn" : "ok"} />
                   </section>
 
-                  <div className="finance-grid">
+                  <div className={styles.financeGrid}>
                      <section className="card">
                         <div className="section">
                            <div className="section-header"><div><h2 className="section-title">{t("finance.reconciliation")}</h2><p className="section-subtitle">{t("finance.reconciliationDesc")}</p></div></div>
-                           <div className="finance-recon-grid">
+                           <div className={styles.financeReconGrid}>
                               <FinanceStat label={t("finance.receipts")} value={`${summary.receiptCount} · ${formatQuantity(summary.receiptQuantity)}`} />
                               <FinanceStat label={t("finance.dispensed")} value={formatQuantity(summary.dispensedQuantity)} />
                               <FinanceStat label={t("finance.returns") } value={formatQuantity(summary.returnQuantity)} />
@@ -146,7 +147,7 @@ export default function FinancePage() {
                         <div className="section">
                            <div className="section-header"><div><h2 className="section-title">{t("finance.activity")}</h2><p className="section-subtitle">{t("finance.activityDesc")}</p></div></div>
                            {summary.activityLines.length === 0 ? <EmptyState icon="0" title={t("finance.noActivity")} description={t("finance.noActivityDesc")} /> : (
-                              <div className="table-shell"><table className="data-table"><thead><tr><th>{t("finance.activityType")}</th><th>{t("finance.count")}</th><th>{t("finance.in")}</th><th>{t("finance.out")}</th><th>{t("finance.latest")}</th></tr></thead><tbody>{summary.activityLines.map((line) => (
+                              <div className={styles.tableShell}><table className={styles.dataTable}><thead><tr><th>{t("finance.activityType")}</th><th>{t("finance.count")}</th><th>{t("finance.in")}</th><th>{t("finance.out")}</th><th>{t("finance.latest")}</th></tr></thead><tbody>{summary.activityLines.map((line) => (
                                  <tr key={line.activityType}><td><strong>{formatActivityType(line.activityType, t)}</strong></td><td>{line.count}</td><td>{formatQuantity(line.quantityIn)}</td><td>{formatQuantity(line.quantityOut)}</td><td>{formatDateTime(line.latestActivityAtUtc)}</td></tr>
                               ))}</tbody></table></div>
                            )}
@@ -158,8 +159,8 @@ export default function FinancePage() {
                      <div className="section">
                         <div className="section-header"><div><h2 className="section-title">{t("finance.valuation")}</h2><p className="section-subtitle">{t("finance.valuationDesc")}</p></div><Badge tone="role">{summary.balanceCount} {t("common.records")}</Badge></div>
                         {summary.valuationLines.length === 0 ? <EmptyState icon="0" title={t("finance.noValuation")} description={t("finance.noValuationDesc")} /> : (
-                           <div className="table-shell"><table className="data-table finance-valuation-table"><thead><tr><th>{t("finance.product")}</th><th>{t("finance.location")}</th><th>{t("finance.quantity")}</th><th>{t("finance.unitPrice")}</th><th>{t("finance.value")}</th><th>{t("finance.priceSource")}</th></tr></thead><tbody>{summary.valuationLines.map((line) => (
-                              <tr key={`${line.productBatchId}-${line.storageLocationId}`}><td><strong>{line.productSku}</strong><span className="muted-text block">{line.productName} · {line.batchNumber}</span></td><td>{line.siteName}<span className="muted-text block">{line.storageLocationName}</span></td><td>{formatQuantity(line.quantityOnHand)}<span className="muted-text block">{t("finance.reservedShort")} {formatQuantity(line.quantityReserved)}</span></td><td>{line.unitPrice === null ? "—" : formatMoney(line.unitPrice, line.currency)}</td><td>{formatMoney(line.valueOnHand, line.currency)}</td><td><Badge tone={line.priceStatus === "Missing" ? "warn" : "ok"}>{line.priceStatus}</Badge></td></tr>
+                           <div className={styles.tableShell}><table className={`${styles.dataTable} ${styles.financeValuationTable}`}><thead><tr><th>{t("finance.product")}</th><th>{t("finance.location")}</th><th>{t("finance.quantity")}</th><th>{t("finance.unitPrice")}</th><th>{t("finance.value")}</th><th>{t("finance.priceSource")}</th></tr></thead><tbody>{summary.valuationLines.map((line) => (
+                              <tr key={`${line.productBatchId}-${line.storageLocationId}`}><td><strong>{line.productSku}</strong><span className={`muted-text ${styles.block}`}>{line.productName} · {line.batchNumber}</span></td><td>{line.siteName}<span className={`muted-text ${styles.block}`}>{line.storageLocationName}</span></td><td>{formatQuantity(line.quantityOnHand)}<span className={`muted-text ${styles.block}`}>{t("finance.reservedShort")} {formatQuantity(line.quantityReserved)}</span></td><td>{line.unitPrice === null ? "—" : formatMoney(line.unitPrice, line.currency)}</td><td>{formatMoney(line.valueOnHand, line.currency)}</td><td><Badge tone={line.priceStatus === "Missing" ? "warn" : "ok"}>{line.priceStatus}</Badge></td></tr>
                            ))}</tbody></table></div>
                         )}
                      </div>
@@ -172,5 +173,5 @@ export default function FinancePage() {
 }
 
 function FinanceStat({ label, value, tone = "role" }: { label: string; value: string; tone?: "role" | "ok" | "warn" }) {
-   return <div className="finance-stat card"><span>{label}</span><strong>{value}</strong><Badge tone={tone}>{label}</Badge></div>;
+   return <div className={`${styles.financeStat} card`}><span>{label}</span><strong>{value}</strong><Badge tone={tone}>{label}</Badge></div>;
 }

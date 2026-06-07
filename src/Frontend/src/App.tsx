@@ -1,3 +1,4 @@
+import appStyles from "./App.module.css";
 import { useCallback, type MouseEvent, type ReactNode } from "react";
 import { Breadcrumbs } from "./components/layout/Breadcrumbs";
 import { useMountEffect } from "./hooks/useMountEffect";
@@ -123,8 +124,8 @@ export default function App() {
 
    if (isAuthLoading) {
       return (
-         <main className="login-page">
-            <section className="login-card card">
+         <main className={appStyles.loadingPage}>
+            <section className={`${appStyles.loadingCard} card`}>
                <div className="section" style={{ textAlign: "center", padding: "48px 24px" }}>
                   <p>{t("common.loading")}</p>
                </div>

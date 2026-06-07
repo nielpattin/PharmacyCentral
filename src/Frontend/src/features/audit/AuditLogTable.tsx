@@ -2,6 +2,7 @@ import { Badge } from "../../components/ui/Badge";
 import type { AuditLogEntryDto, SiteDto } from "../../api/pharmacyClient";
 import { useT } from "../../lib/i18n";
 import { formatAuditSummary } from "../../lib/auditDisplay";
+import styles from "./AuditLogTable.module.css";
 
 function auditActionTone(action: string) {
    if (action === "Deleted" || action === "Cancelled") return "bad";
@@ -27,7 +28,7 @@ export function AuditLogTable({ rows, selectedId = "", sites, onSelect }: AuditL
 
    return (
       <div className="table-wrap">
-         <table className="selectable-table audit-table">
+         <table className={`selectable-table ${styles.auditTable}`}>
             <thead>
                <tr>
                   <th>{t("audit.occurredAt")}</th>

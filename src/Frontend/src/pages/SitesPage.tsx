@@ -1,3 +1,4 @@
+import styles from "./SitesPage.module.css";
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
@@ -158,7 +159,7 @@ export default function SitesPage() {
          active="sites"
          breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.sites") }]} />}
       >
-         <div className="sites-page">
+         <div className={styles.sitesPage}>
             <PageHeader
                title={t("sites.title")}
                actions={
@@ -172,8 +173,8 @@ export default function SitesPage() {
 
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
 
-            <div className="site-workbench">
-               <section className="card site-registry">
+            <div className={styles.siteWorkbench}>
+               <section className={`card ${styles.siteRegistry}`}>
                   <div className="section">
                      <div className="section-header">
                         <div>
@@ -187,7 +188,7 @@ export default function SitesPage() {
 
                      <div className="section-toolbar">
                         <input
-                           className="field-input site-search"
+                           className={`field-input ${styles.siteSearch}`}
                            type="search"
                            placeholder={t("sites.searchPlaceholder")}
                            aria-label={t("sites.searchPlaceholder")}
@@ -214,7 +215,7 @@ export default function SitesPage() {
                   </div>
                </section>
 
-               <aside className="card site-editor">
+               <aside className={`card ${styles.siteEditor}`}>
                   <div className="section">
                      <div className="section-header">
                         <div>
