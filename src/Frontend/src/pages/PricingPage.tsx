@@ -240,7 +240,7 @@ export default function PricingPage() {
                      <div className={styles.field}>
                         <Label>{t("pricing.product")}</Label>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={form.productId}
                            onChange={(event) => setForm((current) => ({ ...current, productId: event.target.value }))}
                         >
@@ -255,7 +255,7 @@ export default function PricingPage() {
                      <div className={styles.field}>
                         <Label>{t("pricing.site")}</Label>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={form.siteId}
                            onChange={(event) => setForm((current) => ({ ...current, siteId: event.target.value }))}
                         >

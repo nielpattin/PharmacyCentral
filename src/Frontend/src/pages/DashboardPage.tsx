@@ -618,7 +618,7 @@ function DashboardActivityFeed({
             <div className={styles.activityFeedEmpty}>
                <span className={styles.activityFeedEmptyText}>{t("dashboard.activityCompactEmpty")}</span>
                {authUser?.isPlatformAdmin ? (
-                  <a className="btn secondary btn-sm" href="/dashboard/audit">
+                  <a className="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground" href="/dashboard/audit">
                      {t("dashboard.openAudit")}
                   </a>
                ) : null}
@@ -810,7 +810,7 @@ export default function DashboardPage() {
                actions={
                   <div className="page-actions">
                      <select
-                        className="field-input"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                         value={siteFilter}
                         onChange={(event) => handleSiteFilterChange(event.target.value)}
                      >

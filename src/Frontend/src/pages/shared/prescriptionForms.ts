@@ -1,15 +1,22 @@
 import type { PrescriptionCreateRequest, PrescriptionDispenseLineRequest } from "../../api/pharmacyClient";
 
-export type PrescriptionLineFormValues = Omit<PrescriptionCreateRequest["lines"][number], "prescribedQuantity"> & { prescribedQuantity: string };
+export type PrescriptionLineFormValues = Omit<PrescriptionCreateRequest["lines"][number], "prescribedQuantity"> & {
+   prescribedQuantity: string;
+};
 export type PrescriptionFormValues = Omit<PrescriptionCreateRequest, "lines"> & { lines: PrescriptionLineFormValues[] };
-export type DispenseLineFormValues = Omit<PrescriptionDispenseLineRequest, "dispensedQuantity"> & { dispensedQuantity: string };
+export type DispenseLineFormValues = Omit<PrescriptionDispenseLineRequest, "dispensedQuantity"> & {
+   dispensedQuantity: string;
+};
 export type DispenseFormValues = { lines: DispenseLineFormValues[] };
 
 export function blankPrescriptionLineValues(): PrescriptionLineFormValues {
    return { productId: "", prescribedQuantity: "", dosage: "", frequency: "", duration: "", notes: "" };
 }
 
-export function blankPrescriptionValues(defaultPatientName = "", defaults?: { siteId?: string; storageLocationId?: string }): PrescriptionFormValues {
+export function blankPrescriptionValues(
+   defaultPatientName = "",
+   defaults?: { siteId?: string; storageLocationId?: string },
+): PrescriptionFormValues {
    return {
       siteId: defaults?.siteId ?? "",
       storageLocationId: defaults?.storageLocationId ?? "",
@@ -36,7 +43,10 @@ export function arePrescriptionFormValuesEqual(left: PrescriptionFormValues, rig
    );
 }
 
-function arePrescriptionLineFormValuesEqual(left: PrescriptionLineFormValues, right: PrescriptionLineFormValues | undefined) {
+function arePrescriptionLineFormValuesEqual(
+   left: PrescriptionLineFormValues,
+   right: PrescriptionLineFormValues | undefined,
+) {
    return (
       right !== undefined &&
       left.productId === right.productId &&

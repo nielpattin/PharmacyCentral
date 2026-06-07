@@ -1,117 +1,117 @@
 .usersPage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-  align-content: start;
-  min-height: min-content;
-  padding-bottom: 20px;
+   display: grid;
+   grid-template-columns: minmax(0, 1fr);
+   gap: 14px;
+   align-content: start;
+   min-height: min-content;
+   padding-bottom: 20px;
 }
 
 .usersPage :global(.page-head) {
-  margin-bottom: 0;
+   margin-bottom: 0;
 }
 
 .usersGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
-  gap: 16px;
-  align-items: start;
-  min-width: 0;
+   display: grid;
+   grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+   gap: 16px;
+   align-items: start;
+   min-width: 0;
 }
 
 .usersCreateGrid {
-  margin-bottom: 14px;
+   margin-bottom: 14px;
 }
 
 .usersAccessGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 14px;
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 16px;
+   margin-bottom: 14px;
 }
 
 .choiceGrid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+   display: flex;
+   flex-wrap: wrap;
+   gap: 8px;
 }
 
 .choicePill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.813rem;
-  font-weight: 700;
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+   padding: 8px 10px;
+   border: 1px solid var(--line);
+   border-radius: 999px;
+   background: var(--surface);
+   color: var(--text);
+   font-size: 0.813rem;
+   font-weight: 700;
 }
 
 .choicePill input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--primary);
+   width: 16px;
+   height: 16px;
+   accent-color: var(--primary);
 }
 
 .usersToolbar {
-  margin-bottom: 10px;
+   margin-bottom: 10px;
 }
 
 .usersTable {
-  min-width: 920px;
+   min-width: 920px;
 }
 
 .usersTable tr.selected td {
-  background: var(--surface-soft);
+   background: var(--surface-soft);
 }
 
 .usersTable :global(.badge) {
-  margin-right: 4px;
-  margin-bottom: 4px;
+   margin-right: 4px;
+   margin-bottom: 4px;
 }
 
 .usersEditor {
-  display: grid;
-  gap: 16px;
+   display: grid;
+   gap: 16px;
 }
 
 .detailStack {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface-soft);
+   display: grid;
+   gap: 10px;
+   padding: 12px;
+   border: 1px solid var(--line);
+   border-radius: 6px;
+   background: var(--surface-soft);
 }
 
 .detailStack span {
-  display: block;
-  color: var(--muted);
-  font-size: 0.813rem;
-  line-height: 1.45;
+   display: block;
+   color: var(--muted);
+   font-size: 0.813rem;
+   line-height: 1.45;
 }
 
 .detailStack strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--text);
-  font-size: 0.875rem;
-  font-weight: 800;
+   display: block;
+   margin-top: 4px;
+   color: var(--text);
+   font-size: 0.875rem;
+   font-weight: 800;
 }
 
 .tableMuted {
-  display: block;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.813rem;
-  line-height: 1.45;
+   display: block;
+   margin: 0;
+   color: var(--muted);
+   font-size: 0.813rem;
+   line-height: 1.45;
 }
 
 @media (max-width: 1100px) {
-  .usersGrid,
-  .usersAccessGrid {
-    grid-template-columns: 1fr;
-  }
+   .usersGrid,
+   .usersAccessGrid {
+      grid-template-columns: 1fr;
+   }
 }

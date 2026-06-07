@@ -1,5 +1,11 @@
 import { useSyncExternalStore } from "react";
-import { fetchMe, login as apiLogin, logout as apiLogout, resetCsrfToken, setupFirstAdmin as apiSetupFirstAdmin } from "../api/pharmacyClient";
+import {
+   fetchMe,
+   login as apiLogin,
+   logout as apiLogout,
+   resetCsrfToken,
+   setupFirstAdmin as apiSetupFirstAdmin,
+} from "../api/pharmacyClient";
 
 export type AuthUser = {
    id: string;

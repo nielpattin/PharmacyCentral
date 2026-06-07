@@ -27,8 +27,8 @@ export function AuditLogTable({ rows, selectedId = "", sites, onSelect }: AuditL
       siteId === null ? t("audit.system") : (sites.find((site) => site.id === siteId)?.name ?? siteId);
 
    return (
-      <div className="table-wrap">
-         <table className={`selectable-table ${styles.auditTable}`}>
+      <div className="overflow-x-auto">
+         <table className={`w-full border-collapse text-sm ${styles.auditTable}`}>
             <thead>
                <tr>
                   <th>{t("audit.occurredAt")}</th>

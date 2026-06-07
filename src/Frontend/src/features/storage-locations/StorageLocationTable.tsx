@@ -30,8 +30,8 @@ export function StorageLocationTable({
    const t = useT();
 
    return (
-      <div className="table-wrap">
-         <table className={`selectable-table ${styles.storageTable}`}>
+      <div className="overflow-x-auto">
+         <table className={`w-full border-collapse text-sm ${styles.storageTable}`}>
             <thead>
                <tr>
                   <th>{t("sites.code")}</th>

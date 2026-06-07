@@ -15,8 +15,8 @@ export function SupplierTable({ rows, selectedSupplierId, onSelectSupplier, onDe
    const t = useT();
 
    return (
-      <div className="table-wrap">
-         <table className="selectable-table sites-table">
+      <div className="overflow-x-auto">
+         <table className="w-full border-collapse text-sm">
             <thead>
                <tr>
                   <th>{t("suppliers.code")}</th>

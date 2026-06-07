@@ -162,12 +162,14 @@ export default function AuditPage() {
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
 
             <div className={`${styles.siteWorkbench} ${styles.auditWorkbench}`}>
-               <section className={`card ${styles.siteRegistry}`}>
-                  <div className="section">
-                     <div className="section-header">
+               <section
+                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteRegistry}`}
+               >
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("audit.registry")}</h2>
-                           <p className="section-subtitle">{t("audit.registryDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("audit.registry")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("audit.registryDesc")}</p>
                         </div>
                         <Badge variant="outline">
                            {isLoading ? t("audit.loadingState") : `${logs.length} ${t("common.records")}`}
@@ -176,7 +178,7 @@ export default function AuditPage() {
 
                      <div className={styles.auditFilterGrid}>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.siteId}
                            onChange={(event) => updateFilter("siteId", event.target.value)}
                         >
@@ -188,7 +190,7 @@ export default function AuditPage() {
                            ))}
                         </select>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.action}
                            onChange={(event) => updateFilter("action", event.target.value)}
                         >
@@ -200,7 +202,7 @@ export default function AuditPage() {
                            ))}
                         </select>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.entityType}
                            onChange={(event) => updateFilter("entityType", event.target.value)}
                         >
@@ -212,19 +214,19 @@ export default function AuditPage() {
                            ))}
                         </select>
                         <input
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.userId}
                            placeholder={t("audit.userId")}
                            onChange={(event) => updateFilter("userId", event.target.value)}
                         />
                         <input
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.entityId}
                            placeholder={t("audit.entityId")}
                            onChange={(event) => updateFilter("entityId", event.target.value)}
                         />
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.limit}
                            onChange={(event) => updateFilter("limit", Number(event.target.value))}
                         >
@@ -236,7 +238,7 @@ export default function AuditPage() {
                         </select>
                      </div>
 
-                     <div className={`section-header-actions ${styles.auditFilterActions}`}>
+                     <div className={`flex flex-wrap items-center gap-2 ${styles.auditFilterActions}`}>
                         <Button onClick={handleApplyFilters}>{t("audit.applyFilters")}</Button>
                         <Button variant="outline" onClick={handleClearFilters}>
                            {t("audit.clearFilters")}
@@ -253,29 +255,31 @@ export default function AuditPage() {
                   </div>
                </section>
 
-               <aside className={`card ${styles.siteEditor}`}>
-                  <div className="section">
-                     <div className="section-header">
+               <aside
+                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteEditor}`}
+               >
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("audit.logDetails")}</h2>
-                           <p className="section-subtitle">{t("audit.logDetailsDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("audit.logDetails")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("audit.logDetailsDesc")}</p>
                         </div>
                      </div>
 
                      {selectedLog === null ? (
                         <EmptyState icon="0" title={t("audit.emptyTitle")} description={t("audit.emptyDesc")} />
                      ) : (
-                        <div className={`entity-form ${styles.auditDetailGrid}`}>
-                           <div className="section-header">
+                        <div className={`grid gap-3 ${styles.auditDetailGrid}`}>
+                           <div className="flex items-start justify-between gap-3">
                               <div>
-                                 <h3 className="section-title">
+                                 <h3 className="m-0 text-sm font-semibold text-foreground">
                                     {formatAuditSummary(
                                        t,
                                        selectedLog.summary,
                                        selectedLog.entityId ?? t("common.noData"),
                                     )}
                                  </h3>
-                                 <p className="section-subtitle">
+                                 <p className="mt-1 text-sm text-muted-foreground">
                                     {new Date(selectedLog.occurredAtUtc).toLocaleString()}
                                  </p>
                               </div>
@@ -306,9 +310,9 @@ export default function AuditPage() {
                               </div>
                            </dl>
                            <div>
-                              <h3 className="section-title">{t("audit.details")}</h3>
+                              <h3 className="m-0 text-sm font-semibold text-foreground">{t("audit.details")}</h3>
                               {details === "" ? (
-                                 <p className="section-subtitle">{t("common.noData")}</p>
+                                 <p className="mt-1 text-sm text-muted-foreground">{t("common.noData")}</p>
                               ) : (
                                  <pre className={styles.auditDetailsPre}>{details}</pre>
                               )}

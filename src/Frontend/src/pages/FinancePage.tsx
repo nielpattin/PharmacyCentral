@@ -104,19 +104,19 @@ export default function FinancePage() {
             />
             {error !== null ? <div className="notice danger-note">{error}</div> : null}
 
-            <section className="card">
-               <div className="section">
-                  <div className="section-header">
+            <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+               <div className="p-4">
+                  <div className="flex items-start justify-between gap-3">
                      <div>
-                        <h2 className="section-title">{t("finance.filters")}</h2>
-                        <p className="section-subtitle">{t("finance.filtersDesc")}</p>
+                        <h2 className="m-0 text-sm font-semibold text-foreground">{t("finance.filters")}</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">{t("finance.filtersDesc")}</p>
                      </div>
                      <Badge variant="outline">{sourceLabel}</Badge>
                   </div>
                   <div className={`form-grid ${styles.financeFilterGrid}`}>
                      <Field label={t("common.site")}>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={siteId}
                            onChange={(event) => setSiteId(event.target.value)}
                         >
@@ -130,7 +130,7 @@ export default function FinancePage() {
                      </Field>
                      <Field label={t("finance.from")}>
                         <input
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            type="date"
                            value={from}
                            onChange={(event) => setFrom(event.target.value)}
@@ -138,7 +138,7 @@ export default function FinancePage() {
                      </Field>
                      <Field label={t("finance.to")}>
                         <input
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            type="date"
                            value={to}
                            onChange={(event) => setTo(event.target.value)}
@@ -167,12 +167,14 @@ export default function FinancePage() {
                   </section>
 
                   <div className={styles.financeGrid}>
-                     <section className="card">
-                        <div className="section">
-                           <div className="section-header">
+                     <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                        <div className="p-4">
+                           <div className="flex items-start justify-between gap-3">
                               <div>
-                                 <h2 className="section-title">{t("finance.reconciliation")}</h2>
-                                 <p className="section-subtitle">{t("finance.reconciliationDesc")}</p>
+                                 <h2 className="m-0 text-sm font-semibold text-foreground">
+                                    {t("finance.reconciliation")}
+                                 </h2>
+                                 <p className="mt-1 text-sm text-muted-foreground">{t("finance.reconciliationDesc")}</p>
                               </div>
                            </div>
                            <div className={styles.financeReconGrid}>
@@ -204,12 +206,12 @@ export default function FinancePage() {
                         </div>
                      </section>
 
-                     <section className="card">
-                        <div className="section">
-                           <div className="section-header">
+                     <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                        <div className="p-4">
+                           <div className="flex items-start justify-between gap-3">
                               <div>
-                                 <h2 className="section-title">{t("finance.activity")}</h2>
-                                 <p className="section-subtitle">{t("finance.activityDesc")}</p>
+                                 <h2 className="m-0 text-sm font-semibold text-foreground">{t("finance.activity")}</h2>
+                                 <p className="mt-1 text-sm text-muted-foreground">{t("finance.activityDesc")}</p>
                               </div>
                            </div>
                            {summary.activityLines.length === 0 ? (
@@ -250,12 +252,12 @@ export default function FinancePage() {
                      </section>
                   </div>
 
-                  <section className="card">
-                     <div className="section">
-                        <div className="section-header">
+                  <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                     <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
                            <div>
-                              <h2 className="section-title">{t("finance.valuation")}</h2>
-                              <p className="section-subtitle">{t("finance.valuationDesc")}</p>
+                              <h2 className="m-0 text-sm font-semibold text-foreground">{t("finance.valuation")}</h2>
+                              <p className="mt-1 text-sm text-muted-foreground">{t("finance.valuationDesc")}</p>
                            </div>
                            <Badge variant="outline">
                               {summary.balanceCount} {t("common.records")}

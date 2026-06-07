@@ -172,21 +172,23 @@ export default function SitesPage() {
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
 
             <div className={styles.siteWorkbench}>
-               <section className={`card ${styles.siteRegistry}`}>
-                  <div className="section">
-                     <div className="section-header">
+               <section
+                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteRegistry}`}
+               >
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("sites.registry")}</h2>
-                           <p className="section-subtitle">{t("sites.registryDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("sites.registry")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("sites.registryDesc")}</p>
                         </div>
                         <Badge variant="outline">
                            {isLoading ? t("sites.loadingState") : `${visibleSites.length} ${t("sites.records")}`}
                         </Badge>
                      </div>
 
-                     <div className="section-toolbar">
+                     <div className="flex flex-wrap items-center gap-2">
                         <input
-                           className={`field-input ${styles.siteSearch}`}
+                           className={`h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 ${styles.siteSearch}`}
                            type="search"
                            placeholder={t("sites.searchPlaceholder")}
                            aria-label={t("sites.searchPlaceholder")}
@@ -213,12 +215,14 @@ export default function SitesPage() {
                   </div>
                </section>
 
-               <aside className={`card ${styles.siteEditor}`}>
-                  <div className="section">
-                     <div className="section-header">
+               <aside
+                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteEditor}`}
+               >
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("sites.editor")}</h2>
-                           <p className="section-subtitle">{t("sites.editorDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("sites.editor")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("sites.editorDesc")}</p>
                         </div>
                      </div>
 

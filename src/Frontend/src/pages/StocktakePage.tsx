@@ -193,12 +193,14 @@ export default function StocktakePage() {
             />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
             <div className={styles.siteWorkbench}>
-               <section className={`card ${styles.siteRegistry}`}>
-                  <div className="section">
-                     <div className="section-header">
+               <section
+                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteRegistry}`}
+               >
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("stocktake.registry")}</h2>
-                           <p className="section-subtitle">{t("stocktake.registryDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("stocktake.registry")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("stocktake.registryDesc")}</p>
                         </div>
                         <Badge variant="outline">
                            {isLoading
@@ -206,9 +208,9 @@ export default function StocktakePage() {
                               : `${visibleSessions.length} ${t("common.records")}`}
                         </Badge>
                      </div>
-                     <div className="section-toolbar">
+                     <div className="flex flex-wrap items-center gap-2">
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={siteFilter}
                            onChange={(event) => setSiteFilter(event.target.value)}
                         >
@@ -220,7 +222,7 @@ export default function StocktakePage() {
                            ))}
                         </select>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={statusFilter}
                            onChange={(event) => setStatusFilter(event.target.value)}
                         >
@@ -247,12 +249,14 @@ export default function StocktakePage() {
                      )}
                   </div>
                </section>
-               <aside className={`card ${styles.siteEditor}`}>
-                  <div className="section">
-                     <div className="section-header">
+               <aside
+                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteEditor}`}
+               >
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("stocktake.editor")}</h2>
-                           <p className="section-subtitle">{t("stocktake.editorDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("stocktake.editor")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("stocktake.editorDesc")}</p>
                         </div>
                      </div>
                      {selectedSession === null ? (
@@ -266,14 +270,14 @@ export default function StocktakePage() {
                            onSubmit={handleCreateSession}
                         />
                      ) : (
-                        <div className="entity-form">
-                           <div className="section-header">
+                        <div className="grid gap-3">
+                           <div className="flex items-start justify-between gap-3">
                               <div>
-                                 <h3 className="section-title">
+                                 <h3 className="m-0 text-sm font-semibold text-foreground">
                                     {siteName(selectedSession.siteId)} ·{" "}
                                     {locationName(selectedSession.storageLocationId)}
                                  </h3>
-                                 <p className="section-subtitle">
+                                 <p className="mt-1 text-sm text-muted-foreground">
                                     {new Date(selectedSession.startedAtUtc).toLocaleString()}
                                  </p>
                               </div>
@@ -288,15 +292,17 @@ export default function StocktakePage() {
                               isSaving={isSaving}
                               onSubmit={handleRecordCount}
                            />
-                           <div className="form-actions">
+                           <div className="flex flex-wrap justify-end gap-2">
                               <Button onClick={handlePostAdjustments} disabled={isSaving || !hasVariance}>
                                  {t("stocktake.postAdjustments")}
                               </Button>
                            </div>
-                           <div className="section-header">
+                           <div className="flex items-start justify-between gap-3">
                               <div>
-                                 <h3 className="section-title">{t("stocktake.adjustments")}</h3>
-                                 <p className="section-subtitle">{t("stocktake.adjustmentsDesc")}</p>
+                                 <h3 className="m-0 text-sm font-semibold text-foreground">
+                                    {t("stocktake.adjustments")}
+                                 </h3>
+                                 <p className="mt-1 text-sm text-muted-foreground">{t("stocktake.adjustmentsDesc")}</p>
                               </div>
                            </div>
                            {selectedAdjustments.length === 0 ? (

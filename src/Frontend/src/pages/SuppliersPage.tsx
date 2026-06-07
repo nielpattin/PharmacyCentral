@@ -179,12 +179,14 @@ export default function SuppliersPage() {
             />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
             <div className={styles.siteWorkbench}>
-               <section className={`card ${styles.siteRegistry}`}>
-                  <div className="section">
-                     <div className="section-header">
+               <section
+                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteRegistry}`}
+               >
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("suppliers.registry")}</h2>
-                           <p className="section-subtitle">{t("suppliers.registryDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("suppliers.registry")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("suppliers.registryDesc")}</p>
                         </div>
                         <Badge variant="outline">
                            {isLoading
@@ -192,9 +194,9 @@ export default function SuppliersPage() {
                               : `${visibleSuppliers.length} ${t("common.records")}`}
                         </Badge>
                      </div>
-                     <div className="section-toolbar">
+                     <div className="flex flex-wrap items-center gap-2">
                         <input
-                           className={`field-input ${styles.siteSearch}`}
+                           className={`h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 ${styles.siteSearch}`}
                            type="search"
                            placeholder={t("suppliers.searchPlaceholder")}
                            aria-label={t("suppliers.searchPlaceholder")}
@@ -222,12 +224,14 @@ export default function SuppliersPage() {
                      )}
                   </div>
                </section>
-               <aside className={`card ${styles.siteEditor}`}>
-                  <div className="section">
-                     <div className="section-header">
+               <aside
+                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteEditor}`}
+               >
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("suppliers.editor")}</h2>
-                           <p className="section-subtitle">{t("suppliers.editorDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("suppliers.editor")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("suppliers.editorDesc")}</p>
                         </div>
                      </div>
                      <SupplierForm

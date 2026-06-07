@@ -267,10 +267,10 @@ export default function PrescriptionPage() {
                <Card className={styles.counterTicket}>
                   {selectedPrescription === null ? (
                      <>
-                        <div className={`section-header ${styles.editorHeader}`}>
+                        <div className={`flex items-start justify-between gap-3 ${styles.editorHeader}`}>
                            <div>
-                              <h2 className="section-title">{t("prescription.editor")}</h2>
-                              <p className="section-subtitle">{t("prescription.editorDesc")}</p>
+                              <h2 className="m-0 text-sm font-semibold text-foreground">{t("prescription.editor")}</h2>
+                              <p className="mt-1 text-sm text-muted-foreground">{t("prescription.editorDesc")}</p>
                            </div>
                         </div>
                         <PrescriptionForm

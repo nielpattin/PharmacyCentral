@@ -20,7 +20,7 @@ export function SupplierForm({ mode, initialValues, isSaving, onSubmit, onDelete
 
    return (
       <form
-         className="entity-form"
+         className="grid gap-3"
          onSubmit={async (event) => {
             event.preventDefault();
             if (isSaving || !isDirty) {
@@ -34,7 +34,7 @@ export function SupplierForm({ mode, initialValues, isSaving, onSubmit, onDelete
          <div className="form-grid">
             <Field label={t("forms.code")} required>
                <input
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.code}
                   onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
@@ -43,7 +43,7 @@ export function SupplierForm({ mode, initialValues, isSaving, onSubmit, onDelete
 
             <Field label={t("forms.name")} required>
                <input
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.name}
                   onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))}
@@ -52,7 +52,7 @@ export function SupplierForm({ mode, initialValues, isSaving, onSubmit, onDelete
 
             <Field label={t("forms.contactName")}>
                <input
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   value={values.contactName}
                   onChange={(event) => setValues((current) => ({ ...current, contactName: event.target.value }))}
                />
@@ -60,7 +60,7 @@ export function SupplierForm({ mode, initialValues, isSaving, onSubmit, onDelete
 
             <Field label={t("forms.email")}>
                <input
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   type="email"
                   value={values.email}
                   onChange={(event) => setValues((current) => ({ ...current, email: event.target.value }))}
@@ -69,7 +69,7 @@ export function SupplierForm({ mode, initialValues, isSaving, onSubmit, onDelete
 
             <Field label={t("forms.phone")}>
                <input
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   value={values.phone}
                   onChange={(event) => setValues((current) => ({ ...current, phone: event.target.value }))}
                />
@@ -77,7 +77,7 @@ export function SupplierForm({ mode, initialValues, isSaving, onSubmit, onDelete
 
             <Field label={t("forms.status")}>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   value={values.status}
                   onChange={(event) => setValues((current) => ({ ...current, status: event.target.value }))}
                >
@@ -86,27 +86,27 @@ export function SupplierForm({ mode, initialValues, isSaving, onSubmit, onDelete
                </select>
             </Field>
 
-            <Field label={t("forms.address")} className="field-wide">
+            <Field label={t("forms.address")} className="col-span-full">
                <input
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   value={values.address}
                   onChange={(event) => setValues((current) => ({ ...current, address: event.target.value }))}
                />
             </Field>
 
-            <Field label={t("forms.notes")} className="field-wide">
+            <Field label={t("forms.notes")} className="col-span-full">
                <textarea
-                  className="field-input field-textarea"
+                  className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   rows={4}
                   value={values.notes}
                   onChange={(event) => setValues((current) => ({ ...current, notes: event.target.value }))}
                />
             </Field>
 
-            <label className="field field-inline">
-               <span className="field-label">{t("forms.active")}</span>
+            <label className="flex items-center gap-2">
+               <span className="text-sm font-medium text-foreground">{t("forms.active")}</span>
                <input
-                  className="field-check"
+                  className="size-4 rounded border border-input accent-primary"
                   type="checkbox"
                   checked={values.isActive}
                   onChange={(event) => setValues((current) => ({ ...current, isActive: event.target.checked }))}
@@ -114,7 +114,7 @@ export function SupplierForm({ mode, initialValues, isSaving, onSubmit, onDelete
             </label>
          </div>
 
-         <div className="form-actions">
+         <div className="flex flex-wrap justify-end gap-2">
             <Button type="submit" disabled={isSaving || !isDirty}>
                {isSaving
                   ? t("suppliers.saving")

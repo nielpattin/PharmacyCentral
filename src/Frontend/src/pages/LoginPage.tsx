@@ -1,7 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { AlertCircle, Eye, EyeOff, Globe2, LockKeyhole, LogIn, Mail, UserRound } from "lucide-react";
 import { ApiRequestError, loadFirstAdminSetupStatus } from "../api/pharmacyClient";
-import { login, validateLoginCredentials, getPostLoginRedirectPath, setPostLoginRedirectPath, setupFirstAdmin } from "../lib/auth";
+import {
+   login,
+   validateLoginCredentials,
+   getPostLoginRedirectPath,
+   setPostLoginRedirectPath,
+   setupFirstAdmin,
+} from "../lib/auth";
 import { navigate, usePathname } from "../lib/router";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { setLanguage, useLanguage, useT } from "../lib/i18n";
@@ -117,7 +123,11 @@ export default function LoginPage() {
       setFormError(null);
 
       try {
-         const user = await setupFirstAdmin({ email: setupEmail, password: setupPassword, displayName: setupDisplayName });
+         const user = await setupFirstAdmin({
+            email: setupEmail,
+            password: setupPassword,
+            displayName: setupDisplayName,
+         });
          const redirectPath = getDefaultPathForUser(user);
          setPostLoginRedirectPath(redirectPath);
          navigate(redirectPath);
@@ -171,148 +181,210 @@ export default function LoginPage() {
                         <span>{formError}</span>
                      </div>
                   ) : null}
-                  {isSetupStatusLoading ? <div className={`notice ${styles.formNotice}`}>{t("common.loading")}</div> : null}
+                  {isSetupStatusLoading ? (
+                     <div className={`notice ${styles.formNotice}`}>{t("common.loading")}</div>
+                  ) : null}
 
                   {requiresAdminSetup ? (
                      <>
-                     <h2 className={styles.formTitle}>{t("auth.setupFormTitle")}</h2>
-                     <form className={styles.form} onSubmit={handleSetupSubmit}>
-                        <label className="field">
-                           <span className="field-label">{t("auth.displayName")}</span>
-                           <span className={`${styles.inputWrap} ${styles.hasIcon}`}>
-                              <UserRound className={styles.inputIcon} aria-hidden="true" size={18} />
-                              <input
-                                 className="field-input"
-                                 autoFocus
-                                 type="text"
-                                 autoComplete="name"
-                                 placeholder={t("auth.displayNamePlaceholder")}
-                                 value={setupDisplayName}
-                                 onChange={(event) => {
-                                    setSetupDisplayName(event.target.value);
-                                    clearSetupFieldError("displayName");
-                                 }}
-                                 aria-invalid={setupFieldErrors.displayName !== undefined}
-                                 aria-describedby={setupFieldErrors.displayName !== undefined ? "setup-display-name-error" : undefined}
-                              />
-                           </span>
-                           {setupFieldErrors.displayName !== undefined ? <span id="setup-display-name-error" className="field-error">{setupFieldErrors.displayName}</span> : null}
-                        </label>
+                        <h2 className={styles.formTitle}>{t("auth.setupFormTitle")}</h2>
+                        <form className={styles.form} onSubmit={handleSetupSubmit}>
+                           <label className="field">
+                              <span className="text-sm font-medium text-foreground">{t("auth.displayName")}</span>
+                              <span className={`${styles.inputWrap} ${styles.hasIcon}`}>
+                                 <UserRound className={styles.inputIcon} aria-hidden="true" size={18} />
+                                 <input
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    autoFocus
+                                    type="text"
+                                    autoComplete="name"
+                                    placeholder={t("auth.displayNamePlaceholder")}
+                                    value={setupDisplayName}
+                                    onChange={(event) => {
+                                       setSetupDisplayName(event.target.value);
+                                       clearSetupFieldError("displayName");
+                                    }}
+                                    aria-invalid={setupFieldErrors.displayName !== undefined}
+                                    aria-describedby={
+                                       setupFieldErrors.displayName !== undefined
+                                          ? "setup-display-name-error"
+                                          : undefined
+                                    }
+                                 />
+                              </span>
+                              {setupFieldErrors.displayName !== undefined ? (
+                                 <span id="setup-display-name-error" className="text-sm font-medium text-destructive">
+                                    {setupFieldErrors.displayName}
+                                 </span>
+                              ) : null}
+                           </label>
 
-                        <label className="field">
-                           <span className="field-label">{t("auth.email")}</span>
-                           <span className={`${styles.inputWrap} ${styles.hasIcon}`}>
-                              <Mail className={styles.inputIcon} aria-hidden="true" size={18} />
-                              <input
-                                 className="field-input"
-                                 type="email"
-                                 autoComplete="email"
-                                 placeholder={t("auth.emailPlaceholder")}
-                                 value={setupEmail}
-                                 onChange={(event) => {
-                                    setSetupEmail(event.target.value);
-                                    clearSetupFieldError("email");
-                                 }}
-                                 aria-invalid={setupFieldErrors.email !== undefined}
-                                 aria-describedby={setupFieldErrors.email !== undefined ? "setup-email-error" : undefined}
-                              />
-                           </span>
-                           {setupFieldErrors.email !== undefined ? <span id="setup-email-error" className="field-error">{setupFieldErrors.email}</span> : null}
-                        </label>
+                           <label className="field">
+                              <span className="text-sm font-medium text-foreground">{t("auth.email")}</span>
+                              <span className={`${styles.inputWrap} ${styles.hasIcon}`}>
+                                 <Mail className={styles.inputIcon} aria-hidden="true" size={18} />
+                                 <input
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    type="email"
+                                    autoComplete="email"
+                                    placeholder={t("auth.emailPlaceholder")}
+                                    value={setupEmail}
+                                    onChange={(event) => {
+                                       setSetupEmail(event.target.value);
+                                       clearSetupFieldError("email");
+                                    }}
+                                    aria-invalid={setupFieldErrors.email !== undefined}
+                                    aria-describedby={
+                                       setupFieldErrors.email !== undefined ? "setup-email-error" : undefined
+                                    }
+                                 />
+                              </span>
+                              {setupFieldErrors.email !== undefined ? (
+                                 <span id="setup-email-error" className="text-sm font-medium text-destructive">
+                                    {setupFieldErrors.email}
+                                 </span>
+                              ) : null}
+                           </label>
 
-                        <label className="field">
-                           <span className="field-label">{t("auth.password")}</span>
-                           <span className={`${styles.inputWrap} ${styles.hasIcon} ${styles.hasAction}`}>
-                              <LockKeyhole className={styles.inputIcon} aria-hidden="true" size={18} />
-                              <input
-                                 className="field-input"
-                                 type={showPassword ? "text" : "password"}
-                                 autoComplete="new-password"
-                                 placeholder={t("auth.passwordPlaceholder")}
-                                 value={setupPassword}
-                                 onChange={(event) => {
-                                    setSetupPassword(event.target.value);
-                                    clearSetupFieldError("password");
-                                 }}
-                                 aria-invalid={setupFieldErrors.password !== undefined}
-                                 aria-describedby={setupFieldErrors.password !== undefined ? "setup-password-error" : undefined}
-                              />
-                              <button type="button" className={styles.inputAction} onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")} aria-pressed={showPassword}>
-                                 {showPassword ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
-                              </button>
-                           </span>
-                           {setupFieldErrors.password !== undefined ? <span id="setup-password-error" className="field-error">{setupFieldErrors.password}</span> : null}
-                        </label>
+                           <label className="field">
+                              <span className="text-sm font-medium text-foreground">{t("auth.password")}</span>
+                              <span className={`${styles.inputWrap} ${styles.hasIcon} ${styles.hasAction}`}>
+                                 <LockKeyhole className={styles.inputIcon} aria-hidden="true" size={18} />
+                                 <input
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    type={showPassword ? "text" : "password"}
+                                    autoComplete="new-password"
+                                    placeholder={t("auth.passwordPlaceholder")}
+                                    value={setupPassword}
+                                    onChange={(event) => {
+                                       setSetupPassword(event.target.value);
+                                       clearSetupFieldError("password");
+                                    }}
+                                    aria-invalid={setupFieldErrors.password !== undefined}
+                                    aria-describedby={
+                                       setupFieldErrors.password !== undefined ? "setup-password-error" : undefined
+                                    }
+                                 />
+                                 <button
+                                    type="button"
+                                    className={styles.inputAction}
+                                    onClick={() => setShowPassword((current) => !current)}
+                                    aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
+                                    aria-pressed={showPassword}
+                                 >
+                                    {showPassword ? (
+                                       <EyeOff aria-hidden="true" size={18} />
+                                    ) : (
+                                       <Eye aria-hidden="true" size={18} />
+                                    )}
+                                 </button>
+                              </span>
+                              {setupFieldErrors.password !== undefined ? (
+                                 <span id="setup-password-error" className="text-sm font-medium text-destructive">
+                                    {setupFieldErrors.password}
+                                 </span>
+                              ) : null}
+                           </label>
 
-                        <button className={`btn primary ${styles.submit}`} type="submit" disabled={isSubmitting || isSetupStatusLoading}>
-                           <span>{isSubmitting ? t("auth.settingUp") : t("auth.createFirstAdmin")}</span>
-                           <LogIn aria-hidden="true" size={18} />
-                        </button>
-                     </form>
+                           <button
+                              className={`inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90 ${styles.submit}`}
+                              type="submit"
+                              disabled={isSubmitting || isSetupStatusLoading}
+                           >
+                              <span>{isSubmitting ? t("auth.settingUp") : t("auth.createFirstAdmin")}</span>
+                              <LogIn aria-hidden="true" size={18} />
+                           </button>
+                        </form>
                      </>
                   ) : (
                      <>
-                     <h2 className={styles.formTitle}>{t("auth.formTitle")}</h2>
-                     <form className={styles.form} onSubmit={handleSubmit}>
-                        <label className="field">
-                           <span className="field-label">{t("auth.email")}</span>
-                           <span className={`${styles.inputWrap} ${styles.hasIcon}`}>
-                              <Mail className={styles.inputIcon} aria-hidden="true" size={18} />
-                              <input
-                                 className="field-input"
-                                 autoFocus
-                                 type="email"
-                                 autoComplete="email"
-                                 placeholder={t("auth.emailPlaceholder")}
-                                 value={email}
-                                 onChange={(event) => {
-                                    setEmail(event.target.value);
-                                    clearFieldError("email");
-                                 }}
-                                 aria-invalid={fieldErrors.email !== undefined}
-                                 aria-describedby={fieldErrors.email !== undefined ? "login-email-error" : undefined}
-                              />
-                           </span>
-                           {fieldErrors.email !== undefined ? <span id="login-email-error" className="field-error">{fieldErrors.email}</span> : null}
-                        </label>
+                        <h2 className={styles.formTitle}>{t("auth.formTitle")}</h2>
+                        <form className={styles.form} onSubmit={handleSubmit}>
+                           <label className="field">
+                              <span className="text-sm font-medium text-foreground">{t("auth.email")}</span>
+                              <span className={`${styles.inputWrap} ${styles.hasIcon}`}>
+                                 <Mail className={styles.inputIcon} aria-hidden="true" size={18} />
+                                 <input
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    autoFocus
+                                    type="email"
+                                    autoComplete="email"
+                                    placeholder={t("auth.emailPlaceholder")}
+                                    value={email}
+                                    onChange={(event) => {
+                                       setEmail(event.target.value);
+                                       clearFieldError("email");
+                                    }}
+                                    aria-invalid={fieldErrors.email !== undefined}
+                                    aria-describedby={fieldErrors.email !== undefined ? "login-email-error" : undefined}
+                                 />
+                              </span>
+                              {fieldErrors.email !== undefined ? (
+                                 <span id="login-email-error" className="text-sm font-medium text-destructive">
+                                    {fieldErrors.email}
+                                 </span>
+                              ) : null}
+                           </label>
 
-                        <label className="field">
-                           <span className="field-label">{t("auth.password")}</span>
-                           <span className={`${styles.inputWrap} ${styles.hasIcon} ${styles.hasAction}`}>
-                              <LockKeyhole className={styles.inputIcon} aria-hidden="true" size={18} />
-                              <input
-                                 className="field-input"
-                                 type={showPassword ? "text" : "password"}
-                                 autoComplete="current-password"
-                                 placeholder={t("auth.passwordPlaceholder")}
-                                 value={password}
-                                 onChange={(event) => {
-                                    setPassword(event.target.value);
-                                    clearFieldError("password");
-                                 }}
-                                 aria-invalid={fieldErrors.password !== undefined}
-                                 aria-describedby={fieldErrors.password !== undefined ? "login-password-error" : undefined}
-                              />
-                              <button type="button" className={styles.inputAction} onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")} aria-pressed={showPassword}>
-                                 {showPassword ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
-                              </button>
-                           </span>
-                           {fieldErrors.password !== undefined ? <span id="login-password-error" className="field-error">{fieldErrors.password}</span> : null}
-                        </label>
+                           <label className="field">
+                              <span className="text-sm font-medium text-foreground">{t("auth.password")}</span>
+                              <span className={`${styles.inputWrap} ${styles.hasIcon} ${styles.hasAction}`}>
+                                 <LockKeyhole className={styles.inputIcon} aria-hidden="true" size={18} />
+                                 <input
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    type={showPassword ? "text" : "password"}
+                                    autoComplete="current-password"
+                                    placeholder={t("auth.passwordPlaceholder")}
+                                    value={password}
+                                    onChange={(event) => {
+                                       setPassword(event.target.value);
+                                       clearFieldError("password");
+                                    }}
+                                    aria-invalid={fieldErrors.password !== undefined}
+                                    aria-describedby={
+                                       fieldErrors.password !== undefined ? "login-password-error" : undefined
+                                    }
+                                 />
+                                 <button
+                                    type="button"
+                                    className={styles.inputAction}
+                                    onClick={() => setShowPassword((current) => !current)}
+                                    aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
+                                    aria-pressed={showPassword}
+                                 >
+                                    {showPassword ? (
+                                       <EyeOff aria-hidden="true" size={18} />
+                                    ) : (
+                                       <Eye aria-hidden="true" size={18} />
+                                    )}
+                                 </button>
+                              </span>
+                              {fieldErrors.password !== undefined ? (
+                                 <span id="login-password-error" className="text-sm font-medium text-destructive">
+                                    {fieldErrors.password}
+                                 </span>
+                              ) : null}
+                           </label>
 
-                        <button className={`btn primary ${styles.submit}`} type="submit" disabled={isSubmitting || isSetupStatusLoading}>
-                           <span>{isSubmitting ? t("auth.signingIn") : t("auth.signIn")}</span>
-                           <LogIn aria-hidden="true" size={18} />
-                        </button>
-                     </form>
+                           <button
+                              className={`inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90 ${styles.submit}`}
+                              type="submit"
+                              disabled={isSubmitting || isSetupStatusLoading}
+                           >
+                              <span>{isSubmitting ? t("auth.signingIn") : t("auth.signIn")}</span>
+                              <LogIn aria-hidden="true" size={18} />
+                           </button>
+                        </form>
                      </>
                   )}
-
                </div>
                <footer className={styles.cardFooter}>
                   <label className={styles.language} aria-label={t("language.switch")}>
                      <Globe2 aria-hidden="true" size={16} />
-                     <select value={language} onChange={(event) => setLanguage(event.target.value === "vi" ? "vi" : "en")}>
+                     <select
+                        value={language}
+                        onChange={(event) => setLanguage(event.target.value === "vi" ? "vi" : "en")}
+                     >
                         <option value="en">English</option>
                         <option value="vi">Tiếng Việt</option>
                      </select>

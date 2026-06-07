@@ -192,7 +192,7 @@ export default function RecallPage() {
                   <div className={styles.field}>
                      <Label>{t("recalls.batch")}</Label>
                      <select
-                        className="field-input"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                         value={form.productBatchId}
                         onChange={(event) => setForm((current) => ({ ...current, productBatchId: event.target.value }))}
                      >
@@ -207,7 +207,7 @@ export default function RecallPage() {
                   <div className={styles.field}>
                      <Label>{t("recalls.siteScope")}</Label>
                      <select
-                        className="field-input"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                         value={form.siteId}
                         onChange={(event) => setForm((current) => ({ ...current, siteId: event.target.value }))}
                      >

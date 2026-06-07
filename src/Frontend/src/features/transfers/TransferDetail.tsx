@@ -94,21 +94,21 @@ export function TransferDetail({
    }
 
    return (
-      <div className="entity-form">
-         <div className="section-header">
+      <div className="grid gap-3">
+         <div className="flex items-start justify-between gap-3">
             <div>
-               <h3 className="section-title">{transfer.transferNumber}</h3>
-               <p className="section-subtitle">
+               <h3 className="m-0 text-sm font-semibold text-foreground">{transfer.transferNumber}</h3>
+               <p className="mt-1 text-sm text-muted-foreground">
                   {siteName(transfer.sourceSiteId)} Â· {locationName(transfer.sourceStorageLocationId)} â†’{" "}
                   {siteName(transfer.destinationSiteId)} Â· {locationName(transfer.destinationStorageLocationId)}
                </p>
             </div>
             <Badge variant={transferStatusVariant(transfer.status)}>{t(`transfer.status.${transfer.status}`)}</Badge>
          </div>
-         <p className="section-subtitle">{new Date(transfer.createdAtUtc).toLocaleString()}</p>
+         <p className="mt-1 text-sm text-muted-foreground">{new Date(transfer.createdAtUtc).toLocaleString()}</p>
 
-         <div className="table-wrap">
-            <table className="selectable-table sites-table">
+         <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
                <thead>
                   <tr>
                      <th>{t("transfer.product")}</th>
@@ -137,10 +137,10 @@ export function TransferDetail({
          {validationError !== null ? <div className="notice danger-note">{validationError}</div> : null}
 
          {canApprove ? (
-            <div className="section-header">
+            <div className="flex items-start justify-between gap-3">
                <div>
-                  <h3 className="section-title">{t("transfer.approve")}</h3>
-                  <p className="section-subtitle">{t("transfer.approveDesc")}</p>
+                  <h3 className="m-0 text-sm font-semibold text-foreground">{t("transfer.approve")}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{t("transfer.approveDesc")}</p>
                </div>
                <Button
                   onClick={async () => {
@@ -165,14 +165,14 @@ export function TransferDetail({
                   await onShip(shipValues);
                }}
             >
-               <div className="section-header">
+               <div className="flex items-start justify-between gap-3">
                   <div>
-                     <h3 className="section-title">{t("transfer.ship")}</h3>
-                     <p className="section-subtitle">{t("transfer.shipDesc")}</p>
+                     <h3 className="m-0 text-sm font-semibold text-foreground">{t("transfer.ship")}</h3>
+                     <p className="mt-1 text-sm text-muted-foreground">{t("transfer.shipDesc")}</p>
                   </div>
                </div>
-               <div className="table-wrap">
-                  <table className="selectable-table sites-table">
+               <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-sm">
                      <thead>
                         <tr>
                            <th>{t("transfer.product")}</th>
@@ -191,7 +191,7 @@ export function TransferDetail({
                                  <td>{line.requestedQuantity}</td>
                                  <td>
                                     <input
-                                       className="field-input"
+                                       className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                                        required
                                        type="number"
                                        min="0.01"
@@ -214,7 +214,7 @@ export function TransferDetail({
                      </tbody>
                   </table>
                </div>
-               <div className="form-actions">
+               <div className="flex flex-wrap justify-end gap-2">
                   <Button type="submit" disabled={isSaving}>
                      {t("transfer.ship")}
                   </Button>
@@ -243,14 +243,14 @@ export function TransferDetail({
                   await onReceive(receiveValues);
                }}
             >
-               <div className="section-header">
+               <div className="flex items-start justify-between gap-3">
                   <div>
-                     <h3 className="section-title">{t("transfer.receive")}</h3>
-                     <p className="section-subtitle">{t("transfer.receiveDesc")}</p>
+                     <h3 className="m-0 text-sm font-semibold text-foreground">{t("transfer.receive")}</h3>
+                     <p className="mt-1 text-sm text-muted-foreground">{t("transfer.receiveDesc")}</p>
                   </div>
                </div>
-               <div className="table-wrap">
-                  <table className="selectable-table sites-table">
+               <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-sm">
                      <thead>
                         <tr>
                            <th>{t("transfer.product")}</th>
@@ -269,7 +269,7 @@ export function TransferDetail({
                                  <td>{line.requestedQuantity}</td>
                                  <td>
                                     <input
-                                       className="field-input"
+                                       className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                                        required
                                        type="number"
                                        min="0"
@@ -292,7 +292,7 @@ export function TransferDetail({
                      </tbody>
                   </table>
                </div>
-               <div className="form-actions">
+               <div className="flex flex-wrap justify-end gap-2">
                   <Button type="submit" disabled={isSaving}>
                      {t("transfer.receive")}
                   </Button>
@@ -311,10 +311,10 @@ export function TransferDetail({
          ) : null}
 
          {canCancel ? (
-            <div className="section-header">
+            <div className="flex items-start justify-between gap-3">
                <div>
-                  <h3 className="section-title">{t("transfer.cancel")}</h3>
-                  <p className="section-subtitle">{t("transfer.cancelDesc")}</p>
+                  <h3 className="m-0 text-sm font-semibold text-foreground">{t("transfer.cancel")}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{t("transfer.cancelDesc")}</p>
                </div>
                <Button
                   variant="destructive"

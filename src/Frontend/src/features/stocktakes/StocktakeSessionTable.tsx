@@ -29,8 +29,8 @@ export function StocktakeSessionTable({
       storageLocations.find((location) => location.id === locationId)?.name ?? "—";
 
    return (
-      <div className="table-wrap">
-         <table className="selectable-table sites-table">
+      <div className="overflow-x-auto">
+         <table className="w-full border-collapse text-sm">
             <thead>
                <tr>
                   <th>{t("stocktake.site")}</th>

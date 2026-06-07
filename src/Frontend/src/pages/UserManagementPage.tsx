@@ -256,32 +256,32 @@ export default function UserManagementPage() {
             {banner !== null ? <div className="notice danger-note">{banner}</div> : null}
             {notice !== null ? <div className="notice success-note">{notice}</div> : null}
 
-            <section className="card">
-               <div className="section">
-                  <div className="section-header">
+            <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+               <div className="p-4">
+                  <div className="flex items-start justify-between gap-3">
                      <div>
-                        <h2 className="section-title">{t("users.createTitle")}</h2>
-                        <p className="section-subtitle">{t("users.createDesc")}</p>
+                        <h2 className="m-0 text-sm font-semibold text-foreground">{t("users.createTitle")}</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">{t("users.createDesc")}</p>
                      </div>
                   </div>
                   <div className={`form-grid ${styles.usersCreateGrid}`}>
                      <Field label={t("users.email")} required>
                         <input
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={createForm.email}
                            onChange={(event) => setCreateForm({ ...createForm, email: event.target.value })}
                         />
                      </Field>
                      <Field label={t("users.displayName")} required>
                         <input
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={createForm.displayName}
                            onChange={(event) => setCreateForm({ ...createForm, displayName: event.target.value })}
                         />
                      </Field>
                      <Field label={t("users.password")} required hint={t("users.passwordHint")}>
                         <input
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            type="password"
                            value={createForm.password}
                            onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })}
@@ -290,7 +290,7 @@ export default function UserManagementPage() {
                   </div>
                   <div className={styles.usersAccessGrid}>
                      <div>
-                        <h3 className="section-kicker">{t("users.roles")}</h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("users.roles")}</h3>
                         <div className={styles.choiceGrid}>
                            {roles.map((role) => (
                               <label key={role} className={styles.choicePill}>
@@ -307,7 +307,7 @@ export default function UserManagementPage() {
                         </div>
                      </div>
                      <div>
-                        <h3 className="section-kicker">{t("users.siteAccess")}</h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("users.siteAccess")}</h3>
                         <div className={styles.choiceGrid}>
                            {sites.map((site) => (
                               <label key={site.id} className={styles.choicePill}>
@@ -327,7 +327,7 @@ export default function UserManagementPage() {
                         </div>
                      </div>
                   </div>
-                  <div className="form-actions">
+                  <div className="flex flex-wrap justify-end gap-2">
                      <Button disabled={isSaving} onClick={() => void handleCreateUser()}>
                         {isSaving ? t("common.saving") : t("users.createButton")}
                      </Button>
@@ -337,26 +337,26 @@ export default function UserManagementPage() {
             </section>
 
             <div className={styles.usersGrid}>
-               <section className="card">
-                  <div className="section">
-                     <div className="section-header">
+               <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("users.registryTitle")}</h2>
-                           <p className="section-subtitle">{t("users.registryDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("users.registryTitle")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("users.registryDesc")}</p>
                         </div>
                         <Badge variant="outline">
                            {isLoading ? t("common.loading") : `${visibleUsers.length} ${t("common.records")}`}
                         </Badge>
                      </div>
-                     <div className={`section-toolbar ${styles.usersToolbar}`}>
+                     <div className={`flex flex-wrap items-center gap-2 ${styles.usersToolbar}`}>
                         <input
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            placeholder={t("users.searchPlaceholder")}
                            value={search}
                            onChange={(event) => setSearch(event.target.value)}
                         />
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={roleFilter}
                            onChange={(event) => setRoleFilter(event.target.value)}
                         >
@@ -373,8 +373,8 @@ export default function UserManagementPage() {
                      ) : visibleUsers.length === 0 ? (
                         <EmptyState icon="0" title={t("users.emptyTitle")} description={t("users.emptyDesc")} />
                      ) : (
-                        <div className="table-wrap">
-                           <table className={`selectable-table ${styles.usersTable}`}>
+                        <div className="overflow-x-auto">
+                           <table className={`w-full border-collapse text-sm ${styles.usersTable}`}>
                               <thead>
                                  <tr>
                                     <th>{t("users.user")}</th>
@@ -414,12 +414,12 @@ export default function UserManagementPage() {
                   </div>
                </section>
 
-               <aside className="card">
-                  <div className="section">
-                     <div className="section-header">
+               <aside className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("users.editorTitle")}</h2>
-                           <p className="section-subtitle">{t("users.editorDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("users.editorTitle")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("users.editorDesc")}</p>
                         </div>
                      </div>
                      {selectedUser === null ? (
@@ -445,7 +445,7 @@ export default function UserManagementPage() {
                               </div>
                            </div>
                            <div>
-                              <h3 className="section-kicker">{t("users.roles")}</h3>
+                              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("users.roles")}</h3>
                               <div className={styles.choiceGrid}>
                                  {roles.map((role) => (
                                     <label key={role} className={styles.choicePill}>
@@ -465,7 +465,7 @@ export default function UserManagementPage() {
                               </div>
                            </div>
                            <div>
-                              <h3 className="section-kicker">{t("users.siteAccess")}</h3>
+                              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("users.siteAccess")}</h3>
                               <div className={styles.choiceGrid}>
                                  {sites.map((site) => (
                                     <label key={site.id} className={styles.choicePill}>
@@ -485,16 +485,16 @@ export default function UserManagementPage() {
                               </div>
                            </div>
                            <div>
-                              <h3 className="section-kicker">{t("users.security")}</h3>
+                              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("users.security")}</h3>
                               <Field label={t("users.newPassword")} hint={t("users.newPasswordHint")}>
                                  <input
-                                    className="field-input"
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                                     type="password"
                                     value={passwordForm.newPassword}
                                     onChange={(event) => setPasswordForm({ newPassword: event.target.value })}
                                  />
                               </Field>
-                              <div className="form-actions">
+                              <div className="flex flex-wrap justify-end gap-2">
                                  <Button disabled={isSaving} onClick={() => void handleResetPassword()}>
                                     {t("users.resetPassword")}
                                  </Button>
@@ -507,7 +507,7 @@ export default function UserManagementPage() {
                                  </Button>
                               </div>
                            </div>
-                           <div className="form-actions">
+                           <div className="flex flex-wrap justify-end gap-2">
                               <Button disabled={isSaving} onClick={() => void handleSaveAccess()}>
                                  {isSaving ? t("common.saving") : t("users.saveAccess")}
                               </Button>

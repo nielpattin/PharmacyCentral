@@ -222,12 +222,14 @@ export default function StorageLocationsPage({ siteId }: StorageLocationsPagePro
             </div>
          ) : (
             <div className={`${styles.split} ${styles.splitCrud}`} style={{ marginTop: "14px" }}>
-               <section className="card">
-                  <div className="section">
-                     <div className="section-header">
+               <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("storage.linked")}</h2>
-                           <p className="section-subtitle">{t("storage.linkedDesc", { code: selectedSite.code })}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("storage.linked")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">
+                              {t("storage.linkedDesc", { code: selectedSite.code })}
+                           </p>
                         </div>
                         <Badge variant={selectedSite.status === "Active" ? "secondary" : "destructive"}>
                            {selectedSite.status === "Active" ? t("status.active") : t("status.inactive")}
@@ -251,8 +253,8 @@ export default function StorageLocationsPage({ siteId }: StorageLocationsPagePro
                   </div>
                </section>
 
-               <section className="card">
-                  <div className="section">
+               <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                  <div className="p-4">
                      <StorageLocationForm
                         key={storageFormKey}
                         mode={storageEditorMode}

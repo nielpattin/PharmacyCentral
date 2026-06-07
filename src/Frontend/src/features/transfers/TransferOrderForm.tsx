@@ -90,7 +90,7 @@ export function TransferOrderForm({
 
    return (
       <form
-         className="entity-form"
+         className="grid gap-3"
          onSubmit={async (event) => {
             event.preventDefault();
             if (isSaving || !isDirty) return;
@@ -105,7 +105,7 @@ export function TransferOrderForm({
          <div className="form-grid">
             <Field label={t("transfer.source")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.sourceSiteId}
                   onChange={(event) =>
@@ -127,7 +127,7 @@ export function TransferOrderForm({
             </Field>
             <Field label={t("transfer.sourceLocation")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.sourceStorageLocationId}
                   onChange={(event) =>
@@ -148,7 +148,7 @@ export function TransferOrderForm({
             </Field>
             <Field label={t("transfer.destination")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.destinationSiteId}
                   onChange={(event) =>
@@ -169,7 +169,7 @@ export function TransferOrderForm({
             </Field>
             <Field label={t("transfer.destinationLocation")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.destinationStorageLocationId}
                   onChange={(event) =>
@@ -184,9 +184,9 @@ export function TransferOrderForm({
                   ))}
                </select>
             </Field>
-            <Field label={t("forms.notes")} className="field-wide">
+            <Field label={t("forms.notes")} className="col-span-full">
                <textarea
-                  className="field-input field-textarea"
+                  className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   rows={3}
                   value={values.notes}
                   onChange={(event) => setValues((current) => ({ ...current, notes: event.target.value }))}
@@ -194,10 +194,10 @@ export function TransferOrderForm({
             </Field>
          </div>
 
-         <div className="section-header">
+         <div className="flex items-start justify-between gap-3">
             <div>
-               <h3 className="section-title">{t("transfer.lines")}</h3>
-               <p className="section-subtitle">{t("transfer.linesDesc")}</p>
+               <h3 className="m-0 text-sm font-semibold text-foreground">{t("transfer.lines")}</h3>
+               <p className="mt-1 text-sm text-muted-foreground">{t("transfer.linesDesc")}</p>
             </div>
             <Button
                variant="outline"
@@ -216,7 +216,7 @@ export function TransferOrderForm({
                <div className="form-grid" key={index}>
                   <Field label={t("transfer.product")} required>
                      <select
-                        className="field-input"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                         required
                         value={line.productId}
                         onChange={(event) =>
@@ -240,7 +240,7 @@ export function TransferOrderForm({
                   </Field>
                   <Field label={t("transfer.batch")} required>
                      <select
-                        className="field-input"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                         required
                         value={line.productBatchId}
                         disabled={line.productId === "" || batches.length === 0}
@@ -264,7 +264,7 @@ export function TransferOrderForm({
                   </Field>
                   <Field label={t("transfer.requested")} required>
                      <input
-                        className="field-input"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                         required
                         min="0.01"
                         step="0.01"
@@ -282,7 +282,7 @@ export function TransferOrderForm({
                   </Field>
                   <Field label={t("forms.notes")}>
                      <input
-                        className="field-input"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                         value={line.notes}
                         onChange={(event) =>
                            setValues((current) => ({
@@ -294,7 +294,7 @@ export function TransferOrderForm({
                         }
                      />
                   </Field>
-                  <div className="form-actions">
+                  <div className="flex flex-wrap justify-end gap-2">
                      <Button
                         variant="destructive"
                         size="sm"
@@ -313,7 +313,7 @@ export function TransferOrderForm({
             );
          })}
 
-         <div className="form-actions">
+         <div className="flex flex-wrap justify-end gap-2">
             <Button type="submit" disabled={isSaving || !isDirty}>
                {isSaving ? t("common.saving") : t("transfer.createButton")}
             </Button>

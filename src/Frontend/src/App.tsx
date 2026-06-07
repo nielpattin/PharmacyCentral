@@ -127,7 +127,7 @@ export default function App() {
       return (
          <main className={appStyles.loadingPage}>
             <section className={`${appStyles.loadingCard} card`}>
-               <div className="section" style={{ textAlign: "center", padding: "48px 24px" }}>
+               <div className="p-4" style={{ textAlign: "center", padding: "48px 24px" }}>
                   <p>{t("common.loading")}</p>
                </div>
             </section>

@@ -52,7 +52,10 @@ export function areGoodsReceiptFormValuesEqual(left: GoodsReceiptFormValues, rig
    );
 }
 
-function areGoodsReceiptLineFormValuesEqual(left: GoodsReceiptLineFormValues, right: GoodsReceiptLineFormValues | undefined) {
+function areGoodsReceiptLineFormValuesEqual(
+   left: GoodsReceiptLineFormValues,
+   right: GoodsReceiptLineFormValues | undefined,
+) {
    return (
       right !== undefined &&
       left.productId === right.productId &&

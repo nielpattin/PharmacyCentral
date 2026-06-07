@@ -10,6 +10,8 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 export function Button({ className = "", variant = "secondary", size = "md", type = "button", ...props }: ButtonProps) {
-   const classes = [styles.btn, styles[variant], size === "sm" ? styles.btnSm : "", className].filter(Boolean).join(" ");
+   const classes = [styles.btn, styles[variant], size === "sm" ? styles.btnSm : "", className]
+      .filter(Boolean)
+      .join(" ");
    return <button type={type} className={classes} {...props} />;
 }

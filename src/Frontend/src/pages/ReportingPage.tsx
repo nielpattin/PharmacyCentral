@@ -125,12 +125,14 @@ function ReportingSection({
    children: ReactNode;
 }) {
    return (
-      <section className={`card ${styles.dashboardSection}`}>
-         <div className="section">
-            <div className="section-header">
+      <section
+         className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.dashboardSection}`}
+      >
+         <div className="p-4">
+            <div className="flex items-start justify-between gap-3">
                <div>
-                  <h2 className="section-title">{title}</h2>
-                  <p className="section-subtitle">{description}</p>
+                  <h2 className="m-0 text-sm font-semibold text-foreground">{title}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{description}</p>
                </div>
             </div>
             {children}
@@ -143,11 +145,13 @@ function ReportingSourceStrip({ lastLoadedAt }: { lastLoadedAt: Date | null }) {
    const t = useT();
 
    return (
-      <section className={`card ${styles.dashboardSection} ${styles.reportingSourceStrip}`}>
+      <section
+         className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.dashboardSection} ${styles.reportingSourceStrip}`}
+      >
          <div className={`section ${styles.reportingSourceContent}`}>
             <div>
-               <h2 className="section-title">{t("reporting.sourceTitle")}</h2>
-               <p className="section-subtitle">
+               <h2 className="m-0 text-sm font-semibold text-foreground">{t("reporting.sourceTitle")}</h2>
+               <p className="mt-1 text-sm text-muted-foreground">
                   {lastLoadedAt === null
                      ? t("reporting.sourceDesc")
                      : t("reporting.sourceDescWithTime", { time: formatOptionalDateTime(lastLoadedAt) })}
@@ -264,7 +268,7 @@ function InventoryRiskTable({
    }
 
    return (
-      <div className={`table-wrap ${styles.reportingRiskTableWrap}`}>
+      <div className={`overflow-x-auto ${styles.reportingRiskTableWrap}`}>
          <table className={styles.reportingRiskTable}>
             <thead>
                <tr>
@@ -387,10 +391,10 @@ export default function ReportingPage() {
                description={t("reporting.description")}
                actions={
                   <div className="page-actions">
-                     <a className="btn secondary" href="/dashboard/inventory">
+                     <a className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground" href="/dashboard/inventory">
                         {t("reporting.openInventory")}
                      </a>
-                     <a className="btn secondary" href="/dashboard/audit">
+                     <a className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground" href="/dashboard/audit">
                         {t("reporting.openAudit")}
                      </a>
                      <Button variant="outline" onClick={() => void refreshData()}>
@@ -404,14 +408,18 @@ export default function ReportingPage() {
             <ReportingSourceStrip lastLoadedAt={lastLoadedAt} />
 
             {isLoading ? (
-               <section className={`card ${styles.dashboardSection}`}>
-                  <div className="section">
+               <section
+                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.dashboardSection}`}
+               >
+                  <div className="p-4">
                      <EmptyState icon="…" title={t("reporting.loading")} description={t("reporting.fetching")} />
                   </div>
                </section>
             ) : summary === null ? (
-               <section className={`card ${styles.dashboardSection}`}>
-                  <div className="section">
+               <section
+                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.dashboardSection}`}
+               >
+                  <div className="p-4">
                      <EmptyState icon="0" title={t("reporting.emptyTitle")} description={t("reporting.emptyDesc")} />
                   </div>
                </section>

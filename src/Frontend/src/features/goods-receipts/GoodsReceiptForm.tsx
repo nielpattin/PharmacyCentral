@@ -83,7 +83,7 @@ export function GoodsReceiptForm({
 
    return (
       <form
-         className="entity-form"
+         className="grid gap-3"
          onSubmit={async (event) => {
             event.preventDefault();
             if (isSaving || !isDirty) {
@@ -104,7 +104,7 @@ export function GoodsReceiptForm({
          <div className="form-grid">
             <Field label={t("receiving.supplier")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.supplierId}
                   onChange={(event) => setValues((current) => ({ ...current, supplierId: event.target.value }))}
@@ -119,7 +119,7 @@ export function GoodsReceiptForm({
             </Field>
             <Field label={t("receiving.site")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.siteId}
                   onChange={(event) =>
@@ -136,7 +136,7 @@ export function GoodsReceiptForm({
             </Field>
             <Field label={t("receiving.location")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.storageLocationId}
                   onChange={(event) => setValues((current) => ({ ...current, storageLocationId: event.target.value }))}
@@ -151,7 +151,7 @@ export function GoodsReceiptForm({
             </Field>
             <Field label={t("procurement.purchaseOrder")}>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   value={values.purchaseOrderId ?? ""}
                   onChange={(event) =>
                      setValues((current) => ({
@@ -170,15 +170,15 @@ export function GoodsReceiptForm({
             </Field>
             <Field label={t("receiving.receiptNumber")} required>
                <input
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.receiptNumber}
                   onChange={(event) => setValues((current) => ({ ...current, receiptNumber: event.target.value }))}
                />
             </Field>
-            <Field label={t("forms.notes")} className="field-wide">
+            <Field label={t("forms.notes")} className="col-span-full">
                <textarea
-                  className="field-input field-textarea"
+                  className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   rows={3}
                   value={values.notes}
                   onChange={(event) => setValues((current) => ({ ...current, notes: event.target.value }))}
@@ -186,10 +186,10 @@ export function GoodsReceiptForm({
             </Field>
          </div>
 
-         <div className="section-header">
+         <div className="flex items-start justify-between gap-3">
             <div>
-               <h3 className="section-title">{t("receiving.lines")}</h3>
-               <p className="section-subtitle">{t("receiving.linesDesc")}</p>
+               <h3 className="m-0 text-sm font-semibold text-foreground">{t("receiving.lines")}</h3>
+               <p className="mt-1 text-sm text-muted-foreground">{t("receiving.linesDesc")}</p>
             </div>
             <Button
                variant="outline"
@@ -206,7 +206,7 @@ export function GoodsReceiptForm({
             <div className="form-grid" key={index}>
                <Field label={t("receiving.product")} required>
                   <select
-                     className="field-input"
+                     className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                      required
                      value={line.productId}
                      onChange={(event) =>
@@ -228,7 +228,7 @@ export function GoodsReceiptForm({
                </Field>
                <Field label={t("receiving.batchNumber")} required>
                   <input
-                     className="field-input"
+                     className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                      required
                      value={line.batchNumber}
                      onChange={(event) =>
@@ -243,7 +243,7 @@ export function GoodsReceiptForm({
                </Field>
                <Field label={t("receiving.expiryDate")} required>
                   <input
-                     className="field-input"
+                     className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                      required
                      type="date"
                      value={line.expiryDate}
@@ -259,7 +259,7 @@ export function GoodsReceiptForm({
                </Field>
                <Field label={t("receiving.quantity")} required>
                   <input
-                     className="field-input"
+                     className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                      required
                      min="0.01"
                      step="0.01"
@@ -277,7 +277,7 @@ export function GoodsReceiptForm({
                </Field>
                <Field label={t("receiving.manufacturedDate")}>
                   <input
-                     className="field-input"
+                     className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                      type="date"
                      value={line.manufacturedDate}
                      onChange={(event) =>
@@ -292,7 +292,7 @@ export function GoodsReceiptForm({
                </Field>
                <Field label={t("forms.manufacturer")}>
                   <input
-                     className="field-input"
+                     className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                      value={line.manufacturer}
                      onChange={(event) =>
                         setValues((current) => ({
@@ -304,9 +304,9 @@ export function GoodsReceiptForm({
                      }
                   />
                </Field>
-               <Field label={t("forms.notes")} className="field-wide">
+               <Field label={t("forms.notes")} className="col-span-full">
                   <textarea
-                     className="field-input field-textarea"
+                     className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                      rows={2}
                      value={line.notes}
                      onChange={(event) =>
@@ -319,7 +319,7 @@ export function GoodsReceiptForm({
                      }
                   />
                </Field>
-               <div className="form-actions">
+               <div className="flex flex-wrap justify-end gap-2">
                   <Button
                      variant="destructive"
                      size="sm"
@@ -337,7 +337,7 @@ export function GoodsReceiptForm({
             </div>
          ))}
 
-         <div className="form-actions">
+         <div className="flex flex-wrap justify-end gap-2">
             <Button type="submit" disabled={isSaving || !isDirty}>
                {isSaving ? t("receiving.saving") : t("receiving.createButton")}
             </Button>

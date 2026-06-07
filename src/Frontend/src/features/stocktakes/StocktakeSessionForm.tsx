@@ -41,7 +41,7 @@ export function StocktakeSessionForm({
 
    return (
       <form
-         className="entity-form"
+         className="grid gap-3"
          onSubmit={async (event) => {
             event.preventDefault();
             if (isSaving || !isDirty) return;
@@ -56,7 +56,7 @@ export function StocktakeSessionForm({
          <div className="form-grid">
             <Field label={t("stocktake.site")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.siteId}
                   onChange={(event) =>
@@ -73,7 +73,7 @@ export function StocktakeSessionForm({
             </Field>
             <Field label={t("stocktake.location")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.storageLocationId}
                   onChange={(event) => setValues((current) => ({ ...current, storageLocationId: event.target.value }))}
@@ -86,16 +86,16 @@ export function StocktakeSessionForm({
                   ))}
                </select>
             </Field>
-            <Field label={t("forms.notes")} className="field-wide">
+            <Field label={t("forms.notes")} className="col-span-full">
                <textarea
-                  className="field-input field-textarea"
+                  className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   rows={3}
                   value={values.notes}
                   onChange={(event) => setValues((current) => ({ ...current, notes: event.target.value }))}
                />
             </Field>
          </div>
-         <div className="form-actions">
+         <div className="flex flex-wrap justify-end gap-2">
             <Button type="submit" disabled={isSaving || !isDirty}>
                {isSaving ? t("stocktake.saving") : mode === "create" ? t("stocktake.createButton") : t("common.edit")}
             </Button>

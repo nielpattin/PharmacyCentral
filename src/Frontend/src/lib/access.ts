@@ -29,7 +29,12 @@ const WAREHOUSE_ROLES: RoleName[] = ["Platform Admin", "Warehouse Staff"];
 
 export const ROUTE_ACCESS: RouteAccess[] = [
    { path: "/dashboard", active: "dashboard", roles: DASHBOARD_ROLES },
-   { path: "/dashboard/prescriptions", active: "prescriptions", roles: COUNTER_SALE_ROLES, allowPlatformAdminOverride: false },
+   {
+      path: "/dashboard/prescriptions",
+      active: "prescriptions",
+      roles: COUNTER_SALE_ROLES,
+      allowPlatformAdminOverride: false,
+   },
    { path: "/dashboard/transfers", active: "transfers", roles: WAREHOUSE_ROLES },
    { path: "/dashboard/sites", active: "sites", roles: MANAGEMENT_ROLES },
    { path: "/dashboard/catalog", active: "catalog", roles: MANAGEMENT_ROLES },
@@ -69,7 +74,9 @@ export function canAccessPath(user: AuthUser, pathname: string) {
 }
 
 export function isPharmacistOnlyUser(user: AuthUser) {
-   return user.roles.includes("Pharmacist") && !user.isPlatformAdmin && !user.roles.some((role) => role !== "Pharmacist");
+   return (
+      user.roles.includes("Pharmacist") && !user.isPlatformAdmin && !user.roles.some((role) => role !== "Pharmacist")
+   );
 }
 
 export function getDefaultPathForUser(user: AuthUser) {

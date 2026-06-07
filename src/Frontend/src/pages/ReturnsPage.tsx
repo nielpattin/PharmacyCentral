@@ -226,19 +226,19 @@ export default function ReturnsPage() {
             {successMessage !== null ? <div className="notice success-note">{successMessage}</div> : null}
 
             <div className={styles.returnsGrid}>
-               <section className="card">
-                  <div className="section">
-                     <div className="section-header">
+               <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("returns.formTitle")}</h2>
-                           <p className="section-subtitle">{t("returns.formDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("returns.formTitle")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("returns.formDesc")}</p>
                         </div>
                      </div>
 
-                     <div className="entity-form">
+                     <div className="grid gap-3">
                         <Field label={t("returns.product")}>
                            <select
-                              className="field-input"
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               value={form.productId}
                               onChange={(event) =>
                                  updateForm({ ...form, productId: event.target.value, balanceId: "" })
@@ -255,7 +255,7 @@ export default function ReturnsPage() {
 
                         <Field label={t("returns.balance")}>
                            <select
-                              className="field-input"
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               value={form.balanceId}
                               onChange={(event) => updateForm({ ...form, balanceId: event.target.value })}
                               disabled={isLoading}
@@ -272,7 +272,7 @@ export default function ReturnsPage() {
 
                         <Field label={t("returns.quantity")}>
                            <input
-                              className="field-input"
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               type="number"
                               min="0"
                               step="0.01"
@@ -283,7 +283,7 @@ export default function ReturnsPage() {
 
                         <Field label={t("returns.reason")}>
                            <select
-                              className="field-input"
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               value={form.reason}
                               onChange={(event) => updateForm({ ...form, reason: event.target.value as ReturnReason })}
                            >
@@ -297,7 +297,7 @@ export default function ReturnsPage() {
 
                         <Field label={t("returns.destination")}>
                            <input
-                              className="field-input"
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               value={form.destination}
                               onChange={(event) => updateForm({ ...form, destination: event.target.value })}
                               placeholder={t("returns.destinationPlaceholder")}
@@ -306,16 +306,16 @@ export default function ReturnsPage() {
 
                         <Field label={t("returns.occurredAt")}>
                            <input
-                              className="field-input"
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               type="datetime-local"
                               value={form.occurredAtLocal}
                               onChange={(event) => updateForm({ ...form, occurredAtLocal: event.target.value })}
                            />
                         </Field>
 
-                        <Field label={t("returns.notes")} className="field-wide">
+                        <Field label={t("returns.notes")} className="col-span-full">
                            <textarea
-                              className="field-input field-textarea"
+                              className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               value={form.notes}
                               onChange={(event) => updateForm({ ...form, notes: event.target.value })}
                               placeholder={t("returns.notesPlaceholder")}
@@ -349,7 +349,7 @@ export default function ReturnsPage() {
                         </div>
                      ) : null}
 
-                     <div className="form-actions">
+                     <div className="flex flex-wrap justify-end gap-2">
                         <Button onClick={() => void handleSubmit()} disabled={!canSubmit || isSubmitting}>
                            {isSubmitting ? t("returns.submitting") : t("returns.submit")}
                         </Button>
@@ -360,12 +360,12 @@ export default function ReturnsPage() {
                   </div>
                </section>
 
-               <section className="card">
-                  <div className="section">
-                     <div className="section-header">
+               <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("returns.recentTitle")}</h2>
-                           <p className="section-subtitle">{t("returns.recentDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("returns.recentTitle")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("returns.recentDesc")}</p>
                         </div>
                         <Badge variant="outline">
                            {recentReturns.length} {t("common.records")}

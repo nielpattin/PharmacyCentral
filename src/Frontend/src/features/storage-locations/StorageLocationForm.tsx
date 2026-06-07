@@ -34,7 +34,7 @@ export function StorageLocationForm({
 
    return (
       <form
-         className="entity-form"
+         className="grid gap-3"
          onSubmit={async (event) => {
             event.preventDefault();
             if (isSaving || !isDirty) {
@@ -45,18 +45,22 @@ export function StorageLocationForm({
             setBaselineValues(values);
          }}
       >
-         <div className="section-header">
+         <div className="flex items-start justify-between gap-3">
             <div>
-               <h2 className="section-title">{mode === "create" ? t("storage.create") : t("storage.edit")}</h2>
-               <p className="section-subtitle">{t("storage.link")}</p>
+               <h2 className="m-0 text-sm font-semibold text-foreground">
+                  {mode === "create" ? t("storage.create") : t("storage.edit")}
+               </h2>
+               <p className="mt-1 text-sm text-muted-foreground">{t("storage.link")}</p>
             </div>
-            <span className="badge b-role">{mode === "create" ? t("status.new") : t("status.selected")}</span>
+            <span className="inline-flex h-5 items-center rounded-full border border-border px-2 text-xs font-medium text-muted-foreground">
+               {mode === "create" ? t("status.new") : t("status.selected")}
+            </span>
          </div>
 
          <div className="form-grid">
             <Field label={t("forms.site")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.siteId}
                   onChange={(event) => setValues((current) => ({ ...current, siteId: event.target.value }))}
@@ -72,7 +76,7 @@ export function StorageLocationForm({
 
             <Field label={t("forms.code")} required>
                <input
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.code}
                   onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
@@ -81,7 +85,7 @@ export function StorageLocationForm({
 
             <Field label={t("forms.name")} required>
                <input
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={values.name}
                   onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))}
@@ -90,7 +94,7 @@ export function StorageLocationForm({
 
             <Field label={t("forms.type")} required>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   required
                   value={normalizeStorageLocationTypeValue(values.locationType)}
                   onChange={(event) =>
@@ -111,7 +115,7 @@ export function StorageLocationForm({
 
             <Field label={t("forms.status")}>
                <select
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   value={values.status}
                   onChange={(event) => setValues((current) => ({ ...current, status: event.target.value }))}
                >
@@ -122,7 +126,7 @@ export function StorageLocationForm({
 
             <Field label={t("forms.capacity")}>
                <input
-                  className="field-input"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   type="number"
                   step="0.01"
                   value={values.capacity}
@@ -130,10 +134,10 @@ export function StorageLocationForm({
                />
             </Field>
 
-            <label className="field field-inline">
-               <span className="field-label">{t("forms.active")}</span>
+            <label className="flex items-center gap-2">
+               <span className="text-sm font-medium text-foreground">{t("forms.active")}</span>
                <input
-                  className="field-check"
+                  className="size-4 rounded border border-input accent-primary"
                   type="checkbox"
                   checked={values.isActive}
                   onChange={(event) => setValues((current) => ({ ...current, isActive: event.target.checked }))}
@@ -141,7 +145,7 @@ export function StorageLocationForm({
             </label>
          </div>
 
-         <div className="form-actions">
+         <div className="flex flex-wrap justify-end gap-2">
             <Button type="submit" disabled={isSaving || !isDirty}>
                {isSaving
                   ? t("storage.saving")

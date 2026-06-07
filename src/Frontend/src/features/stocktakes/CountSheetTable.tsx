@@ -56,8 +56,8 @@ export function CountSheetTable({ session, products, isSaving, onSubmit }: Count
          }}
       >
          {validationError !== null ? <div className="notice danger-note">{validationError}</div> : null}
-         <div className="table-wrap">
-            <table className="selectable-table sites-table">
+         <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
                <thead>
                   <tr>
                      <th>{t("stocktake.product")}</th>
@@ -77,7 +77,7 @@ export function CountSheetTable({ session, products, isSaving, onSubmit }: Count
                            <td>{line.expectedQuantity}</td>
                            <td>
                               <input
-                                 className="field-input"
+                                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                                  type="number"
                                  min="0"
                                  step="0.01"
@@ -97,7 +97,7 @@ export function CountSheetTable({ session, products, isSaving, onSubmit }: Count
                            <td>{counted - line.expectedQuantity}</td>
                            <td>
                               <input
-                                 className="field-input"
+                                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                                  value={value?.notes ?? ""}
                                  onChange={(event) =>
                                     setValues((current) => ({
@@ -117,7 +117,7 @@ export function CountSheetTable({ session, products, isSaving, onSubmit }: Count
                </tbody>
             </table>
          </div>
-         <div className="form-actions">
+         <div className="flex flex-wrap justify-end gap-2">
             <Button type="submit" disabled={isSaving || !isDirty}>
                {t("stocktake.count")}
             </Button>

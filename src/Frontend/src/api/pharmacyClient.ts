@@ -1268,11 +1268,17 @@ export async function createRecall(request: RecallCreateRequest) {
 }
 
 export async function activateRecall(id: string, notes?: string) {
-   return await requestJson<RecallCaseDto>(`/api/recalls/${id}/activate`, { method: "POST", body: JSON.stringify({ notes: notes ?? null }) });
+   return await requestJson<RecallCaseDto>(`/api/recalls/${id}/activate`, {
+      method: "POST",
+      body: JSON.stringify({ notes: notes ?? null }),
+   });
 }
 
 export async function closeRecall(id: string, notes?: string) {
-   return await requestJson<RecallCaseDto>(`/api/recalls/${id}/close`, { method: "POST", body: JSON.stringify({ notes: notes ?? null }) });
+   return await requestJson<RecallCaseDto>(`/api/recalls/${id}/close`, {
+      method: "POST",
+      body: JSON.stringify({ notes: notes ?? null }),
+   });
 }
 
 export async function updateRecallAffectedBatch(id: string, affectedBatchId: string, status: string, notes?: string) {

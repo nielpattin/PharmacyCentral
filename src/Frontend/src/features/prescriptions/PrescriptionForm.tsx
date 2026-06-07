@@ -405,7 +405,7 @@ export function PrescriptionForm({
                : t("counterSale.priceAtPaymentNote")}
          </div>
 
-         <div className="form-actions">
+         <div className="flex flex-wrap justify-end gap-2">
             <Button type="submit" disabled={isSaving || !isDirty || !hasSaleSource}>
                {isSaving ? t("common.saving") : t("counterSale.createButton")}
             </Button>

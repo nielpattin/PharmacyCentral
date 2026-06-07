@@ -29,8 +29,8 @@ export function InventoryBalanceTable({ rows, sites, storageLocations, onUseBala
    }
 
    return (
-      <div className="table-wrap">
-         <table className="selectable-table sites-table">
+      <div className="overflow-x-auto">
+         <table className="w-full border-collapse text-sm">
             <thead>
                <tr>
                   <th>{t("inventory.sku")}</th>
@@ -57,7 +57,7 @@ export function InventoryBalanceTable({ rows, sites, storageLocations, onUseBala
                      <td>{balance.quantityReserved}</td>
                      {onUseBalance !== undefined ? (
                         <td>
-                           <button type="button" className="btn secondary btn-sm" onClick={() => onUseBalance(balance)}>
+                           <button type="button" className="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground" onClick={() => onUseBalance(balance)}>
                               {t("inventory.useForMovement")}
                            </button>
                         </td>

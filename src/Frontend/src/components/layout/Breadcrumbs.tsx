@@ -14,10 +14,7 @@ export function Breadcrumbs({ items }: BreadcrumbsProps) {
    return (
       <>
          {items.map((item, index) => (
-            <span
-               key={index}
-               className={index === items.length - 1 ? styles.current : undefined}
-            >
+            <span key={index} className={index === items.length - 1 ? styles.current : undefined}>
                {index > 0 ? (
                   <span className={styles.separator} aria-hidden="true">
                      /

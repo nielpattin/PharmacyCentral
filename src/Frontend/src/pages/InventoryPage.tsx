@@ -279,12 +279,12 @@ export default function InventoryPage() {
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
             {successMessage !== null ? <div className="notice success-note">{successMessage}</div> : null}
 
-            <section className="card">
-               <div className="section">
-                  <div className="section-header">
+            <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+               <div className="p-4">
+                  <div className="flex items-start justify-between gap-3">
                      <div>
-                        <h2 className="section-title">{t("inventory.registry")}</h2>
-                        <p className="section-subtitle">{t("inventory.registryDesc")}</p>
+                        <h2 className="m-0 text-sm font-semibold text-foreground">{t("inventory.registry")}</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">{t("inventory.registryDesc")}</p>
                      </div>
                      <Badge variant="outline">
                         {isLoading ? t("inventory.loadingState") : `${balances.length} ${t("common.records")}`}
@@ -293,7 +293,7 @@ export default function InventoryPage() {
                   <div className="form-grid">
                      <Field label={t("inventory.productFilter")}>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.productId}
                            onChange={(event) => updateFilters({ ...filters, productId: event.target.value })}
                         >
@@ -307,7 +307,7 @@ export default function InventoryPage() {
                      </Field>
                      <Field label={t("inventory.siteFilter")}>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.siteId}
                            onChange={(event) =>
                               updateFilters({ ...filters, siteId: event.target.value, storageLocationId: "" })
@@ -323,7 +323,7 @@ export default function InventoryPage() {
                      </Field>
                      <Field label={t("inventory.locationFilter")}>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.storageLocationId}
                            onChange={(event) => updateFilters({ ...filters, storageLocationId: event.target.value })}
                         >
@@ -335,10 +335,12 @@ export default function InventoryPage() {
                            ))}
                         </select>
                      </Field>
-                     <label className="field field-inline">
-                        <span className="field-label">{t("inventory.includeZeroBalances")}</span>
+                     <label className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">
+                           {t("inventory.includeZeroBalances")}
+                        </span>
                         <input
-                           className="field-check"
+                           className="size-4 rounded border border-input accent-primary"
                            type="checkbox"
                            checked={filters.includeZeroBalances}
                            onChange={(event) =>
@@ -347,7 +349,7 @@ export default function InventoryPage() {
                         />
                      </label>
                   </div>
-                  <div className="form-actions">
+                  <div className="flex flex-wrap justify-end gap-2">
                      <Button variant="outline" onClick={handleResetFilters}>
                         {t("inventory.clearFilters")}
                      </Button>
@@ -369,19 +371,21 @@ export default function InventoryPage() {
 
             <div className={canControlInventory ? styles.inventoryOperationsGrid : styles.inventoryHistoryOnly}>
                {canControlInventory ? (
-                  <section className="card">
-                     <div className="section">
-                        <div className="section-header">
+                  <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                     <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
                            <div>
-                              <h2 className="section-title">{t("inventory.movementTitle")}</h2>
-                              <p className="section-subtitle">{t("inventory.movementDesc")}</p>
+                              <h2 className="m-0 text-sm font-semibold text-foreground">
+                                 {t("inventory.movementTitle")}
+                              </h2>
+                              <p className="mt-1 text-sm text-muted-foreground">{t("inventory.movementDesc")}</p>
                            </div>
                            <Badge variant="outline">{t("inventory.manual")}</Badge>
                         </div>
-                        <div className="entity-form">
+                        <div className="grid gap-3">
                            <Field label={t("inventory.movementBalance")} required>
                               <select
-                                 className="field-input"
+                                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                                  value={movementForm.balanceId}
                                  onChange={(event) =>
                                     updateMovementForm({ ...movementForm, balanceId: event.target.value })
@@ -398,7 +402,7 @@ export default function InventoryPage() {
                            </Field>
                            <Field label={t("inventory.quantityDelta")} hint={t("inventory.quantityDeltaHint")} required>
                               <input
-                                 className="field-input"
+                                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                                  type="number"
                                  step="0.01"
                                  value={movementForm.quantityDelta}
@@ -409,7 +413,7 @@ export default function InventoryPage() {
                            </Field>
                            <Field label={t("inventory.reason")} required>
                               <input
-                                 className="field-input"
+                                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                                  value={movementForm.reason}
                                  onChange={(event) =>
                                     updateMovementForm({ ...movementForm, reason: event.target.value })
@@ -420,7 +424,7 @@ export default function InventoryPage() {
                            </Field>
                            <Field label={t("inventory.occurredAt")}>
                               <input
-                                 className="field-input"
+                                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                                  type="datetime-local"
                                  value={movementForm.occurredAt}
                                  onChange={(event) =>
@@ -428,9 +432,9 @@ export default function InventoryPage() {
                                  }
                               />
                            </Field>
-                           <Field label={t("inventory.notes")} className="field-wide">
+                           <Field label={t("inventory.notes")} className="col-span-full">
                               <textarea
-                                 className="field-input field-textarea"
+                                 className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                                  value={movementForm.notes}
                                  onChange={(event) =>
                                     updateMovementForm({ ...movementForm, notes: event.target.value })
@@ -471,7 +475,7 @@ export default function InventoryPage() {
                            <div className={`notice warning ${styles.inventoryMovementWarning}`}>{movementError}</div>
                         ) : null}
 
-                        <div className="form-actions">
+                        <div className="flex flex-wrap justify-end gap-2">
                            <Button
                               onClick={() => void handleSubmitMovement()}
                               disabled={!canSubmitMovement || isSubmittingMovement}
@@ -485,12 +489,12 @@ export default function InventoryPage() {
                      </div>
                   </section>
                ) : null}
-               <section className="card">
-                  <div className="section">
-                     <div className="section-header">
+               <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("inventory.ledgerTitle")}</h2>
-                           <p className="section-subtitle">{t("inventory.ledgerDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("inventory.ledgerTitle")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("inventory.ledgerDesc")}</p>
                         </div>
                         <Badge variant="outline">
                            {ledgerEntries.length} {t("common.records")}
@@ -499,7 +503,7 @@ export default function InventoryPage() {
                      <div className={`form-grid ${styles.inventoryLedgerFilters}`}>
                         <Field label={t("inventory.productFilter")}>
                            <select
-                              className="field-input"
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               value={ledgerFilters.productId}
                               onChange={(event) =>
                                  updateLedgerFilters({ ...ledgerFilters, productId: event.target.value })
@@ -515,7 +519,7 @@ export default function InventoryPage() {
                         </Field>
                         <Field label={t("inventory.siteFilter")}>
                            <select
-                              className="field-input"
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               value={ledgerFilters.siteId}
                               onChange={(event) =>
                                  updateLedgerFilters({
@@ -535,7 +539,7 @@ export default function InventoryPage() {
                         </Field>
                         <Field label={t("inventory.locationFilter")}>
                            <select
-                              className="field-input"
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               value={ledgerFilters.storageLocationId}
                               onChange={(event) =>
                                  updateLedgerFilters({ ...ledgerFilters, storageLocationId: event.target.value })
@@ -551,7 +555,7 @@ export default function InventoryPage() {
                         </Field>
                         <Field label={t("inventory.limit")}>
                            <select
-                              className="field-input"
+                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                               value={ledgerFilters.limit}
                               onChange={(event) =>
                                  updateLedgerFilters({ ...ledgerFilters, limit: Number(event.target.value) })
@@ -565,7 +569,7 @@ export default function InventoryPage() {
                            </select>
                         </Field>
                      </div>
-                     <div className={`form-actions ${styles.inventoryLedgerActions}`}>
+                     <div className={`flex flex-wrap justify-end gap-2 ${styles.inventoryLedgerActions}`}>
                         <Button variant="outline" onClick={handleResetLedgerFilters}>
                            {t("inventory.clearLedgerFilters")}
                         </Button>
@@ -638,7 +642,7 @@ function InventoryLedgerTable({
    const t = useT();
 
    return (
-      <div className="table-wrap">
+      <div className="overflow-x-auto">
          <table className={styles.inventoryLedgerTable}>
             <thead>
                <tr>

@@ -255,18 +255,18 @@ export default function StockAdjustmentPage() {
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
             {successMessage !== null ? <div className="notice success-note">{successMessage}</div> : null}
 
-            <section className="card">
-               <div className="section">
-                  <div className="section-header">
+            <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+               <div className="p-4">
+                  <div className="flex items-start justify-between gap-3">
                      <div>
-                        <h2 className="section-title">{t("adjustments.createTitle")}</h2>
-                        <p className="section-subtitle">{t("adjustments.createDesc")}</p>
+                        <h2 className="m-0 text-sm font-semibold text-foreground">{t("adjustments.createTitle")}</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">{t("adjustments.createDesc")}</p>
                      </div>
                   </div>
                   <div className="form-grid">
                      <Field label={t("adjustments.balance")} required>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={formValues.balanceId}
                            onChange={(event) => updateForm({ ...formValues, balanceId: event.target.value })}
                         >
@@ -280,7 +280,7 @@ export default function StockAdjustmentPage() {
                      </Field>
                      <Field label={t("adjustments.type")} required>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={formValues.adjustmentType}
                            onChange={(event) =>
                               updateForm({
@@ -295,7 +295,7 @@ export default function StockAdjustmentPage() {
                      </Field>
                      <Field label={t("adjustments.quantity")} required>
                         <input
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            type="number"
                            min="0"
                            step="0.01"
@@ -305,7 +305,7 @@ export default function StockAdjustmentPage() {
                      </Field>
                      <Field label={t("adjustments.reason")} required>
                         <input
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={formValues.reason}
                            onChange={(event) => updateForm({ ...formValues, reason: event.target.value })}
                            maxLength={200}
@@ -313,7 +313,7 @@ export default function StockAdjustmentPage() {
                      </Field>
                      <Field label={t("adjustments.notes")}>
                         <textarea
-                           className="field-input textarea"
+                           className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                            value={formValues.notes}
                            onChange={(event) => updateForm({ ...formValues, notes: event.target.value })}
                            maxLength={1000}
@@ -348,7 +348,7 @@ export default function StockAdjustmentPage() {
                      </div>
                   ) : null}
 
-                  <div className="form-actions">
+                  <div className="flex flex-wrap justify-end gap-2">
                      <Button onClick={() => void handleCreateAdjustment()} disabled={isSaving}>
                         {isSaving ? t("common.saving") : t("adjustments.createButton")}
                      </Button>
@@ -360,20 +360,20 @@ export default function StockAdjustmentPage() {
             </section>
 
             <div className={styles.adjustmentsGrid}>
-               <section className="card">
-                  <div className="section">
-                     <div className="section-header">
+               <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("adjustments.reviewTitle")}</h2>
-                           <p className="section-subtitle">{t("adjustments.reviewDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("adjustments.reviewTitle")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("adjustments.reviewDesc")}</p>
                         </div>
                         <Badge variant={pendingCount > 0 ? "outline" : "secondary"}>
                            {pendingCount} {t("adjustments.pending")}
                         </Badge>
                      </div>
-                     <div className={`section-toolbar ${styles.adjustmentsToolbar}`}>
+                     <div className={`flex flex-wrap items-center gap-2 ${styles.adjustmentsToolbar}`}>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.siteId}
                            onChange={(event) => updateFilters({ ...filters, siteId: event.target.value })}
                         >
@@ -385,7 +385,7 @@ export default function StockAdjustmentPage() {
                            ))}
                         </select>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={filters.status}
                            onChange={(event) => updateFilters({ ...filters, status: event.target.value })}
                         >
@@ -397,7 +397,7 @@ export default function StockAdjustmentPage() {
                            ))}
                         </select>
                         <select
-                           className="field-input"
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={String(filters.limit)}
                            onChange={(event) => updateFilters({ ...filters, limit: Number(event.target.value) })}
                         >
@@ -420,8 +420,8 @@ export default function StockAdjustmentPage() {
                            description={t("adjustments.emptyDesc")}
                         />
                      ) : (
-                        <div className="table-wrap">
-                           <table className={`selectable-table sites-table ${styles.adjustmentsTable}`}>
+                        <div className="overflow-x-auto">
+                           <table className={`w-full border-collapse text-sm ${styles.adjustmentsTable}`}>
                               <thead>
                                  <tr>
                                     <th>{t("adjustments.product")}</th>
@@ -477,12 +477,12 @@ export default function StockAdjustmentPage() {
                   </div>
                </section>
 
-               <aside className="card">
-                  <div className="section">
-                     <div className="section-header">
+               <aside className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+                  <div className="p-4">
+                     <div className="flex items-start justify-between gap-3">
                         <div>
-                           <h2 className="section-title">{t("adjustments.detailTitle")}</h2>
-                           <p className="section-subtitle">{t("adjustments.detailDesc")}</p>
+                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("adjustments.detailTitle")}</h2>
+                           <p className="mt-1 text-sm text-muted-foreground">{t("adjustments.detailDesc")}</p>
                         </div>
                      </div>
                      {selectedAdjustment === null ? (
@@ -492,11 +492,13 @@ export default function StockAdjustmentPage() {
                            description={t("adjustments.noSelectionDesc")}
                         />
                      ) : (
-                        <div className={`entity-form ${styles.adjustmentsDetail}`}>
-                           <div className="section-header">
+                        <div className={`grid gap-3 ${styles.adjustmentsDetail}`}>
+                           <div className="flex items-start justify-between gap-3">
                               <div>
-                                 <h3 className="section-title">{productName(selectedAdjustment.productId)}</h3>
-                                 <p className="section-subtitle">
+                                 <h3 className="m-0 text-sm font-semibold text-foreground">
+                                    {productName(selectedAdjustment.productId)}
+                                 </h3>
+                                 <p className="mt-1 text-sm text-muted-foreground">
                                     {siteName(selectedAdjustment.siteId)} ·{" "}
                                     {storageLocationName(selectedAdjustment.storageLocationId)}
                                  </p>
@@ -553,13 +555,13 @@ export default function StockAdjustmentPage() {
                               <>
                                  <Field label={t("adjustments.approvalNotes")}>
                                     <textarea
-                                       className="field-input textarea"
+                                       className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                                        value={approvalNotes}
                                        onChange={(event) => setApprovalNotes(event.target.value)}
                                        maxLength={1000}
                                     />
                                  </Field>
-                                 <div className="form-actions">
+                                 <div className="flex flex-wrap justify-end gap-2">
                                     <Button onClick={() => void handleApproveAdjustment()} disabled={isSaving}>
                                        {isSaving ? t("common.saving") : t("adjustments.approveButton")}
                                     </Button>
