@@ -92,3 +92,5 @@ docs/*
 !docs/Architecture.md
 !docs/ProjectInfo.md
 bin-build
+.lazyweb/
+.cloudflared/
