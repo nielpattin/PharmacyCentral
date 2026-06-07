@@ -1,26 +1,26 @@
-# Pharmacy Central API Guide
+# Hướng dẫn API Pharmacy Central
 
-The API is exposed under `/api` from `Web.Api`.
+API được expose dưới prefix `/api` từ project `Web.Api`.
 
-Development HTTPS endpoint is usually:
+Development HTTPS endpoint thường là:
 
 ```text
 https://localhost:7528/api
 ```
 
-Use the actual Aspire resource URL if it differs.
+Nếu Aspire cấp URL khác, dùng đúng URL của resource đang chạy.
 
-## Authentication and CSRF
+## Authentication và CSRF
 
-The API uses cookie authentication and antiforgery validation for unsafe requests.
+API dùng cookie authentication và antiforgery validation cho các request thay đổi dữ liệu.
 
-Important rules:
+Quy tắc quan trọng:
 
-- Use HTTPS for CSRF in development.
-- Get a CSRF token before login.
-- Login with the token and session cookie.
-- Fetch a fresh CSRF token after login before POST/PUT/PATCH/DELETE requests.
-- Send the token in `X-CSRF-TOKEN`.
+- Dùng HTTPS cho CSRF trong development.
+- Lấy CSRF token trước khi login.
+- Login bằng token và session cookie.
+- Sau khi login, lấy CSRF token mới trước khi gọi POST/PUT/PATCH/DELETE.
+- Gửi token trong header `X-CSRF-TOKEN`.
 
 Example with `curl`:
 
@@ -42,37 +42,38 @@ TOKEN=$(curl -ks -b "$COOKIE" -c "$COOKIE" "$BASE/auth/csrf" | jq -r .token)
 curl -k -b "$COOKIE" "$BASE/auth/me"
 ```
 
-Payment provider webhooks are the exception to the normal browser session flow. They do not use cookie authentication or CSRF because the caller is an external payment provider. Provider webhook endpoints must validate their configured signature before accepting a confirmation.
+Payment provider webhook là ngoại lệ so với flow browser session bình thường. Webhook không dùng cookie authentication hoặc CSRF vì caller là payment provider bên ngoài. Endpoint webhook phải kiểm tra chữ ký đã cấu hình trước khi chấp nhận xác nhận thanh toán.
 
 ## Idempotency
 
-Prescription creation and dispensing accept an `Idempotency-Key` header. Reusing the same key for a successful request returns the same successful response instead of performing the operation twice.
+Prescription creation và dispensing nhận header `Idempotency-Key`. Nếu dùng lại cùng key cho request đã thành công, API trả lại response thành công cũ thay vì thực hiện nghiệp vụ lần thứ hai.
 
-Example:
+Ví dụ:
 
 ```bash
 -H "Idempotency-Key: prescription-create-2026-01-01-001"
 ```
 
-Payment creation may use the same retry pattern where a UI action could be submitted more than once. Provider webhook confirmations must also be idempotent by provider transaction ID.
+Payment creation có thể dùng cùng pattern retry khi UI action có nguy cơ submit nhiều lần. Provider webhook confirmation phải idempotent theo provider transaction ID.
 
-## Authorization model
+## Mô hình phân quyền
 
-Endpoints enforce role policies and site access server-side.
+Endpoint enforce role policy và site access ở backend.
 
-| Policy area | Typical roles |
+| Policy area | Role được phép |
 | --- | --- |
 | Any app role | Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff |
 | Management | Platform Admin, Pharmacy Manager |
-| Store | Platform Admin, Pharmacy Manager, Pharmacist |
+| Counter sale | Pharmacist |
+| Store | Pharmacist |
 | Warehouse | Platform Admin, Warehouse Staff |
 | Platform Admin | Platform Admin |
 
-Non-admin users can only access assigned-site data.
+User không phải Platform Admin chỉ truy cập được dữ liệu thuộc site được gán.
 
-## Common endpoints
+## Endpoint thường dùng
 
-### Auth
+### Xác thực
 
 | Method | Path | Notes |
 | --- | --- | --- |
@@ -83,7 +84,7 @@ Non-admin users can only access assigned-site data.
 | POST | `/api/auth/register` | Development/internal registration path |
 | POST | `/api/auth/change-password` | Change the current user's password |
 
-### Admin users
+### Người dùng admin
 
 | Method | Path |
 | --- | --- |
@@ -94,7 +95,7 @@ Non-admin users can only access assigned-site data.
 | POST | `/api/admin/users/{id}/reset-password` | Reset a user's password |
 | POST | `/api/admin/users/{id}/revoke-sessions` | Sign out a user's active sessions |
 
-### Dashboard, reporting, and audit
+### Tổng quan, báo cáo và audit
 
 | Method | Path |
 | --- | --- |
@@ -102,7 +103,7 @@ Non-admin users can only access assigned-site data.
 | GET | `/api/audit/logs` |
 | GET | `/api/finance/summary` | Finance valuation and operational reconciliation |
 
-### Payments and invoices
+### Thanh toán và hóa đơn
 
 | Method | Path | Notes |
 | --- | --- | --- |
@@ -111,9 +112,9 @@ Non-admin users can only access assigned-site data.
 | GET | `/api/payments/{paymentId}/invoice` | Get printable invoice details |
 | POST | `/api/payments/sepay/webhook` | SePay provider webhook; no session/CSRF, protected by HMAC |
 
-Staff payment endpoints use Store policy and site access enforcement. The SePay webhook endpoint is public at the transport level but must verify the `x-SePay-Signature` HMAC-SHA256 header before mapping the provider payload into the neutral payment confirmation use case.
+Các endpoint thanh toán tại quầy dùng policy CounterSale và site access enforcement. Endpoint SePay webhook public ở transport level nhưng bắt buộc kiểm tra header HMAC-SHA256 `x-SePay-Signature` trước khi map payload của provider vào use case xác nhận thanh toán trung lập.
 
-Webhook handling requirements:
+Yêu cầu xử lý webhook:
 
 - accept only inbound transfer confirmations;
 - match by payment code, provider and amount;
@@ -122,7 +123,7 @@ Webhook handling requirements:
 - return `200 { "success": true }` quickly for accepted or duplicate confirmations;
 - avoid exposing secret values or raw provider internals in user-facing responses.
 
-### Master data
+### Dữ liệu nền
 
 | Area | Paths |
 | --- | --- |
@@ -131,7 +132,7 @@ Webhook handling requirements:
 | Products | `/api/products`, `/api/products/{id}` |
 | Suppliers | `/api/suppliers`, `/api/suppliers/{id}` |
 
-### Pricing
+### Định giá
 
 | Method | Path |
 | --- | --- |
@@ -141,7 +142,7 @@ Webhook handling requirements:
 | POST | `/api/pricing/prices/{id}/archive` |
 | GET | `/api/pricing/active?productId={id}&siteId={id}&effectiveDate=2031-06-01` |
 
-### Procurement and receiving
+### Mua hàng và nhận hàng
 
 | Method | Path |
 | --- | --- |
@@ -153,7 +154,7 @@ Webhook handling requirements:
 | GET | `/api/goods-receipts` |
 | POST | `/api/goods-receipts` |
 
-### Inventory
+### Tồn kho
 
 | Method | Path |
 | --- | --- |
@@ -162,7 +163,7 @@ Webhook handling requirements:
 | POST | `/api/inventory/movements` |
 | POST | `/api/inventory/fefo-allocate` |
 
-### Quality and recall
+### Chất lượng và thu hồi
 
 | Method | Path |
 | --- | --- |
@@ -175,7 +176,7 @@ Webhook handling requirements:
 | POST | `/api/recalls/{id}/cancel` |
 | POST | `/api/recalls/{id}/batches/{affectedBatchId}/action` |
 
-### Prescriptions
+### Quầy bán thuốc
 
 | Method | Path |
 | --- | --- |
@@ -185,9 +186,9 @@ Webhook handling requirements:
 | POST | `/api/prescriptions/{id}/dispense` |
 | POST | `/api/prescriptions/{id}/cancel` |
 
-When payment is enabled and a prescription requires payment, dispensing is blocked until the related payment invoice is confirmed as paid.
+Khi payment được bật và phiếu bán cần thanh toán, thao tác cấp phát bị chặn cho đến khi hóa đơn thanh toán liên quan được xác nhận đã thanh toán.
 
-### Transfers
+### Điều chuyển
 
 | Method | Path |
 | --- | --- |
@@ -199,13 +200,13 @@ When payment is enabled and a prescription requires payment, dispensing is block
 | POST | `/api/transfers/{id}/receive` |
 | POST | `/api/transfers/{id}/cancel` |
 
-### Returns/removals
+### Trả hàng/loại bỏ
 
 | Method | Path |
 | --- | --- |
 | POST | `/api/returns` |
 
-### Stocktake and adjustments
+### Kiểm kê và điều chỉnh
 
 | Method | Path |
 | --- | --- |
@@ -218,7 +219,7 @@ When payment is enabled and a prescription requires payment, dispensing is block
 | POST | `/api/stock-adjustments` |
 | POST | `/api/stock-adjustments/{id}/approve` |
 
-## Example: create a product
+## Ví dụ: tạo sản phẩm
 
 ```bash
 TOKEN=$(curl -ks -b "$COOKIE" -c "$COOKIE" "$BASE/auth/csrf" | jq -r .token)
@@ -239,7 +240,7 @@ curl -k -b "$COOKIE" -c "$COOKIE" \
   "$BASE/products"
 ```
 
-## Error handling
+## Xử lý lỗi
 
 The API returns standard HTTP statuses. Common responses:
 

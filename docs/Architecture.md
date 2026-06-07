@@ -1,12 +1,12 @@
-# Pharmacy Central Architecture
+# Kiến trúc Pharmacy Central
 
-## Purpose
+## Mục đích
 
-This document explains the current implemented architecture of Pharmacy Central. It is not a future proposal. Use it to understand how the running application is structured, where code belongs, and which architectural rules must stay true when the product changes.
+Tài liệu này mô tả kiến trúc đang được triển khai trong Pharmacy Central. Đây không phải proposal tương lai. Dùng tài liệu này để hiểu app đang chạy như thế nào, code thuộc về đâu và những quy tắc kiến trúc nào phải giữ đúng khi sản phẩm thay đổi.
 
-## Current system shape
+## Hình dạng hệ thống hiện tại
 
-Pharmacy Central is a single internal web application for pharmacy and warehouse operations. It uses one React SPA, one ASP.NET Core backend, PostgreSQL, and Aspire for local orchestration.
+Pharmacy Central là một web app nội bộ duy nhất cho vận hành nhà thuốc và kho. Hệ thống dùng một React SPA, một backend ASP.NET Core, PostgreSQL và Aspire cho local orchestration.
 
 ```mermaid
 flowchart LR
@@ -21,7 +21,7 @@ flowchart LR
     Aspire --> Db
 ```
 
-## Implemented stack
+## Stack đang triển khai
 
 | Area | Current implementation |
 | --- | --- |
@@ -36,7 +36,7 @@ flowchart LR
 
 Do not add stack claims to this document unless the library, service, or workflow exists in the repository.
 
-## Runtime topology
+## Topology runtime
 
 ```mermaid
 flowchart TB
@@ -52,7 +52,7 @@ flowchart TB
     UseCases --> Payments[Payment and invoice workflow]
 ```
 
-## Code architecture decision
+## Quyết định kiến trúc code
 
 Pharmacy Central uses a hybrid of:
 
@@ -72,7 +72,7 @@ flowchart BT
     Domain --> SharedKernel
 ```
 
-### Dependency rules
+### Quy tắc dependency
 
 - `Domain` contains entities, statuses and stable business concepts.
 - `Application` contains use-case orchestration and abstractions.
@@ -81,7 +81,7 @@ flowchart BT
 - `Domain` and `Application` must not reference EF Core, ASP.NET Core, Web.Api, or Infrastructure.
 - Payment core must stay provider-neutral. External payment providers are adapters at the infrastructure/API boundary, not domain concepts.
 
-## Vertical slice layout
+## Bố cục vertical slice
 
 Application features are organized by capability and use case:
 
@@ -116,7 +116,7 @@ src/Web.Api/Endpoints/<Feature>/
 
 Endpoints should stay thin: auth policy, site access, request mapping, current-user extraction and response mapping only.
 
-## Access model
+## Mô hình truy cập
 
 The backend enforces both role policy and site access.
 
@@ -137,13 +137,14 @@ flowchart TD
 | --- | --- |
 | AnyRole | Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff |
 | Management | Platform Admin, Pharmacy Manager |
-| Store | Platform Admin, Pharmacy Manager, Pharmacist |
+| CounterSale | Pharmacist |
+| Store | Pharmacist |
 | Warehouse | Platform Admin, Warehouse Staff |
 | PlatformAdmin | Platform Admin only |
 
 Site-bound list endpoints filter data by assigned site IDs for non-admin users. Site-bound write endpoints reject unassigned sites.
 
-## Main business modules
+## Module nghiệp vụ chính
 
 | Module | Current responsibility |
 | --- | --- |
@@ -155,7 +156,7 @@ Site-bound list endpoints filter data by assigned site IDs for non-admin users. 
 | Receiving | Supplier delivery capture and optional PO matching |
 | Quality | Batch release/reject before operational use |
 | Inventory | Balances, availability, history and controlled corrections |
-| Prescriptions | Reservation, cancellation and dispensing |
+| Quầy bán thuốc và cấp phát | Chỉ Pharmacist tạo phiếu bán hiện tại, giữ hàng, thanh toán, hủy và cấp phát |
 | Transfers | Approve, ship and receive stock between locations |
 | Returns/removals | Supplier returns, damage, expiry, recall or other removals |
 | Stocktake/adjustments | Count sessions, variance posting and approval |
@@ -165,7 +166,7 @@ Site-bound list endpoints filter data by assigned site IDs for non-admin users. 
 | Audit | Business activity traceability |
 | Users | Internal user, role, site access and account controls |
 
-## Stock availability controls
+## Kiểm soát lượng hàng có thể dùng
 
 ```mermaid
 flowchart TD
@@ -184,15 +185,15 @@ flowchart TD
 
 A batch is operationally usable only when it has available quantity, is quality-released, is not blocked by active recall, and the user has role/site access.
 
-## Transaction and reliability rules
+## Quy tắc giao dịch và độ tin cậy
 
 - EF Core migrations manage schema.
 - `Web.Api` applies migrations on startup.
 - Fresh Aspire dev databases bootstrap the EF migration history table before migration.
-- Prescription creation reserves available stock.
-- Prescription cancellation releases held quantity.
-- Prescription dispensing consumes held quantity.
-- Prescription create/dispense support `Idempotency-Key` retry behavior.
+- Current sale ticket creation reserves available stock.
+- Current sale ticket cancellation releases held quantity.
+- Dispensing consumes held quantity.
+- Current sale ticket create/dispense support `Idempotency-Key` retry behavior.
 - Creator identity and approver identity are taken from authenticated claims, not request bodies.
 - High-risk approvals block self-approval where required.
 - Critical business actions write audit activity.
@@ -201,7 +202,7 @@ A batch is operationally usable only when it has available quantity, is quality-
 - External payment confirmations are matched atomically by provider, payment code, amount and status.
 - Payment providers are integrated through adapters. SePay is the first provider adapter for VietQR and webhook confirmation.
 
-## Data model overview
+## Tổng quan data model
 
 ```mermaid
 classDiagram
@@ -223,7 +224,7 @@ classDiagram
     RecallCase "1" --> "many" AffectedBatch
 ```
 
-## Deployment and packaging reality
+## Thực tế đóng gói và deployment
 
 The repository currently supports:
 
@@ -232,7 +233,7 @@ The repository currently supports:
 - A PostgreSQL container in `docker-compose.yml`.
 - GitHub Actions build validation only; no image push or real deployment step.
 
-## Bootstrap and first administrator setup
+## Bootstrap và setup quản trị viên đầu tiên
 
 For local/demo convenience, the seeder can create a development administrator. This is controlled by:
 
@@ -246,7 +247,7 @@ When `PHARMACY_SEED_ADMIN_USER=false` and no Platform Admin exists, the login pa
 
 This keeps two supported paths: seeded development credentials for fast local work, and a first-run setup flow for validating a fresh workspace without demo users or business seed data.
 
-## Payment and invoice architecture
+## Kiến trúc thanh toán và hóa đơn
 
 Payments are modeled as a provider-neutral business capability. The domain does not know about SePay, VietQR, webhook headers or any provider-specific payload shape. It only tracks invoices, invoice lines, payment attempts, transactions, provider identity and payment status.
 
