@@ -1,12 +1,16 @@
 import { ClipboardCheck } from "lucide-react";
+import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/shadcn/card";
+import { Label } from "../components/shadcn/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/shadcn/table";
+import { Textarea } from "../components/shadcn/textarea";
 import { EmptyState } from "../components/ui/EmptyState";
-import { Field } from "../components/ui/Field";
 import {
    loadInventoryBalances,
    loadSites,
@@ -35,24 +39,10 @@ function formatQuantity(value: number) {
    return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
 }
 
-function siteName(sites: SiteDto[], siteId: string) {
-   return sites.find((site) => site.id === siteId)?.name ?? siteId;
-}
-
-function locationName(locations: StorageLocationDto[], locationId: string) {
-   return locations.find((location) => location.id === locationId)?.name ?? locationId;
-}
-
-function statusTone(status: string) {
-   if (status === "Released") {
-      return "ok" as const;
-   }
-
-   if (status === "Rejected") {
-      return "bad" as const;
-   }
-
-   return "warn" as const;
+function statusVariant(status: string) {
+   if (status === "Released") return "secondary" as const;
+   if (status === "Rejected") return "destructive" as const;
+   return "outline" as const;
 }
 
 export default function QualityPage() {
@@ -73,6 +63,9 @@ export default function QualityPage() {
    }, [balances]);
 
    const selectedBalance = reviewBalances.find((balance) => balance.productBatchId === form.batchId) ?? null;
+   const siteName = (siteId: string) => sites.find((site) => site.id === siteId)?.name ?? t("common.noData");
+   const locationName = (locationId: string) =>
+      locations.find((location) => location.id === locationId)?.name ?? t("common.noData");
 
    async function loadPageData() {
       setIsLoading(true);
@@ -127,119 +120,154 @@ export default function QualityPage() {
    return (
       <AppShell
          active="quality"
-         breadcrumb={<Breadcrumbs items={[{ label: t("nav.dashboard"), href: "/dashboard" }, { label: t("nav.quality") }]} />}
+         breadcrumb={
+            <Breadcrumbs items={[{ label: t("nav.dashboard"), href: "/dashboard" }, { label: t("nav.quality") }]} />
+         }
       >
-         <main className={`${styles.qualityPage} stack-page`}>
+         <main className={styles.page}>
             <PageHeader
                title={t("quality.title")}
                description={t("quality.description")}
-               actions={<Button onClick={() => void loadPageData()}>{t("common.refresh")}</Button>}
+               actions={
+                  <Button variant="outline" onClick={() => void loadPageData()}>
+                     {t("common.refresh")}
+                  </Button>
+               }
             />
 
             {bannerError !== null ? <div className="form-banner error">{bannerError}</div> : null}
             {successMessage !== null ? <div className="form-banner success">{successMessage}</div> : null}
 
-            <section className="card section">
-               <div className="section-heading">
+            <Card className={styles.card}>
+               <CardHeader className={styles.cardHeader}>
                   <div>
-                     <h2>{t("quality.pendingTitle")}</h2>
-                     <p>{t("quality.pendingSubtitle")}</p>
+                     <CardTitle>{t("quality.pendingTitle")}</CardTitle>
+                     <CardDescription>{t("quality.pendingSubtitle")}</CardDescription>
                   </div>
-                  <Badge tone={reviewBalances.length === 0 ? "ok" : "warn"}>{reviewBalances.length}</Badge>
-               </div>
-
-               {isLoading ? (
-                  <p>{t("common.loading")}</p>
-               ) : reviewBalances.length === 0 ? (
-                  <EmptyState icon={<ClipboardCheck size={24} />} title={t("quality.emptyTitle")} description={t("quality.emptyDescription")} />
-               ) : (
-                  <div className="table-wrap">
-                     <table>
-                        <thead>
-                           <tr>
-                              <th>{t("quality.product")}</th>
-                              <th>{t("quality.batch")}</th>
-                              <th>{t("quality.location")}</th>
-                              <th>{t("quality.quantity")}</th>
-                              <th>{t("quality.status")}</th>
-                              <th>{t("common.actions")}</th>
-                           </tr>
-                        </thead>
-                        <tbody>
-                           {reviewBalances.map((balance) => (
-                              <tr key={`${balance.productBatchId}-${balance.storageLocationId}`}>
-                                 <td>
+                  <Badge variant={reviewBalances.length === 0 ? "secondary" : "outline"}>{reviewBalances.length}</Badge>
+               </CardHeader>
+               <CardContent className={styles.cardContent}>
+                  {isLoading ? (
+                     <p>{t("common.loading")}</p>
+                  ) : reviewBalances.length === 0 ? (
+                     <EmptyState
+                        icon={<ClipboardCheck size={24} />}
+                        title={t("quality.emptyTitle")}
+                        description={t("quality.emptyDescription")}
+                     />
+                  ) : (
+                     <Table className={styles.table}>
+                        <TableHeader>
+                           <TableRow>
+                              <TableHead>{t("quality.product")}</TableHead>
+                              <TableHead>{t("quality.batch")}</TableHead>
+                              <TableHead>{t("quality.location")}</TableHead>
+                              <TableHead>{t("quality.quantity")}</TableHead>
+                              <TableHead>{t("quality.status")}</TableHead>
+                              <TableHead>{t("common.actions")}</TableHead>
+                           </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                           {reviewBalances.map((balance, index) => (
+                              <motion.tr
+                                 key={`${balance.productBatchId}-${balance.storageLocationId}`}
+                                 layout
+                                 initial={{ opacity: 0, y: 6 }}
+                                 animate={{ opacity: 1, y: 0 }}
+                                 transition={{ duration: 0.12, delay: index * 0.01, ease: [0.2, 0, 0, 1] }}
+                              >
+                                 <TableCell>
                                     <strong>{balance.productName}</strong>
-                                    <span className="muted block">{balance.productSku}</span>
-                                 </td>
-                                 <td>
+                                    <span className={styles.mutedBlock}>{balance.productSku}</span>
+                                 </TableCell>
+                                 <TableCell>
                                     <strong>{balance.batchNumber}</strong>
-                                    <span className="muted block">{balance.expiryDate}</span>
-                                 </td>
-                                 <td>
-                                    {siteName(sites, balance.siteId)}
-                                    <span className="muted block">{locationName(locations, balance.storageLocationId)}</span>
-                                 </td>
-                                 <td>{formatQuantity(balance.quantityOnHand)}</td>
-                                 <td>
-                                    <Badge tone={statusTone(balance.qualityStatus)}>{t(`quality.status.${balance.qualityStatus}`)}</Badge>
-                                 </td>
-                                 <td>
-                                    <Button size="sm" variant="secondary" onClick={() => setForm({ ...form, batchId: balance.productBatchId })}>
+                                    <span className={styles.mutedBlock}>{balance.expiryDate}</span>
+                                 </TableCell>
+                                 <TableCell>
+                                    {siteName(balance.siteId)}
+                                    <span className={styles.mutedBlock}>{locationName(balance.storageLocationId)}</span>
+                                 </TableCell>
+                                 <TableCell>{formatQuantity(balance.quantityOnHand)}</TableCell>
+                                 <TableCell>
+                                    <Badge variant={statusVariant(balance.qualityStatus)}>
+                                       {t(`quality.status.${balance.qualityStatus}`)}
+                                    </Badge>
+                                 </TableCell>
+                                 <TableCell>
+                                    <Button
+                                       size="sm"
+                                       variant="outline"
+                                       onClick={() => setForm({ ...form, batchId: balance.productBatchId })}
+                                    >
                                        {t("quality.select")}
                                     </Button>
-                                 </td>
-                              </tr>
+                                 </TableCell>
+                              </motion.tr>
                            ))}
-                        </tbody>
-                     </table>
-                  </div>
-               )}
-            </section>
+                        </TableBody>
+                     </Table>
+                  )}
+               </CardContent>
+            </Card>
 
-            <section className={`card section ${styles.qualityReviewCard}`}>
-               <div className="section-heading">
+            <Card className={styles.card}>
+               <CardHeader className={styles.cardHeader}>
                   <div>
-                     <h2>{t("quality.reviewTitle")}</h2>
-                     <p>{t("quality.reviewSubtitle")}</p>
+                     <CardTitle>{t("quality.reviewTitle")}</CardTitle>
+                     <CardDescription>{t("quality.reviewSubtitle")}</CardDescription>
                   </div>
-               </div>
-
-               <div className="form-grid two-columns">
-                  <Field label={t("quality.selectedBatch")}>
-                     <select value={form.batchId} onChange={(event) => setForm({ ...form, batchId: event.target.value })}>
-                        <option value="">{t("quality.selectBatch")}</option>
-                        {reviewBalances.map((balance) => (
-                           <option key={balance.productBatchId} value={balance.productBatchId}>
-                              {balance.productName} · {balance.batchNumber} · {siteName(sites, balance.siteId)}
-                           </option>
-                        ))}
-                     </select>
-                  </Field>
-
-                  <Field label={t("quality.notes")}>
-                     <textarea value={form.notes} rows={3} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
-                  </Field>
-               </div>
-
-               {selectedBalance !== null ? (
-                  <div className={styles.qualityContext}>
-                     <strong>{selectedBalance.productName}</strong>
-                     <span>{selectedBalance.batchNumber}</span>
-                     <span>{siteName(sites, selectedBalance.siteId)}</span>
-                     <span>{formatQuantity(selectedBalance.quantityOnHand)}</span>
+               </CardHeader>
+               <CardContent className={styles.reviewContent}>
+                  <div className={styles.formGrid}>
+                     <div className={styles.field}>
+                        <Label>{t("quality.selectedBatch")}</Label>
+                        <select
+                           className="field-input"
+                           value={form.batchId}
+                           onChange={(event) => setForm({ ...form, batchId: event.target.value })}
+                        >
+                           <option value="">{t("quality.selectBatch")}</option>
+                           {reviewBalances.map((balance) => (
+                              <option key={balance.productBatchId} value={balance.productBatchId}>
+                                 {balance.productName} · {balance.batchNumber} · {siteName(balance.siteId)}
+                              </option>
+                           ))}
+                        </select>
+                     </div>
+                     <div className={styles.field}>
+                        <Label>{t("quality.notes")}</Label>
+                        <Textarea
+                           value={form.notes}
+                           rows={3}
+                           onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                        />
+                     </div>
                   </div>
-               ) : null}
 
-               <div className="form-actions">
-                  <Button variant="primary" disabled={isSubmitting} onClick={() => void submitDecision("release")}>
-                     {isSubmitting ? t("common.saving") : t("quality.release")}
-                  </Button>
-                  <Button variant="danger" disabled={isSubmitting} onClick={() => void submitDecision("reject")}>
-                     {isSubmitting ? t("common.saving") : t("quality.reject")}
-                  </Button>
-               </div>
-            </section>
+                  {selectedBalance !== null ? (
+                     <div className={styles.context}>
+                        <strong>{selectedBalance.productName}</strong>
+                        <span>{selectedBalance.batchNumber}</span>
+                        <span>{siteName(selectedBalance.siteId)}</span>
+                        <span>{formatQuantity(selectedBalance.quantityOnHand)}</span>
+                     </div>
+                  ) : null}
+
+                  <div className={styles.actions}>
+                     <Button disabled={isSubmitting} onClick={() => void submitDecision("release")}>
+                        {isSubmitting ? t("common.saving") : t("quality.release")}
+                     </Button>
+                     <Button
+                        variant="destructive"
+                        disabled={isSubmitting}
+                        onClick={() => void submitDecision("reject")}
+                     >
+                        {isSubmitting ? t("common.saving") : t("quality.reject")}
+                     </Button>
+                  </div>
+               </CardContent>
+            </Card>
          </main>
       </AppShell>
    );
