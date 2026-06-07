@@ -1,12 +1,17 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { motion } from "motion/react";
 import { AppShell } from "../components/layout/AppShell";
 import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { Badge } from "../components/shadcn/badge";
+import { Button } from "../components/shadcn/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/shadcn/card";
+import { Input } from "../components/shadcn/input";
+import { Label } from "../components/shadcn/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/shadcn/table";
+import { Textarea } from "../components/shadcn/textarea";
 import { EmptyState } from "../components/ui/EmptyState";
-import { Field } from "../components/ui/Field";
 import {
    activateRecall,
    closeRecall,
@@ -45,16 +50,11 @@ function formatDate(value: string | null) {
    return value === null ? "—" : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
 }
 
-function siteName(sites: SiteDto[], siteId: string | null) {
-   if (siteId === null) return "All sites";
-   return sites.find((site) => site.id === siteId)?.name ?? siteId;
-}
-
-function statusTone(status: string) {
-   if (status === "Active" || status === "Quarantined") return "warn" as const;
-   if (status === "Closed" || status === "Released") return "ok" as const;
-   if (status === "Cancelled" || status === "Destroyed" || status === "Removed") return "bad" as const;
-   return "role" as const;
+function statusVariant(status: string) {
+   if (status === "Active" || status === "Quarantined") return "outline" as const;
+   if (status === "Closed" || status === "Released") return "secondary" as const;
+   if (status === "Cancelled" || status === "Destroyed" || status === "Removed") return "destructive" as const;
+   return "default" as const;
 }
 
 export default function RecallPage() {
@@ -78,8 +78,11 @@ export default function RecallPage() {
    }, [balances]);
 
    const selectedBalance = balances.find(
-      (balance) => balance.productBatchId === form.productBatchId && (form.siteId === "" || balance.siteId === form.siteId),
+      (balance) =>
+         balance.productBatchId === form.productBatchId && (form.siteId === "" || balance.siteId === form.siteId),
    );
+   const siteName = (siteId: string | null) =>
+      siteId === null ? t("recalls.allSites") : (sites.find((site) => site.id === siteId)?.name ?? t("common.noData"));
 
    async function refresh() {
       setIsLoading(true);
@@ -114,7 +117,13 @@ export default function RecallPage() {
             title: form.title,
             reason: form.reason,
             notes: form.notes === "" ? null : form.notes,
-            affectedBatches: [{ productBatchId: form.productBatchId, siteId: form.siteId === "" ? null : form.siteId, notes: form.notes === "" ? null : form.notes }],
+            affectedBatches: [
+               {
+                  productBatchId: form.productBatchId,
+                  siteId: form.siteId === "" ? null : form.siteId,
+                  notes: form.notes === "" ? null : form.notes,
+               },
+            ],
          });
          await activateRecall(created.id, form.notes);
          setForm(defaultForm);
@@ -140,30 +149,53 @@ export default function RecallPage() {
    return (
       <AppShell
          active="recalls"
-         breadcrumb={<Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.recalls") }]} />}
+         breadcrumb={
+            <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.recalls") }]} />
+         }
       >
-         <div className={`${styles.reportingPage} ${styles.recallPage}`}>
-            <PageHeader title={t("recalls.title")} description={t("recalls.description")} actions={<Button onClick={() => void refresh()}>{t("common.refresh")}</Button>} />
+         <div className={styles.page}>
+            <PageHeader
+               title={t("recalls.title")}
+               description={t("recalls.description")}
+               actions={
+                  <Button variant="outline" onClick={() => void refresh()}>
+                     {t("common.refresh")}
+                  </Button>
+               }
+            />
 
             {bannerError !== null ? <div className="form-banner error">{bannerError}</div> : null}
             {successMessage !== null ? <div className="form-banner success">{successMessage}</div> : null}
 
-            <section className={`card section ${styles.recallFormCard}`}>
-               <div className="section-head">
+            <Card className={styles.card}>
+               <CardHeader className={styles.cardHeader}>
                   <div>
-                     <h2>{t("recalls.newTitle")}</h2>
-                     <p>{t("recalls.newDescription")}</p>
+                     <CardTitle>{t("recalls.newTitle")}</CardTitle>
+                     <CardDescription>{t("recalls.newDescription")}</CardDescription>
                   </div>
-               </div>
-               <div className="form-grid three">
-                  <Field label={t("recalls.number")}>
-                     <input value={form.recallNumber} onChange={(event) => setForm((current) => ({ ...current, recallNumber: event.target.value }))} />
-                  </Field>
-                  <Field label={t("recalls.caseTitle")}>
-                     <input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
-                  </Field>
-                  <Field label={t("recalls.batch")}>
-                     <select value={form.productBatchId} onChange={(event) => setForm((current) => ({ ...current, productBatchId: event.target.value }))}>
+               </CardHeader>
+               <CardContent className={styles.formGrid}>
+                  <div className={styles.field}>
+                     <Label>{t("recalls.number")}</Label>
+                     <Input
+                        value={form.recallNumber}
+                        onChange={(event) => setForm((current) => ({ ...current, recallNumber: event.target.value }))}
+                     />
+                  </div>
+                  <div className={styles.field}>
+                     <Label>{t("recalls.caseTitle")}</Label>
+                     <Input
+                        value={form.title}
+                        onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                     />
+                  </div>
+                  <div className={styles.field}>
+                     <Label>{t("recalls.batch")}</Label>
+                     <select
+                        className="field-input"
+                        value={form.productBatchId}
+                        onChange={(event) => setForm((current) => ({ ...current, productBatchId: event.target.value }))}
+                     >
                         <option value="">{t("recalls.selectBatch")}</option>
                         {batchOptions.map((balance) => (
                            <option key={balance.productBatchId} value={balance.productBatchId}>
@@ -171,74 +203,167 @@ export default function RecallPage() {
                            </option>
                         ))}
                      </select>
-                  </Field>
-                  <Field label={t("recalls.siteScope")}>
-                     <select value={form.siteId} onChange={(event) => setForm((current) => ({ ...current, siteId: event.target.value }))}>
+                  </div>
+                  <div className={styles.field}>
+                     <Label>{t("recalls.siteScope")}</Label>
+                     <select
+                        className="field-input"
+                        value={form.siteId}
+                        onChange={(event) => setForm((current) => ({ ...current, siteId: event.target.value }))}
+                     >
                         <option value="">{t("recalls.allSites")}</option>
-                        {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+                        {sites.map((site) => (
+                           <option key={site.id} value={site.id}>
+                              {site.name}
+                           </option>
+                        ))}
                      </select>
-                  </Field>
-                  <Field label={t("recalls.reason")}>
-                     <input value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} />
-                  </Field>
-                  <Field label={t("recalls.notes")}>
-                     <input value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
-                  </Field>
-               </div>
-               {selectedBalance !== undefined ? <p className="muted">{selectedBalance.productName} · {selectedBalance.batchNumber} · {siteName(sites, selectedBalance.siteId)} · {selectedBalance.quantityOnHand}</p> : null}
-               <div className="form-actions">
-                  <Button variant="primary" disabled={isSubmitting || form.recallNumber === "" || form.title === "" || form.reason === "" || form.productBatchId === ""} onClick={() => void handleCreateRecall()}>
-                     {isSubmitting ? t("common.saving") : t("recalls.create")}
-                  </Button>
-               </div>
-            </section>
+                  </div>
+                  <div className={styles.field}>
+                     <Label>{t("recalls.reason")}</Label>
+                     <Input
+                        value={form.reason}
+                        onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
+                     />
+                  </div>
+                  <div className={styles.field}>
+                     <Label>{t("recalls.notes")}</Label>
+                     <Textarea
+                        value={form.notes}
+                        onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
+                     />
+                  </div>
+                  {selectedBalance !== undefined ? (
+                     <p className={styles.selectedContext}>
+                        {selectedBalance.productName} · {selectedBalance.batchNumber} ·{" "}
+                        {siteName(selectedBalance.siteId)} · {selectedBalance.quantityOnHand}
+                     </p>
+                  ) : null}
+                  <div className={styles.actions}>
+                     <Button
+                        disabled={
+                           isSubmitting ||
+                           form.recallNumber === "" ||
+                           form.title === "" ||
+                           form.reason === "" ||
+                           form.productBatchId === ""
+                        }
+                        onClick={() => void handleCreateRecall()}
+                     >
+                        {isSubmitting ? t("common.saving") : t("recalls.create")}
+                     </Button>
+                  </div>
+               </CardContent>
+            </Card>
 
-            <section className="card section">
-               <div className="section-head">
+            <Card className={styles.card}>
+               <CardHeader className={styles.cardHeader}>
                   <div>
-                     <h2>{t("recalls.listTitle")}</h2>
-                     <p>{t("recalls.listDescription")}</p>
+                     <CardTitle>{t("recalls.listTitle")}</CardTitle>
+                     <CardDescription>{t("recalls.listDescription")}</CardDescription>
                   </div>
-               </div>
-               {isLoading ? <p>{t("common.loading")}</p> : recalls.length === 0 ? <EmptyState icon={<AlertTriangle size={20} />} title={t("recalls.emptyTitle")} description={t("recalls.emptyDescription")} /> : (
-                  <div className={styles.recallList}>
-                     {recalls.map((recall) => (
-                        <article key={recall.id} className={styles.recallCard}>
-                           <div className={styles.recallCardHead}>
-                              <div>
-                                 <h3>{recall.recallNumber} · {recall.title}</h3>
-                                 <p>{recall.reason}</p>
+               </CardHeader>
+               <CardContent className={styles.cardContent}>
+                  {isLoading ? (
+                     <p>{t("common.loading")}</p>
+                  ) : recalls.length === 0 ? (
+                     <EmptyState
+                        icon={<AlertTriangle size={20} />}
+                        title={t("recalls.emptyTitle")}
+                        description={t("recalls.emptyDescription")}
+                     />
+                  ) : (
+                     <div className={styles.recallList}>
+                        {recalls.map((recall, index) => (
+                           <motion.article
+                              key={recall.id}
+                              layout
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.14, delay: index * 0.02, ease: [0.2, 0, 0, 1] }}
+                              className={styles.recallCard}
+                           >
+                              <div className={styles.recallCardHead}>
+                                 <div>
+                                    <h3>
+                                       {recall.recallNumber} · {recall.title}
+                                    </h3>
+                                    <p>{recall.reason}</p>
+                                 </div>
+                                 <Badge variant={statusVariant(recall.status)}>{recall.status}</Badge>
                               </div>
-                              <Badge tone={statusTone(recall.status)}>{recall.status}</Badge>
-                           </div>
-                           <p className="muted">{t("recalls.createdAt")}: {formatDate(recall.createdAtUtc)} · {t("recalls.activatedAt")}: {formatDate(recall.activatedAtUtc)}</p>
-                           <div className="table-wrap">
-                              <table>
-                                 <thead><tr><th>{t("recalls.batch")}</th><th>{t("recalls.siteScope")}</th><th>{t("recalls.status")}</th><th>{t("common.actions")}</th></tr></thead>
-                                 <tbody>
+                              <p className={styles.mutedLine}>
+                                 {t("recalls.createdAt")}: {formatDate(recall.createdAtUtc)} ·{" "}
+                                 {t("recalls.activatedAt")}: {formatDate(recall.activatedAtUtc)}
+                              </p>
+                              <Table>
+                                 <TableHeader>
+                                    <TableRow>
+                                       <TableHead>{t("recalls.batch")}</TableHead>
+                                       <TableHead>{t("recalls.siteScope")}</TableHead>
+                                       <TableHead>{t("recalls.status")}</TableHead>
+                                       <TableHead>{t("common.actions")}</TableHead>
+                                    </TableRow>
+                                 </TableHeader>
+                                 <TableBody>
                                     {recall.affectedBatches.map((batch) => (
-                                       <tr key={batch.id}>
-                                          <td><strong>{batch.productName}</strong><br /><span>{batch.batchNumber} · {batch.expiryDate}</span></td>
-                                          <td>{siteName(sites, batch.siteId)}</td>
-                                          <td><Badge tone={statusTone(batch.status)}>{batch.status}</Badge></td>
-                                          <td>
-                                             <div className="inline-actions">
-                                                <Button size="sm" onClick={() => void handleBatchAction(recall.id, batch.id, "Quarantined")}>{t("recalls.quarantine")}</Button>
-                                                <Button size="sm" onClick={() => void handleBatchAction(recall.id, batch.id, "Destroyed")}>{t("recalls.destroy")}</Button>
-                                                <Button size="sm" onClick={() => void handleBatchAction(recall.id, batch.id, "Released")}>{t("recalls.release")}</Button>
+                                       <TableRow key={batch.id}>
+                                          <TableCell>
+                                             <strong>{batch.productName}</strong>
+                                             <br />
+                                             <span>
+                                                {batch.batchNumber} · {batch.expiryDate}
+                                             </span>
+                                          </TableCell>
+                                          <TableCell>{siteName(batch.siteId)}</TableCell>
+                                          <TableCell>
+                                             <Badge variant={statusVariant(batch.status)}>{batch.status}</Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                             <div className={styles.inlineActions}>
+                                                <Button
+                                                   size="sm"
+                                                   variant="outline"
+                                                   onClick={() =>
+                                                      void handleBatchAction(recall.id, batch.id, "Quarantined")
+                                                   }
+                                                >
+                                                   {t("recalls.quarantine")}
+                                                </Button>
+                                                <Button
+                                                   size="sm"
+                                                   variant="destructive"
+                                                   onClick={() =>
+                                                      void handleBatchAction(recall.id, batch.id, "Destroyed")
+                                                   }
+                                                >
+                                                   {t("recalls.destroy")}
+                                                </Button>
+                                                <Button
+                                                   size="sm"
+                                                   onClick={() =>
+                                                      void handleBatchAction(recall.id, batch.id, "Released")
+                                                   }
+                                                >
+                                                   {t("recalls.release")}
+                                                </Button>
                                              </div>
-                                          </td>
-                                       </tr>
+                                          </TableCell>
+                                       </TableRow>
                                     ))}
-                                 </tbody>
-                              </table>
-                           </div>
-                           {recall.status === "Active" ? <Button onClick={() => void handleCloseRecall(recall.id)}>{t("recalls.close")}</Button> : null}
-                        </article>
-                     ))}
-                  </div>
-               )}
-            </section>
+                                 </TableBody>
+                              </Table>
+                              {recall.status === "Active" ? (
+                                 <Button variant="outline" onClick={() => void handleCloseRecall(recall.id)}>
+                                    {t("recalls.close")}
+                                 </Button>
+                              ) : null}
+                           </motion.article>
+                        ))}
+                     </div>
+                  )}
+               </CardContent>
+            </Card>
          </div>
       </AppShell>
    );

@@ -1,43 +1,121 @@
-.reportingPage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-  align-content: start;
-  min-height: min-content;
-  padding-bottom: 20px;
+.page {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr);
+   gap: 14px;
+   align-content: start;
+   min-height: min-content;
+   padding-bottom: 20px;
 }
 
-.reportingPage :global(.page-head) {
-  margin-bottom: 0;
+.page :global(.page-head) {
+   margin-bottom: 0;
 }
 
-.recallPage .recallFormCard {
-  align-self: start;
+.card {
+   gap: 0;
+   padding: 0;
+   border-color: var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface);
+   box-shadow: none;
+}
+
+.cardHeader {
+   padding: 14px;
+   border-bottom: 1px solid var(--line);
+   background: var(--surface-soft);
+}
+
+.cardHeader h3,
+.cardHeader p {
+   margin: 0;
+}
+
+.cardHeader p {
+   margin-top: 4px;
+}
+
+.cardContent {
+   padding: 14px;
+}
+
+.formGrid {
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: 10px;
+   padding: 14px;
+}
+
+.field {
+   display: grid;
+   gap: 5px;
+}
+
+.selectedContext {
+   grid-column: 1 / -1;
+   margin: 0;
+   padding: 10px 12px;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface-soft);
+   color: var(--muted);
+   font-size: 0.85rem;
+}
+
+.actions {
+   grid-column: 1 / -1;
+   display: flex;
+   justify-content: flex-end;
 }
 
 .recallList {
-  display: grid;
-  gap: 16px;
+   display: grid;
+   gap: 14px;
 }
 
 .recallCard {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+   display: grid;
+   gap: 12px;
+   padding: 14px;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface);
 }
 
 .recallCardHead {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 16px;
+   display: flex;
+   align-items: start;
+   justify-content: space-between;
+   gap: 16px;
+}
+
+.recallCardHead h3,
+.recallCardHead p,
+.mutedLine {
+   margin: 0;
+}
+
+.recallCardHead p,
+.mutedLine {
+   color: var(--muted);
+   font-size: 0.85rem;
+   line-height: 1.45;
+}
+
+.inlineActions {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 6px;
+}
+
+@media (max-width: 960px) {
+   .formGrid {
+      grid-template-columns: minmax(0, 1fr);
+   }
 }
 
 @media (max-width: 760px) {
-  .recallCardHead {
-    display: grid;
-  }
+   .recallCardHead {
+      display: grid;
+   }
 }
