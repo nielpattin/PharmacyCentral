@@ -1,4 +1,5 @@
 .auditTable {
+   min-width: 960px;
    table-layout: fixed;
 }
 

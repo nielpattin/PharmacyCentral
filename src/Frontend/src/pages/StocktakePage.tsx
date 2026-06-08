@@ -4,6 +4,7 @@ import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/shadcn/badge";
 import { Button } from "../components/shadcn/button";
+import { Dialog, DialogContent, DialogHeader } from "../components/shadcn/dialog";
 import { EmptyState } from "../components/ui/EmptyState";
 import {
    createStocktakeSession,
@@ -55,6 +56,8 @@ export default function StocktakePage() {
    const [siteFilter, setSiteFilter] = useState("");
    const [statusFilter, setStatusFilter] = useState("");
    const [createToken, setCreateToken] = useState(0);
+   const [editorTab, setEditorTab] = useState<"count" | "adjustments">("count");
+   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
    const selectedSession = useMemo(
       () => sessions.find((session) => session.id === selectedId) ?? null,
@@ -168,6 +171,11 @@ export default function StocktakePage() {
    const siteName = (id: string) => sites.find((site) => site.id === id)?.name ?? "—";
    const locationName = (id: string) => storageLocations.find((location) => location.id === id)?.name ?? "—";
 
+   function handleSelectSession(id: string) {
+      setSelectedId(id);
+      setIsDialogOpen(true);
+   }
+
    return (
       <AppShell
          active="stocktake"
@@ -184,6 +192,7 @@ export default function StocktakePage() {
                         onClick={() => {
                            setSelectedId("");
                            setCreateToken((current) => current + 1);
+                           setIsDialogOpen(true);
                         }}
                      >
                         {t("stocktake.newSession")}
@@ -192,120 +201,127 @@ export default function StocktakePage() {
                }
             />
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
-            <div className={styles.siteWorkbench}>
-               <section
-                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteRegistry}`}
-               >
-                  <div className="p-4">
-                     <div className="flex items-start justify-between gap-3">
-                        <div>
-                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("stocktake.registry")}</h2>
-                           <p className="mt-1 text-sm text-muted-foreground">{t("stocktake.registryDesc")}</p>
-                        </div>
-                        <Badge variant="outline">
-                           {isLoading
-                              ? t("stocktake.loadingState")
-                              : `${visibleSessions.length} ${t("common.records")}`}
-                        </Badge>
+            <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+               <div className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                     <div>
+                        <h2 className="m-0 text-sm font-semibold text-foreground">{t("stocktake.registry")}</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">{t("stocktake.registryDesc")}</p>
                      </div>
-                     <div className="flex flex-wrap items-center gap-2">
-                        <select
-                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                           value={siteFilter}
-                           onChange={(event) => setSiteFilter(event.target.value)}
-                        >
-                           <option value="">{t("stocktake.allSites")}</option>
-                           {sites.map((site) => (
-                              <option key={site.id} value={site.id}>
-                                 {site.name}
-                              </option>
-                           ))}
-                        </select>
-                        <select
-                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                           value={statusFilter}
-                           onChange={(event) => setStatusFilter(event.target.value)}
-                        >
-                           <option value="">{t("stocktake.allStatuses")}</option>
-                           {["Draft", "InProgress", "Completed", "Cancelled"].map((status) => (
-                              <option key={status} value={status}>
-                                 {t(`stocktake.status.${status}`)}
-                              </option>
-                           ))}
-                        </select>
-                     </div>
-                     {isLoading ? (
-                        <EmptyState icon="…" title={t("stocktake.loading")} description={t("stocktake.fetching")} />
-                     ) : visibleSessions.length === 0 ? (
-                        <EmptyState icon="0" title={t("stocktake.emptyTitle")} description={t("stocktake.emptyDesc")} />
-                     ) : (
-                        <StocktakeSessionTable
-                           rows={visibleSessions}
-                           selectedId={selectedId}
-                           sites={sites}
-                           storageLocations={storageLocations}
-                           onSelect={setSelectedId}
-                        />
-                     )}
+                     <Badge variant="outline">
+                        {isLoading
+                           ? t("stocktake.loadingState")
+                           : `${visibleSessions.length} ${t("common.records")}`}
+                     </Badge>
                   </div>
-               </section>
-               <aside
-                  className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteEditor}`}
-               >
-                  <div className="p-4">
-                     <div className="flex items-start justify-between gap-3">
-                        <div>
-                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("stocktake.editor")}</h2>
-                           <p className="mt-1 text-sm text-muted-foreground">{t("stocktake.editorDesc")}</p>
-                        </div>
-                     </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                     <select
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                        value={siteFilter}
+                        onChange={(event) => setSiteFilter(event.target.value)}
+                     >
+                        <option value="">{t("stocktake.allSites")}</option>
+                        {sites.map((site) => (
+                           <option key={site.id} value={site.id}>
+                              {site.name}
+                           </option>
+                        ))}
+                     </select>
+                     <select
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                        value={statusFilter}
+                        onChange={(event) => setStatusFilter(event.target.value)}
+                     >
+                        <option value="">{t("stocktake.allStatuses")}</option>
+                        {["Draft", "InProgress", "Completed", "Cancelled"].map((status) => (
+                           <option key={status} value={status}>
+                              {t(`stocktake.status.${status}`)}
+                           </option>
+                        ))}
+                     </select>
+                  </div>
+                  {isLoading ? (
+                     <EmptyState icon="…" title={t("stocktake.loading")} description={t("stocktake.fetching")} />
+                  ) : visibleSessions.length === 0 ? (
+                     <EmptyState icon="0" title={t("stocktake.emptyTitle")} description={t("stocktake.emptyDesc")} />
+                  ) : (
+                     <StocktakeSessionTable
+                        rows={visibleSessions}
+                        selectedId={selectedId}
+                        sites={sites}
+                        storageLocations={storageLocations}
+                        onSelect={handleSelectSession}
+                     />
+                  )}
+               </div>
+            </section>
+
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+               <DialogContent className="sm:max-w-3xl">
+                  <DialogHeader>
                      {selectedSession === null ? (
-                        <StocktakeSessionForm
-                           key={`stocktake-${createToken}`}
-                           initialValues={formValues}
-                           isSaving={isSaving}
-                           sites={sites}
-                           storageLocations={storageLocations}
-                           mode="create"
-                           onSubmit={handleCreateSession}
-                        />
+                        <h2 className="m-0 text-sm font-semibold text-foreground">{t("stocktake.editor")}</h2>
                      ) : (
-                        <div className="grid gap-3">
-                           <div className="flex items-start justify-between gap-3">
-                              <div>
-                                 <h3 className="m-0 text-sm font-semibold text-foreground">
-                                    {siteName(selectedSession.siteId)} ·{" "}
-                                    {locationName(selectedSession.storageLocationId)}
-                                 </h3>
-                                 <p className="mt-1 text-sm text-muted-foreground">
-                                    {new Date(selectedSession.startedAtUtc).toLocaleString()}
-                                 </p>
-                              </div>
-                              <Badge variant={stocktakeStatusTone(selectedSession.status)}>
-                                 {t(`stocktake.status.${selectedSession.status}`)}
-                              </Badge>
+                        <div className="flex items-start justify-between gap-3">
+                           <div>
+                              <h2 className="m-0 text-sm font-semibold text-foreground">
+                                 {siteName(selectedSession.siteId)} · {locationName(selectedSession.storageLocationId)}
+                              </h2>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                 {new Date(selectedSession.startedAtUtc).toLocaleString()}
+                              </p>
                            </div>
-                           <CountSheetTable
-                              key={selectedSession.id}
-                              session={selectedSession}
-                              products={products}
-                              isSaving={isSaving}
-                              onSubmit={handleRecordCount}
-                           />
-                           <div className="flex flex-wrap justify-end gap-2">
-                              <Button onClick={handlePostAdjustments} disabled={isSaving || !hasVariance}>
-                                 {t("stocktake.postAdjustments")}
-                              </Button>
-                           </div>
-                           <div className="flex items-start justify-between gap-3">
-                              <div>
-                                 <h3 className="m-0 text-sm font-semibold text-foreground">
-                                    {t("stocktake.adjustments")}
-                                 </h3>
-                                 <p className="mt-1 text-sm text-muted-foreground">{t("stocktake.adjustmentsDesc")}</p>
-                              </div>
-                           </div>
-                           {selectedAdjustments.length === 0 ? (
+                           <Badge variant={stocktakeStatusTone(selectedSession.status)}>
+                              {t(`stocktake.status.${selectedSession.status}`)}
+                           </Badge>
+                        </div>
+                     )}
+                  </DialogHeader>
+                  {selectedSession === null ? (
+                     <StocktakeSessionForm
+                        key={`stocktake-${createToken}`}
+                        initialValues={formValues}
+                        isSaving={isSaving}
+                        sites={sites}
+                        storageLocations={storageLocations}
+                        mode="create"
+                        onSubmit={handleCreateSession}
+                     />
+                  ) : (
+                     <div className="grid gap-3">
+                        <div className={styles.stocktakeTabStrip}>
+                           <button
+                              type="button"
+                              className={`${styles.stocktakeTab} ${editorTab === "count" ? styles.stocktakeTabActive : ""}`}
+                              onClick={() => setEditorTab("count")}
+                           >
+                              {t("stocktake.countSheet")}
+                           </button>
+                           <button
+                              type="button"
+                              className={`${styles.stocktakeTab} ${editorTab === "adjustments" ? styles.stocktakeTabActive : ""}`}
+                              onClick={() => setEditorTab("adjustments")}
+                           >
+                              {t("stocktake.adjustments")}
+                           </button>
+                        </div>
+                        <div className={styles.stocktakeTabPanel}>
+                           {editorTab === "count" ? (
+                              <>
+                                 <CountSheetTable
+                                    key={selectedSession.id}
+                                    session={selectedSession}
+                                    products={products}
+                                    isSaving={isSaving}
+                                    onSubmit={handleRecordCount}
+                                 />
+                                 <div className="flex flex-wrap justify-end gap-2">
+                                    <Button onClick={handlePostAdjustments} disabled={isSaving || !hasVariance}>
+                                       {t("stocktake.postAdjustments")}
+                                    </Button>
+                                 </div>
+                              </>
+                           ) : selectedAdjustments.length === 0 ? (
                               <EmptyState
                                  icon="0"
                                  title={t("stocktake.noAdjustments")}
@@ -320,10 +336,10 @@ export default function StocktakePage() {
                               />
                            )}
                         </div>
-                     )}
-                  </div>
-               </aside>
-            </div>
+                     </div>
+                  )}
+               </DialogContent>
+            </Dialog>
          </div>
       </AppShell>
    );

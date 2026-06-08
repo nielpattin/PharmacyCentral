@@ -161,7 +161,7 @@ export default function AuditPage() {
 
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
 
-            <div className={`${styles.siteWorkbench} ${styles.auditWorkbench}`}>
+            <div className={styles.siteWorkbench}>
                <section
                   className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.siteRegistry}`}
                >

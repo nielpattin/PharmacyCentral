@@ -111,6 +111,7 @@ export default function InventoryPage() {
    const [isSubmittingMovement, setIsSubmittingMovement] = useState(false);
    const [bannerError, setBannerError] = useState<string | null>(null);
    const [successMessage, setSuccessMessage] = useState<string | null>(null);
+   const [activeTab, setActiveTab] = useState<"movement" | "ledger">("ledger");
 
    const availableStorageLocations = useMemo(() => {
       if (filters.siteId === "") {
@@ -369,19 +370,29 @@ export default function InventoryPage() {
                </div>
             </section>
 
-            <div className={canControlInventory ? styles.inventoryOperationsGrid : styles.inventoryHistoryOnly}>
-               {canControlInventory ? (
-                  <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
-                     <div className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                           <div>
-                              <h2 className="m-0 text-sm font-semibold text-foreground">
-                                 {t("inventory.movementTitle")}
-                              </h2>
-                              <p className="mt-1 text-sm text-muted-foreground">{t("inventory.movementDesc")}</p>
-                           </div>
-                           <Badge variant="outline">{t("inventory.manual")}</Badge>
-                        </div>
+            <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
+               <div className="p-4">
+                  <div className={styles.inventoryTabStrip}>
+                     {canControlInventory ? (
+                        <button
+                           type="button"
+                           className={`${styles.inventoryTab} ${activeTab === "movement" ? styles.inventoryTabActive : ""}`}
+                           onClick={() => setActiveTab("movement")}
+                        >
+                           {t("inventory.movementTitle")}
+                        </button>
+                     ) : null}
+                     <button
+                        type="button"
+                        className={`${styles.inventoryTab} ${activeTab === "ledger" ? styles.inventoryTabActive : ""}`}
+                        onClick={() => setActiveTab("ledger")}
+                     >
+                        {t("inventory.ledgerTitle")}
+                     </button>
+                  </div>
+
+                  {activeTab === "movement" && canControlInventory ? (
+                     <div className={styles.inventoryTabPanel}>
                         <div className="grid gap-3">
                            <Field label={t("inventory.movementBalance")} required>
                               <select
@@ -394,8 +405,9 @@ export default function InventoryPage() {
                                  <option value="">{t("inventory.selectBalance")}</option>
                                  {balances.map((balance) => (
                                     <option key={balance.id} value={balance.id}>
-                                       {balance.productName} · {balance.batchNumber} · {siteName(sites, balance.siteId)}{" "}
-                                       · {formatQuantity(balance.quantityOnHand)}
+                                       {balance.productName} · {balance.batchNumber} · {siteName(sites, balance.siteId)}{
+                                          " "
+                                       }· {formatQuantity(balance.quantityOnHand)}
                                     </option>
                                  ))}
                               </select>
@@ -456,7 +468,9 @@ export default function InventoryPage() {
                               <div>
                                  <span>{t("inventory.selectedLocation")}</span>
                                  <strong>
-                                    {siteName(sites, selectedBalance.siteId)} ·{" "}
+                                    {siteName(sites, selectedBalance.siteId)} ·{
+                                       " "
+                                    }
                                     {locationName(storageLocations, selectedBalance.storageLocationId)}
                                  </strong>
                               </div>
@@ -487,115 +501,107 @@ export default function InventoryPage() {
                            </Button>
                         </div>
                      </div>
-                  </section>
-               ) : null}
-               <section className="rounded-md border border-border bg-card text-card-foreground shadow-none">
-                  <div className="p-4">
-                     <div className="flex items-start justify-between gap-3">
-                        <div>
-                           <h2 className="m-0 text-sm font-semibold text-foreground">{t("inventory.ledgerTitle")}</h2>
-                           <p className="mt-1 text-sm text-muted-foreground">{t("inventory.ledgerDesc")}</p>
+                  ) : null}
+
+                  {activeTab === "ledger" ? (
+                     <div className={styles.inventoryTabPanel}>
+                        <div className={`form-grid ${styles.inventoryLedgerFilters}`}>
+                           <Field label={t("inventory.productFilter")}>
+                              <select
+                                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                 value={ledgerFilters.productId}
+                                 onChange={(event) =>
+                                    updateLedgerFilters({ ...ledgerFilters, productId: event.target.value })
+                                 }
+                              >
+                                 <option value="">{t("inventory.allProducts")}</option>
+                                 {products.map((product) => (
+                                    <option key={product.id} value={product.id}>
+                                       {product.sku} · {product.name}
+                                    </option>
+                                 ))}
+                              </select>
+                           </Field>
+                           <Field label={t("inventory.siteFilter")}>
+                              <select
+                                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                 value={ledgerFilters.siteId}
+                                 onChange={(event) =>
+                                    updateLedgerFilters({
+                                       ...ledgerFilters,
+                                       siteId: event.target.value,
+                                       storageLocationId: "",
+                                    })
+                                 }
+                              >
+                                 <option value="">{t("inventory.allSites")}</option>
+                                 {sites.map((site) => (
+                                    <option key={site.id} value={site.id}>
+                                       {site.name}
+                                    </option>
+                                 ))}
+                              </select>
+                           </Field>
+                           <Field label={t("inventory.locationFilter")}>
+                              <select
+                                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                 value={ledgerFilters.storageLocationId}
+                                 onChange={(event) =>
+                                    updateLedgerFilters({ ...ledgerFilters, storageLocationId: event.target.value })
+                                 }
+                              >
+                                 <option value="">{t("inventory.allLocations")}</option>
+                                 {ledgerStorageLocations.map((location) => (
+                                    <option key={location.id} value={location.id}>
+                                       {location.name}
+                                    </option>
+                                 ))}
+                              </select>
+                           </Field>
+                           <Field label={t("inventory.limit")}>
+                              <select
+                                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                 value={ledgerFilters.limit}
+                                 onChange={(event) =>
+                                    updateLedgerFilters({ ...ledgerFilters, limit: Number(event.target.value) })
+                                 }
+                              >
+                                 {[25, 50, 100, 200].map((limit) => (
+                                    <option key={limit} value={limit}>
+                                       {limit}
+                                    </option>
+                                 ))}
+                              </select>
+                           </Field>
                         </div>
-                        <Badge variant="outline">
-                           {ledgerEntries.length} {t("common.records")}
-                        </Badge>
+                        <div className={`flex flex-wrap justify-end gap-2 ${styles.inventoryLedgerActions}`}>
+                           <Button variant="outline" onClick={handleResetLedgerFilters}>
+                              {t("inventory.clearLedgerFilters")}
+                           </Button>
+                        </div>
+                        {isLoading ? (
+                           <EmptyState
+                              icon="…"
+                              title={t("inventory.ledgerLoading")}
+                              description={t("inventory.ledgerFetching")}
+                           />
+                        ) : ledgerEntries.length === 0 ? (
+                           <EmptyState
+                              icon="0"
+                              title={t("inventory.ledgerEmptyTitle")}
+                              description={t("inventory.ledgerEmptyDesc")}
+                           />
+                        ) : (
+                           <InventoryLedgerTable
+                              entries={ledgerEntries}
+                              sites={sites}
+                              storageLocations={storageLocations}
+                           />
+                        )}
                      </div>
-                     <div className={`form-grid ${styles.inventoryLedgerFilters}`}>
-                        <Field label={t("inventory.productFilter")}>
-                           <select
-                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                              value={ledgerFilters.productId}
-                              onChange={(event) =>
-                                 updateLedgerFilters({ ...ledgerFilters, productId: event.target.value })
-                              }
-                           >
-                              <option value="">{t("inventory.allProducts")}</option>
-                              {products.map((product) => (
-                                 <option key={product.id} value={product.id}>
-                                    {product.sku} · {product.name}
-                                 </option>
-                              ))}
-                           </select>
-                        </Field>
-                        <Field label={t("inventory.siteFilter")}>
-                           <select
-                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                              value={ledgerFilters.siteId}
-                              onChange={(event) =>
-                                 updateLedgerFilters({
-                                    ...ledgerFilters,
-                                    siteId: event.target.value,
-                                    storageLocationId: "",
-                                 })
-                              }
-                           >
-                              <option value="">{t("inventory.allSites")}</option>
-                              {sites.map((site) => (
-                                 <option key={site.id} value={site.id}>
-                                    {site.name}
-                                 </option>
-                              ))}
-                           </select>
-                        </Field>
-                        <Field label={t("inventory.locationFilter")}>
-                           <select
-                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                              value={ledgerFilters.storageLocationId}
-                              onChange={(event) =>
-                                 updateLedgerFilters({ ...ledgerFilters, storageLocationId: event.target.value })
-                              }
-                           >
-                              <option value="">{t("inventory.allLocations")}</option>
-                              {ledgerStorageLocations.map((location) => (
-                                 <option key={location.id} value={location.id}>
-                                    {location.name}
-                                 </option>
-                              ))}
-                           </select>
-                        </Field>
-                        <Field label={t("inventory.limit")}>
-                           <select
-                              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                              value={ledgerFilters.limit}
-                              onChange={(event) =>
-                                 updateLedgerFilters({ ...ledgerFilters, limit: Number(event.target.value) })
-                              }
-                           >
-                              {[25, 50, 100, 200].map((limit) => (
-                                 <option key={limit} value={limit}>
-                                    {limit}
-                                 </option>
-                              ))}
-                           </select>
-                        </Field>
-                     </div>
-                     <div className={`flex flex-wrap justify-end gap-2 ${styles.inventoryLedgerActions}`}>
-                        <Button variant="outline" onClick={handleResetLedgerFilters}>
-                           {t("inventory.clearLedgerFilters")}
-                        </Button>
-                     </div>
-                     {isLoading ? (
-                        <EmptyState
-                           icon="…"
-                           title={t("inventory.ledgerLoading")}
-                           description={t("inventory.ledgerFetching")}
-                        />
-                     ) : ledgerEntries.length === 0 ? (
-                        <EmptyState
-                           icon="0"
-                           title={t("inventory.ledgerEmptyTitle")}
-                           description={t("inventory.ledgerEmptyDesc")}
-                        />
-                     ) : (
-                        <InventoryLedgerTable
-                           entries={ledgerEntries}
-                           sites={sites}
-                           storageLocations={storageLocations}
-                        />
-                     )}
-                  </div>
-               </section>
-            </div>
+                  ) : null}
+               </div>
+            </section>
          </div>
       </AppShell>
    );

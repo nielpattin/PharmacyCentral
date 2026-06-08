@@ -109,7 +109,7 @@ function formatOptionalDateTime(value: Date | null) {
 
 function ReportingStat({ label, value }: { label: string; value: string | number }) {
    return (
-      <div className={`stat ${styles.reportingStat}`}>
+      <div className={styles.reportingStat}>
          <span>{label}</span>
          <strong>{value}</strong>
       </div>
@@ -334,6 +334,7 @@ export default function ReportingPage() {
    const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
    const [isLoading, setIsLoading] = useState(true);
    const [bannerError, setBannerError] = useState<string | null>(null);
+   const [activityTab, setActivityTab] = useState<"action" | "entity">("action");
 
    useMountEffect(() => {
       void refreshData();
@@ -471,29 +472,53 @@ export default function ReportingPage() {
                      </div>
                   </ReportingSection>
 
-                  <div className={styles.reportingGrid}>
-                     <ReportingSection
-                        title={t("reporting.activityByAction")}
-                        description={t("reporting.activityByActionDesc")}
-                     >
-                        <CountList
-                           items={actionSummaries}
-                           emptyTitle={t("reporting.noActivityTitle")}
-                           emptyDescription={t("reporting.noActivityDesc")}
-                        />
-                     </ReportingSection>
-
-                     <ReportingSection
-                        title={t("reporting.activityByEntity")}
-                        description={t("reporting.activityByEntityDesc")}
-                     >
-                        <CountList
-                           items={entitySummaries}
-                           emptyTitle={t("reporting.noActivityTitle")}
-                           emptyDescription={t("reporting.noActivityDesc")}
-                        />
-                     </ReportingSection>
-                  </div>
+                  <section
+                     className={`rounded-md border border-border bg-card text-card-foreground shadow-none ${styles.dashboardSection}`}
+                  >
+                     <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                           <div>
+                              <h2 className="m-0 text-sm font-semibold text-foreground">
+                                 {t("reporting.activityByAction")}
+                              </h2>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                 {t("reporting.activityByActionDesc")}
+                              </p>
+                           </div>
+                        </div>
+                        <div className={styles.reportingTabStrip}>
+                           <button
+                              type="button"
+                              className={`${styles.reportingTab} ${activityTab === "action" ? styles.reportingTabActive : ""}`}
+                              onClick={() => setActivityTab("action")}
+                           >
+                              {t("reporting.activityByAction")}
+                           </button>
+                           <button
+                              type="button"
+                              className={`${styles.reportingTab} ${activityTab === "entity" ? styles.reportingTabActive : ""}`}
+                              onClick={() => setActivityTab("entity")}
+                           >
+                              {t("reporting.activityByEntity")}
+                           </button>
+                        </div>
+                        <div className={styles.reportingTabPanel}>
+                           {activityTab === "action" ? (
+                              <CountList
+                                 items={actionSummaries}
+                                 emptyTitle={t("reporting.noActivityTitle")}
+                                 emptyDescription={t("reporting.noActivityDesc")}
+                              />
+                           ) : (
+                              <CountList
+                                 items={entitySummaries}
+                                 emptyTitle={t("reporting.noActivityTitle")}
+                                 emptyDescription={t("reporting.noActivityDesc")}
+                              />
+                           )}
+                        </div>
+                     </div>
+                  </section>
 
                   <ReportingSection
                      title={t("reporting.recentActivity")}

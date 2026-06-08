@@ -22,7 +22,7 @@
 .card {
    gap: 0;
    padding: 0;
-   border-color: var(--line);
+   border: 1px solid var(--line);
    border-radius: var(--radius-md);
    background: var(--surface);
    box-shadow: none;
@@ -55,7 +55,7 @@
 }
 
 .formContent {
-   padding: 0;
+   padding: 14px;
 }
 
 .toolbar {

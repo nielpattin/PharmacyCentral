@@ -1,18 +1,18 @@
 .sitesPage {
    display: grid;
-   grid-template-rows: auto auto minmax(0, 1fr);
-   min-height: 0;
-   height: 100%;
+   grid-template-columns: minmax(0, 1fr);
+   gap: 14px;
+   align-content: start;
+   min-height: min-content;
+   padding-bottom: 20px;
 }
 
 .siteWorkbench {
    display: grid;
-   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 400px);
+   grid-template-columns: minmax(0, 1.2fr) minmax(340px, 420px);
    gap: 16px;
    align-items: start;
-   margin-top: 10px;
-   min-height: 0;
-   height: calc(100dvh - 180px);
+   min-width: 0;
 }
 
 .siteRegistry,
@@ -25,41 +25,132 @@
    flex-direction: column;
    min-height: 0;
    overflow: hidden;
-   height: 100%;
 }
 
-.siteRegistry :global(.section) {
+.siteRegistry > div,
+.siteEditor > div {
    display: flex;
    flex-direction: column;
    min-height: 0;
-   flex: 1;
-   overflow: hidden;
 }
 
-.siteRegistry :global(.table-wrap) {
-   flex: 1;
-   min-height: 0;
-   overflow: auto;
+.siteRegistry > div {
+   gap: 14px;
 }
 
 .siteEditor {
-   position: static;
-   height: 100%;
+   position: sticky;
+   top: 0;
+   max-height: calc(100dvh - 120px);
    overflow: auto;
 }
 
-.siteEditor :global(.section) {
-   display: flex;
-   flex-direction: column;
-   height: 100%;
-   min-height: 0;
-   overflow: auto;
+.siteEditor > div {
+   gap: 14px;
 }
 
-.siteEditor :global(.entity-form) {
-   margin-top: 10px;
+.siteEditor :global(.grid) {
+   display: grid;
+   gap: 14px;
 }
 
-.siteEditor :global(.empty) {
-   margin-bottom: 10px;
+.siteEditor :global(.overflow-x-auto) {
+   max-width: 100%;
+   overflow-x: auto;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface);
+}
+
+.siteEditor table {
+   min-width: 640px;
+   width: 100%;
+   border-collapse: collapse;
+   color: var(--text);
+   font-size: 14px;
+   line-height: 1.4;
+}
+
+.siteEditor th,
+.siteEditor td {
+   padding: 12px;
+   border-bottom: 1px solid var(--line);
+   vertical-align: top;
+   text-align: left;
+}
+
+.siteEditor th {
+   background: var(--surface-soft);
+   color: var(--muted);
+   font-size: 0.813rem;
+   font-weight: 800;
+   letter-spacing: 0.02em;
+   white-space: nowrap;
+}
+
+.siteEditor tbody tr:last-child td {
+   border-bottom: 0;
+}
+
+.siteRegistry :global(.overflow-x-auto) {
+   max-width: 100%;
+   overflow-x: auto;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface);
+}
+
+.siteRegistry table {
+   width: 100%;
+   min-width: 800px;
+   table-layout: fixed;
+   border-collapse: collapse;
+   color: var(--text);
+   font-size: 14px;
+   line-height: 1.4;
+}
+
+.siteRegistry th,
+.siteRegistry td {
+   padding: 12px;
+   border-bottom: 1px solid var(--line);
+   vertical-align: top;
+   text-align: left;
+}
+
+.siteRegistry th {
+   background: var(--surface-soft);
+   color: var(--muted);
+   font-size: 0.813rem;
+   font-weight: 800;
+   letter-spacing: 0.02em;
+   white-space: nowrap;
+}
+
+.siteRegistry tbody tr {
+   cursor: pointer;
+   transition: background-color 140ms var(--ease);
+}
+
+.siteRegistry tbody tr:hover {
+   background: var(--surface-soft);
+}
+
+.siteRegistry tbody :global(.is-selected) {
+   background: var(--primary-soft);
+}
+
+.siteRegistry tbody tr:last-child td {
+   border-bottom: 0;
+}
+
+@media (max-width: 1100px) {
+   .siteWorkbench {
+      grid-template-columns: minmax(0, 1fr);
+   }
+
+   .siteEditor {
+      position: static;
+      max-height: none;
+   }
 }

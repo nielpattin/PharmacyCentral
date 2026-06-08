@@ -150,7 +150,7 @@ export default function PricingPage() {
 
    return (
       <AppShell
-         active="pricing"
+         active="catalog"
          breadcrumb={
             <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.pricing") }]} />
          }

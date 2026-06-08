@@ -238,17 +238,14 @@
 }
 
 .priorityIcon.bad {
-   background: var(--danger-soft);
    color: var(--danger);
 }
 
 .priorityIcon.warn {
-   background: var(--warning-soft);
    color: var(--warning-text);
 }
 
 .priorityIcon.ok {
-   background: var(--info-soft);
    color: var(--info-text);
 }
 
@@ -715,8 +712,6 @@
    justify-content: center;
    width: 28px;
    height: 28px;
-   border-radius: 6px;
-   background: var(--surface-soft);
    color: var(--muted);
    flex-shrink: 0;
 }

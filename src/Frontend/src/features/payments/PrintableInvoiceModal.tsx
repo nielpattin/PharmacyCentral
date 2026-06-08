@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { PrintableInvoiceDetails } from "../../api/pharmacyClient";
 import { Button } from "../../components/shadcn/button";
+import { Dialog, DialogContent } from "../../components/shadcn/dialog";
 import { useMountEffect } from "../../hooks/useMountEffect";
 import { useT } from "../../lib/i18n";
 import styles from "./PrintableInvoiceModal.module.css";
@@ -24,9 +25,9 @@ export function PrintableInvoiceModal({ invoice, siteName, onClose }: PrintableI
    });
 
    return (
-      <div className="modal-overlay" onClick={onClose}>
-         <div className={`modal-content ${styles.invoiceModal}`} onClick={(e) => e.stopPropagation()} ref={printRef}>
-            <div className={styles.invoicePrintArea}>
+      <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+         <DialogContent className={styles.invoiceModal} showCloseButton={false}>
+            <div className={styles.invoicePrintArea} ref={printRef}>
                <div className={styles.invoiceHeader}>
                   <h2>{t("invoice.title")}</h2>
                   <p className={styles.invoiceSite}>
@@ -87,7 +88,7 @@ export function PrintableInvoiceModal({ invoice, siteName, onClose }: PrintableI
                   </Button>
                </div>
             </div>
-         </div>
-      </div>
+         </DialogContent>
+      </Dialog>
    );
 }
