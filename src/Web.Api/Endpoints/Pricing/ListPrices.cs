@@ -12,6 +12,7 @@ internal sealed class ListPrices : IEndpoint
     {
         app.MapGet("pricing/prices", async (
             Guid? productId,
+            Guid? productUnitId,
             Guid? siteId,
             string? status,
             int? limit,
@@ -30,7 +31,7 @@ internal sealed class ListPrices : IEndpoint
                 return EndpointSiteAccess.ForbidSiteAccess();
             }
 
-            ListPricesQuery query = new(productId, siteId, EndpointSiteAccess.GetAllowedSiteIds(currentUser), status, limit ?? 100);
+            ListPricesQuery query = new(productId, productUnitId, siteId, EndpointSiteAccess.GetAllowedSiteIds(currentUser), status, limit ?? 100);
             return Results.Ok(await handler.HandleAsync(query, cancellationToken));
         }).WithTags(Tags.Pricing).RequireAuthorization(Policies.AnyRole);
     }

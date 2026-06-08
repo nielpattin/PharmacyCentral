@@ -16,6 +16,7 @@ public sealed class CreatePrescriptionCommand
 public sealed class CreatePrescriptionLineItem
 {
     public Guid ProductId { get; set; }
+    public Guid ProductUnitId { get; set; }
     public decimal PrescribedQuantity { get; set; }
     public string? Dosage { get; set; }
     public string? Frequency { get; set; }

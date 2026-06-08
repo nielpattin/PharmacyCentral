@@ -38,6 +38,7 @@ public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, A
             return PrescriptionErrors.StorageLocationMismatch(command.StorageLocationId, command.SiteId);
         }
 
+        Dictionary<Guid, ProductUnit> unitByProductId = [];
         foreach (CreatePrescriptionLineItem item in command.Lines)
         {
             Product? product = await dbContext.GetProductByIdAsync(item.ProductId, cancellationToken);
@@ -45,6 +46,14 @@ public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, A
             {
                 return InventoryErrors.ProductNotFound(item.ProductId);
             }
+
+            ProductUnit? productUnit = await dbContext.GetProductUnitByIdAsync(item.ProductUnitId, cancellationToken);
+            if (productUnit is null || productUnit.ProductId != product.Id)
+            {
+                return PrescriptionErrors.ProductUnitNotFound(item.ProductUnitId);
+            }
+
+            unitByProductId[item.ProductId] = productUnit;
         }
 
         string prescriptionNumber = await GeneratePrescriptionNumberAsync(cancellationToken);
@@ -76,7 +85,10 @@ public sealed class CreatePrescriptionHandler(IApplicationDbContext dbContext, A
                 Id = Guid.NewGuid(),
                 PrescriptionId = prescription.Id,
                 ProductId = item.ProductId,
+                ProductUnitId = item.ProductUnitId,
+                ProductUnit = unitByProductId[item.ProductId],
                 PrescribedQuantity = item.PrescribedQuantity,
+                QuantityInBaseUnits = unitByProductId[item.ProductId].ToBaseQuantity(item.PrescribedQuantity),
                 Dosage = NormalizeOptional(item.Dosage),
                 Frequency = NormalizeOptional(item.Frequency),
                 Duration = NormalizeOptional(item.Duration),

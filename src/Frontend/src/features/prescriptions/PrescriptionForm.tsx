@@ -132,13 +132,14 @@ export function PrescriptionForm({
       return { totalAvailable, bestBatch };
    }
 
-   function computeActivePrice(productId: string, siteId: string) {
+   function computeActivePrice(productId: string, productUnitId: string, siteId: string) {
       const now = new Date();
       return (
          prices
             .filter(
                (price) =>
                   price.productId === productId &&
+                  price.productUnitId === productUnitId &&
                   price.status === "Published" &&
                   (price.siteId === siteId || price.siteId === null) &&
                   new Date(price.effectiveFrom) <= now &&
@@ -168,11 +169,13 @@ export function PrescriptionForm({
 
    function addProductToTicket(productId: string) {
       if (isProductInTicket(productId)) return;
+      const product = productMap.get(productId);
+      const productUnitId = product?.units.find((unit) => unit.isDefaultSaleUnit)?.id ?? product?.units[0]?.id ?? "";
       setValues((current) => ({
          ...current,
          lines: current.lines.some((line) => line.productId === "")
-            ? current.lines.map((line) => (line.productId === "" ? { ...line, productId, prescribedQuantity: "1" } : line))
-            : [...current.lines, { ...blankPrescriptionLineValues(), productId, prescribedQuantity: "1" }],
+            ? current.lines.map((line) => (line.productId === "" ? { ...line, productId, productUnitId, prescribedQuantity: "1" } : line))
+            : [...current.lines, { ...blankPrescriptionLineValues(), productId, productUnitId, prescribedQuantity: "1" }],
       }));
       setSearchQuery("");
    }
@@ -242,7 +245,7 @@ export function PrescriptionForm({
                  balance.storageLocationId === values.storageLocationId,
            );
    const selectedInfoPrice =
-      selectedInfoProductId !== null && values.siteId !== "" ? computeActivePrice(selectedInfoProductId, values.siteId) : null;
+      selectedInfoProductId !== null && selectedInfoLine !== null && values.siteId !== "" ? computeActivePrice(selectedInfoProductId, selectedInfoLine.productUnitId, values.siteId) : null;
    const selectedInfoInstructions =
       selectedInfoLine === null
          ? []
@@ -251,12 +254,12 @@ export function PrescriptionForm({
            );
    const summaryTotalAmount = filledLines.reduce((sum, line) => {
       if (values.siteId === "") return sum;
-      const activePrice = computeActivePrice(line.productId, values.siteId);
+      const activePrice = computeActivePrice(line.productId, line.productUnitId, values.siteId);
       return sum + (activePrice?.unitPrice ?? 0) * (Number(line.prescribedQuantity) || 0);
    }, 0);
    const summaryCurrency =
       filledLines
-         .map((line) => (values.siteId === "" ? null : computeActivePrice(line.productId, values.siteId)))
+         .map((line) => (values.siteId === "" ? null : computeActivePrice(line.productId, line.productUnitId, values.siteId)))
          .find((price): price is ProductPriceDto => price !== null)?.currency ?? "VND";
 
    return (
@@ -308,7 +311,8 @@ export function PrescriptionForm({
                               {visibleProducts.map((product) => {
                                  const stockInfo = getProductStockInfo(product.id);
                                  const alreadyAdded = isProductInTicket(product.id);
-                                 const activePrice = values.siteId ? computeActivePrice(product.id, values.siteId) : null;
+                                 const defaultUnitId = product.units.find((unit) => unit.isDefaultSaleUnit)?.id ?? product.units[0]?.id ?? "";
+                                 const activePrice = values.siteId ? computeActivePrice(product.id, defaultUnitId, values.siteId) : null;
                                  return (
                                     <CommandItem
                                        key={product.id}
@@ -415,7 +419,7 @@ export function PrescriptionForm({
                            const stockInfo = product !== undefined ? getProductStockInfo(product.id) : null;
                            const activePrice =
                               product !== undefined && values.siteId
-                                 ? computeActivePrice(product.id, values.siteId)
+                                 ? computeActivePrice(product.id, line.productUnitId, values.siteId)
                                  : null;
                            return (
                               <MotionListItem key={line.productId} className={styles.line}>

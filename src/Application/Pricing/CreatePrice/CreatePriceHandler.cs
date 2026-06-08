@@ -28,6 +28,12 @@ public sealed class CreatePriceHandler(IApplicationDbContext dbContext, AuditLog
             return InventoryErrors.ProductNotFound(command.ProductId);
         }
 
+        ProductUnit? productUnit = await dbContext.GetProductUnitByIdAsync(command.ProductUnitId, cancellationToken);
+        if (productUnit is null || productUnit.ProductId != product.Id)
+        {
+            return PricingErrors.ProductUnitNotFound(command.ProductUnitId);
+        }
+
         if (command.SiteId is not null && !await dbContext.SiteExistsAsync(command.SiteId.Value, cancellationToken))
         {
             return InventoryErrors.SiteNotFound(command.SiteId.Value);
@@ -38,6 +44,8 @@ public sealed class CreatePriceHandler(IApplicationDbContext dbContext, AuditLog
             Id = Guid.NewGuid(),
             ProductId = product.Id,
             Product = product,
+            ProductUnitId = productUnit.Id,
+            ProductUnit = productUnit,
             SiteId = command.SiteId,
             UnitPrice = command.UnitPrice,
             Currency = NormalizeCurrency(command.Currency),
@@ -49,7 +57,7 @@ public sealed class CreatePriceHandler(IApplicationDbContext dbContext, AuditLog
         };
 
         await dbContext.AddAsync(price, cancellationToken);
-        await auditLogService.RecordAsync(AuditActions.Created, AuditEntityTypes.ProductPrice, price.Id, command.CreatedByUserId, command.SiteId, $"Created price for {product.Sku}", cancellationToken: cancellationToken);
+        await auditLogService.RecordAsync(AuditActions.Created, AuditEntityTypes.ProductPrice, price.Id, command.CreatedByUserId, command.SiteId, $"Created price for {product.Sku} {productUnit.UnitName}", cancellationToken: cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return ProductPriceDetails.From(price);
     }

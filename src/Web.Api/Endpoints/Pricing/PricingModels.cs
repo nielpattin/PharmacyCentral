@@ -3,6 +3,7 @@ namespace Web.Api.Endpoints.Pricing;
 internal sealed class CreatePriceRequest
 {
     public Guid ProductId { get; set; }
+    public Guid ProductUnitId { get; set; }
     public Guid? SiteId { get; set; }
     public decimal UnitPrice { get; set; }
     public string Currency { get; set; } = "VND";

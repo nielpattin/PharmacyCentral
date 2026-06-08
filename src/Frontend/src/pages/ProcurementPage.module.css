@@ -11,10 +11,74 @@
    margin-bottom: 0;
 }
 
+.page :global(.page-actions button) {
+   min-height: 44px;
+   border-radius: var(--radius-md);
+   font-size: 15px;
+   font-weight: 700;
+}
+.panelCrumbs {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: stretch;
+   gap: 8px;
+   padding: 6px;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface-soft);
+}
+.panelCrumbItem {
+   position: relative;
+   display: inline-flex;
+   flex: 1 1 0;
+   align-items: center;
+   min-width: 0;
+}
+.panelCrumbSeparator {
+   position: absolute;
+   top: 50%;
+   left: -18px;
+   z-index: 1;
+   flex-shrink: 0;
+   color: var(--muted-soft);
+   transform: translateY(-50%);
+}
+.panelCrumbButton {
+   display: grid;
+   justify-items: start;
+   width: 100%;
+   min-width: 0;
+   min-height: 54px;
+   overflow: hidden;
+   gap: 2px;
+   padding: 8px 12px;
+   border-radius: var(--radius-sm);
+   text-align: left;
+}
+.panelCrumbButton span {
+   overflow: hidden;
+   max-width: 100%;
+   font-size: 15px;
+   font-weight: 850;
+   line-height: 1.2;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+.panelCrumbButton small {
+   overflow: hidden;
+   max-width: 100%;
+   font-size: 14px;
+   font-weight: 650;
+   line-height: 1.25;
+   opacity: 0.8;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+
 .grid {
    display: grid;
-   grid-template-columns: minmax(0, 1.15fr) minmax(340px, 460px);
-   gap: 16px;
+   grid-template-columns: minmax(0, 1fr);
+   gap: 12px;
    align-items: start;
    min-width: 0;
 }
@@ -34,9 +98,12 @@
    align-items: flex-start;
    justify-content: space-between;
    gap: 12px;
-   padding: 14px;
+   padding: 16px;
    border-bottom: 1px solid var(--line);
    background: var(--surface-soft);
+}
+.cardHeader :global(.text-2xl) {
+   font-size: 18px;
 }
 
 .cardHeader h3,
@@ -45,11 +112,13 @@
 }
 
 .cardHeader p {
-   margin-top: 4px;
+   margin-top: 6px;
+   font-size: 14px;
 }
 
 .cardContent {
    padding: 0;
+   overflow-x: auto;
 }
 
 .table th,
@@ -67,10 +136,10 @@
 
 .formStack {
    display: grid;
-   gap: 12px;
-   padding: 14px;
+   gap: 14px;
+   overflow-x: hidden;
+   padding: 16px;
 }
-
 .formGrid,
 .lineGrid {
    display: grid;
@@ -78,20 +147,40 @@
 }
 
 .formGrid {
-   grid-template-columns: 1fr 1fr;
+   grid-template-columns: repeat(2, minmax(220px, 1fr));
 }
 
 .lineGrid {
-   grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr);
-   padding: 10px;
+   grid-template-columns: minmax(0, 1fr) minmax(140px, 160px) minmax(0, 0.75fr);
+   padding: 12px;
    border: 1px solid var(--line);
    border-radius: var(--radius-md);
    background: var(--surface-soft);
 }
+.lineGrid > * {
+   min-width: 0;
+}
 
 .field {
    display: grid;
+   min-width: 0;
    gap: 5px;
+}
+.field label {
+   font-size: 14px;
+   font-weight: 750;
+}
+.field input,
+.field textarea,
+.field select {
+   width: 100%;
+   min-width: 0;
+   min-height: 44px;
+   border-radius: var(--radius-sm);
+   font-size: 15px;
+}
+.field textarea {
+   min-height: 78px;
 }
 
 .fieldWide {
@@ -108,7 +197,7 @@
 .linesHeader h3 {
    margin: 0;
    color: var(--text);
-   font-size: 0.9rem;
+   font-size: 16px;
    font-weight: 800;
 }
 
@@ -119,11 +208,32 @@
    gap: 8px;
    align-items: center;
 }
-
+.actions button,
+.actionsInline button {
+   min-height: 40px;
+   border-radius: var(--radius-sm);
+   font-size: 14px;
+   font-weight: 750;
+}
 .actions {
    justify-content: flex-end;
 }
 
+
+.table th {
+   color: var(--text);
+   font-size: 14px;
+   font-weight: 850;
+}
+.table td {
+   font-size: 14px;
+}
+.table tbody tr {
+   transition: background-color 140ms var(--ease);
+}
+.table tbody tr:hover {
+   background: var(--surface-soft);
+}
 @media (max-width: 1100px) {
    .grid {
       grid-template-columns: minmax(0, 1fr);
@@ -138,5 +248,13 @@
 
    .cardHeader {
       flex-direction: column;
+   }
+
+   .panelCrumbItem {
+      flex-basis: 100%;
+   }
+
+   .panelCrumbSeparator {
+      display: none;
    }
 }

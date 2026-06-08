@@ -1,7 +1,7 @@
+import { ChevronRight } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
-import { Breadcrumbs } from "../components/layout/Breadcrumbs";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/shadcn/badge";
 import { Button } from "../components/shadcn/button";
@@ -36,6 +36,8 @@ function orderStatusVariant(status: string) {
    return "outline" as const;
 }
 
+type ProcurementPanel = "orders" | "create" | "details";
+
 export default function ProcurementPage() {
    const t = useT();
    const [orders, setOrders] = useState<PurchaseOrderDto[]>([]);
@@ -46,6 +48,7 @@ export default function ProcurementPage() {
    const [isLoading, setIsLoading] = useState(true);
    const [isSaving, setIsSaving] = useState(false);
    const [bannerError, setBannerError] = useState<string | null>(null);
+   const [activePanel, setActivePanel] = useState<ProcurementPanel>("orders");
    const [form, setForm] = useState({
       supplierId: "",
       siteId: "",
@@ -140,9 +143,7 @@ export default function ProcurementPage() {
    return (
       <AppShell
          active="procurement"
-         breadcrumb={
-            <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: t("nav.procurement") }]} />
-         }
+         breadcrumb={undefined}
       >
          <div className={styles.page}>
             <PageHeader
@@ -153,9 +154,38 @@ export default function ProcurementPage() {
                   </Button>
                }
             />
+            <nav className={styles.panelCrumbs} aria-label={t("nav.procurement")}>
+               {(
+                  [
+                     { id: "orders", label: t("procurement.orders"), meta: `${orders.length} ${t("common.records")}` },
+                     { id: "create", label: t("procurement.create"), meta: t("procurement.createStepMeta") },
+                     {
+                        id: "details",
+                        label: t("procurement.details"),
+                        meta: selected === null ? t("procurement.selectOrder") : selected.purchaseOrderNumber,
+                     },
+                  ] satisfies { id: ProcurementPanel; label: string; meta: string }[]
+)
+                  .map((item, index) => (
+                     <div key={item.id} className={styles.panelCrumbItem}>
+                        {index > 0 ? (
+                           <ChevronRight className={styles.panelCrumbSeparator} size={16} aria-hidden="true" />
+                        ) : null}
+                        <Button
+                           type="button"
+                           variant={activePanel === item.id ? "default" : "outline"}
+                           className={styles.panelCrumbButton}
+                           onClick={() => setActivePanel(item.id)}
+                        >
+                           <span>{item.label}</span>
+                           <small>{item.meta}</small>
+                        </Button>
+                     </div>
+                  ))}
+            </nav>
             {bannerError !== null ? <div className="notice danger-note">{bannerError}</div> : null}
 
-            <div className={styles.grid}>
+            {activePanel === "orders" ? (
                <Card className={styles.card}>
                   <CardHeader className={styles.cardHeader}>
                      <div>
@@ -196,8 +226,10 @@ export default function ProcurementPage() {
                                        animate={{ opacity: 1, y: 0 }}
                                        exit={{ opacity: 0, y: -4 }}
                                        transition={{ duration: 0.12, delay: index * 0.01, ease: [0.2, 0, 0, 1] }}
-                                       className={selected?.id === order.id ? styles.selectedRow : undefined}
-                                       onClick={() => setSelectedId(order.id)}
+                                       onClick={() => {
+                                          setSelectedId(order.id);
+                                          setActivePanel("details");
+                                       }}
                                     >
                                        <TableCell>{order.purchaseOrderNumber}</TableCell>
                                        <TableCell>{supplierName(order.supplierId)}</TableCell>
@@ -214,7 +246,9 @@ export default function ProcurementPage() {
                      )}
                   </CardContent>
                </Card>
+            ) : null}
 
+            {activePanel === "create" ? (
                <Card className={styles.card}>
                   <CardHeader className={styles.cardHeader}>
                      <div>
@@ -375,9 +409,10 @@ export default function ProcurementPage() {
                      </div>
                   </CardContent>
                </Card>
-            </div>
+            ) : null}
 
-            <Card className={styles.card}>
+            {activePanel === "details" ? (
+               <Card className={styles.card}>
                <CardHeader className={styles.cardHeader}>
                   <div>
                      <CardTitle>{t("procurement.details")}</CardTitle>
@@ -436,7 +471,8 @@ export default function ProcurementPage() {
                      </Table>
                   )}
                </CardContent>
-            </Card>
+               </Card>
+            ) : null}
          </div>
       </AppShell>
    );

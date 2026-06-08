@@ -24,7 +24,7 @@ public sealed class UpdatePriceStatusHandler(IApplicationDbContext dbContext, Au
                 return PricingErrors.InvalidStatus(price.Status);
             }
 
-            bool hasOverlap = await dbContext.HasOverlappingPublishedProductPriceAsync(price.ProductId, price.SiteId, price.EffectiveFrom, price.EffectiveTo, price.Id, cancellationToken);
+            bool hasOverlap = await dbContext.HasOverlappingPublishedProductPriceAsync(price.ProductId, price.ProductUnitId, price.SiteId, price.EffectiveFrom, price.EffectiveTo, price.Id, cancellationToken);
             if (hasOverlap)
             {
                 return PricingErrors.OverlappingPrice();
@@ -33,7 +33,7 @@ public sealed class UpdatePriceStatusHandler(IApplicationDbContext dbContext, Au
             price.Status = ProductPriceStatus.Published;
             price.PublishedByUserId = command.UserId;
             price.PublishedAtUtc = DateTimeOffset.UtcNow;
-            await auditLogService.RecordAsync(AuditActions.Approved, AuditEntityTypes.ProductPrice, price.Id, command.UserId, price.SiteId, $"Published price for {price.Product.Sku}", cancellationToken: cancellationToken);
+            await auditLogService.RecordAsync(AuditActions.Approved, AuditEntityTypes.ProductPrice, price.Id, command.UserId, price.SiteId, $"Published price for {price.Product.Sku} {price.ProductUnit.UnitName}", cancellationToken: cancellationToken);
         }
         else if (action == "archive")
         {
@@ -46,7 +46,7 @@ public sealed class UpdatePriceStatusHandler(IApplicationDbContext dbContext, Au
             price.ArchivedByUserId = command.UserId;
             price.ArchivedAtUtc = DateTimeOffset.UtcNow;
             price.Notes = string.IsNullOrWhiteSpace(command.Notes) ? price.Notes : command.Notes.Trim();
-            await auditLogService.RecordAsync(AuditActions.Cancelled, AuditEntityTypes.ProductPrice, price.Id, command.UserId, price.SiteId, $"Archived price for {price.Product.Sku}", cancellationToken: cancellationToken);
+            await auditLogService.RecordAsync(AuditActions.Cancelled, AuditEntityTypes.ProductPrice, price.Id, command.UserId, price.SiteId, $"Archived price for {price.Product.Sku} {price.ProductUnit.UnitName}", cancellationToken: cancellationToken);
         }
         else
         {

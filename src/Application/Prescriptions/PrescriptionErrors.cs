@@ -33,4 +33,7 @@ internal static class PrescriptionErrors
 
     public static Error OnlyCreatorCanCancel() =>
         new("prescriptions.only_creator_can_cancel", "Only the creator of a prescription can cancel it.");
+    public static Error ProductUnitNotFound(Guid productUnitId) =>
+        new("prescriptions.product_unit_not_found", $"Product unit '{productUnitId}' was not found.");
+
 }

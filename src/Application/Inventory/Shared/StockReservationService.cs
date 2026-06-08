@@ -1,5 +1,4 @@
 using PharmacyCentral.Application.Abstractions.Persistence;
-using PharmacyCentral.Application.Recalls;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Prescriptions;
 using SharedKernel.Results;
@@ -12,7 +11,8 @@ public sealed class StockReservationService(IApplicationDbContext dbContext)
     {
         foreach (PrescriptionLine line in prescription.Lines)
         {
-            decimal remaining = line.PrescribedQuantity;
+            decimal quantityNeededInBaseUnits = line.QuantityInBaseUnits > 0 ? line.QuantityInBaseUnits : line.PrescribedQuantity;
+            decimal remaining = quantityNeededInBaseUnits;
             List<InventoryBalance> balances = await dbContext.ListAvailableBalancesForReservationAsync(line.ProductId, prescription.SiteId, prescription.StorageLocationId, cancellationToken);
 
             foreach (InventoryBalance balance in balances)
@@ -22,10 +22,6 @@ public sealed class StockReservationService(IApplicationDbContext dbContext)
                     break;
                 }
 
-                if (await dbContext.IsProductBatchBlockedByActiveRecallAsync(balance.ProductBatchId, prescription.SiteId, cancellationToken))
-                {
-                    continue;
-                }
 
                 decimal available = balance.QuantityOnHand - balance.QuantityReserved;
                 if (available <= 0)
@@ -61,7 +57,7 @@ public sealed class StockReservationService(IApplicationDbContext dbContext)
 
             if (remaining > 0)
             {
-                return Result.Failure(InventoryErrors.InsufficientStockForAllocation(line.PrescribedQuantity, line.PrescribedQuantity - remaining));
+                return Result.Failure(InventoryErrors.InsufficientStockForAllocation(quantityNeededInBaseUnits, quantityNeededInBaseUnits - remaining));
             }
         }
 

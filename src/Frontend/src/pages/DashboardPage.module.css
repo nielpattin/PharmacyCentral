@@ -755,3 +755,208 @@
       grid-template-columns: repeat(3, 1fr);
    }
 }
+
+
+/* ─── Manager dashboard visual refresh ─── */
+.dashboardPage {
+   display: grid;
+   align-content: start;
+   gap: 12px;
+   min-height: min-content;
+   padding-bottom: 16px;
+}
+.dashboardPage :global(.page-actions) {
+   display: grid;
+   grid-template-columns: minmax(240px, 340px) auto;
+   gap: 10px;
+   align-items: center;
+}
+.dashboardPage :global(.page-actions select),
+.dashboardPage :global(.page-actions button) {
+   min-height: 44px;
+   border-radius: var(--radius-md);
+   font-size: 15px;
+   font-weight: 650;
+}
+.dashboardPage :global(.page-actions select) {
+   border-color: var(--line);
+   background: var(--surface);
+   color: var(--text);
+}
+.dashCard,
+.opsHealthBand {
+   border-radius: var(--radius-md);
+   background: var(--surface);
+   box-shadow: none;
+}
+.opsHealthBand {
+   border-color: color-mix(in oklch, var(--primary) 14%, var(--line));
+}
+.opsHealthInner {
+   gap: 12px;
+   padding: 14px 16px;
+}
+.dashCardHeader {
+   padding: 14px 16px 6px;
+}
+.dashCardBody {
+   padding: 8px 16px 14px;
+}
+.dashCardTitle,
+.opsFactLabel,
+.networkSecondaryLabel {
+   color: var(--text);
+   font-size: 14px;
+   font-weight: 850;
+   letter-spacing: 0.06em;
+   text-transform: uppercase;
+}
+.dashCardSubtitle,
+.priorityHint,
+.activityFeedSummary,
+.activityFeedMeta,
+.activityFeedEmptyText,
+.todayMixLabel,
+.todayMixCount,
+.attentionBarLabel,
+.attentionBarCount,
+.networkRowLabel,
+.networkRowCount {
+   font-size: 14px;
+   line-height: 1.4;
+}
+.opsFact {
+   gap: 4px;
+   padding: 12px;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface-soft);
+}
+.opsFactValue {
+   font-size: 1.25rem;
+   font-weight: 900;
+}
+.dashboardPage .opsFact {
+   padding: 10px 12px;
+}
+.dashboardPage .opsFactValue {
+   font-size: 1.12rem;
+}
+.dashboardPage .opsStatusLabel,
+.dashboardPage .opsStatusCount {
+   font-size: 1rem;
+}
+.priorityQueue {
+   gap: 8px;
+}
+.priorityItem {
+   min-height: 58px;
+   gap: 12px;
+   padding: 10px 12px;
+   border: 1px solid var(--line);
+   border-radius: var(--radius-md);
+   background: var(--surface);
+}
+.priorityItem:first-child {
+   border-top: 1px solid var(--line);
+}
+.priorityItem:hover {
+   border-color: color-mix(in oklch, var(--primary) 24%, var(--line));
+   background: var(--surface-soft);
+}
+.priorityIcon {
+   width: 40px;
+   height: 40px;
+   border-radius: var(--radius-md);
+}
+.priorityIcon svg {
+   width: 18px;
+   height: 18px;
+}
+.priorityLabel {
+   font-size: 15px;
+   font-weight: 850;
+}
+.priorityCount {
+   font-size: 1.1rem;
+   font-weight: 900;
+}
+.attentionBarTrack,
+.todayMixTrack,
+.networkBar {
+   height: 7px;
+   border-radius: 999px;
+}
+.attentionBarFill,
+.todayMixFill,
+.networkBarFill {
+   border-radius: 999px;
+}
+.dashTabsRoot {
+   gap: 10px;
+}
+.dashTabs {
+   gap: 4px;
+   padding: 5px;
+   border-radius: var(--radius-md);
+}
+.dashTab {
+   min-height: 44px;
+   border-radius: var(--radius-sm);
+   font-size: 14px;
+   font-weight: 850;
+}
+.dashTabIndicator {
+   box-shadow: 0 1px 3px rgb(15 23 42 / 0.08);
+}
+.todayGrid {
+   grid-template-columns: minmax(0, 1.25fr) minmax(320px, 380px);
+   gap: 12px;
+}
+.stockGrid {
+   grid-template-columns: minmax(0, 1.2fr) minmax(300px, 360px);
+   gap: 12px;
+}
+.flowGrid {
+   grid-template-columns: minmax(0, 1.2fr) minmax(280px, 340px);
+   gap: 12px;
+}
+.networkGrid {
+   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+   gap: 12px;
+}
+.todayMain,
+.todaySide,
+.stockMain,
+.stockSide {
+   gap: 12px;
+}
+.activityFeedItem {
+   gap: 6px;
+   padding: 12px 0;
+}
+.actionLinkItem {
+   min-height: 48px;
+   gap: 10px;
+   padding: 10px 0;
+   font-size: 14px;
+   font-weight: 800;
+}
+.actionLinkIcon {
+   width: 34px;
+   height: 34px;
+   border-radius: var(--radius-md);
+}
+@media (max-width: 720px) {
+   .dashboardPage :global(.page-actions) {
+      grid-template-columns: minmax(0, 1fr);
+   }
+
+   .opsFactRow {
+      grid-template-columns: minmax(0, 1fr);
+   }
+
+   .dashTabs {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+}

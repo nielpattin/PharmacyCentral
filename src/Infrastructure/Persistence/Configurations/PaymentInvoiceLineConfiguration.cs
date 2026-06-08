@@ -17,8 +17,10 @@ internal sealed class PaymentInvoiceLineConfiguration : IEntityTypeConfiguration
         builder.Property(line => line.ProductId).HasColumnName("product_id");
         builder.Property(line => line.PrescriptionLineId).HasColumnName("prescription_line_id");
         builder.Property(line => line.ProductBatchId).HasColumnName("product_batch_id");
+        builder.Property(line => line.ProductUnitId).HasColumnName("product_unit_id");
         builder.Property(line => line.ProductNameSnapshot).HasColumnName("product_name_snapshot").HasMaxLength(300).IsRequired();
         builder.Property(line => line.BatchNumberSnapshot).HasColumnName("batch_number_snapshot").HasMaxLength(100);
+        builder.Property(line => line.UnitNameSnapshot).HasColumnName("unit_name_snapshot").HasMaxLength(50);
         builder.Property(line => line.DisplayOrder).HasColumnName("display_order");
         builder.Property(line => line.UnitPrice).HasColumnName("unit_price").HasPrecision(18, 2);
         builder.Property(line => line.Quantity).HasColumnName("quantity").HasPrecision(18, 2);
@@ -34,6 +36,11 @@ internal sealed class PaymentInvoiceLineConfiguration : IEntityTypeConfiguration
         builder.HasOne(line => line.Product)
             .WithMany()
             .HasForeignKey(line => line.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(line => line.ProductUnit)
+            .WithMany()
+            .HasForeignKey(line => line.ProductUnitId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

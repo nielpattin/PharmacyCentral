@@ -139,7 +139,7 @@ Yêu cầu xử lý webhook:
 | POST | `/api/pricing/prices` |
 | POST | `/api/pricing/prices/{id}/publish` |
 | POST | `/api/pricing/prices/{id}/archive` |
-| GET | `/api/pricing/active?productId={id}&siteId={id}&effectiveDate=2031-06-01` |
+| GET | `/api/pricing/active?productId={id}&productUnitId={id}&siteId={id}&effectiveDate=2031-06-01` |
 
 ### Mua hàng và nhận hàng
 
@@ -162,18 +162,12 @@ Yêu cầu xử lý webhook:
 | POST | `/api/inventory/movements` |
 | POST | `/api/inventory/fefo-allocate` |
 
-### Chất lượng và thu hồi
+### Chất lượng
 
 | Method | Path |
 | --- | --- |
 | POST | `/api/quality/batches/{batchId}/release` |
 | POST | `/api/quality/batches/{batchId}/reject` |
-| GET | `/api/recalls` |
-| POST | `/api/recalls` |
-| POST | `/api/recalls/{id}/activate` |
-| POST | `/api/recalls/{id}/close` |
-| POST | `/api/recalls/{id}/cancel` |
-| POST | `/api/recalls/{id}/batches/{affectedBatchId}/action` |
 
 ### Quầy bán thuốc
 

@@ -12,21 +12,13 @@ internal sealed class Update : IEndpoint
     {
         public string Sku { get; set; } = string.Empty;
         public string? Barcode { get; set; }
-
-
         public string Name { get; set; } = string.Empty;
-
         public string? Category { get; set; }
-
-        public string? Unit { get; set; }
-
         public string? Manufacturer { get; set; }
-
         public string? Status { get; set; }
-
         public string? Notes { get; set; }
-
         public bool? IsActive { get; set; }
+        public List<Create.ProductUnitRequest> Units { get; set; } = [];
     }
 
     public void MapEndpoint(IEndpointRouteBuilder app)
@@ -49,11 +41,11 @@ internal sealed class Update : IEndpoint
                 Barcode = request.Barcode,
                 Name = request.Name,
                 Category = request.Category,
-                Unit = request.Unit,
                 Manufacturer = request.Manufacturer,
                 Status = request.Status,
                 Notes = request.Notes,
                 IsActive = request.IsActive,
+                Units = request.Units.Select(Create.ToCommandItem).ToList()
             };
 
             Result<ProductDetails> result = await handler.HandleAsync(id, command, cancellationToken);
@@ -72,36 +64,19 @@ internal sealed class Update : IEndpoint
 
     private static Dictionary<string, string[]> Validate(Request request)
     {
-        Dictionary<string, string[]> errors = [];
-
-        AddRequired(errors, nameof(request.Sku), request.Sku);
-        AddRequired(errors, nameof(request.Name), request.Name);
-        AddMaxLength(errors, nameof(request.Sku), request.Sku, 50);
-        AddMaxLength(errors, nameof(request.Barcode), request.Barcode, 100);
-        AddMaxLength(errors, nameof(request.Name), request.Name, 200);
-        AddMaxLength(errors, nameof(request.Category), request.Category, 100);
-        AddMaxLength(errors, nameof(request.Unit), request.Unit, 50);
-        AddMaxLength(errors, nameof(request.Manufacturer), request.Manufacturer, 200);
-        AddMaxLength(errors, nameof(request.Status), request.Status, 30);
-        AddMaxLength(errors, nameof(request.Notes), request.Notes, 1000);
-
-        return errors;
-    }
-
-    private static void AddRequired(Dictionary<string, string[]> errors, string fieldName, string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
+        Create.Request createRequest = new()
         {
-            errors[fieldName] = [$"{fieldName} is required."];
-        }
-    }
+            Sku = request.Sku,
+            Barcode = request.Barcode,
+            Name = request.Name,
+            Category = request.Category,
+            Manufacturer = request.Manufacturer,
+            Status = request.Status,
+            Notes = request.Notes,
+            IsActive = request.IsActive,
+            Units = request.Units
+        };
 
-    private static void AddMaxLength(Dictionary<string, string[]> errors, string fieldName, string? value, int maxLength)
-    {
-        if (!string.IsNullOrWhiteSpace(value) && value.Trim().Length > maxLength)
-        {
-            errors[fieldName] = [$"{fieldName} must be {maxLength} characters or fewer."];
-        }
+        return Create.Validate(createRequest);
     }
 }
-

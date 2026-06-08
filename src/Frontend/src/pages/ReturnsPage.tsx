@@ -23,7 +23,7 @@ import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
 import styles from "./ReturnsPage.module.css";
 
-type ReturnReason = "ReturnToSupplier" | "Damaged" | "Expired" | "Recalled" | "InventoryRemoval";
+type ReturnReason = "ReturnToSupplier" | "Damaged" | "Expired" | "InventoryRemoval";
 
 type ReturnFormState = {
    productId: string;
@@ -35,7 +35,7 @@ type ReturnFormState = {
    notes: string;
 };
 
-const returnReasons: ReturnReason[] = ["ReturnToSupplier", "Damaged", "Expired", "Recalled", "InventoryRemoval"];
+const returnReasons: ReturnReason[] = ["ReturnToSupplier", "Damaged", "Expired", "InventoryRemoval"];
 
 const returnMovementTypes = new Set(["ReturnToSupplier", "InventoryReturn"]);
 

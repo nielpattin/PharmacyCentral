@@ -5,6 +5,7 @@ using PharmacyCentral.Application.Prescriptions;
 using PharmacyCentral.Domain.Payments;
 using PharmacyCentral.Domain.Prescriptions;
 using PharmacyCentral.Domain.Pricing;
+using PharmacyCentral.Domain.Products;
 using SharedKernel.Results;
 
 namespace PharmacyCentral.Application.Payments.CreatePrescriptionPayment;
@@ -56,14 +57,14 @@ public sealed class CreatePrescriptionPaymentHandler(
         foreach (PrescriptionLine line in prescription.Lines)
         {
             ProductPrice? activePrice = await dbContext.GetActiveProductPriceAsync(
-                line.ProductId, prescription.SiteId, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
+                line.ProductId, line.ProductUnitId, prescription.SiteId, DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
 
             if (activePrice is null)
             {
                 return PaymentErrors.NoActivePriceFound(line.ProductId);
             }
 
-            var product = await dbContext.GetProductByIdAsync(line.ProductId, cancellationToken);
+            Product? product = await dbContext.GetProductByIdAsync(line.ProductId, cancellationToken);
             string productName = product?.Name ?? $"Product {line.ProductId}";
 
             decimal lineTotal = activePrice.UnitPrice * line.PrescribedQuantity;
@@ -78,6 +79,8 @@ public sealed class CreatePrescriptionPaymentHandler(
                 ProductNameSnapshot = productName,
                 ProductBatchId = line.ProductBatchId,
                 BatchNumberSnapshot = line.ProductBatch?.BatchNumber,
+                ProductUnitId = line.ProductUnitId,
+                UnitNameSnapshot = line.ProductUnit?.UnitName ?? activePrice.ProductUnit.UnitName,
                 DisplayOrder = displayOrder++,
                 UnitPrice = activePrice.UnitPrice,
                 Quantity = line.PrescribedQuantity,

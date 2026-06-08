@@ -7,12 +7,19 @@ import { Badge } from "../components/shadcn/badge";
 import { Button } from "../components/shadcn/button";
 import { EmptyState } from "../components/ui/EmptyState";
 import {
+   archiveProductPrice,
    createProduct,
+   createProductPrice,
    deleteProduct,
+   loadProductPrices,
    loadProducts,
+   loadSites,
+   publishProductPrice,
    updateProduct,
    type ProductDto,
+   type ProductPriceDto,
    type ProductUpsertRequest,
+   type SiteDto,
 } from "../api/pharmacyClient";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useT } from "../lib/i18n";
@@ -25,17 +32,44 @@ import {
    type ProductFormValues,
 } from "./shared/pharmacyForms";
 
+type PriceFormValues = {
+   productUnitId: string;
+   siteId: string;
+   unitPrice: string;
+   currency: string;
+   effectiveFrom: string;
+   effectiveTo: string;
+   notes: string;
+};
+
+const today = new Date().toISOString().slice(0, 10);
+
+const blankPriceForm: PriceFormValues = {
+   productUnitId: "",
+   siteId: "",
+   unitPrice: "",
+   currency: "VND",
+   effectiveFrom: today,
+   effectiveTo: "",
+   notes: "",
+};
+
 export default function ProductsPage() {
    const t = useT();
    const [products, setProducts] = useState<ProductDto[]>([]);
+   const [prices, setPrices] = useState<ProductPriceDto[]>([]);
+   const [sites, setSites] = useState<SiteDto[]>([]);
    const [isLoading, setIsLoading] = useState(true);
    const [bannerError, setBannerError] = useState<string | null>(null);
    const [selectedProductId, setSelectedProductId] = useState("");
+   const [selectedPriceId, setSelectedPriceId] = useState("");
    const [editorTargetId, setEditorTargetId] = useState<string | null>(null);
    const [query, setQuery] = useState("");
    const [isSaving, setIsSaving] = useState(false);
    const [isDeleting, setIsDeleting] = useState(false);
+   const [isPriceSaving, setIsPriceSaving] = useState(false);
    const [createToken, setCreateToken] = useState(0);
+   const [priceForm, setPriceForm] = useState<PriceFormValues>(blankPriceForm);
 
    const selectedProduct = useMemo(
       () => products.find((product) => product.id === selectedProductId) ?? null,
@@ -54,7 +88,8 @@ export default function ProductsPage() {
             product.barcode ?? "",
             product.name,
             product.category ?? "",
-            product.unit ?? "",
+            product.baseUnitName ?? "",
+            ...product.units.map((unit) => unit.unitName),
             product.manufacturer ?? "",
             product.status,
             product.notes ?? "",
@@ -69,30 +104,56 @@ export default function ProductsPage() {
       editorProduct === null ? blankProductValues() : productValuesFromDto(editorProduct);
    const formKey = `${editorTargetId ?? `new-product-${createToken}`}-${JSON.stringify(formValues)}`;
 
+   const selectedProductPrices = useMemo(
+      () => (editorProduct === null ? [] : prices.filter((price) => price.productId === editorProduct.id)),
+      [editorProduct, prices],
+   );
+   const selectedPrice = selectedProductPrices.find((price) => price.id === selectedPriceId) ?? null;
+   const priceUnits = (editorProduct?.units ?? []).slice().sort((left, right) => left.sortOrder - right.sortOrder);
+   const defaultPriceUnitId = priceUnits.find((unit) => unit.isDefaultSaleUnit)?.id ?? priceUnits[0]?.id ?? "";
+   const activePriceUnitId = priceUnits.some((unit) => unit.id === priceForm.productUnitId)
+      ? priceForm.productUnitId
+      : defaultPriceUnitId;
+
    useMountEffect(() => {
-      void refreshProducts();
+      void refreshData();
    });
 
-   async function refreshProducts(preferredSelectedProductId?: string) {
+   async function refreshData(preferredSelectedProductId?: string, preferredSelectedPriceId?: string) {
       setIsLoading(true);
       setBannerError(null);
 
       try {
-         const data = await loadProducts();
-         setProducts(data);
+         const [productData, priceData, siteData] = await Promise.all([
+            loadProducts(),
+            loadProductPrices({ limit: 500 }),
+            loadSites(),
+         ]);
+         setProducts(productData);
+         setPrices(priceData);
+         setSites(siteData);
 
          const nextSelectedProductId = preferredSelectedProductId ?? selectedProductId;
-         const resolvedSelectedProductId = data.some((product) => product.id === nextSelectedProductId)
+         const resolvedSelectedProductId = productData.some((product) => product.id === nextSelectedProductId)
             ? nextSelectedProductId
-            : (data[0]?.id ?? "");
+            : (productData[0]?.id ?? "");
 
          setSelectedProductId(resolvedSelectedProductId);
+         setSelectedPriceId((current) =>
+            priceData.some((price) => price.id === (preferredSelectedPriceId ?? current))
+               ? preferredSelectedPriceId ?? current
+               : "",
+         );
          setEditorTargetId((current) => {
-            if (current === null) {
-               return null;
+            if (preferredSelectedProductId !== undefined) {
+               return resolvedSelectedProductId || null;
             }
 
-            return data.some((product) => product.id === current) ? current : resolvedSelectedProductId || null;
+            if (current === null) {
+               return resolvedSelectedProductId || null;
+            }
+
+            return productData.some((product) => product.id === current) ? current : resolvedSelectedProductId || null;
          });
       } catch (error) {
          setBannerError(error instanceof Error ? error.message : t("errors.loadProducts"));
@@ -111,7 +172,7 @@ export default function ProductsPage() {
             barcode: values.barcode.trim(),
             name: normalizeText(values.name),
             category: values.category.trim(),
-            unit: values.unit.trim(),
+            units: values.units,
             manufacturer: values.manufacturer.trim(),
             status: normalizeText(values.status) || "Active",
             notes: values.notes.trim(),
@@ -120,12 +181,69 @@ export default function ProductsPage() {
 
          const result =
             editorTargetId === null ? await createProduct(request) : await updateProduct(editorTargetId, request);
-         await refreshProducts(result.id);
+         await refreshData(result.id);
          setEditorTargetId(result.id);
       } catch (error) {
          setBannerError(error instanceof Error ? error.message : t("errors.saveProduct"));
       } finally {
          setIsSaving(false);
+      }
+   }
+
+   async function handleCreatePrice() {
+      if (editorProduct === null || activePriceUnitId === "" || priceForm.unitPrice.trim() === "") {
+         return;
+      }
+
+      setIsPriceSaving(true);
+      setBannerError(null);
+      try {
+         const created = await createProductPrice({
+            productId: editorProduct.id,
+            productUnitId: activePriceUnitId,
+            siteId: priceForm.siteId === "" ? null : priceForm.siteId,
+            unitPrice: Number(priceForm.unitPrice),
+            currency: priceForm.currency.trim() || "VND",
+            effectiveFrom: priceForm.effectiveFrom,
+            effectiveTo: priceForm.effectiveTo === "" ? null : priceForm.effectiveTo,
+            notes: priceForm.notes.trim() === "" ? null : priceForm.notes.trim(),
+         });
+         setPriceForm(blankPriceForm);
+         await refreshData(editorProduct.id, created.id);
+      } catch (error) {
+         setBannerError(error instanceof Error ? error.message : t("errors.savePrice"));
+      } finally {
+         setIsPriceSaving(false);
+      }
+   }
+
+   async function handlePublishPrice() {
+      if (selectedPrice === null) return;
+
+      setIsPriceSaving(true);
+      setBannerError(null);
+      try {
+         const updated = await publishProductPrice(selectedPrice.id);
+         await refreshData(updated.productId, updated.id);
+      } catch (error) {
+         setBannerError(error instanceof Error ? error.message : t("errors.savePrice"));
+      } finally {
+         setIsPriceSaving(false);
+      }
+   }
+
+   async function handleArchivePrice() {
+      if (selectedPrice === null) return;
+
+      setIsPriceSaving(true);
+      setBannerError(null);
+      try {
+         const updated = await archiveProductPrice(selectedPrice.id);
+         await refreshData(updated.productId, updated.id);
+      } catch (error) {
+         setBannerError(error instanceof Error ? error.message : t("errors.savePrice"));
+      } finally {
+         setIsPriceSaving(false);
       }
    }
 
@@ -140,7 +258,7 @@ export default function ProductsPage() {
 
       try {
          await deleteProduct(productId);
-         await refreshProducts();
+         await refreshData();
       } catch (error) {
          setBannerError(error instanceof Error ? error.message : t("errors.deleteProduct"));
       } finally {
@@ -151,12 +269,16 @@ export default function ProductsPage() {
    function handleSelectProduct(productId: string) {
       setSelectedProductId(productId);
       setEditorTargetId(productId);
+      setSelectedPriceId("");
+      setPriceForm(blankPriceForm);
    }
 
    function handleNewProduct() {
       setCreateToken((current) => current + 1);
       setSelectedProductId("");
       setEditorTargetId(null);
+      setSelectedPriceId("");
+      setPriceForm(blankPriceForm);
    }
 
    return (
@@ -230,6 +352,135 @@ export default function ProductsPage() {
                            <p className="mt-1 text-sm text-muted-foreground">{t("products.editorDesc")}</p>
                         </div>
                      </div>
+                     {editorProduct !== null ? (
+                        <section className={styles.pricePanel}>
+                           <div className={styles.priceHeader}>
+                              <div>
+                                 <h3>Giá bán theo đơn vị</h3>
+                                 <p>Tạo giá cho từng đơn vị bán của thuốc đang chọn.</p>
+                              </div>
+                              <Badge variant="outline">{selectedProductPrices.length} giá</Badge>
+                           </div>
+                           <div className={styles.priceFormGrid}>
+                              <label>
+                                 <span>Đơn vị bán</span>
+                                 <select
+                                    className={styles.control}
+                                    value={activePriceUnitId}
+                                    onChange={(event) =>
+                                       setPriceForm((current) => ({ ...current, productUnitId: event.target.value }))
+                                    }
+                                 >
+                                    {priceUnits.map((unit) => (
+                                       <option key={unit.id} value={unit.id}>
+                                          {formatUnitOption(unit, editorProduct.baseUnitName)}
+                                       </option>
+                                    ))}
+                                 </select>
+                              </label>
+                              <label>
+                                 <span>Cơ sở áp dụng</span>
+                                 <select
+                                    className={styles.control}
+                                    value={priceForm.siteId}
+                                    onChange={(event) => setPriceForm((current) => ({ ...current, siteId: event.target.value }))}
+                                 >
+                                    <option value="">Tất cả cơ sở</option>
+                                    {sites.map((site) => (
+                                       <option key={site.id} value={site.id}>
+                                          {site.name}
+                                       </option>
+                                    ))}
+                                 </select>
+                              </label>
+                              <label>
+                                 <span>Giá bán</span>
+                                 <input
+                                    className={styles.control}
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={priceForm.unitPrice}
+                                    onChange={(event) => setPriceForm((current) => ({ ...current, unitPrice: event.target.value }))}
+                                 />
+                              </label>
+                              <label>
+                                 <span>Tiền tệ</span>
+                                 <input
+                                    className={styles.control}
+                                    maxLength={3}
+                                    value={priceForm.currency}
+                                    onChange={(event) => setPriceForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))}
+                                 />
+                              </label>
+                              <label>
+                                 <span>Từ ngày</span>
+                                 <input
+                                    className={styles.control}
+                                    type="date"
+                                    value={priceForm.effectiveFrom}
+                                    onChange={(event) => setPriceForm((current) => ({ ...current, effectiveFrom: event.target.value }))}
+                                 />
+                              </label>
+                              <label>
+                                 <span>Đến ngày</span>
+                                 <input
+                                    className={styles.control}
+                                    type="date"
+                                    value={priceForm.effectiveTo}
+                                    onChange={(event) => setPriceForm((current) => ({ ...current, effectiveTo: event.target.value }))}
+                                 />
+                              </label>
+                           </div>
+                           <div className={styles.priceActions}>
+                              <Button
+                                 type="button"
+                                 disabled={isPriceSaving || activePriceUnitId === "" || priceForm.unitPrice.trim() === ""}
+                                 onClick={() => void handleCreatePrice()}
+                              >
+                                 {isPriceSaving ? t("common.saving") : "Tạo giá"}
+                              </Button>
+                              <Button
+                                 type="button"
+                                 disabled={selectedPrice === null || selectedPrice.status !== "Draft" || isPriceSaving}
+                                 onClick={() => void handlePublishPrice()}
+                              >
+                                 Publish
+                              </Button>
+                              <Button
+                                 type="button"
+                                 variant="outline"
+                                 disabled={selectedPrice === null || selectedPrice.status === "Archived" || isPriceSaving}
+                                 onClick={() => void handleArchivePrice()}
+                              >
+                                 Archive
+                              </Button>
+                           </div>
+                           {selectedProductPrices.length === 0 ? (
+                              <EmptyState icon="₫" title="Chưa có giá bán" description="Tạo giá theo đơn vị bán để quầy thu ngân dùng đúng giá." />
+                           ) : (
+                              <div className={styles.priceList}>
+                                 {selectedProductPrices.map((price) => (
+                                    <button
+                                       key={price.id}
+                                       type="button"
+                                       className={`${styles.priceRow}${price.id === selectedPriceId ? ` ${styles.priceRowSelected}` : ""}`}
+                                       onClick={() => setSelectedPriceId(price.id)}
+                                    >
+                                       <span>
+                                          <strong>{price.productUnitName}</strong>
+                                          <small>{price.siteName ?? "Tất cả cơ sở"}</small>
+                                       </span>
+                                       <span>{formatMoney(price.unitPrice, price.currency)}</span>
+                                       <Badge variant={price.status === "Published" ? "secondary" : price.status === "Archived" ? "outline" : "default"}>
+                                          {price.status}
+                                       </Badge>
+                                    </button>
+                                 ))}
+                              </div>
+                           )}
+                        </section>
+                     ) : null}
                      <ProductForm
                         key={formKey}
                         mode={editorMode}
@@ -244,4 +495,21 @@ export default function ProductsPage() {
          </div>
       </AppShell>
    );
+}
+
+function formatMoney(value: number, currency: string) {
+   return new Intl.NumberFormat("vi-VN", { style: "currency", currency }).format(value);
+}
+
+function formatUnitOption(unit: ProductDto["units"][number], baseUnitName: string | null) {
+   if (unit.isBaseUnit) {
+      return `${unit.unitName} (đơn vị cơ sở)`;
+   }
+
+   const baseUnit = baseUnitName ?? "đơn vị cơ sở";
+   return `1 ${unit.unitName} = ${formatUnitFactor(unit.conversionFactorToBaseUnit)} ${baseUnit}`;
+}
+
+function formatUnitFactor(value: number) {
+   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 3 }).format(value);
 }

@@ -9,8 +9,10 @@ public sealed class PaymentInvoiceLine
     public Guid ProductId { get; set; }
     public Guid? PrescriptionLineId { get; set; }
     public Guid? ProductBatchId { get; set; }
+    public Guid? ProductUnitId { get; set; }
     public string ProductNameSnapshot { get; set; } = string.Empty;
     public string? BatchNumberSnapshot { get; set; }
+    public string? UnitNameSnapshot { get; set; }
     public int DisplayOrder { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal Quantity { get; set; }
@@ -19,4 +21,5 @@ public sealed class PaymentInvoiceLine
 
     public PaymentInvoice? PaymentInvoice { get; set; }
     public Product? Product { get; set; }
+    public ProductUnit? ProductUnit { get; set; }
 }

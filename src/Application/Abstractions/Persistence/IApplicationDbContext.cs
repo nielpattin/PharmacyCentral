@@ -9,7 +9,6 @@ using PharmacyCentral.Domain.Prescriptions;
 using PharmacyCentral.Domain.Pricing;
 using PharmacyCentral.Domain.Procurement;
 using PharmacyCentral.Domain.Products;
-using PharmacyCentral.Domain.Recalls;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.StorageLocations;
@@ -30,6 +29,8 @@ public interface IApplicationDbContext
     IQueryable<StorageLocation> StorageLocations { get; }
 
     IQueryable<Product> Products { get; }
+
+    IQueryable<ProductUnit> ProductUnits { get; }
 
     IQueryable<ProductBatch> ProductBatches { get; }
 
@@ -65,9 +66,6 @@ public interface IApplicationDbContext
 
     IQueryable<ProductPrice> ProductPrices { get; }
 
-    IQueryable<RecallCase> RecallCases { get; }
-
-    IQueryable<RecallAffectedBatch> RecallAffectedBatches { get; }
 
     IQueryable<Supplier> Suppliers { get; }
 
@@ -101,6 +99,8 @@ public interface IApplicationDbContext
 
     Task<Product?> GetProductByIdAsync(Guid productId, CancellationToken cancellationToken = default);
 
+    Task<ProductUnit?> GetProductUnitByIdAsync(Guid productUnitId, CancellationToken cancellationToken = default);
+
     Task<bool> ProductSkuExistsAsync(string sku, Guid? excludedProductId = null, CancellationToken cancellationToken = default);
 
     Task<ProductBatch?> GetProductBatchByIdAsync(Guid productBatchId, CancellationToken cancellationToken = default);
@@ -123,11 +123,6 @@ public interface IApplicationDbContext
 
     Task<List<StockLedgerEntry>> ListStockLedgerEntriesAsync(Guid? productId = null, Guid? productBatchId = null, Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, Guid? storageLocationId = null, int limit = 100, CancellationToken cancellationToken = default);
 
-    Task<bool> IsProductBatchBlockedByActiveRecallAsync(Guid productBatchId, Guid siteId, CancellationToken cancellationToken = default);
-
-    Task<List<RecallCase>> ListRecallCasesAsync(string? status = null, int limit = 100, CancellationToken cancellationToken = default);
-
-    Task<RecallCase?> GetRecallCaseByIdAsync(Guid recallCaseId, CancellationToken cancellationToken = default);
 
     Task<List<GoodsReceipt>> ListGoodsReceiptsAsync(int limit = 100, IReadOnlyCollection<Guid>? siteIds = null, CancellationToken cancellationToken = default);
 
@@ -165,13 +160,13 @@ public interface IApplicationDbContext
 
     Task<Prescription?> GetPrescriptionByIdAsync(Guid prescriptionId, CancellationToken cancellationToken = default);
 
-    Task<List<ProductPrice>> ListProductPricesAsync(Guid? productId = null, Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<ProductPrice>> ListProductPricesAsync(Guid? productId = null, Guid? productUnitId = null, Guid? siteId = null, IReadOnlyCollection<Guid>? siteIds = null, string? status = null, int limit = 100, CancellationToken cancellationToken = default);
 
     Task<ProductPrice?> GetProductPriceByIdAsync(Guid priceId, CancellationToken cancellationToken = default);
 
-    Task<ProductPrice?> GetActiveProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveDate, CancellationToken cancellationToken = default);
+    Task<ProductPrice?> GetActiveProductPriceAsync(Guid productId, Guid productUnitId, Guid? siteId, DateOnly effectiveDate, CancellationToken cancellationToken = default);
 
-    Task<bool> HasOverlappingPublishedProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveFrom, DateOnly? effectiveTo, Guid? excludePriceId = null, CancellationToken cancellationToken = default);
+    Task<bool> HasOverlappingPublishedProductPriceAsync(Guid productId, Guid productUnitId, Guid? siteId, DateOnly effectiveFrom, DateOnly? effectiveTo, Guid? excludePriceId = null, CancellationToken cancellationToken = default);
     Task<CustomerProfile?> GetCustomerProfileByPhoneAsync(string normalizedPhoneNumber, CancellationToken cancellationToken = default);
 
     Task<List<Prescription>> ListCustomerPrescriptionsAsync(Guid customerProfileId, int limit = 100, CancellationToken cancellationToken = default);

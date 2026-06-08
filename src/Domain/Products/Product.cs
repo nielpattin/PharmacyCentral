@@ -7,7 +7,7 @@ public sealed class Product
     public string? Barcode { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Category { get; set; }
-    public string? Unit { get; set; }
+    public List<ProductUnit> Units { get; set; } = [];
     public string? Manufacturer { get; set; }
     public string Status { get; set; } = "Active";
     public string? Notes { get; set; }

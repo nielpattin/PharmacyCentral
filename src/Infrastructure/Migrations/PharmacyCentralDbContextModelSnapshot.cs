@@ -950,10 +950,19 @@ namespace PharmacyCentral.Infrastructure.Migrations
                         .HasColumnType("character varying(300)")
                         .HasColumnName("product_name_snapshot");
 
+                    b.Property<Guid?>("ProductUnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_unit_id");
+
                     b.Property<decimal>("Quantity")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("quantity");
+
+                    b.Property<string>("UnitNameSnapshot")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("unit_name_snapshot");
 
                     b.Property<decimal>("UnitPrice")
                         .HasPrecision(18, 2)
@@ -963,6 +972,8 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ProductId");
+
+                    b.HasIndex("ProductUnitId");
 
                     b.HasIndex("PaymentInvoiceId", "DisplayOrder");
 
@@ -1181,6 +1192,15 @@ namespace PharmacyCentral.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("product_id");
 
+                    b.Property<Guid>("ProductUnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_unit_id");
+
+                    b.Property<decimal>("QuantityInBaseUnits")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("quantity_in_base_units");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PrescriptionId");
@@ -1188,6 +1208,8 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.HasIndex("ProductBatchId");
 
                     b.HasIndex("ProductId");
+
+                    b.HasIndex("ProductUnitId");
 
                     b.ToTable("prescription_lines", (string)null);
                 });
@@ -1238,6 +1260,10 @@ namespace PharmacyCentral.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("product_id");
 
+                    b.Property<Guid>("ProductUnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_unit_id");
+
                     b.Property<DateTimeOffset?>("PublishedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("published_at_utc");
@@ -1267,9 +1293,11 @@ namespace PharmacyCentral.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ProductUnitId");
+
                     b.HasIndex("SiteId");
 
-                    b.HasIndex("ProductId", "SiteId", "Status", "EffectiveFrom");
+                    b.HasIndex("ProductId", "ProductUnitId", "SiteId", "Status", "EffectiveFrom");
 
                     b.ToTable("product_prices", (string)null);
                 });
@@ -1452,11 +1480,6 @@ namespace PharmacyCentral.Infrastructure.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
 
-                    b.Property<string>("Unit")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("unit");
-
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -1475,134 +1498,71 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.ToTable("products", (string)null);
                 });
 
-            modelBuilder.Entity("PharmacyCentral.Domain.Recalls.RecallAffectedBatch", b =>
+            modelBuilder.Entity("PharmacyCentral.Domain.Products.ProductUnit", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<DateTimeOffset?>("ActionedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("actioned_at_utc");
-
-                    b.Property<Guid?>("ActionedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("actioned_by_user_id");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("notes");
-
-                    b.Property<Guid>("ProductBatchId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("product_batch_id");
-
-                    b.Property<Guid>("RecallCaseId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("recall_case_id");
-
-                    b.Property<Guid?>("SiteId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("site_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at_utc");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProductBatchId", "SiteId", "Status");
-
-                    b.HasIndex("RecallCaseId", "ProductBatchId", "SiteId")
-                        .IsUnique();
-
-                    b.ToTable("recall_affected_batches", (string)null);
-                });
-
-            modelBuilder.Entity("PharmacyCentral.Domain.Recalls.RecallCase", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset?>("ActivatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("activated_at_utc");
-
-                    b.Property<Guid?>("ActivatedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("activated_by_user_id");
-
-                    b.Property<DateTimeOffset?>("ClosedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("closed_at_utc");
-
-                    b.Property<Guid?>("ClosedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("closed_by_user_id");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by_user_id");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("notes");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("reason");
-
-                    b.Property<string>("RecallNumber")
-                        .IsRequired()
+                    b.Property<string>("Barcode")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
-                        .HasColumnName("recall_number");
+                        .HasColumnName("barcode");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status");
+                    b.Property<decimal>("ConversionFactorToBaseUnit")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("conversion_factor_to_base_unit");
 
-                    b.Property<string>("Title")
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<bool>("IsBaseUnit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_base_unit");
+
+                    b.Property<bool>("IsDefaultPurchaseUnit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default_purchase_unit");
+
+                    b.Property<bool>("IsDefaultSaleUnit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default_sale_unit");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("UnitName")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("title");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("unit_name");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at_utc");
+                        .HasColumnName("updated_at_utc")
+                        .HasDefaultValueSql("now()");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RecallNumber")
+                    b.HasIndex("Barcode")
+                        .IsUnique()
+                        .HasFilter("barcode IS NOT NULL");
+
+                    b.HasIndex("ProductId", "UnitName")
                         .IsUnique();
 
-                    b.HasIndex("Status");
-
-                    b.ToTable("recall_cases", (string)null);
+                    b.ToTable("product_units", (string)null);
                 });
 
             modelBuilder.Entity("PharmacyCentral.Domain.Replenishment.ReplenishmentRequest", b =>
@@ -2647,9 +2607,16 @@ namespace PharmacyCentral.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("PharmacyCentral.Domain.Products.ProductUnit", "ProductUnit")
+                        .WithMany()
+                        .HasForeignKey("ProductUnitId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("PaymentInvoice");
 
                     b.Navigation("Product");
+
+                    b.Navigation("ProductUnit");
                 });
 
             modelBuilder.Entity("PharmacyCentral.Domain.Payments.PaymentTransaction", b =>
@@ -2708,11 +2675,19 @@ namespace PharmacyCentral.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("PharmacyCentral.Domain.Products.ProductUnit", "ProductUnit")
+                        .WithMany()
+                        .HasForeignKey("ProductUnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Prescription");
 
                     b.Navigation("Product");
 
                     b.Navigation("ProductBatch");
+
+                    b.Navigation("ProductUnit");
                 });
 
             modelBuilder.Entity("PharmacyCentral.Domain.Pricing.ProductPrice", b =>
@@ -2723,12 +2698,20 @@ namespace PharmacyCentral.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("PharmacyCentral.Domain.Products.ProductUnit", "ProductUnit")
+                        .WithMany()
+                        .HasForeignKey("ProductUnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("PharmacyCentral.Domain.Sites.Site", "Site")
                         .WithMany()
                         .HasForeignKey("SiteId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Product");
+
+                    b.Navigation("ProductUnit");
 
                     b.Navigation("Site");
                 });
@@ -2771,23 +2754,15 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.Navigation("PurchaseOrder");
                 });
 
-            modelBuilder.Entity("PharmacyCentral.Domain.Recalls.RecallAffectedBatch", b =>
+            modelBuilder.Entity("PharmacyCentral.Domain.Products.ProductUnit", b =>
                 {
-                    b.HasOne("PharmacyCentral.Domain.Inventory.ProductBatch", "ProductBatch")
-                        .WithMany()
-                        .HasForeignKey("ProductBatchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("PharmacyCentral.Domain.Recalls.RecallCase", "RecallCase")
-                        .WithMany("AffectedBatches")
-                        .HasForeignKey("RecallCaseId")
+                    b.HasOne("PharmacyCentral.Domain.Products.Product", "Product")
+                        .WithMany("Units")
+                        .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("ProductBatch");
-
-                    b.Navigation("RecallCase");
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("PharmacyCentral.Domain.Replenishment.ReplenishmentRequest", b =>
@@ -3042,9 +3017,9 @@ namespace PharmacyCentral.Infrastructure.Migrations
                     b.Navigation("Lines");
                 });
 
-            modelBuilder.Entity("PharmacyCentral.Domain.Recalls.RecallCase", b =>
+            modelBuilder.Entity("PharmacyCentral.Domain.Products.Product", b =>
                 {
-                    b.Navigation("AffectedBatches");
+                    b.Navigation("Units");
                 });
 
             modelBuilder.Entity("PharmacyCentral.Domain.Replenishment.ReplenishmentRequest", b =>

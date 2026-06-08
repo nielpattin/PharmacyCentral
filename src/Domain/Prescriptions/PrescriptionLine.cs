@@ -8,8 +8,10 @@ public sealed class PrescriptionLine
     public Guid Id { get; set; }
     public Guid PrescriptionId { get; set; }
     public Guid ProductId { get; set; }
+    public Guid ProductUnitId { get; set; }
     public Guid? ProductBatchId { get; set; }
     public decimal PrescribedQuantity { get; set; }
+    public decimal QuantityInBaseUnits { get; set; }
     public decimal DispensedQuantity { get; set; }
     public string? Dosage { get; set; }
     public string? Frequency { get; set; }
@@ -18,5 +20,6 @@ public sealed class PrescriptionLine
 
     public Prescription? Prescription { get; set; }
     public Product? Product { get; set; }
+    public ProductUnit? ProductUnit { get; set; }
     public ProductBatch? ProductBatch { get; set; }
 }

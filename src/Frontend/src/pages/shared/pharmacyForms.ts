@@ -83,11 +83,15 @@ export function blankProductValues(): ProductFormValues {
       barcode: "",
       name: "",
       category: "",
-      unit: "",
       manufacturer: "",
       status: "Active",
       notes: "",
       isActive: true,
+      units: [
+         { unitName: "Viên", conversionFactorToBaseUnit: 1, isBaseUnit: true, isDefaultSaleUnit: true, isDefaultPurchaseUnit: false, barcode: null, sortOrder: 1 },
+         { unitName: "Vỉ", conversionFactorToBaseUnit: 10, isBaseUnit: false, isDefaultSaleUnit: true, isDefaultPurchaseUnit: false, barcode: null, sortOrder: 2 },
+         { unitName: "Hộp", conversionFactorToBaseUnit: 100, isBaseUnit: false, isDefaultSaleUnit: true, isDefaultPurchaseUnit: true, barcode: null, sortOrder: 3 },
+      ],
    };
 }
 
@@ -97,11 +101,22 @@ export function productValuesFromDto(product: ProductDto): ProductFormValues {
       barcode: product.barcode ?? "",
       name: product.name,
       category: product.category ?? "",
-      unit: product.unit ?? "",
       manufacturer: product.manufacturer ?? "",
       status: product.status,
       notes: product.notes ?? "",
       isActive: product.isActive,
+      units: product.units.length > 0
+         ? product.units.map((unit) => ({
+              id: unit.id,
+              unitName: unit.unitName,
+              conversionFactorToBaseUnit: unit.conversionFactorToBaseUnit,
+              isBaseUnit: unit.isBaseUnit,
+              isDefaultSaleUnit: unit.isDefaultSaleUnit,
+              isDefaultPurchaseUnit: unit.isDefaultPurchaseUnit,
+              barcode: unit.barcode,
+              sortOrder: unit.sortOrder,
+           }))
+         : blankProductValues().units,
    };
 }
 
@@ -163,11 +178,11 @@ export function areProductFormValuesEqual(left: ProductFormValues, right: Produc
       left.barcode === right.barcode &&
       left.name === right.name &&
       left.category === right.category &&
-      left.unit === right.unit &&
       left.manufacturer === right.manufacturer &&
       left.status === right.status &&
       left.notes === right.notes &&
-      left.isActive === right.isActive
+      left.isActive === right.isActive &&
+      JSON.stringify(left.units) === JSON.stringify(right.units)
    );
 }
 

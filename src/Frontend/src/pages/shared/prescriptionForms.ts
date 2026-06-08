@@ -10,7 +10,7 @@ export type DispenseLineFormValues = Omit<PrescriptionDispenseLineRequest, "disp
 export type DispenseFormValues = { lines: DispenseLineFormValues[] };
 
 export function blankPrescriptionLineValues(): PrescriptionLineFormValues {
-   return { productId: "", prescribedQuantity: "", dosage: "", frequency: "", duration: "", notes: "" };
+   return { productId: "", productUnitId: "", prescribedQuantity: "", dosage: "", frequency: "", duration: "", notes: "" };
 }
 
 export function blankPrescriptionValues(
@@ -50,6 +50,7 @@ function arePrescriptionLineFormValuesEqual(
    return (
       right !== undefined &&
       left.productId === right.productId &&
+      left.productUnitId === right.productUnitId &&
       left.prescribedQuantity === right.prescribedQuantity &&
       left.dosage === right.dosage &&
       left.frequency === right.frequency &&

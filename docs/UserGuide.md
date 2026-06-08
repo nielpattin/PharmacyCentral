@@ -41,7 +41,7 @@ Pharmacy Central có bốn role nghiệp vụ. Platform Admin quản trị hệ 
 | Role | Workspace chính |
 | --- | --- |
 | Platform Admin | Users, phân quyền, audit, giám sát hệ thống |
-| Pharmacy Manager | Sites, catalog, suppliers, pricing, procurement, reporting, finance, recalls |
+| Pharmacy Manager | Sites, catalog, suppliers, pricing, procurement, reporting, finance |
 | Pharmacist | Quầy bán thuốc, thanh toán, cấp phát, gửi yêu cầu bổ sung hàng |
 | Warehouse Staff | Receiving, quality, transfers, replenishment requests, returns/removals, stocktake, adjustments |
 
@@ -76,15 +76,15 @@ Dùng **Sites** để quản lý nhà thuốc, kho và vị trí lưu trữ liê
 
 ### Danh mục sản phẩm
 
-Dùng **Catalog** để quản lý mã sản phẩm, tên, đơn vị, nhà sản xuất và trạng thái.
+Dùng **Catalog** để quản lý mã sản phẩm, tên, nhà sản xuất, trạng thái, đơn vị bán và hệ số quy đổi. Đơn vị không nhập tự do; mỗi thuốc có một đơn vị cơ sở nhỏ nhất để trừ tồn và có thể có thêm đơn vị bán như vỉ, hộp hoặc chai.
 
 ### Nhà cung cấp
 
 Dùng **Suppliers** để quản lý nhà cung cấp được duyệt.
 
-## Định giá
+## Giá bán trong danh mục
 
-Use **Pricing** to prepare, publish and archive product prices.
+Giá bán thuộc dữ liệu danh mục thuốc. Khi cấu hình thuốc, hệ thống quản lý giá theo từng đơn vị bán như viên, vỉ hoặc hộp, thay vì tách thành một workspace riêng.
 
 Basic flow:
 
@@ -182,19 +182,13 @@ Self-approval is blocked for transfer approval.
 
 ## Trả hàng và loại khỏi tồn
 
-Dùng **Returns** để xử lý trả nhà cung cấp, hàng hư hỏng, hàng hết hạn, hàng thu hồi hoặc các trường hợp loại khỏi tồn kho. Đây là nghiệp vụ warehouse, không phải workflow khách trả hàng tại quầy.
+Dùng **Returns** để xử lý trả nhà cung cấp, hàng hư hỏng, hàng hết hạn hoặc các trường hợp loại khỏi tồn kho. Đây là nghiệp vụ warehouse, không phải workflow khách trả hàng tại quầy.
 
 ## Kiểm kê và điều chỉnh
 
 Use **Stocktake** to create count sessions, record counts and post resulting adjustments.
 
 Use **Adjustments** to prepare and approve standalone stock adjustments. Approval requires an eligible user and records the decision.
-
-## Thu hồi
-
-Use **Recalls** to identify affected batches, activate recall controls, record batch actions and close or cancel recall cases.
-
-Active recalls block affected batches from operational use until an allowed action releases or removes the batch.
 
 ## Đối soát tài chính
 
@@ -225,7 +219,7 @@ Dùng luồng này để demo local ngắn gọn:
 1. Đăng nhập bằng tài khoản admin local để kiểm tra quản trị user, audit và dữ liệu hệ thống.
 2. Mở **Dashboard** để xem tổng quan, cảnh báo và navigation theo role.
 3. Mở **Sites**, **Catalog** và **Suppliers** để xem dữ liệu nền.
-4. Mở **Pricing**, tạo draft price và publish.
+4. Mở **Catalog** để kiểm tra thuốc, đơn vị bán và giá theo từng đơn vị bán.
 5. Mở **Procurement**, tạo và approve purchase order.
 6. Mở **Receiving**, ghi nhận hàng về theo đơn mua.
 7. Mở **Quality**, release lô hàng mới.
@@ -234,7 +228,6 @@ Dùng luồng này để demo local ngắn gọn:
 10. Đăng nhập bằng tài khoản **Warehouse Staff**, mở **Transfers** để demo vòng đời tạo/duyệt/gửi/nhận nếu có tài khoản đủ điều kiện thứ hai.
 11. Mở **Returns** để demo lý do trả hàng hoặc loại khỏi tồn kho theo nghiệp vụ warehouse.
 12. Mở **Stocktake** và **Adjustments** để demo kiểm kê và duyệt điều chỉnh.
-13. Đăng nhập lại tài khoản quản lý/admin nếu cần, mở **Recalls** để xem kiểm soát thu hồi.
 14. Mở **Reporting**, **Finance** và **Audit** để xem khả năng quan sát và truy vết.
 15. Mở **Users** để xem quản lý role và site access.
 
@@ -249,5 +242,5 @@ Dùng luồng này để demo local ngắn gọn:
 
 - Use named staff accounts, not shared accounts.
 - Keep site access narrow for users who only work at specific sites.
-- Review quality, recall, stock adjustment and audit records regularly.
+- Review quality, stock adjustment and audit records regularly.
 - Use development seed credentials only in development environments.

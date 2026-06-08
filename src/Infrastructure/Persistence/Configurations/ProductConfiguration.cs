@@ -17,7 +17,6 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.HasIndex(product => product.Sku).IsUnique();
         builder.Property(product => product.Name).HasColumnName("name").IsRequired().HasMaxLength(200);
         builder.Property(product => product.Category).HasColumnName("category").HasMaxLength(100);
-        builder.Property(product => product.Unit).HasColumnName("unit").HasMaxLength(50);
         builder.Property(product => product.Manufacturer).HasColumnName("manufacturer").HasMaxLength(200);
         builder.Property(product => product.Status).HasColumnName("status").IsRequired().HasMaxLength(30);
         builder.Property(product => product.Notes).HasColumnName("notes").HasMaxLength(1000);

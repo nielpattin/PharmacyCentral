@@ -26,6 +26,7 @@ internal sealed class CreatePrescription : IEndpoint
     public sealed class LineRequest
     {
         public Guid ProductId { get; set; }
+        public Guid ProductUnitId { get; set; }
         public decimal PrescribedQuantity { get; set; }
         public string? Dosage { get; set; }
         public string? Frequency { get; set; }
@@ -81,6 +82,7 @@ internal sealed class CreatePrescription : IEndpoint
                 Lines = request.Lines.Select(line => new CreatePrescriptionLineItem
                 {
                     ProductId = line.ProductId,
+                    ProductUnitId = line.ProductUnitId,
                     PrescribedQuantity = line.PrescribedQuantity,
                     Dosage = line.Dosage,
                     Frequency = line.Frequency,
@@ -139,6 +141,11 @@ internal sealed class CreatePrescription : IEndpoint
             if (line.ProductId == Guid.Empty)
             {
                 errors[$"Lines[{index}].ProductId"] = ["ProductId is required."];
+            }
+
+            if (line.ProductUnitId == Guid.Empty)
+            {
+                errors[$"Lines[{index}].ProductUnitId"] = ["ProductUnitId is required."];
             }
 
             if (line.PrescribedQuantity <= 0)

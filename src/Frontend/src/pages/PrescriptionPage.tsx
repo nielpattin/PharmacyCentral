@@ -54,6 +54,7 @@ export default function PrescriptionPage() {
    const [selectedId, setSelectedId] = useState("");
    const [isSaving, setIsSaving] = useState(false);
    const [bannerError, setBannerError] = useState<string | null>(null);
+   const [isLoadingData, setIsLoadingData] = useState(true);
    const [createToken, setCreateToken] = useState(0);
    const [payment, setPayment] = useState<PaymentDetails | null>(null);
    const [invoiceData, setInvoiceData] = useState<PrintableInvoiceDetails | null>(null);
@@ -138,6 +139,7 @@ export default function PrescriptionPage() {
 
    async function refreshData(preferredSelectedId?: string) {
       setBannerError(null);
+      setIsLoadingData(true);
       try {
          const [prescriptionData, siteData, locationData, productData, balanceData, priceData, transactionData] = await Promise.all([
             loadPrescriptions({ limit: 100 }),
@@ -162,6 +164,8 @@ export default function PrescriptionPage() {
          );
       } catch (error) {
          setBannerError(error instanceof Error ? error.message : t("errors.loadPrescription"));
+      } finally {
+         setIsLoadingData(false);
       }
    }
 
@@ -179,6 +183,7 @@ export default function PrescriptionPage() {
             notes: values.notes?.trim() || null,
             lines: values.lines.map((line) => ({
                productId: line.productId,
+               productUnitId: line.productUnitId,
                prescribedQuantity: Number(line.prescribedQuantity),
                dosage: line.dosage?.trim() || null,
                frequency: line.frequency?.trim() || null,
@@ -353,17 +358,21 @@ export default function PrescriptionPage() {
                <div className={`${styles.counterWorkbench}${selectedPrescription === null ? ` ${styles.createWorkbench}` : ""}`}>
                   {selectedPrescription === null ? (
                      <div className={styles.counterTicket}>
-                        <PrescriptionForm
-                           key={`prescription-${createToken}-${defaultSource.siteId}-${defaultSource.storageLocationId}`}
-                           initialValues={formValues}
-                           isSaving={isSaving}
-                           products={products}
-                           sites={sites}
-                           storageLocations={storageLocations}
-                           balances={balances}
-                           prices={prices}
-                           onSubmit={handleCreatePrescription}
-                        />
+                        {isLoadingData ? (
+                           <Card className={styles.loadingCard}>{t("common.loading")}</Card>
+                        ) : (
+                           <PrescriptionForm
+                              key={`prescription-${createToken}-${defaultSource.siteId}-${defaultSource.storageLocationId}`}
+                              initialValues={formValues}
+                              isSaving={isSaving}
+                              products={products}
+                              sites={sites}
+                              storageLocations={storageLocations}
+                              balances={balances}
+                              prices={prices}
+                              onSubmit={handleCreatePrescription}
+                           />
+                        )}
                      </div>
                   ) : (
                      <Card className={styles.counterTicket}>

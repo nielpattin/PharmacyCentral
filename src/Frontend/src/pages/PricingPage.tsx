@@ -30,6 +30,7 @@ const today = new Date().toISOString().slice(0, 10);
 
 type PriceForm = {
    productId: string;
+   productUnitId: string;
    siteId: string;
    unitPrice: string;
    currency: string;
@@ -40,6 +41,7 @@ type PriceForm = {
 
 const blankForm: PriceForm = {
    productId: "",
+   productUnitId: "",
    siteId: "",
    unitPrice: "",
    currency: "VND",
@@ -101,6 +103,7 @@ export default function PricingPage() {
       try {
          const created = await createProductPrice({
             productId: form.productId,
+            productUnitId: form.productUnitId,
             siteId: form.siteId === "" ? null : form.siteId,
             unitPrice: Number(form.unitPrice),
             currency: form.currency.trim() || "VND",
@@ -210,6 +213,7 @@ export default function PricingPage() {
                                        <TableCell>
                                           <strong>{price.productSku}</strong>
                                           <span className={styles.mutedBlock}>{price.productName}</span>
+                                          <span className={styles.mutedBlock}>{price.productUnitName}</span>
                                        </TableCell>
                                        <TableCell>{price.siteName ?? t("pricing.allSites")}</TableCell>
                                        <TableCell>{formatMoney(price.unitPrice, price.currency)}</TableCell>
@@ -242,12 +246,32 @@ export default function PricingPage() {
                         <select
                            className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                            value={form.productId}
-                           onChange={(event) => setForm((current) => ({ ...current, productId: event.target.value }))}
+                           onChange={(event) => {
+                              const product = products.find((item) => item.id === event.target.value);
+                              const defaultUnitId = product?.units.find((unit) => unit.isDefaultSaleUnit)?.id ?? product?.units[0]?.id ?? "";
+                              setForm((current) => ({ ...current, productId: event.target.value, productUnitId: defaultUnitId }));
+                           }}
                         >
                            <option value="">{t("receiving.selectProduct")}</option>
                            {products.map((product) => (
                               <option key={product.id} value={product.id}>
                                  {product.sku} · {product.name}
+                              </option>
+                           ))}
+                        </select>
+                     </div>
+                     <div className={styles.field}>
+                        <Label>Đơn vị bán</Label>
+                        <select
+                           className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                           value={form.productUnitId}
+                           onChange={(event) => setForm((current) => ({ ...current, productUnitId: event.target.value }))}
+                           disabled={form.productId === ""}
+                        >
+                           <option value="">Chọn đơn vị</option>
+                           {(products.find((product) => product.id === form.productId)?.units ?? []).map((unit) => (
+                              <option key={unit.id} value={unit.id}>
+                                 {unit.unitName} · {unit.conversionFactorToBaseUnit} đơn vị cơ sở
                               </option>
                            ))}
                         </select>
@@ -315,7 +339,7 @@ export default function PricingPage() {
                      </div>
                      <div className={styles.actions}>
                         <Button
-                           disabled={isSaving || form.productId === "" || form.unitPrice === ""}
+                           disabled={isSaving || form.productId === "" || form.productUnitId === "" || form.unitPrice === ""}
                            onClick={() => void handleCreate()}
                         >
                            {isSaving ? t("common.saving") : t("pricing.createButton")}
@@ -355,7 +379,7 @@ export default function PricingPage() {
                   ) : (
                      <div className={styles.detailStrip}>
                         <span>
-                           {selectedPrice.productSku} · {selectedPrice.productName}
+                           {selectedPrice.productSku} · {selectedPrice.productName} · {selectedPrice.productUnitName}
                         </span>
                         <span>{selectedPrice.siteName ?? t("pricing.allSites")}</span>
                         <span>{formatMoney(selectedPrice.unitPrice, selectedPrice.currency)}</span>

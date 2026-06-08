@@ -12,6 +12,7 @@ internal sealed class ProductPriceConfiguration : IEntityTypeConfiguration<Produ
         builder.HasKey(price => price.Id);
         builder.Property(price => price.Id).HasColumnName("id");
         builder.Property(price => price.ProductId).HasColumnName("product_id");
+        builder.Property(price => price.ProductUnitId).HasColumnName("product_unit_id");
         builder.Property(price => price.SiteId).HasColumnName("site_id");
         builder.Property(price => price.UnitPrice).HasColumnName("unit_price").HasPrecision(18, 2);
         builder.Property(price => price.Currency).HasColumnName("currency").HasMaxLength(3).IsRequired();
@@ -26,8 +27,9 @@ internal sealed class ProductPriceConfiguration : IEntityTypeConfiguration<Produ
         builder.Property(price => price.ArchivedAtUtc).HasColumnName("archived_at_utc");
         builder.Property(price => price.CreatedAtUtc).HasColumnName("created_at_utc");
         builder.Property(price => price.UpdatedAtUtc).HasColumnName("updated_at_utc");
-        builder.HasIndex(price => new { price.ProductId, price.SiteId, price.Status, price.EffectiveFrom });
+        builder.HasIndex(price => new { price.ProductId, price.ProductUnitId, price.SiteId, price.Status, price.EffectiveFrom });
         builder.HasOne(price => price.Product).WithMany().HasForeignKey(price => price.ProductId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(price => price.ProductUnit).WithMany().HasForeignKey(price => price.ProductUnitId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(price => price.Site).WithMany().HasForeignKey(price => price.SiteId).OnDelete(DeleteBehavior.Restrict);
     }
 }

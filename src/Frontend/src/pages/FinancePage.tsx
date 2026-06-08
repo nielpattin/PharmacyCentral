@@ -162,7 +162,7 @@ export default function FinancePage() {
                      <FinanceStat
                         label={t("finance.missingPrices")}
                         value={String(summary.missingPriceCount)}
-                        tone={summary.missingPriceCount > 0 ? "outline" : "secondary"}
+                        tone={summary.missingPriceCount > 0 ? "destructive" : "secondary"}
                      />
                   </section>
 
@@ -222,7 +222,7 @@ export default function FinancePage() {
                               />
                            ) : (
                               <div className={styles.tableShell}>
-                                 <table className={styles.dataTable}>
+                                 <table className={`${styles.dataTable} ${styles.activityTable}`}>
                                     <thead>
                                        <tr>
                                           <th>{t("finance.activityType")}</th>
@@ -286,20 +286,20 @@ export default function FinancePage() {
                                     {summary.valuationLines.map((line) => (
                                        <tr key={`${line.productBatchId}-${line.storageLocationId}`}>
                                           <td>
-                                             <strong>{line.productSku}</strong>
-                                             <span className={`muted-text ${styles.block}`}>
+                                             <strong className={styles.cellPrimary}>{line.productSku}</strong>
+                                             <span className={styles.cellMeta}>
                                                 {line.productName} · {line.batchNumber}
                                              </span>
                                           </td>
                                           <td>
-                                             {line.siteName}
-                                             <span className={`muted-text ${styles.block}`}>
+                                             <strong className={styles.cellPrimary}>{line.siteName}</strong>
+                                             <span className={styles.cellMeta}>
                                                 {line.storageLocationName}
                                              </span>
                                           </td>
                                           <td>
-                                             {formatQuantity(line.quantityOnHand)}
-                                             <span className={`muted-text ${styles.block}`}>
+                                             <strong className={styles.cellPrimary}>{formatQuantity(line.quantityOnHand)}</strong>
+                                             <span className={styles.cellMeta}>
                                                 {t("finance.reservedShort")} {formatQuantity(line.quantityReserved)}
                                              </span>
                                           </td>
@@ -339,10 +339,9 @@ function FinanceStat({
    tone?: "outline" | "secondary" | "destructive";
 }) {
    return (
-      <div className={`${styles.financeStat} card`}>
+      <div className={styles.financeStat} data-tone={tone}>
          <span>{label}</span>
          <strong>{value}</strong>
-         <Badge variant={tone}>{label}</Badge>
       </div>
    );
 }

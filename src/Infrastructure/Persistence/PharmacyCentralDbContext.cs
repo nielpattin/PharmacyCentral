@@ -18,7 +18,6 @@ using PharmacyCentral.Domain.Prescriptions;
 using PharmacyCentral.Domain.Pricing;
 using PharmacyCentral.Domain.Procurement;
 using PharmacyCentral.Domain.Products;
-using PharmacyCentral.Domain.Recalls;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.Stocktakes;
 using PharmacyCentral.Domain.StorageLocations;
@@ -48,6 +47,8 @@ public sealed class PharmacyCentralDbContext
     public IQueryable<StorageLocation> StorageLocations => Set<StorageLocation>();
 
     public IQueryable<Product> Products => Set<Product>();
+
+    public IQueryable<ProductUnit> ProductUnits => Set<ProductUnit>();
 
     public IQueryable<ProductBatch> ProductBatches => Set<ProductBatch>();
 
@@ -83,9 +84,6 @@ public sealed class PharmacyCentralDbContext
 
     public IQueryable<ProductPrice> ProductPrices => Set<ProductPrice>();
 
-    public IQueryable<RecallCase> RecallCases => Set<RecallCase>();
-
-    public IQueryable<RecallAffectedBatch> RecallAffectedBatches => Set<RecallAffectedBatch>();
 
     public IQueryable<Supplier> Suppliers => Set<Supplier>();
 
@@ -158,13 +156,23 @@ public sealed class PharmacyCentralDbContext
     async Task<List<Product>> IApplicationDbContext.ListProductsAsync(CancellationToken cancellationToken)
     {
         return await Products
+            .Include(product => product.Units)
             .OrderBy(product => product.Sku)
             .ToListAsync(cancellationToken);
     }
 
     async Task<Product?> IApplicationDbContext.GetProductByIdAsync(Guid productId, CancellationToken cancellationToken)
     {
-        return await Products.SingleOrDefaultAsync(product => product.Id == productId, cancellationToken);
+        return await Products
+            .Include(product => product.Units)
+            .SingleOrDefaultAsync(product => product.Id == productId, cancellationToken);
+    }
+
+    async Task<ProductUnit?> IApplicationDbContext.GetProductUnitByIdAsync(Guid productUnitId, CancellationToken cancellationToken)
+    {
+        return await ProductUnits
+            .Include(unit => unit.Product)
+            .SingleOrDefaultAsync(unit => unit.Id == productUnitId, cancellationToken);
     }
 
     async Task<bool> IApplicationDbContext.ProductSkuExistsAsync(string sku, Guid? excludedProductId, CancellationToken cancellationToken)
@@ -290,41 +298,6 @@ public sealed class PharmacyCentralDbContext
             .ToListAsync(cancellationToken);
     }
 
-    async Task<bool> IApplicationDbContext.IsProductBatchBlockedByActiveRecallAsync(Guid productBatchId, Guid siteId, CancellationToken cancellationToken)
-    {
-        return await RecallAffectedBatches
-            .AnyAsync(affectedBatch => affectedBatch.ProductBatchId == productBatchId
-                && (affectedBatch.SiteId == null || affectedBatch.SiteId == siteId)
-                && affectedBatch.RecallCase.Status == RecallCaseStatus.Active
-                && affectedBatch.Status != RecallBatchStatus.Released, cancellationToken);
-    }
-
-    async Task<List<RecallCase>> IApplicationDbContext.ListRecallCasesAsync(string? status, int limit, CancellationToken cancellationToken)
-    {
-        IQueryable<RecallCase> query = RecallCases
-            .Include(recall => recall.AffectedBatches)
-            .ThenInclude(affectedBatch => affectedBatch.ProductBatch)
-            .ThenInclude(batch => batch.Product);
-
-        if (!string.IsNullOrWhiteSpace(status))
-        {
-            query = query.Where(recall => recall.Status == status);
-        }
-
-        return await query
-            .OrderByDescending(recall => recall.CreatedAtUtc)
-            .Take(Math.Clamp(limit, 1, 500))
-            .ToListAsync(cancellationToken);
-    }
-
-    async Task<RecallCase?> IApplicationDbContext.GetRecallCaseByIdAsync(Guid recallCaseId, CancellationToken cancellationToken)
-    {
-        return await RecallCases
-            .Include(recall => recall.AffectedBatches)
-            .ThenInclude(affectedBatch => affectedBatch.ProductBatch)
-            .ThenInclude(batch => batch.Product)
-            .SingleOrDefaultAsync(recall => recall.Id == recallCaseId, cancellationToken);
-    }
 
     async Task<List<StockLedgerEntry>> IApplicationDbContext.ListStockLedgerEntriesAsync(Guid? productId, Guid? productBatchId, Guid? siteId, IReadOnlyCollection<Guid>? siteIds, Guid? storageLocationId, int limit, CancellationToken cancellationToken)
     {
@@ -575,7 +548,8 @@ public sealed class PharmacyCentralDbContext
     async Task<List<Prescription>> IApplicationDbContext.ListPrescriptionsAsync(Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
     {
         IQueryable<Prescription> query = Prescriptions
-            .Include(prescription => prescription.Lines);
+            .Include(prescription => prescription.Lines)
+            .ThenInclude(line => line.ProductUnit);
 
         if (siteId is not null)
         {
@@ -604,6 +578,9 @@ public sealed class PharmacyCentralDbContext
     {
         return await Prescriptions
             .Include(prescription => prescription.Lines)
+            .ThenInclude(line => line.ProductUnit)
+            .Include(prescription => prescription.Lines)
+            .ThenInclude(line => line.ProductBatch)
             .SingleOrDefaultAsync(prescription => prescription.Id == prescriptionId, cancellationToken);
     }
 
@@ -655,16 +632,22 @@ public sealed class PharmacyCentralDbContext
             .ToList();
     }
 
-    async Task<List<ProductPrice>> IApplicationDbContext.ListProductPricesAsync(Guid? productId, Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
+    async Task<List<ProductPrice>> IApplicationDbContext.ListProductPricesAsync(Guid? productId, Guid? productUnitId, Guid? siteId, IReadOnlyCollection<Guid>? siteIds, string? status, int limit, CancellationToken cancellationToken)
     {
         IQueryable<ProductPrice> query = ProductPrices
             .Include(price => price.Product)
+            .Include(price => price.ProductUnit)
             .Include(price => price.Site)
             .AsQueryable();
 
         if (productId is not null)
         {
             query = query.Where(price => price.ProductId == productId);
+        }
+
+        if (productUnitId is not null)
+        {
+            query = query.Where(price => price.ProductUnitId == productUnitId);
         }
 
         if (siteId is not null)
@@ -686,6 +669,7 @@ public sealed class PharmacyCentralDbContext
         return await query
             .OrderByDescending(price => price.EffectiveFrom)
             .ThenBy(price => price.Product.Sku)
+            .ThenBy(price => price.ProductUnit.SortOrder)
             .Take(boundedLimit)
             .ToListAsync(cancellationToken);
     }
@@ -694,16 +678,19 @@ public sealed class PharmacyCentralDbContext
     {
         return await ProductPrices
             .Include(price => price.Product)
+            .Include(price => price.ProductUnit)
             .Include(price => price.Site)
             .SingleOrDefaultAsync(price => price.Id == priceId, cancellationToken);
     }
 
-    async Task<ProductPrice?> IApplicationDbContext.GetActiveProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveDate, CancellationToken cancellationToken)
+    async Task<ProductPrice?> IApplicationDbContext.GetActiveProductPriceAsync(Guid productId, Guid productUnitId, Guid? siteId, DateOnly effectiveDate, CancellationToken cancellationToken)
     {
         IQueryable<ProductPrice> query = ProductPrices
             .Include(price => price.Product)
+            .Include(price => price.ProductUnit)
             .Include(price => price.Site)
             .Where(price => price.ProductId == productId
+                && price.ProductUnitId == productUnitId
                 && price.Status == ProductPriceStatus.Published
                 && price.EffectiveFrom <= effectiveDate
                 && (price.EffectiveTo == null || price.EffectiveTo >= effectiveDate)
@@ -715,11 +702,12 @@ public sealed class PharmacyCentralDbContext
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    async Task<bool> IApplicationDbContext.HasOverlappingPublishedProductPriceAsync(Guid productId, Guid? siteId, DateOnly effectiveFrom, DateOnly? effectiveTo, Guid? excludePriceId, CancellationToken cancellationToken)
+    async Task<bool> IApplicationDbContext.HasOverlappingPublishedProductPriceAsync(Guid productId, Guid productUnitId, Guid? siteId, DateOnly effectiveFrom, DateOnly? effectiveTo, Guid? excludePriceId, CancellationToken cancellationToken)
     {
         DateOnly requestedEnd = effectiveTo ?? DateOnly.MaxValue;
         return await ProductPrices.AnyAsync(price =>
             price.ProductId == productId
+            && price.ProductUnitId == productUnitId
             && price.SiteId == siteId
             && price.Status == ProductPriceStatus.Published
             && (excludePriceId == null || price.Id != excludePriceId)
@@ -783,6 +771,8 @@ public sealed class PharmacyCentralDbContext
         return await PaymentInvoices
             .Include(invoice => invoice.Lines)
             .ThenInclude(line => line.Product)
+            .Include(invoice => invoice.Lines)
+            .ThenInclude(line => line.ProductUnit)
             .Include(invoice => invoice.Attempts)
             .ThenInclude(attempt => attempt.Transactions)
             .SingleOrDefaultAsync(invoice => invoice.PrescriptionId == prescriptionId, cancellationToken);
@@ -793,6 +783,8 @@ public sealed class PharmacyCentralDbContext
         return await PaymentInvoices
             .Include(invoice => invoice.Lines)
             .ThenInclude(line => line.Product)
+            .Include(invoice => invoice.Lines)
+            .ThenInclude(line => line.ProductUnit)
             .Include(invoice => invoice.Attempts)
             .ThenInclude(attempt => attempt.Transactions)
             .SingleOrDefaultAsync(invoice => invoice.Id == paymentInvoiceId, cancellationToken);
@@ -803,6 +795,8 @@ public sealed class PharmacyCentralDbContext
         return await PaymentInvoices
             .Include(invoice => invoice.Lines)
             .ThenInclude(line => line.Product)
+            .Include(invoice => invoice.Lines)
+            .ThenInclude(line => line.ProductUnit)
             .Include(invoice => invoice.Attempts)
             .ThenInclude(attempt => attempt.Transactions)
             .SingleOrDefaultAsync(invoice => invoice.PaymentCode == paymentCode, cancellationToken);
@@ -935,7 +929,9 @@ public sealed class PharmacyCentralDbContext
         DateOnly priceDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
 
         IQueryable<InventoryBalance> balanceQuery = InventoryBalances
-            .Include(balance => balance.ProductBatch).ThenInclude(batch => batch.Product)
+            .Include(balance => balance.ProductBatch)
+            .ThenInclude(batch => batch.Product)
+            .ThenInclude(product => product.Units)
             .Include(balance => balance.Site)
             .Include(balance => balance.StorageLocation)
             .Where(balance => balance.QuantityOnHand != 0 || balance.QuantityReserved != 0);
@@ -971,6 +967,7 @@ public sealed class PharmacyCentralDbContext
         Guid[] productIds = balances.Select(balance => balance.ProductBatch.ProductId).Distinct().ToArray();
         List<ProductPrice> prices = await ProductPrices
             .Include(price => price.Site)
+            .Include(price => price.ProductUnit)
             .Where(price => productIds.Contains(price.ProductId)
                 && price.Status == ProductPriceStatus.Published
                 && price.EffectiveFrom <= priceDate
@@ -981,8 +978,10 @@ public sealed class PharmacyCentralDbContext
         List<FinanceInventoryValuationLine> valuationLines = [];
         foreach (InventoryBalance balance in balances)
         {
+            Guid? baseUnitId = balance.ProductBatch.Product.Units.FirstOrDefault(unit => unit.IsBaseUnit)?.Id;
             ProductPrice? price = prices
                 .Where(candidate => candidate.ProductId == balance.ProductBatch.ProductId
+                    && candidate.ProductUnitId == baseUnitId
                     && (candidate.SiteId == balance.SiteId || candidate.SiteId == null))
                 .OrderByDescending(candidate => candidate.SiteId == balance.SiteId)
                 .ThenByDescending(candidate => candidate.EffectiveFrom)

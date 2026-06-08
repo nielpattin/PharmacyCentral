@@ -75,7 +75,7 @@ src/Application/Inventory/ListInventoryBalances/
 src/Application/Inventory/RecordStockMovement/
 src/Application/Prescriptions/CreatePrescription/
 src/Application/Procurement/CreatePurchaseOrder/
-src/Application/Recalls/UpdateRecallStatus/
+src/Application/Stocktakes/ApproveAdjustment/
 src/Application/Payments/CreatePrescriptionPayment/
 src/Application/Payments/ConfirmPayment/
 src/Application/Payments/GetPrintableInvoice/
@@ -115,8 +115,8 @@ Dashboard tổng quan không áp dụng cho user chỉ có role Pharmacist. User
 | --- | --- |
 | Identity and access | Đăng nhập, role, site scope và kiểm soát tài khoản |
 | Sites and locations | Dữ liệu cơ sở và vị trí lưu trữ |
-| Catalog and suppliers | Dữ liệu sản phẩm và nhà cung cấp |
-| Pricing | Tạo draft, publish, archive giá và tra giá đang hiệu lực |
+| Catalog and suppliers | Dữ liệu thuốc, đơn vị bán/quy đổi và nhà cung cấp |
+| Catalog pricing | Tạo draft, publish, archive giá theo từng đơn vị bán trong danh mục và tra giá đang hiệu lực |
 | Procurement | Đơn mua và trạng thái vòng đời đơn mua |
 | Receiving | Ghi nhận hàng nhà cung cấp và liên kết đơn mua khi có |
 | Quality | Release/reject lô trước khi dùng trong vận hành |
@@ -124,9 +124,8 @@ Dashboard tổng quan không áp dụng cho user chỉ có role Pharmacist. User
 | Quầy bán thuốc và cấp phát | Chỉ Pharmacist tạo phiếu bán hiện tại, giữ hàng, thanh toán, hủy và cấp phát |
 | Replenishment requests | Pharmacist gửi yêu cầu bổ sung hàng theo nguồn bán được gán; Warehouse Staff hoặc Platform Admin xem xét và xử lý |
 | Transfers | Nghiệp vụ warehouse cho tạo, duyệt, xuất, nhận và hủy điều chuyển giữa các vị trí |
-| Returns/removals | Nghiệp vụ warehouse cho trả nhà cung cấp, hàng hư hỏng, hàng hết hạn, thu hồi hoặc các trường hợp loại khỏi tồn |
+| Returns/removals | Nghiệp vụ warehouse cho trả nhà cung cấp, hàng hư hỏng, hàng hết hạn hoặc các trường hợp loại khỏi tồn |
 | Stocktake/adjustments | Count sessions, variance posting and approval |
-| Recalls | Recall cases and affected batch action tracking |
 | Reporting/finance | Read-only operational visibility and valuation/reconciliation |
 | Payments/invoices | Provider-neutral payment invoice workflow, provider attempts, confirmations and printable invoices |
 | Audit | Business activity traceability |
@@ -138,7 +137,7 @@ Dashboard tổng quan không áp dụng cho user chỉ có role Pharmacist. User
 
 *Nguồn chỉnh sửa: [architecture-diagram-05-kiem-soat-luong-hang-co-the-dung.drawio](diagrams/architecture-diagram-05-kiem-soat-luong-hang-co-the-dung.drawio).*
 
-A batch is operationally usable only when it has available quantity, is quality-released, is not blocked by active recall, and the user has role/site access.
+A batch is operationally usable only when it has available quantity, is quality-released, and the user has role/site access.
 
 ## Quy tắc giao dịch và độ tin cậy
 

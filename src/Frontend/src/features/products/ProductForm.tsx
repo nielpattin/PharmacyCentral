@@ -67,10 +67,59 @@ export function ProductForm({ mode, initialValues, isSaving, onSubmit, onDelete 
             </Field>
 
             <Field label={t("forms.unit")}>
+               <select
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={values.units.find((unit) => unit.isBaseUnit)?.unitName ?? "Viên"}
+                  onChange={(event) =>
+                     setValues((current) => ({
+                        ...current,
+                        units: current.units.map((unit) =>
+                           unit.isBaseUnit ? { ...unit, unitName: event.target.value } : unit,
+                        ),
+                     }))
+                  }
+               >
+                  <option value="Viên">Viên</option>
+                  <option value="Ống">Ống</option>
+                  <option value="Miếng">Miếng</option>
+                  <option value="Cái">Cái</option>
+                  <option value="Chai">Chai</option>
+                  <option value="Tuýp">Tuýp</option>
+                  <option value="Gói">Gói</option>
+               </select>
+            </Field>
+            <Field label="Hệ số vỉ">
                <input
                   className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={values.unit}
-                  onChange={(event) => setValues((current) => ({ ...current, unit: event.target.value }))}
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={values.units.find((unit) => unit.unitName === "Vỉ")?.conversionFactorToBaseUnit ?? 10}
+                  onChange={(event) =>
+                     setValues((current) => ({
+                        ...current,
+                        units: current.units.map((unit) =>
+                           unit.unitName === "Vỉ" ? { ...unit, conversionFactorToBaseUnit: Number(event.target.value) } : unit,
+                        ),
+                     }))
+                  }
+               />
+            </Field>
+            <Field label="Hệ số hộp">
+               <input
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={values.units.find((unit) => unit.unitName === "Hộp")?.conversionFactorToBaseUnit ?? 100}
+                  onChange={(event) =>
+                     setValues((current) => ({
+                        ...current,
+                        units: current.units.map((unit) =>
+                           unit.unitName === "Hộp" ? { ...unit, conversionFactorToBaseUnit: Number(event.target.value) } : unit,
+                        ),
+                     }))
+                  }
                />
             </Field>
 

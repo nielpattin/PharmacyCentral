@@ -14,6 +14,7 @@ internal sealed class GetActivePrice : IEndpoint
     {
         app.MapGet("pricing/active", async (
             Guid productId,
+            Guid productUnitId,
             Guid? siteId,
             DateOnly? effectiveDate,
             IIdentityService identityService,
@@ -31,7 +32,7 @@ internal sealed class GetActivePrice : IEndpoint
                 return EndpointSiteAccess.ForbidSiteAccess();
             }
 
-            Result<ProductPriceDetails> result = await handler.HandleAsync(new GetActivePriceQuery(productId, siteId, effectiveDate ?? DateOnly.FromDateTime(DateTime.UtcNow)), cancellationToken);
+            Result<ProductPriceDetails> result = await handler.HandleAsync(new GetActivePriceQuery(productId, productUnitId, siteId, effectiveDate ?? DateOnly.FromDateTime(DateTime.UtcNow)), cancellationToken);
             return result.IsFailure
                 ? Results.NotFound(new { error = result.Error.Description, code = result.Error.Code })
                 : Results.Ok(result.Value);

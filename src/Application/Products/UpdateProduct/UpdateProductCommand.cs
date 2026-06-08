@@ -1,23 +1,16 @@
+using PharmacyCentral.Application.Products.CreateProduct;
+
 namespace PharmacyCentral.Application.Products.UpdateProduct;
 
 public sealed record UpdateProductCommand
 {
     public string Sku { get; init; } = string.Empty;
     public string? Barcode { get; init; }
-
-
     public string Name { get; init; } = string.Empty;
-
     public string? Category { get; init; }
-
-    public string? Unit { get; init; }
-
     public string? Manufacturer { get; init; }
-
     public string? Status { get; init; }
-
     public string? Notes { get; init; }
-
     public bool? IsActive { get; init; }
+    public List<ProductUnitCommandItem> Units { get; init; } = [];
 }
-

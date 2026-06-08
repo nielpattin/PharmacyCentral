@@ -83,6 +83,18 @@ export type StorageLocationDto = {
    updatedAtUtc: string;
 };
 
+export type ProductUnitDto = {
+   id: string;
+   productId: string;
+   unitName: string;
+   conversionFactorToBaseUnit: number;
+   isBaseUnit: boolean;
+   isDefaultSaleUnit: boolean;
+   isDefaultPurchaseUnit: boolean;
+   barcode: string | null;
+   sortOrder: number;
+};
+
 export type ProductDto = {
    id: string;
    sku: string;
@@ -90,12 +102,14 @@ export type ProductDto = {
    name: string;
    category: string | null;
    unit: string | null;
+   baseUnitName: string | null;
    manufacturer: string | null;
    status: string;
    notes: string | null;
    isActive: boolean;
    createdAtUtc: string;
    updatedAtUtc: string;
+   units: ProductUnitDto[];
 };
 
 export type SupplierDto = {
@@ -118,6 +132,9 @@ export type ProductPriceDto = {
    productId: string;
    productSku: string;
    productName: string;
+   productUnitId: string;
+   productUnitName: string;
+   conversionFactorToBaseUnit: number;
    siteId: string | null;
    siteName: string | null;
    unitPrice: number;
@@ -295,48 +312,6 @@ export type ProductBatchQualityDto = {
    qualityNotes: string | null;
 };
 
-export type RecallAffectedBatchDto = {
-   id: string;
-   recallCaseId: string;
-   productBatchId: string;
-   productId: string;
-   productSku: string;
-   productName: string;
-   batchNumber: string;
-   expiryDate: string;
-   siteId: string | null;
-   status: string;
-   actionedAtUtc: string | null;
-   actionedByUserId: string | null;
-   notes: string | null;
-   createdAtUtc: string;
-   updatedAtUtc: string;
-};
-
-export type RecallCaseDto = {
-   id: string;
-   recallNumber: string;
-   title: string;
-   reason: string;
-   status: string;
-   activatedAtUtc: string | null;
-   closedAtUtc: string | null;
-   createdByUserId: string | null;
-   activatedByUserId: string | null;
-   closedByUserId: string | null;
-   notes: string | null;
-   createdAtUtc: string;
-   updatedAtUtc: string;
-   affectedBatches: RecallAffectedBatchDto[];
-};
-
-export type RecallCreateRequest = {
-   recallNumber: string;
-   title: string;
-   reason: string;
-   notes: string | null;
-   affectedBatches: Array<{ productBatchId: string; siteId: string | null; notes: string | null }>;
-};
 
 export type AuditLogEntryDto = {
    id: string;
@@ -399,16 +374,27 @@ export type StorageLocationUpsertRequest = {
    isActive: boolean;
 };
 
+export type ProductUnitUpsertRequest = {
+   id?: string | null;
+   unitName: string;
+   conversionFactorToBaseUnit: number;
+   isBaseUnit: boolean;
+   isDefaultSaleUnit: boolean;
+   isDefaultPurchaseUnit: boolean;
+   barcode: string | null;
+   sortOrder: number;
+};
+
 export type ProductUpsertRequest = {
    sku: string;
    barcode: string;
    name: string;
    category: string;
-   unit: string;
    manufacturer: string;
    status: string;
    notes: string;
    isActive: boolean;
+   units: ProductUnitUpsertRequest[];
 };
 
 export type SupplierUpsertRequest = {
@@ -435,6 +421,7 @@ export type GoodsReceiptUpsertRequest = {
 
 export type ProductPriceCreateRequest = {
    productId: string;
+   productUnitId: string;
    siteId: string | null;
    unitPrice: number;
    currency: string;
@@ -609,8 +596,12 @@ export type PrescriptionLineDetails = {
    id: string;
    prescriptionId: string;
    productId: string;
+   productUnitId: string;
+   productUnitName: string | null;
+   conversionFactorToBaseUnit: number;
    productBatchId: string | null;
    prescribedQuantity: number;
+   quantityInBaseUnits: number;
    dispensedQuantity: number;
    dosage: string | null;
    frequency: string | null;
@@ -641,6 +632,7 @@ export type PrescriptionDetails = {
 
 export type PrescriptionLineCreateRequest = {
    productId: string;
+   productUnitId: string;
    prescribedQuantity: number;
    dosage: string | null;
    frequency: string | null;
@@ -678,7 +670,9 @@ export type PrescriptionFilters = {
 export type PaymentLineDetails = {
    id: string;
    productId: string;
+   productUnitId: string | null;
    productName: string;
+   unitName: string | null;
    unitPrice: number;
    quantity: number;
    lineTotal: number;
@@ -1389,42 +1383,6 @@ export async function rejectProductBatch(productBatchId: string, notes?: string)
    });
 }
 
-export async function loadRecalls(filters: { status?: string; limit?: number } = {}) {
-   const query = new URLSearchParams();
-   if (filters.status !== undefined && filters.status !== "") {
-      query.set("status", filters.status);
-   }
-   if (filters.limit !== undefined) {
-      query.set("limit", String(filters.limit));
-   }
-   const path = query.size === 0 ? "/api/recalls" : `/api/recalls?${query}`;
-   return await requestJson<RecallCaseDto[]>(path);
-}
-
-export async function createRecall(request: RecallCreateRequest) {
-   return await requestJson<RecallCaseDto>("/api/recalls", { method: "POST", body: JSON.stringify(request) });
-}
-
-export async function activateRecall(id: string, notes?: string) {
-   return await requestJson<RecallCaseDto>(`/api/recalls/${id}/activate`, {
-      method: "POST",
-      body: JSON.stringify({ notes: notes ?? null }),
-   });
-}
-
-export async function closeRecall(id: string, notes?: string) {
-   return await requestJson<RecallCaseDto>(`/api/recalls/${id}/close`, {
-      method: "POST",
-      body: JSON.stringify({ notes: notes ?? null }),
-   });
-}
-
-export async function updateRecallAffectedBatch(id: string, affectedBatchId: string, status: string, notes?: string) {
-   return await requestJson<RecallCaseDto>(`/api/recalls/${id}/affected-batches/${affectedBatchId}`, {
-      method: "POST",
-      body: JSON.stringify({ status, notes: notes ?? null }),
-   });
-}
 
 export async function createReturn(request: ReturnCreateRequest) {
    return await requestJson<StockLedgerEntryDto>("/api/returns", {

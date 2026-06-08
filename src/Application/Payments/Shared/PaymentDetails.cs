@@ -43,8 +43,10 @@ public sealed record PaymentInstructionDetails(
 public sealed record PaymentLineDetails(
     Guid Id,
     Guid ProductId,
+    Guid? ProductUnitId,
     string ProductName,
     string? BatchNumber,
+    string? UnitName,
     decimal UnitPrice,
     decimal Quantity,
     decimal LineTotal,
@@ -53,8 +55,10 @@ public sealed record PaymentLineDetails(
     public static PaymentLineDetails From(PaymentInvoiceLine line) => new(
         line.Id,
         line.ProductId,
+        line.ProductUnitId,
         line.ProductNameSnapshot,
         line.BatchNumberSnapshot,
+        line.UnitNameSnapshot ?? line.ProductUnit?.UnitName,
         line.UnitPrice,
         line.Quantity,
         line.LineTotal,

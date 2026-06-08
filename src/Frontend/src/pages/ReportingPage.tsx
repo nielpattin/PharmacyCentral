@@ -1,11 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
-   loadAuditLogs,
    loadDashboardSummary,
    loadInventoryBalances,
    loadSites,
    loadStorageLocations,
-   type AuditLogEntryDto,
+   type DashboardActivityDto,
    type DashboardSummaryDto,
    type InventoryBalanceDto,
    type SiteDto,
@@ -18,6 +17,8 @@ import { Badge } from "../components/shadcn/badge";
 import { Button } from "../components/shadcn/button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useMountEffect } from "../hooks/useMountEffect";
+import { useAuth } from "../lib/auth";
+import { canAccessPath } from "../lib/access";
 import { useT } from "../lib/i18n";
 import { formatAuditSummary } from "../lib/auditDisplay";
 import styles from "./ReportingPage.module.css";
@@ -198,7 +199,7 @@ function CountList({
    );
 }
 
-function RecentAuditList({ logs, sites }: { logs: AuditLogEntryDto[]; sites: SiteDto[] }) {
+function RecentAuditList({ logs, sites }: { logs: DashboardActivityDto[]; sites: SiteDto[] }) {
    const t = useT();
    const siteName = (siteId: string | null) =>
       siteId === null
@@ -325,8 +326,8 @@ function InventoryRiskTable({
 
 export default function ReportingPage() {
    const t = useT();
+   const authUser = useAuth();
    const [summary, setSummary] = useState<DashboardSummaryDto | null>(null);
-   const [auditLogs, setAuditLogs] = useState<AuditLogEntryDto[]>([]);
    const [balances, setBalances] = useState<InventoryBalanceDto[]>([]);
    const [sites, setSites] = useState<SiteDto[]>([]);
    const [storageLocations, setStorageLocations] = useState<StorageLocationDto[]>([]);
@@ -343,15 +344,13 @@ export default function ReportingPage() {
       setBannerError(null);
 
       try {
-         const [summaryData, auditLogData, balanceData, siteData, storageLocationData] = await Promise.all([
+         const [summaryData, balanceData, siteData, storageLocationData] = await Promise.all([
             loadDashboardSummary(),
-            loadAuditLogs({ limit: 100 }),
             loadInventoryBalances(),
             loadSites(),
             loadStorageLocations(),
          ]);
          setSummary(summaryData);
-         setAuditLogs(auditLogData);
          setBalances(balanceData);
          setSites(siteData);
          setStorageLocations(storageLocationData);
@@ -363,13 +362,14 @@ export default function ReportingPage() {
       }
    }
 
+   const recentActivity = useMemo(() => summary?.recentActivity ?? [], [summary]);
    const actionSummaries = useMemo(
-      () => countBy(auditLogs, (entry) => t(`audit.action.${entry.action}`)).slice(0, 6),
-      [auditLogs, t],
+      () => countBy(recentActivity, (entry) => t(`audit.action.${entry.action}`)).slice(0, 6),
+      [recentActivity, t],
    );
    const entitySummaries = useMemo(
-      () => countBy(auditLogs, (entry) => t(`audit.entity.${entry.entityType}`)).slice(0, 6),
-      [auditLogs, t],
+      () => countBy(recentActivity, (entry) => t(`audit.entity.${entry.entityType}`)).slice(0, 6),
+      [recentActivity, t],
    );
    const totalBatches = balances.length;
    const lowStockCount = balances.filter(isLowStock).length;
@@ -377,6 +377,9 @@ export default function ReportingPage() {
    const totalOnHand = balances.reduce((total, balance) => total + balance.quantityOnHand, 0);
    const totalReserved = balances.reduce((total, balance) => total + balance.quantityReserved, 0);
    const metric = (value: number | undefined) => (isLoading || summary === null ? "..." : formatQuantity(value ?? 0));
+
+   const canOpenInventory = authUser !== null && canAccessPath(authUser, "/dashboard/inventory");
+   const canOpenAudit = authUser !== null && canAccessPath(authUser, "/dashboard/audit");
 
    return (
       <AppShell
@@ -391,12 +394,16 @@ export default function ReportingPage() {
                description={t("reporting.description")}
                actions={
                   <div className="page-actions">
-                     <a className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground" href="/dashboard/inventory">
-                        {t("reporting.openInventory")}
-                     </a>
-                     <a className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground" href="/dashboard/audit">
-                        {t("reporting.openAudit")}
-                     </a>
+                     {canOpenInventory ? (
+                        <a className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground" href="/dashboard/inventory">
+                           {t("reporting.openInventory")}
+                        </a>
+                     ) : null}
+                     {canOpenAudit ? (
+                        <a className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground" href="/dashboard/audit">
+                           {t("reporting.openAudit")}
+                        </a>
+                     ) : null}
                      <Button variant="outline" onClick={() => void refreshData()}>
                         {t("common.refresh")}
                      </Button>
@@ -492,7 +499,7 @@ export default function ReportingPage() {
                      title={t("reporting.recentActivity")}
                      description={t("reporting.recentActivityDesc")}
                   >
-                     <RecentAuditList logs={auditLogs} sites={sites} />
+                     <RecentAuditList logs={recentActivity} sites={sites} />
                   </ReportingSection>
                </>
             )}

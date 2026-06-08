@@ -38,6 +38,7 @@ internal sealed class CreatePrice : IEndpoint
             CreatePriceCommand command = new()
             {
                 ProductId = request.ProductId,
+                ProductUnitId = request.ProductUnitId,
                 SiteId = request.SiteId,
                 UnitPrice = request.UnitPrice,
                 Currency = request.Currency,
@@ -58,6 +59,7 @@ internal sealed class CreatePrice : IEndpoint
     {
         Dictionary<string, string[]> errors = [];
         if (request.ProductId == Guid.Empty) errors[nameof(request.ProductId)] = ["ProductId is required."];
+        if (request.ProductUnitId == Guid.Empty) errors[nameof(request.ProductUnitId)] = ["ProductUnitId is required."];
         if (request.SiteId == Guid.Empty) errors[nameof(request.SiteId)] = ["SiteId must be empty or a valid id."];
         if (request.UnitPrice <= 0) errors[nameof(request.UnitPrice)] = ["UnitPrice must be greater than zero."];
         if (string.IsNullOrWhiteSpace(request.Currency) || request.Currency.Trim().Length != 3) errors[nameof(request.Currency)] = ["Currency must use a 3-letter code."];

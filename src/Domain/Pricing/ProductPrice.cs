@@ -7,6 +7,7 @@ public sealed class ProductPrice
 {
     public Guid Id { get; set; }
     public Guid ProductId { get; set; }
+    public Guid ProductUnitId { get; set; }
     public Guid? SiteId { get; set; }
     public decimal UnitPrice { get; set; }
     public string Currency { get; set; } = "VND";
@@ -23,5 +24,6 @@ public sealed class ProductPrice
     public DateTimeOffset UpdatedAtUtc { get; set; }
 
     public Product Product { get; set; } = null!;
+    public ProductUnit ProductUnit { get; set; } = null!;
     public Site? Site { get; set; }
 }

@@ -8,5 +8,6 @@ internal static class PricingErrors
     public static Error InvalidPrice() => new("pricing.invalid_price", "Price must be greater than zero.");
     public static Error InvalidEffectiveDates() => new("pricing.invalid_effective_dates", "Effective end date must be on or after effective start date.");
     public static Error InvalidStatus(string status) => new("pricing.invalid_status", $"Price status '{status}' does not allow this action.");
-    public static Error OverlappingPrice() => new("pricing.overlapping_price", "A published price already exists for the selected product, site, and date range.");
+    public static Error OverlappingPrice() => new("pricing.overlapping_price", "A published price already exists for the selected product unit, site, and date range.");
+    public static Error ProductUnitNotFound(Guid productUnitId) => new("pricing.product_unit_not_found", $"Product unit '{productUnitId}' was not found.");
 }

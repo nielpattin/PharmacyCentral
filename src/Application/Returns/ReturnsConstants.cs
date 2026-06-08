@@ -14,8 +14,6 @@ public static class ReturnsConstants
 
     public const string ReasonExpired = "Expired";
 
-    public const string ReasonRecalled = "Recalled";
-
     public const string ReasonInventoryRemoval = "InventoryRemoval";
 
     public static readonly IReadOnlySet<string> Reasons = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -23,7 +21,6 @@ public static class ReturnsConstants
         ReasonReturnToSupplier,
         ReasonDamaged,
         ReasonExpired,
-        ReasonRecalled,
         ReasonInventoryRemoval
     };
 

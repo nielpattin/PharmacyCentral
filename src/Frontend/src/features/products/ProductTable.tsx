@@ -47,7 +47,7 @@ export function ProductTable({ rows, selectedProductId, onSelectProduct, onDelet
                         <td>{product.sku}</td>
                         <td>{product.name}</td>
                         <td>{formatValue(product.category)}</td>
-                        <td>{formatValue(product.unit)}</td>
+                        <td>{formatValue(product.baseUnitName)}</td>
                         <td>
                            <Badge variant={product.status === "Active" ? "secondary" : "destructive"}>
                               {product.status === "Active" ? t("status.active") : t("status.inactive")}

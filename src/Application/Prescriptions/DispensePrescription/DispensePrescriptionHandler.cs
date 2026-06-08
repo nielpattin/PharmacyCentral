@@ -67,9 +67,10 @@ public sealed class DispensePrescriptionHandler(IApplicationDbContext dbContext,
                 return PrescriptionErrors.CannotDispenseWithoutBatch();
             }
 
-            if (item.DispensedQuantity <= 0 || item.DispensedQuantity > line.PrescribedQuantity)
+            decimal prescribedBaseQuantity = line.QuantityInBaseUnits > 0 ? line.QuantityInBaseUnits : line.PrescribedQuantity;
+            if (item.DispensedQuantity <= 0 || item.DispensedQuantity > prescribedBaseQuantity)
             {
-                return PrescriptionErrors.DispensedQuantityExceedsPrescribed(item.DispensedQuantity, line.PrescribedQuantity);
+                return PrescriptionErrors.DispensedQuantityExceedsPrescribed(item.DispensedQuantity, prescribedBaseQuantity);
             }
         }
 
@@ -108,7 +109,7 @@ public sealed class DispensePrescriptionHandler(IApplicationDbContext dbContext,
             }
         }
 
-        bool allFullyDispensed = prescription.Lines.All(line => line.DispensedQuantity == line.PrescribedQuantity);
+        bool allFullyDispensed = prescription.Lines.All(line => line.DispensedQuantity == (line.QuantityInBaseUnits > 0 ? line.QuantityInBaseUnits : line.PrescribedQuantity));
         prescription.Status = allFullyDispensed ? PrescriptionStatus.Dispensed : PrescriptionStatus.PartiallyDispensed;
         prescription.DispensedByUserId = command.DispensedByUserId;
         prescription.DispensedAtUtc = DateTimeOffset.UtcNow;

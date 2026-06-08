@@ -12,21 +12,25 @@ internal sealed class Create : IEndpoint
     {
         public string Sku { get; set; } = string.Empty;
         public string? Barcode { get; set; }
-
-
         public string Name { get; set; } = string.Empty;
-
         public string? Category { get; set; }
-
-        public string? Unit { get; set; }
-
         public string? Manufacturer { get; set; }
-
         public string? Status { get; set; }
-
         public string? Notes { get; set; }
-
         public bool? IsActive { get; set; }
+        public List<ProductUnitRequest> Units { get; set; } = [];
+    }
+
+    public sealed class ProductUnitRequest
+    {
+        public Guid? Id { get; set; }
+        public string UnitName { get; set; } = string.Empty;
+        public decimal ConversionFactorToBaseUnit { get; set; } = 1m;
+        public bool IsBaseUnit { get; set; }
+        public bool IsDefaultSaleUnit { get; set; }
+        public bool IsDefaultPurchaseUnit { get; set; }
+        public string? Barcode { get; set; }
+        public int SortOrder { get; set; }
     }
 
     public void MapEndpoint(IEndpointRouteBuilder app)
@@ -48,11 +52,11 @@ internal sealed class Create : IEndpoint
                 Barcode = request.Barcode,
                 Name = request.Name,
                 Category = request.Category,
-                Unit = request.Unit,
                 Manufacturer = request.Manufacturer,
                 Status = request.Status,
                 Notes = request.Notes,
                 IsActive = request.IsActive,
+                Units = request.Units.Select(ToCommandItem).ToList()
             };
 
             Result<ProductDetails> result = await handler.HandleAsync(command, cancellationToken);
@@ -69,7 +73,19 @@ internal sealed class Create : IEndpoint
         .RequireAuthorization(Policies.Management);
     }
 
-    private static Dictionary<string, string[]> Validate(Request request)
+    internal static ProductUnitCommandItem ToCommandItem(ProductUnitRequest request) => new()
+    {
+        Id = request.Id,
+        UnitName = request.UnitName,
+        ConversionFactorToBaseUnit = request.ConversionFactorToBaseUnit,
+        IsBaseUnit = request.IsBaseUnit,
+        IsDefaultSaleUnit = request.IsDefaultSaleUnit,
+        IsDefaultPurchaseUnit = request.IsDefaultPurchaseUnit,
+        Barcode = request.Barcode,
+        SortOrder = request.SortOrder
+    };
+
+    internal static Dictionary<string, string[]> Validate(Request request)
     {
         Dictionary<string, string[]> errors = [];
 
@@ -79,10 +95,26 @@ internal sealed class Create : IEndpoint
         AddMaxLength(errors, nameof(request.Barcode), request.Barcode, 100);
         AddMaxLength(errors, nameof(request.Name), request.Name, 200);
         AddMaxLength(errors, nameof(request.Category), request.Category, 100);
-        AddMaxLength(errors, nameof(request.Unit), request.Unit, 50);
         AddMaxLength(errors, nameof(request.Manufacturer), request.Manufacturer, 200);
         AddMaxLength(errors, nameof(request.Status), request.Status, 30);
         AddMaxLength(errors, nameof(request.Notes), request.Notes, 1000);
+
+        if (request.Units.Count == 0)
+        {
+            errors[nameof(request.Units)] = ["At least one unit is required."];
+        }
+
+        for (int index = 0; index < request.Units.Count; index++)
+        {
+            ProductUnitRequest unit = request.Units[index];
+            AddRequired(errors, $"Units[{index}].UnitName", unit.UnitName);
+            AddMaxLength(errors, $"Units[{index}].UnitName", unit.UnitName, 50);
+            AddMaxLength(errors, $"Units[{index}].Barcode", unit.Barcode, 100);
+            if (unit.ConversionFactorToBaseUnit <= 0)
+            {
+                errors[$"Units[{index}].ConversionFactorToBaseUnit"] = ["ConversionFactorToBaseUnit must be greater than zero."];
+            }
+        }
 
         return errors;
     }
@@ -103,4 +135,3 @@ internal sealed class Create : IEndpoint
         }
     }
 }
-

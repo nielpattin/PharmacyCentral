@@ -1,7 +1,7 @@
 import { MotionConfig } from "motion/react";
 import appStyles from "./App.module.css";
 import { useCallback, type MouseEvent, type ReactNode } from "react";
-import { Breadcrumbs } from "./components/layout/Breadcrumbs";
+
 import { TooltipProvider } from "./components/shadcn/tooltip";
 import { useMountEffect } from "./hooks/useMountEffect";
 import { useT } from "./lib/i18n";
@@ -15,7 +15,6 @@ import {
    type AuthUser,
 } from "./lib/auth";
 import { canAccessPath, getDefaultPathForUser } from "./lib/access";
-import type { SidebarActiveKey } from "./lib/sidebar";
 import AuditPage from "./pages/AuditPage";
 import DashboardPage from "./pages/DashboardPage";
 import StocktakePage from "./pages/StocktakePage";
@@ -29,25 +28,16 @@ import FinancePage from "./pages/FinancePage";
 import ReturnsPage from "./pages/ReturnsPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import QualityPage from "./pages/QualityPage";
-import RecallPage from "./pages/RecallPage";
 
-import PricingPage from "./pages/PricingPage";
 import ProcurementPage from "./pages/ProcurementPage";
 import GoodsReceiptsPage from "./pages/GoodsReceiptsPage";
 import InventoryPage from "./pages/InventoryPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
-import OperationPlaceholderPage from "./pages/OperationPlaceholderPage";
 import ProductsPage from "./pages/ProductsPage";
 import SitesPage from "./pages/SitesPage";
 import StorageLocationsPage from "./pages/StorageLocationsPage";
 import SuppliersPage from "./pages/SuppliersPage";
-
-const PLACEHOLDER_ROUTES: Array<{
-   path: string;
-   active: SidebarActiveKey;
-   titleKey: string;
-}> = [{ path: "/dashboard/prescriptions", active: "prescriptions", titleKey: "nav.prescription" }];
 
 const STORAGE_LOCATIONS_PATH = /^\/dashboard\/sites\/([^/]+)\/storage-locations$/;
 
@@ -68,6 +58,10 @@ function resolveRoutePathname(pathname: string, authUser: AuthUser | null) {
       return "/login";
    }
 
+
+   if (pathname === "/dashboard/pricing") {
+      return "/dashboard/catalog";
+   }
    if (pathname === "/login" && authUser !== null) {
       const preferredPath = getPostLoginRedirectPath();
       return canAccessPath(authUser, preferredPath) ? preferredPath : getDefaultPathForUser(authUser);
@@ -155,9 +149,6 @@ export default function App() {
       case "/dashboard/catalog":
          page = <ProductsPage />;
          break;
-      case "/dashboard/pricing":
-         page = <PricingPage />;
-         break;
       case "/dashboard/supplier":
          page = <SuppliersPage />;
          break;
@@ -204,9 +195,6 @@ export default function App() {
       case "/dashboard/quality":
          page = <QualityPage />;
          break;
-      case "/dashboard/recalls":
-         page = <RecallPage />;
-         break;
       default: {
          const storageLocationMatch = routePathname.match(STORAGE_LOCATIONS_PATH);
          if (storageLocationMatch !== null) {
@@ -214,16 +202,7 @@ export default function App() {
             break;
          }
 
-         const placeholderRoute = PLACEHOLDER_ROUTES.find((route) => route.path === routePathname);
-         if (placeholderRoute === undefined) {
-            page = <NotFoundPage />;
-            break;
-         }
-
-         const title = t(placeholderRoute.titleKey);
-         const breadcrumb = <Breadcrumbs items={[{ label: t("app.brand"), href: "/dashboard" }, { label: title }]} />;
-
-         page = <OperationPlaceholderPage active={placeholderRoute.active} title={title} breadcrumb={breadcrumb} />;
+         page = <NotFoundPage />;
       }
    }
 

@@ -15,8 +15,10 @@ internal sealed class PrescriptionLineConfiguration : IEntityTypeConfiguration<P
         builder.Property(line => line.Id).HasColumnName("id");
         builder.Property(line => line.PrescriptionId).HasColumnName("prescription_id");
         builder.Property(line => line.ProductId).HasColumnName("product_id");
+        builder.Property(line => line.ProductUnitId).HasColumnName("product_unit_id");
         builder.Property(line => line.ProductBatchId).HasColumnName("product_batch_id");
         builder.Property(line => line.PrescribedQuantity).HasColumnName("prescribed_quantity").HasPrecision(18, 3);
+        builder.Property(line => line.QuantityInBaseUnits).HasColumnName("quantity_in_base_units").HasPrecision(18, 3);
         builder.Property(line => line.DispensedQuantity).HasColumnName("dispensed_quantity").HasPrecision(18, 3);
         builder.Property(line => line.Dosage).HasColumnName("dosage").HasMaxLength(200);
         builder.Property(line => line.Frequency).HasColumnName("frequency").HasMaxLength(200);
@@ -31,6 +33,11 @@ internal sealed class PrescriptionLineConfiguration : IEntityTypeConfiguration<P
         builder.HasOne(line => line.Product)
             .WithMany()
             .HasForeignKey(line => line.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(line => line.ProductUnit)
+            .WithMany()
+            .HasForeignKey(line => line.ProductUnitId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(line => line.ProductBatch)
