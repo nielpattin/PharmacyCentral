@@ -34,8 +34,6 @@ public sealed class PaymentInvoice
 
         PaymentAttempt attempt = new()
         {
-            Id = Guid.NewGuid(),
-            PaymentInvoiceId = Id,
             Provider = provider,
             Method = method,
             Status = PaymentStatus.Paid,
@@ -47,8 +45,6 @@ public sealed class PaymentInvoice
 
         attempt.Transactions.Add(new PaymentTransaction
         {
-            Id = Guid.NewGuid(),
-            PaymentAttemptId = attempt.Id,
             ProviderTransactionId = $"{provider}-{PaymentCode}-{now:yyyyMMddHHmmss}",
             Provider = provider,
             Amount = TotalAmount,

@@ -13,6 +13,7 @@ import {
    getPaymentStatus,
    getPrintableInvoice,
    loadCounterTransactions,
+   loadPrescription,
    loadInventoryBalances,
    loadPrescriptions,
    loadProductPrices,
@@ -296,19 +297,25 @@ export default function PrescriptionPage() {
    }
 
    async function handleOpenTransaction(transaction: CounterTransactionDetails) {
-      setSelectedId(transaction.prescriptionId);
-      setActiveCounterTab("create");
-      setInvoiceData(null);
-
-      if (transaction.paymentId === null) {
-         setPayment(null);
-         return;
-      }
-
+      setBannerError(null);
       setIsPaymentBusy(true);
       try {
-         const paymentData = await getPaymentStatus(transaction.paymentId);
+         const [prescriptionData, paymentData] = await Promise.all([
+            loadPrescription(transaction.prescriptionId),
+            transaction.paymentId === null ? Promise.resolve(null) : getPaymentStatus(transaction.paymentId),
+         ]);
+
+         setPrescriptions((current) =>
+            current.some((prescription) => prescription.id === prescriptionData.id)
+               ? current.map((prescription) => (prescription.id === prescriptionData.id ? prescriptionData : prescription))
+               : [prescriptionData, ...current],
+         );
+         setSelectedId(prescriptionData.id);
          setPayment(paymentData);
+         setInvoiceData(null);
+         setActiveCounterTab("create");
+      } catch (error) {
+         setBannerError(error instanceof Error ? error.message : t("errors.loadPrescription"));
       } finally {
          setIsPaymentBusy(false);
       }

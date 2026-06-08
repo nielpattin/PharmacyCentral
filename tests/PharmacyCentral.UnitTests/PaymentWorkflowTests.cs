@@ -92,6 +92,20 @@ public sealed class PaymentWorkflowTests
     }
 
     [Fact]
+    public void PaymentInvoice_counter_confirmation_leaves_new_child_keys_for_persistence()
+    {
+        PaymentInvoice invoice = CreatePendingInvoice();
+
+        invoice.ConfirmAtCounter(PaymentMethod.Cash, Guid.NewGuid());
+
+        PaymentAttempt attempt = Assert.Single(invoice.Attempts);
+        PaymentTransaction transaction = Assert.Single(attempt.Transactions);
+        Assert.Equal(Guid.Empty, attempt.Id);
+        Assert.Equal(Guid.Empty, transaction.Id);
+        Assert.Equal(Guid.Empty, transaction.PaymentAttemptId);
+    }
+
+    [Fact]
     public void PaymentInvoice_can_record_simple_refund()
     {
         Guid staffId = Guid.NewGuid();
