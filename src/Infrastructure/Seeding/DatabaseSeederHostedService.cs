@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using PharmacyCentral.Domain.GoodsReceipts;
 using PharmacyCentral.Domain.Inventory;
 using PharmacyCentral.Domain.Prescriptions;
+using PharmacyCentral.Domain.Pricing;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
 using PharmacyCentral.Domain.Stocktakes;
@@ -53,21 +54,21 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
             "Quản lý nhà thuốc",
             "Pharmacy Manager",
             false,
-            ["HQ-HCM-01", "WH-HCM-01", "ST-HCM-01", "ST-HCM-02"]),
+            ["HQ-HCM-01", "WH-HCM-01", "RG-HCM-01", "ST-HCM-01"]),
         new(
             "pharmacist@pharmacy.local",
             "Pharmacist@123!",
             "Dược sĩ bán hàng",
             "Pharmacist",
             false,
-            ["ST-HCM-01", "ST-HCM-02"]),
+            ["ST-HCM-01"]),
         new(
             "warehouse@pharmacy.local",
             "Warehouse@123!",
             "Nhân viên kho",
             "Warehouse Staff",
             false,
-            ["WH-HCM-01", "ST-HCM-01", "ST-HCM-02"])
+            ["WH-HCM-01", "ST-HCM-01"])
     ];
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -206,41 +207,10 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
 
         List<Product> products = CreateProducts();
         await dbContext.AddRangeAsync(products, cancellationToken);
-
-        List<Supplier> suppliers = CreateSuppliers();
-        await dbContext.AddRangeAsync(suppliers, cancellationToken);
-
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        List<ProductBatch> batches = CreateProductBatches(products, suppliers);
-        await dbContext.AddRangeAsync(batches, cancellationToken);
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        Dictionary<string, Site> siteMap = sites.ToDictionary(s => s.Code);
-        Dictionary<string, StorageLocation> locationMap = sites
-            .SelectMany(s => s.StorageLocations)
-            .ToDictionary(l => l.Code);
-        Dictionary<string, ProductBatch> batchMap = batches.ToDictionary(b => b.BatchNumber);
-
-        List<InventoryBalance> balances = CreateInventoryBalances(batchMap, siteMap, locationMap);
-        await dbContext.AddRangeAsync(balances, cancellationToken);
-
-        List<GoodsReceipt> receipts = CreateGoodsReceipts(suppliers, products, batches, siteMap, locationMap);
-        await dbContext.AddRangeAsync(receipts, cancellationToken);
-
-        List<Prescription> prescriptions = CreatePrescriptions(products, batches, siteMap, locationMap);
-        await dbContext.AddRangeAsync(prescriptions, cancellationToken);
-
-        List<TransferOrder> transfers = CreateTransferOrders(products, batches, siteMap, locationMap);
-        await dbContext.AddRangeAsync(transfers, cancellationToken);
-
-        List<StocktakeSession> stocktakes = CreateStocktakeSessions(products, batches, siteMap, locationMap);
-        await dbContext.AddRangeAsync(stocktakes, cancellationToken);
-
-        List<StockLedgerEntry> ledgerEntries = CreateStockLedgerEntries(products, batches, siteMap, locationMap);
-        await dbContext.AddRangeAsync(ledgerEntries, cancellationToken);
-
+        List<ProductPrice> prices = CreateProductPrices(products);
+        await dbContext.AddRangeAsync(prices, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -250,192 +220,24 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
     {
         return
         [
-            CreateSite("HQ-HCM-01", "Trụ sở chính", "Head Office", "Active", "TP. Hồ Chí Minh", "Trung tâm quản trị và vận hành",
+            CreateSite("HQ-HCM-01", "Trụ sở chính", "Head Office", "Active", "TP. Hồ Chí Minh", "Điểm quản trị hệ thống",
             [
-                CreateLocation("LOC-HQ-01", "Văn phòng quản trị", "Office"),
-                CreateLocation("LOC-HQ-02", "Phòng lưu trữ", "Storage"),
-                CreateLocation("LOC-HQ-03", "Bàn vận hành", "Service")
+                CreateLocation("LOC-HQ-01", "Văn phòng quản trị", "Office")
             ]),
 
-            CreateSite("WH-HCM-01", "Kho trung tâm", "Warehouse", "Active", "TP. Hồ Chí Minh", "Kho phân phối chính",
+            CreateSite("WH-HCM-01", "Kho trung tâm", "Warehouse", "Active", "TP. Hồ Chí Minh", "Kho lưu trữ và điều phối hàng hóa",
             [
-                CreateLocation("LOC-WH-01", "Khu nhận hàng", "Receiving"),
-                CreateLocation("LOC-WH-02", "Kho lưu trữ", "Storage"),
-                CreateLocation("LOC-WH-03", "Khu xuất hàng", "Dispatch"),
-                CreateLocation("LOC-WH-04", "Khu lấy hàng", "Picking")
+                CreateLocation("LOC-WH-01", "Kho lưu trữ", "Storage")
             ]),
 
-            CreateSite("WH-HN-01", "Kho miền Bắc", "Warehouse", "Active", "Hà Nội", "Kho phân phối miền Bắc",
+            CreateSite("RG-HCM-01", "Trung tâm khu vực", "Regional Hub", "Active", "TP. Hồ Chí Minh", "Điểm hỗ trợ vận hành khu vực",
             [
-                CreateLocation("LOC-NWH-01", "Khu nhận hàng", "Receiving"),
-                CreateLocation("LOC-NWH-02", "Kho lưu trữ", "Storage"),
-                CreateLocation("LOC-NWH-03", "Khu xuất hàng", "Dispatch")
+                CreateLocation("LOC-RG-01", "Khu tập kết", "Storage")
             ]),
 
-            CreateSite("RG-HCM-01", "Trung tâm khu vực Sài Gòn", "Regional Hub", "Active", "Quận 3, TP. Hồ Chí Minh", "Điểm hỗ trợ và bổ sung khu vực",
+            CreateSite("ST-HCM-01", "Nhà thuốc trung tâm", "Retail Store", "Active", "TP. Hồ Chí Minh", "Cơ sở bán lẻ demo",
             [
-                CreateLocation("LOC-RG-01", "Quầy trung tâm", "Service"),
-                CreateLocation("LOC-RG-02", "Phòng tập kết", "Storage")
-            ]),
-
-            CreateSite("RG-HN-01", "Trung tâm khu vực Hà Nội", "Regional Hub", "Active", "Cầu Giấy, Hà Nội", "Điểm hỗ trợ và bổ sung khu vực",
-            [
-                CreateLocation("LOC-RG-03", "Quầy trung tâm", "Service"),
-                CreateLocation("LOC-RG-04", "Phòng tập kết", "Storage")
-            ]),
-
-            CreateSite("ST-HCM-01", "Nhà thuốc Quận 1", "Retail Store", "Active", "Quận 1, TP. Hồ Chí Minh", "Chi nhánh bán lẻ chính",
-            [
-                CreateLocation("LOC-ST-01", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-ST-02", "Kho trong", "Storage"),
-                CreateLocation("LOC-ST-03", "Quầy bán hàng", "Service")
-            ]),
-
-            CreateSite("ST-HCM-02", "Nhà thuốc Quận 3", "Retail Store", "Active", "Quận 3, TP. Hồ Chí Minh", "Chi nhánh bán lẻ phụ",
-            [
-                CreateLocation("LOC-ST-04", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-ST-05", "Kho trong", "Storage"),
-                CreateLocation("LOC-ST-06", "Quầy bán hàng", "Service")
-            ]),
-
-            CreateSite("ST-HCM-03", "Nhà thuốc Quận 5", "Retail Store", "Active", "Quận 5, TP. Hồ Chí Minh", "Chi nhánh bán lẻ khu dân cư",
-            [
-                CreateLocation("LOC-ST-07", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-ST-08", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HCM-04", "Nhà thuốc Phú Nhuận", "Retail Store", "Inactive", "Phú Nhuận, TP. Hồ Chí Minh", "Tạm đóng để sửa chữa",
-            [
-                CreateLocation("LOC-ST-09", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-ST-10", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HCM-05", "Nhà thuốc Bình Thạnh", "Retail Store", "Active", "Bình Thạnh, TP. Hồ Chí Minh", "Chi nhánh nội thành đông khách",
-            [
-                CreateLocation("LOC-ST-11", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-ST-12", "Kho trong", "Storage"),
-                CreateLocation("LOC-ST-13", "Bàn tư vấn", "Service")
-            ]),
-
-            CreateSite("ST-HCM-06", "Nhà thuốc Thủ Đức", "Retail Store", "Active", "Thủ Đức, TP. Hồ Chí Minh", "Chi nhánh ngoại thành",
-            [
-                CreateLocation("LOC-ST-14", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-ST-15", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HCM-07", "Nhà thuốc Quận 10", "Retail Store", "Inactive", "Quận 10, TP. Hồ Chí Minh", "Chờ gia hạn hợp đồng thuê",
-            [
-                CreateLocation("LOC-ST-16", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-ST-17", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HCM-08", "Nhà thuốc Quận 7", "Retail Store", "Active", "Quận 7, TP. Hồ Chí Minh", "Chi nhánh dành cho gia đình",
-            [
-                CreateLocation("LOC-ST-18", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-ST-19", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HCM-09", "Nhà thuốc Gò Vấp", "Retail Store", "Active", "Gò Vấp, TP. Hồ Chí Minh", "Chi nhánh bán lẻ khối lượng lớn",
-            [
-                CreateLocation("LOC-ST-20", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-ST-21", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HCM-10", "Nhà thuốc Tân Bình", "Retail Store", "Inactive", "Tân Bình, TP. Hồ Chí Minh", "Đóng do thiếu nhân sự",
-            [
-                CreateLocation("LOC-ST-22", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-ST-23", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HN-01", "Nhà thuốc Ba Đình", "Retail Store", "Active", "Ba Đình, Hà Nội", "Chi nhánh trung tâm Hà Nội",
-            [
-                CreateLocation("LOC-HN-01", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-HN-02", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HN-02", "Nhà thuốc Cầu Giấy", "Retail Store", "Active", "Cầu Giấy, Hà Nội", "Chi nhánh miền Bắc đông khách",
-            [
-                CreateLocation("LOC-HN-03", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-HN-04", "Kho trong", "Storage"),
-                CreateLocation("LOC-HN-05", "Quầy bán hàng", "Service")
-            ]),
-
-            CreateSite("ST-HN-03", "Nhà thuốc Đống Đa", "Retail Store", "Active", "Đống Đa, Hà Nội", "Chi nhánh đô thị",
-            [
-                CreateLocation("LOC-HN-06", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-HN-07", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HN-04", "Nhà thuốc Hai Bà Trưng", "Retail Store", "Inactive", "Hai Bà Trưng, Hà Nội", "Tạm ngưng để cải tạo",
-            [
-                CreateLocation("LOC-HN-08", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-HN-09", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HN-05", "Nhà thuốc Thanh Xuân", "Retail Store", "Active", "Thanh Xuân, Hà Nội", "Chi nhánh khu dân cư",
-            [
-                CreateLocation("LOC-HN-10", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-HN-11", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-HN-06", "Nhà thuốc Long Biên", "Retail Store", "Active", "Long Biên, Hà Nội", "Chi nhánh phía Đông Hà Nội",
-            [
-                CreateLocation("LOC-HN-12", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-HN-13", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-DN-01", "Nhà thuốc Đà Nẵng", "Retail Store", "Inactive", "Đà Nẵng", "Chi nhánh dự kiến mở rộng",
-            [
-                CreateLocation("LOC-DN-01", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-DN-02", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-DN-02", "Nhà thuốc Hải Châu", "Retail Store", "Active", "Hải Châu, Đà Nẵng", "Chi nhánh trung tâm thành phố",
-            [
-                CreateLocation("LOC-DN-03", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-DN-04", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-DN-03", "Nhà thuốc Liên Chiểu", "Retail Store", "Active", "Liên Chiểu, Đà Nẵng", "Chi nhánh phía Bắc Đà Nẵng",
-            [
-                CreateLocation("LOC-DN-05", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-DN-06", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-DN-04", "Nhà thuốc Sơn Trà", "Retail Store", "Active", "Sơn Trà, Đà Nẵng", "Chi nhánh khu vực biển",
-            [
-                CreateLocation("LOC-DN-07", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-DN-08", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-DN-05", "Nhà thuốc Ngũ Hành Sơn", "Retail Store", "Inactive", "Ngũ Hành Sơn, Đà Nẵng", "Chi nhánh theo mùa",
-            [
-                CreateLocation("LOC-DN-09", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-DN-10", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-BD-01", "Nhà thuốc Bình Dương", "Retail Store", "Active", "Thủ Dầu Một, Bình Dương", "Chi nhánh khu công nghiệp",
-            [
-                CreateLocation("LOC-BD-01", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-BD-02", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-BD-02", "Nhà thuốc Dĩ An", "Retail Store", "Active", "Dĩ An, Bình Dương", "Chi nhánh khu vực giao thông",
-            [
-                CreateLocation("LOC-BD-03", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-BD-04", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-BD-03", "Nhà thuốc Bến Cát", "Retail Store", "Inactive", "Bến Cát, Bình Dương", "Chi nhánh ít khách",
-            [
-                CreateLocation("LOC-BD-05", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-BD-06", "Kho trong", "Storage")
-            ]),
-
-            CreateSite("ST-BD-04", "Nhà thuốc Tân Uyên", "Retail Store", "Active", "Tân Uyên, Bình Dương", "Chi nhánh ngoại thành đang phát triển",
-            [
-                CreateLocation("LOC-BD-07", "Kệ trưng bày", "Storage"),
-                CreateLocation("LOC-BD-08", "Kho trong", "Storage")
+                CreateLocation("LOC-ST-01", "Quầy bán hàng", "Service")
             ])
         ];
     }
@@ -484,38 +286,123 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
     {
         return
         [
-            CreateProduct("PARA-500", "Paracetamol 500mg", "Giảm đau hạ sốt", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược Hậu Giang"),
-            CreateProduct("AMOX-500", "Amoxicillin 500mg", "Kháng sinh", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược phẩm Traphaco"),
-            CreateProduct("OMEP-20", "Omeprazol 20mg", "Dạ dày", "Hộp 3 vỉ x 10 viên", "Công ty CP Dược phẩm Domesco"),
-            CreateProduct("CETI-10", "Cetirizin 10mg", "Kháng dị ứng", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược Hậu Giang"),
-            CreateProduct("METF-500", "Metformin 500mg", "Tiểu đường", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược phẩm Traphaco"),
-            CreateProduct("AMLO-5", "Amlodipine 5mg", "Tăng huyết áp", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược phẩm Domesco"),
-            CreateProduct("VITC-100", "Vitamin C 100mg", "Vitamin", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược Hậu Giang"),
-            CreateProduct("IBUP-400", "Ibuprofen 400mg", "Giảm đau kháng viêm", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược phẩm Traphaco"),
-            CreateProduct("LORA-10", "Loratadin 10mg", "Kháng dị ứng", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược phẩm Domesco"),
-            CreateProduct("PANT-40", "Pantoprazole 40mg", "Dạ dày", "Hộp 3 vỉ x 10 viên", "Công ty CP Dược Hậu Giang"),
-            CreateProduct("CEFZ-500", "Cefuroxim 500mg", "Kháng sinh", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược phẩm Traphaco"),
-            CreateProduct("DICL-50", "Diclofenac 50mg", "Giảm đau kháng viêm", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược phẩm Domesco"),
-            CreateProduct("CLOP-75", "Clopidogrel 75mg", "Tim mạch", "Hộp 3 vỉ x 10 viên", "Công ty CP Dược Hậu Giang"),
-            CreateProduct("RANI-150", "Ranitidin 150mg", "Dạ dày", "Hộp 10 vỉ x 10 viên", "Công ty CP Dược phẩm Traphaco"),
-            CreateProduct("AZIT-500", "Azithromycin 500mg", "Kháng sinh", "Hộp 3 vỉ x 6 viên", "Công ty CP Dược phẩm Domesco"),
-            CreateProduct("GLUC-500", "Glucose 50%", "Dịch truyền", "Hộp 50 ống x 10ml", "Công ty CP Dược Hậu Giang"),
-            CreateProduct("BAND-AID", "Băng dán cá nhân", "Vật tư y tế", "Hộp 100 miếng", "Công ty CP Thiết bị y tế Việt Nhật"),
-            CreateProduct("THERMO", "Nhiệt kế điện tử", "Thiết bị y tế", "Cái", "Công ty CP Thiết bị y tế Việt Nhật"),
-            CreateProduct("FACE-MASK", "Khẩu trang y tế 4 lớp", "Vật tư y tế", "Hộp 50 cái", "Công ty TNHH Bảo hộ lao động Phú An"),
-            CreateProduct("HAND-SAN", "Nước rửa tay khô 500ml", "Vệ sinh", "Chai 500ml", "Công ty TNHH Hóa phẩm Á Đông")
+            CreateProduct("PARA-500", "Paracetamol 500mg", "Giảm đau hạ sốt", "Công ty CP Dược Hậu Giang", 10, 100),
+            CreateProduct("AMOX-500", "Amoxicillin 500mg", "Kháng sinh", "Công ty CP Dược phẩm Traphaco", 10, 100),
+            CreateProduct("OMEP-20", "Omeprazol 20mg", "Dạ dày", "Công ty CP Dược phẩm Domesco", 10, 30),
+            CreateProduct("CETI-10", "Cetirizin 10mg", "Kháng dị ứng", "Công ty CP Dược Hậu Giang", 10, 100),
+            CreateProduct("METF-500", "Metformin 500mg", "Tiểu đường", "Công ty CP Dược phẩm Traphaco", 10, 100),
+            CreateProduct("AMLO-5", "Amlodipine 5mg", "Tăng huyết áp", "Công ty CP Dược phẩm Domesco", 10, 100),
+            CreateProduct("VITC-100", "Vitamin C 100mg", "Vitamin", "Công ty CP Dược Hậu Giang", 10, 100),
+            CreateProduct("IBUP-400", "Ibuprofen 400mg", "Giảm đau kháng viêm", "Công ty CP Dược phẩm Traphaco", 10, 100),
+            CreateProduct("LORA-10", "Loratadin 10mg", "Kháng dị ứng", "Công ty CP Dược phẩm Domesco", 10, 100),
+            CreateProduct("PANT-40", "Pantoprazole 40mg", "Dạ dày", "Công ty CP Dược Hậu Giang", 10, 30),
+            CreateProduct("CEFZ-500", "Cefuroxim 500mg", "Kháng sinh", "Công ty CP Dược phẩm Traphaco", 10, 100),
+            CreateProduct("DICL-50", "Diclofenac 50mg", "Giảm đau kháng viêm", "Công ty CP Dược phẩm Domesco", 10, 100),
+            CreateProduct("CLOP-75", "Clopidogrel 75mg", "Tim mạch", "Công ty CP Dược Hậu Giang", 10, 30),
+            CreateProduct("RANI-150", "Ranitidin 150mg", "Dạ dày", "Công ty CP Dược phẩm Traphaco", 10, 100),
+            CreateProduct("AZIT-500", "Azithromycin 500mg", "Kháng sinh", "Công ty CP Dược phẩm Domesco", 6, 18),
+            CreateProduct("GLUC-500", "Glucose 50%", "Dịch truyền", "Công ty CP Dược Hậu Giang", "Ống", 50),
+            CreateProduct("BAND-AID", "Băng dán cá nhân", "Vật tư y tế", "Công ty CP Thiết bị y tế Việt Nhật", "Miếng", 100),
+            CreateProduct("THERMO", "Nhiệt kế điện tử", "Thiết bị y tế", "Công ty CP Thiết bị y tế Việt Nhật", "Cái", null),
+            CreateProduct("FACE-MASK", "Khẩu trang y tế 4 lớp", "Vật tư y tế", "Công ty TNHH Bảo hộ lao động Phú An", "Cái", 50),
+            CreateProduct("HAND-SAN", "Nước rửa tay khô 500ml", "Vệ sinh", "Công ty TNHH Hóa phẩm Á Đông", "Chai", null)
         ];
     }
 
-    private static Product CreateProduct(string sku, string name, string category, string unit, string manufacturer) => new()
+    private static Product CreateProduct(string sku, string name, string category, string manufacturer, int stripFactor, int boxFactor)
     {
-        Sku = sku,
-        Name = name,
-        Category = category,
-        Unit = unit,
-        Manufacturer = manufacturer,
-        Status = "Active",
-        IsActive = true
+        Product product = CreateProduct(sku, name, category, manufacturer, "Viên", boxFactor);
+        product.Units.Insert(1, CreateUnit("Vỉ", stripFactor, false, true, false, 2));
+        product.Units[2].SortOrder = 3;
+        return product;
+    }
+
+    private static Product CreateProduct(string sku, string name, string category, string manufacturer, string baseUnitName, int? boxFactor)
+    {
+        Product product = new()
+        {
+            Sku = sku,
+            Name = name,
+            Category = category,
+            Manufacturer = manufacturer,
+            Status = "Active",
+            IsActive = true
+        };
+
+        product.Units.Add(CreateUnit(baseUnitName, 1m, true, true, boxFactor is null, 1));
+        if (boxFactor is not null)
+        {
+            product.Units.Add(CreateUnit("Hộp", boxFactor.Value, false, true, true, 2));
+        }
+
+        return product;
+    }
+
+    private static ProductUnit CreateUnit(string unitName, decimal conversionFactorToBaseUnit, bool isBaseUnit, bool isDefaultSaleUnit, bool isDefaultPurchaseUnit, int sortOrder) => new()
+    {
+        UnitName = unitName,
+        ConversionFactorToBaseUnit = conversionFactorToBaseUnit,
+        IsBaseUnit = isBaseUnit,
+        IsDefaultSaleUnit = isDefaultSaleUnit,
+        IsDefaultPurchaseUnit = isDefaultPurchaseUnit,
+        SortOrder = sortOrder
+    };
+
+    private static List<ProductPrice> CreateProductPrices(List<Product> products)
+    {
+        List<ProductPrice> prices = [];
+        DateOnly effectiveFrom = new(2025, 1, 1);
+
+        foreach (Product product in products)
+        {
+            decimal basePrice = GetBaseUnitPrice(product.Sku);
+            foreach (ProductUnit unit in product.Units)
+            {
+                decimal unitPrice = unit.IsBaseUnit
+                    ? basePrice
+                    : Math.Round(basePrice * unit.ConversionFactorToBaseUnit * (unit.UnitName == "Hộp" ? 0.9m : 0.95m), 0);
+
+                prices.Add(new ProductPrice
+                {
+                    Product = product,
+                    ProductUnit = unit,
+                    UnitPrice = unitPrice,
+                    Currency = "VND",
+                    EffectiveFrom = effectiveFrom,
+                    Status = ProductPriceStatus.Published,
+                    PublishedAtUtc = DateTimeOffset.UtcNow,
+                    CreatedAtUtc = DateTimeOffset.UtcNow,
+                    UpdatedAtUtc = DateTimeOffset.UtcNow
+                });
+            }
+        }
+
+        return prices;
+    }
+
+    private static decimal GetBaseUnitPrice(string sku) => sku switch
+    {
+        "PARA-500" => 1_500m,
+        "AMOX-500" => 2_500m,
+        "OMEP-20" => 2_000m,
+        "CETI-10" => 1_200m,
+        "METF-500" => 1_800m,
+        "AMLO-5" => 1_600m,
+        "VITC-100" => 800m,
+        "IBUP-400" => 1_700m,
+        "LORA-10" => 1_300m,
+        "PANT-40" => 2_200m,
+        "CEFZ-500" => 3_500m,
+        "DICL-50" => 1_400m,
+        "CLOP-75" => 4_000m,
+        "RANI-150" => 1_500m,
+        "AZIT-500" => 7_000m,
+        "GLUC-500" => 5_000m,
+        "BAND-AID" => 500m,
+        "THERMO" => 75_000m,
+        "FACE-MASK" => 1_000m,
+        "HAND-SAN" => 55_000m,
+        _ => 1_000m
     };
 
     // ── Suppliers ──────────────────────────────────────────────────────
