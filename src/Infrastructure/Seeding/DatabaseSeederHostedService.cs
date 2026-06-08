@@ -205,12 +205,50 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        Dictionary<string, Site> siteMap = sites.ToDictionary(s => s.Code);
+        Dictionary<string, StorageLocation> locationMap = sites
+            .SelectMany(s => s.StorageLocations)
+            .ToDictionary(l => l.Code);
+
+        List<Supplier> suppliers = CreateSuppliers();
+        await dbContext.AddRangeAsync(suppliers, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         List<Product> products = CreateProducts();
         await dbContext.AddRangeAsync(products, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         List<ProductPrice> prices = CreateProductPrices(products);
         await dbContext.AddRangeAsync(prices, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        List<ProductBatch> batches = CreateProductBatches(products, suppliers);
+        await dbContext.AddRangeAsync(batches, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        List<InventoryBalance> balances = CreateInventoryBalances(
+            batches.ToDictionary(b => b.BatchNumber), siteMap, locationMap);
+        await dbContext.AddRangeAsync(balances, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        List<GoodsReceipt> goodsReceipts = CreateGoodsReceipts(suppliers, products, batches, siteMap, locationMap);
+        await dbContext.AddRangeAsync(goodsReceipts, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        List<Prescription> prescriptions = CreatePrescriptions(products, batches, siteMap, locationMap);
+        await dbContext.AddRangeAsync(prescriptions, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        List<TransferOrder> transferOrders = CreateTransferOrders(products, batches, siteMap, locationMap);
+        await dbContext.AddRangeAsync(transferOrders, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        List<StocktakeSession> stocktakeSessions = CreateStocktakeSessions(products, batches, siteMap, locationMap);
+        await dbContext.AddRangeAsync(stocktakeSessions, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        List<StockLedgerEntry> ledgerEntries = CreateStockLedgerEntries(products, batches, siteMap, locationMap);
+        await dbContext.AddRangeAsync(ledgerEntries, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -227,7 +265,8 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
 
             CreateSite("WH-HCM-01", "Kho trung tâm", "Warehouse", "Active", "TP. Hồ Chí Minh", "Kho lưu trữ và điều phối hàng hóa",
             [
-                CreateLocation("LOC-WH-01", "Kho lưu trữ", "Storage")
+                CreateLocation("LOC-WH-01", "Kho lưu trữ", "Storage"),
+                CreateLocation("LOC-WH-02", "Khu receiving", "Receiving")
             ]),
 
             CreateSite("RG-HCM-01", "Trung tâm khu vực", "Regional Hub", "Active", "TP. Hồ Chí Minh", "Điểm hỗ trợ vận hành khu vực",
@@ -237,7 +276,8 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
 
             CreateSite("ST-HCM-01", "Nhà thuốc trung tâm", "Retail Store", "Active", "TP. Hồ Chí Minh", "Cơ sở bán lẻ demo",
             [
-                CreateLocation("LOC-ST-01", "Quầy bán hàng", "Service")
+                CreateLocation("LOC-ST-01", "Quầy bán hàng", "Service"),
+                CreateLocation("LOC-ST-02", "Kho trong", "Storage")
             ])
         ];
     }
@@ -501,15 +541,15 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
             CreateBalance(batchMap["HSAN-2025-001"], siteMap["WH-HCM-01"], locationMap["LOC-WH-02"], 150m, 0m),
 
             // Kho miền Bắc - bulk storage
-            CreateBalance(batchMap["PARA-2024-001"], siteMap["WH-HN-01"], locationMap["LOC-NWH-02"], 2000m, 0m),
-            CreateBalance(batchMap["AMOX-2024-001"], siteMap["WH-HN-01"], locationMap["LOC-NWH-02"], 1500m, 0m),
-            CreateBalance(batchMap["OMEP-2024-001"], siteMap["WH-HN-01"], locationMap["LOC-NWH-02"], 800m, 0m),
-            CreateBalance(batchMap["METF-2024-001"], siteMap["WH-HN-01"], locationMap["LOC-NWH-02"], 600m, 0m),
-            CreateBalance(batchMap["CEFZ-2025-001"], siteMap["WH-HN-01"], locationMap["LOC-NWH-02"], 1000m, 0m),
-            CreateBalance(batchMap["DICL-2025-001"], siteMap["WH-HN-01"], locationMap["LOC-NWH-02"], 1200m, 0m),
-            CreateBalance(batchMap["AZIT-2025-001"], siteMap["WH-HN-01"], locationMap["LOC-NWH-02"], 900m, 0m),
+            CreateBalance(batchMap["PARA-2024-001"], siteMap["WH-HCM-01"], locationMap["LOC-WH-02"], 2000m, 0m),
+            CreateBalance(batchMap["AMOX-2024-001"], siteMap["WH-HCM-01"], locationMap["LOC-WH-02"], 1500m, 0m),
+            CreateBalance(batchMap["OMEP-2024-001"], siteMap["WH-HCM-01"], locationMap["LOC-WH-02"], 800m, 0m),
+            CreateBalance(batchMap["METF-2024-001"], siteMap["WH-HCM-01"], locationMap["LOC-WH-02"], 600m, 0m),
+            CreateBalance(batchMap["CEFZ-2025-001"], siteMap["WH-HCM-01"], locationMap["LOC-WH-02"], 1000m, 0m),
+            CreateBalance(batchMap["DICL-2025-001"], siteMap["WH-HCM-01"], locationMap["LOC-WH-02"], 1200m, 0m),
+            CreateBalance(batchMap["AZIT-2025-001"], siteMap["WH-HCM-01"], locationMap["LOC-WH-02"], 900m, 0m),
 
-            // Nhà thuốc Quận 1 - front shelves
+            // Nhà thuốc trung tâm - front shelves
             CreateBalance(batchMap["PARA-2025-002"], siteMap["ST-HCM-01"], locationMap["LOC-ST-01"], 200m, 10m),
             CreateBalance(batchMap["AMOX-2025-002"], siteMap["ST-HCM-01"], locationMap["LOC-ST-01"], 150m, 5m),
             CreateBalance(batchMap["OMEP-2025-002"], siteMap["ST-HCM-01"], locationMap["LOC-ST-01"], 100m, 0m),
@@ -517,28 +557,10 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
             CreateBalance(batchMap["VITC-2025-001"], siteMap["ST-HCM-01"], locationMap["LOC-ST-01"], 300m, 0m),
             CreateBalance(batchMap["MASK-2025-001"], siteMap["ST-HCM-01"], locationMap["LOC-ST-01"], 20m, 0m),
 
-            // Nhà thuốc Quận 1 - kho trong
+            // Nhà thuốc trung tâm - kho trong
             CreateBalance(batchMap["PARA-2025-002"], siteMap["ST-HCM-01"], locationMap["LOC-ST-02"], 500m, 0m),
             CreateBalance(batchMap["AMOX-2025-002"], siteMap["ST-HCM-01"], locationMap["LOC-ST-02"], 300m, 0m),
 
-            // Nhà thuốc Cầu Giấy - kệ trưng bày
-            CreateBalance(batchMap["PARA-2024-001"], siteMap["ST-HN-02"], locationMap["LOC-HN-03"], 180m, 5m),
-            CreateBalance(batchMap["AMOX-2024-001"], siteMap["ST-HN-02"], locationMap["LOC-HN-03"], 120m, 0m),
-            CreateBalance(batchMap["OMEP-2024-001"], siteMap["ST-HN-02"], locationMap["LOC-HN-03"], 80m, 0m),
-            CreateBalance(batchMap["CEFZ-2025-001"], siteMap["ST-HN-02"], locationMap["LOC-HN-03"], 100m, 0m),
-            CreateBalance(batchMap["MASK-2025-001"], siteMap["ST-HN-02"], locationMap["LOC-HN-03"], 15m, 0m),
-
-            // Nhà thuốc Hải Châu - kệ trưng bày
-            CreateBalance(batchMap["PARA-2025-002"], siteMap["ST-DN-02"], locationMap["LOC-DN-03"], 150m, 0m),
-            CreateBalance(batchMap["AMOX-2025-002"], siteMap["ST-DN-02"], locationMap["LOC-DN-03"], 100m, 0m),
-            CreateBalance(batchMap["VITC-2025-001"], siteMap["ST-DN-02"], locationMap["LOC-DN-03"], 200m, 0m),
-            CreateBalance(batchMap["HSAN-2025-001"], siteMap["ST-DN-02"], locationMap["LOC-DN-03"], 30m, 0m),
-
-            // Nhà thuốc Bình Dương - kệ trưng bày
-            CreateBalance(batchMap["PARA-2025-002"], siteMap["ST-BD-01"], locationMap["LOC-BD-01"], 120m, 0m),
-            CreateBalance(batchMap["METF-2025-002"], siteMap["ST-BD-01"], locationMap["LOC-BD-01"], 60m, 0m),
-            CreateBalance(batchMap["AMLO-2025-001"], siteMap["ST-BD-01"], locationMap["LOC-BD-01"], 80m, 0m),
-            CreateBalance(batchMap["CLOP-2025-001"], siteMap["ST-BD-01"], locationMap["LOC-BD-01"], 50m, 0m)
         ];
     }
 
@@ -587,7 +609,7 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
                 CreateGoodsReceiptLine(batchMap["AMLO-2025-001"].Product, batchMap["AMLO-2025-001"], "AMLO-2025-001", new DateOnly(2027, 7, 10), 600m)
             ]);
 
-        GoodsReceipt gr4 = CreateGoodsReceipt("GR-2025-0004", supplierMap["SUP-TRC"], siteMap["WH-HN-01"], locationMap["LOC-NWH-01"],
+        GoodsReceipt gr4 = CreateGoodsReceipt("GR-2025-0004", supplierMap["SUP-TRC"], siteMap["WH-HCM-01"], locationMap["LOC-WH-01"],
             new DateTimeOffset(2025, 2, 20, 14, 0, 0, TimeSpan.Zero), "Nhập hàng kho miền Bắc",
             [
                 CreateGoodsReceiptLine(batchMap["PARA-2024-001"].Product, batchMap["PARA-2024-001"], "PARA-2024-001", new DateOnly(2026, 8, 15), 1000m),
@@ -648,39 +670,40 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
     {
         Dictionary<string, Product> productMap = products.ToDictionary(p => p.Sku);
         Dictionary<string, ProductBatch> batchMap = batches.ToDictionary(b => b.BatchNumber);
+        Dictionary<string, ProductUnit> baseUnitMap = products.ToDictionary(p => p.Sku, p => p.Units.First(u => u.IsBaseUnit));
 
-        Prescription rx1 = CreatePrescription("RX-20250120-001", siteMap["ST-HCM-01"], locationMap["LOC-ST-03"],
+        Prescription rx1 = CreatePrescription("RX-20250120-001", siteMap["ST-HCM-01"], locationMap["LOC-ST-01"],
             "Nguyễn Văn An", "0901234567", "BS. Trần Minh", "BS-12345", "Pending",
             [
-                CreatePrescriptionLine(productMap["PARA-500"], batchMap["PARA-2025-002"], 20m, 20m, "1 viên x 3 lần/ngày", "Sau ăn", "5 ngày", "Giảm đau hạ sốt"),
-                CreatePrescriptionLine(productMap["AMOX-500"], batchMap["AMOX-2025-002"], 15m, 15m, "1 viên x 3 lần/ngày", "Trước ăn", "5 ngày", "Kháng sinh điều trị nhiễm trùng")
+                CreatePrescriptionLine(productMap["PARA-500"], baseUnitMap["PARA-500"], batchMap["PARA-2025-002"], 20m, 20m, "1 viên x 3 lần/ngày", "Sau ăn", "5 ngày", "Giảm đau hạ sốt"),
+                CreatePrescriptionLine(productMap["AMOX-500"], baseUnitMap["AMOX-500"], batchMap["AMOX-2025-002"], 15m, 15m, "1 viên x 3 lần/ngày", "Trước ăn", "5 ngày", "Kháng sinh điều trị nhiễm trùng")
             ]);
 
-        Prescription rx2 = CreatePrescription("RX-20250215-002", siteMap["ST-HCM-01"], locationMap["LOC-ST-03"],
+        Prescription rx2 = CreatePrescription("RX-20250215-002", siteMap["ST-HCM-01"], locationMap["LOC-ST-01"],
             "Lê Thị Bình", "0912345678", "BS. Phạm Hương", "BS-67890", "Dispensed",
             [
-                CreatePrescriptionLine(productMap["OMEP-20"], batchMap["OMEP-2025-002"], 30m, 30m, "1 viên x 2 lần/ngày", "Trước ăn sáng và tối", "14 ngày", "Điều trị viêm loét dạ dày"),
-                CreatePrescriptionLine(productMap["CETI-10"], batchMap["CETI-2025-001"], 10m, 10m, "1 viên x 1 lần/ngày", "Tối", "10 ngày", "Giảm triệu chứng dị ứng")
+                CreatePrescriptionLine(productMap["OMEP-20"], baseUnitMap["OMEP-20"], batchMap["OMEP-2025-002"], 30m, 30m, "1 viên x 2 lần/ngày", "Trước ăn sáng và tối", "14 ngày", "Điều trị viêm loét dạ dày"),
+                CreatePrescriptionLine(productMap["CETI-10"], baseUnitMap["CETI-10"], batchMap["CETI-2025-001"], 10m, 10m, "1 viên x 1 lần/ngày", "Tối", "10 ngày", "Giảm triệu chứng dị ứng")
             ]);
 
-        Prescription rx3 = CreatePrescription("RX-20250301-003", siteMap["ST-HN-02"], locationMap["LOC-HN-05"],
+        Prescription rx3 = CreatePrescription("RX-20250301-003", siteMap["ST-HCM-01"], locationMap["LOC-ST-01"],
             "Phạm Quốc Cường", "0923456789", "BS. Nguyễn Tùng", "BS-11223", "Draft",
             [
-                CreatePrescriptionLine(productMap["METF-500"], batchMap["METF-2024-001"], 60m, 0m, "1 viên x 2 lần/ngày", "Sau ăn", "30 ngày", "Kiểm soát đường huyết"),
-                CreatePrescriptionLine(productMap["AMLO-5"], batchMap["AMLO-2025-001"], 30m, 0m, "1 viên x 1 lần/ngày", "Sáng", "30 ngày", "Kiểm soát huyết áp")
+                CreatePrescriptionLine(productMap["METF-500"], baseUnitMap["METF-500"], batchMap["METF-2024-001"], 60m, 0m, "1 viên x 2 lần/ngày", "Sau ăn", "30 ngày", "Kiểm soát đường huyết"),
+                CreatePrescriptionLine(productMap["AMLO-5"], baseUnitMap["AMLO-5"], batchMap["AMLO-2025-001"], 30m, 0m, "1 viên x 1 lần/ngày", "Sáng", "30 ngày", "Kiểm soát huyết áp")
             ]);
 
-        Prescription rx4 = CreatePrescription("RX-20250310-004", siteMap["ST-DN-02"], locationMap["LOC-DN-04"],
+        Prescription rx4 = CreatePrescription("RX-20250310-004", siteMap["ST-HCM-01"], locationMap["LOC-ST-01"],
             "Hoàng Thị Dung", "0934567890", "BS. Lê Khải", "BS-44556", "Pending",
             [
-                CreatePrescriptionLine(productMap["CEFZ-500"], batchMap["CEFZ-2025-001"], 12m, 12m, "1 viên x 2 lần/ngày", "Sau ăn", "6 ngày", "Kháng sinh thế hệ 2"),
-                CreatePrescriptionLine(productMap["VITC-100"], batchMap["VITC-2025-001"], 30m, 30m, "1 viên x 1 lần/ngày", "Sáng", "30 ngày", "Bổ sung vitamin C")
+                CreatePrescriptionLine(productMap["CEFZ-500"], baseUnitMap["CEFZ-500"], batchMap["CEFZ-2025-001"], 12m, 12m, "1 viên x 2 lần/ngày", "Sau ăn", "6 ngày", "Kháng sinh thế hệ 2"),
+                CreatePrescriptionLine(productMap["VITC-100"], baseUnitMap["VITC-100"], batchMap["VITC-2025-001"], 30m, 30m, "1 viên x 1 lần/ngày", "Sáng", "30 ngày", "Bổ sung vitamin C")
             ]);
 
-        Prescription rx5 = CreatePrescription("RX-20250315-005", siteMap["ST-BD-01"], locationMap["LOC-BD-01"],
+        Prescription rx5 = CreatePrescription("RX-20250315-005", siteMap["ST-HCM-01"], locationMap["LOC-ST-01"],
             "Đỗ Văn Em", "0945678901", "BS. Vũ Phương", "BS-77889", "Cancelled",
             [
-                CreatePrescriptionLine(productMap["AZIT-500"], batchMap["AZIT-2025-001"], 6m, 0m, "1 viên x 1 lần/ngày", "Trước ăn", "3 ngày", "Kháng sinh macrolid - bệnh nhân dị ứng, hủy đơn")
+                CreatePrescriptionLine(productMap["AZIT-500"], baseUnitMap["AZIT-500"], batchMap["AZIT-2025-001"], 6m, 0m, "1 viên x 1 lần/ngày", "Trước ăn", "3 ngày", "Kháng sinh macrolid - bệnh nhân dị ứng, hủy đơn")
             ]);
 
         return [rx1, rx2, rx3, rx4, rx5];
@@ -711,10 +734,11 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
         return prescription;
     }
 
-    private static PrescriptionLine CreatePrescriptionLine(Product product, ProductBatch? batch,
+    private static PrescriptionLine CreatePrescriptionLine(Product product, ProductUnit productUnit, ProductBatch? batch,
         decimal prescribedQty, decimal dispensedQty, string? dosage, string? frequency, string? duration, string? notes) => new()
     {
         Product = product,
+        ProductUnit = productUnit,
         ProductBatch = batch,
         PrescribedQuantity = prescribedQty,
         DispensedQuantity = dispensedQty,
@@ -736,9 +760,9 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
         Dictionary<string, ProductBatch> batchMap = batches.ToDictionary(b => b.BatchNumber);
 
         TransferOrder to1 = CreateTransferOrder("TO-2025-0001",
-            siteMap["WH-HCM-01"], locationMap["LOC-WH-03"],
+            siteMap["WH-HCM-01"], locationMap["LOC-WH-02"],
             siteMap["ST-HCM-01"], locationMap["LOC-ST-02"],
-            "Received", "Luân chuyển hàng cho Nhà thuốc Quận 1",
+            "Received", "Luân chuyển hàng cho Nhà thuốc trung tâm",
             [
                 CreateTransferLine(productMap["PARA-500"], batchMap["PARA-2025-002"], 500m, 500m, 500m),
                 CreateTransferLine(productMap["AMOX-500"], batchMap["AMOX-2025-002"], 300m, 300m, 300m),
@@ -746,36 +770,36 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
             ]);
 
         TransferOrder to2 = CreateTransferOrder("TO-2025-0002",
-            siteMap["WH-HCM-01"], locationMap["LOC-WH-03"],
-            siteMap["ST-HN-02"], locationMap["LOC-HN-04"],
-            "InTransit", "Luân chuyển hàng cho Nhà thuốc Cầu Giấy qua kho HN",
+            siteMap["WH-HCM-01"], locationMap["LOC-WH-02"],
+            siteMap["ST-HCM-01"], locationMap["LOC-ST-02"],
+            "InTransit", "Luân chuyển hàng cho Nhà thuốc trung tâm qua kho trung tâm",
             [
                 CreateTransferLine(productMap["PARA-500"], batchMap["PARA-2024-001"], 400m, 400m, 0m),
                 CreateTransferLine(productMap["OMEP-20"], batchMap["OMEP-2024-001"], 200m, 200m, 0m)
             ]);
 
         TransferOrder to3 = CreateTransferOrder("TO-2025-0003",
-            siteMap["WH-HCM-01"], locationMap["LOC-WH-03"],
-            siteMap["ST-DN-02"], locationMap["LOC-DN-04"],
-            "Approved", "Luân chuyển hàng cho Nhà thuốc Hải Châu",
+            siteMap["WH-HCM-01"], locationMap["LOC-WH-02"],
+            siteMap["ST-HCM-01"], locationMap["LOC-ST-01"],
+            "Approved", "Luân chuyển hàng cho Nhà thuốc trung tâm",
             [
                 CreateTransferLine(productMap["VITC-100"], batchMap["VITC-2025-001"], 600m, 0m, 0m),
                 CreateTransferLine(productMap["AMLO-5"], batchMap["AMLO-2025-001"], 200m, 0m, 0m)
             ]);
 
         TransferOrder to4 = CreateTransferOrder("TO-2025-0004",
-            siteMap["WH-HN-01"], locationMap["LOC-NWH-03"],
-            siteMap["ST-HN-02"], locationMap["LOC-HN-04"],
-            "Received", "Luân chuyển từ kho HN đến Nhà thuốc Cầu Giấy",
+            siteMap["WH-HCM-01"], locationMap["LOC-WH-02"],
+            siteMap["ST-HCM-01"], locationMap["LOC-ST-02"],
+            "Received", "Luân chuyển từ kho trung tâm đến Nhà thuốc trung tâm",
             [
                 CreateTransferLine(productMap["AMOX-500"], batchMap["AMOX-2024-001"], 200m, 200m, 200m),
                 CreateTransferLine(productMap["CEFZ-500"], batchMap["CEFZ-2025-001"], 150m, 150m, 150m)
             ]);
 
         TransferOrder to5 = CreateTransferOrder("TO-2025-0005",
-            siteMap["WH-HCM-01"], locationMap["LOC-WH-03"],
-            siteMap["ST-BD-01"], locationMap["LOC-BD-02"],
-            "Draft", "Dự kiến luân chuyển hàng cho Nhà thuốc Bình Dương",
+            siteMap["WH-HCM-01"], locationMap["LOC-WH-02"],
+            siteMap["ST-HCM-01"], locationMap["LOC-ST-02"],
+            "Draft", "Dự kiến luân chuyển hàng cho Nhà thuốc trung tâm",
             [
                 CreateTransferLine(productMap["METF-500"], batchMap["METF-2025-002"], 100m, 0m, 0m),
                 CreateTransferLine(productMap["CLOP-75"], batchMap["CLOP-2025-001"], 80m, 0m, 0m)
@@ -842,15 +866,15 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
             ]);
 
         StocktakeSession ss2 = CreateStocktakeSession(siteMap["ST-HCM-01"], locationMap["LOC-ST-01"],
-            "Completed", new DateTimeOffset(2025, 2, 28, 9, 0, 0, TimeSpan.Zero), "Kiểm kê Nhà thuốc Quận 1 tháng 2/2025",
+            "Completed", new DateTimeOffset(2025, 2, 28, 9, 0, 0, TimeSpan.Zero), "Kiểm kê Nhà thuốc trung tâm tháng 2/2025",
             [
                 CreateCountSheetLine(productMap["PARA-500"], batchMap["PARA-2025-002"], 200m, 200m, 0m, "Approved"),
                 CreateCountSheetLine(productMap["AMOX-500"], batchMap["AMOX-2025-002"], 150m, 148m, -2m, "Approved"),
                 CreateCountSheetLine(productMap["VITC-100"], batchMap["VITC-2025-001"], 300m, 305m, 5m, "Approved")
             ]);
 
-        StocktakeSession ss3 = CreateStocktakeSession(siteMap["ST-HN-02"], locationMap["LOC-HN-03"],
-            "Draft", new DateTimeOffset(2025, 4, 1, 8, 0, 0, TimeSpan.Zero), "Kiểm kê Nhà thuốc Cầu Giấy tháng 4/2025",
+        StocktakeSession ss3 = CreateStocktakeSession(siteMap["ST-HCM-01"], locationMap["LOC-ST-01"],
+            "Draft", new DateTimeOffset(2025, 4, 1, 8, 0, 0, TimeSpan.Zero), "Kiểm kê Nhà thuốc trung tâm tháng 4/2025",
             [
                 CreateCountSheetLine(productMap["PARA-500"], batchMap["PARA-2024-001"], 180m, 0m, 0m, "Pending"),
                 CreateCountSheetLine(productMap["CEFZ-500"], batchMap["CEFZ-2025-001"], 100m, 0m, 0m, "Pending")
@@ -933,7 +957,7 @@ internal sealed class DatabaseSeederHostedService(IServiceScopeFactory scopeFact
             CreateLedgerEntry(productMap["PARA-500"], batchMap["PARA-2025-002"],
                 siteMap["WH-HCM-01"], locationMap["LOC-WH-02"],
                 "TransferOut", -500m, 1500m, new DateTimeOffset(2025, 2, 15, 10, 0, 0, TimeSpan.Zero),
-                "TransferOrder", null, "Xuất cho Nhà thuốc Quận 1"),
+                "TransferOrder", null, "Xuất cho Nhà thuốc trung tâm"),
             CreateLedgerEntry(productMap["PARA-500"], batchMap["PARA-2025-002"],
                 siteMap["ST-HCM-01"], locationMap["LOC-ST-02"],
                 "TransferIn", 500m, 500m, new DateTimeOffset(2025, 2, 15, 14, 0, 0, TimeSpan.Zero),

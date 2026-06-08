@@ -1,7 +1,14 @@
 using System.Reflection;
+using PharmacyCentral.Domain.GoodsReceipts;
+using PharmacyCentral.Domain.Inventory;
+using PharmacyCentral.Domain.Prescriptions;
 using PharmacyCentral.Domain.Pricing;
 using PharmacyCentral.Domain.Products;
 using PharmacyCentral.Domain.Sites;
+using PharmacyCentral.Domain.Stocktakes;
+using PharmacyCentral.Domain.StorageLocations;
+using PharmacyCentral.Domain.Suppliers;
+using PharmacyCentral.Domain.Transfers;
 using PharmacyCentral.Infrastructure.Persistence;
 
 namespace PharmacyCentral.UnitTests;
@@ -15,6 +22,47 @@ public sealed class CatalogSeedDataTests
 
         Assert.Equal(4, sites.Count);
         Assert.Equal(Enum.GetValues<SiteType>().OrderBy(value => value), sites.Select(site => site.SiteType).OrderBy(value => value));
+    }
+
+    [Fact]
+    public void Catalog_seed_sites_include_storage_locations_required_by_business_data()
+    {
+        List<Site> sites = InvokeSeederFactory<List<Site>>("CreateSites");
+        List<StorageLocation> locations = sites.SelectMany(site => site.StorageLocations).ToList();
+
+        Assert.Equal(6, locations.Count);
+        Assert.Contains(sites, site => site.Code == "WH-HCM-01" && site.StorageLocations.Any(location => location.Code == "LOC-WH-01" && location.Name == "Kho lưu trữ"));
+        Assert.Contains(sites, site => site.Code == "WH-HCM-01" && site.StorageLocations.Any(location => location.Code == "LOC-WH-02" && location.Name == "Khu receiving"));
+        Assert.Contains(sites, site => site.Code == "ST-HCM-01" && site.StorageLocations.Any(location => location.Code == "LOC-ST-01" && location.Name == "Quầy bán hàng"));
+        Assert.Contains(sites, site => site.Code == "ST-HCM-01" && site.StorageLocations.Any(location => location.Code == "LOC-ST-02" && location.Name == "Kho trong"));
+    }
+
+    [Fact]
+    public void Catalog_seed_business_related_data_uses_existing_site_and_location_codes()
+    {
+        List<Site> sites = InvokeSeederFactory<List<Site>>("CreateSites");
+        Dictionary<string, Site> siteMap = sites.ToDictionary(site => site.Code);
+        Dictionary<string, StorageLocation> locationMap = sites
+            .SelectMany(site => site.StorageLocations)
+            .ToDictionary(location => location.Code);
+        List<Supplier> suppliers = InvokeSeederFactory<List<Supplier>>("CreateSuppliers");
+        List<Product> products = InvokeSeederFactory<List<Product>>("CreateProducts");
+        List<ProductBatch> batches = InvokeSeederFactory<List<ProductBatch>>("CreateProductBatches", products, suppliers);
+        Dictionary<string, ProductBatch> batchMap = batches.ToDictionary(batch => batch.BatchNumber);
+
+        List<InventoryBalance> balances = InvokeSeederFactory<List<InventoryBalance>>("CreateInventoryBalances", batchMap, siteMap, locationMap);
+        List<GoodsReceipt> goodsReceipts = InvokeSeederFactory<List<GoodsReceipt>>("CreateGoodsReceipts", suppliers, products, batches, siteMap, locationMap);
+        List<Prescription> prescriptions = InvokeSeederFactory<List<Prescription>>("CreatePrescriptions", products, batches, siteMap, locationMap);
+        List<TransferOrder> transferOrders = InvokeSeederFactory<List<TransferOrder>>("CreateTransferOrders", products, batches, siteMap, locationMap);
+        List<StocktakeSession> stocktakeSessions = InvokeSeederFactory<List<StocktakeSession>>("CreateStocktakeSessions", products, batches, siteMap, locationMap);
+        List<StockLedgerEntry> ledgerEntries = InvokeSeederFactory<List<StockLedgerEntry>>("CreateStockLedgerEntries", products, batches, siteMap, locationMap);
+
+        Assert.NotEmpty(balances);
+        Assert.NotEmpty(goodsReceipts);
+        Assert.NotEmpty(prescriptions);
+        Assert.NotEmpty(transferOrders);
+        Assert.NotEmpty(stocktakeSessions);
+        Assert.NotEmpty(ledgerEntries);
     }
 
     [Fact]
