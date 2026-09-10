@@ -1,0 +1,82 @@
+aws_region   = "ap-southeast-1"
+project_name = "pharmacy-central"
+environment  = "staging"
+
+# Set services_enabled to false for initial bootstrap so database migrations can run before long-running services start.
+services_enabled = false
+
+# Supply networking IDs from the AWS account. Keep these values outside Git.
+vpc_id                 = "vpc-00000000000000000"
+private_subnet_ids     = ["subnet-00000000000000000", "subnet-11111111111111111"]
+api_gateway_subnet_ids = ["subnet-00000000000000000", "subnet-11111111111111111"]
+
+allowed_origins = ["https://staff.example.com", "https://www.example.com"]
+
+# Optional private repository credentials Secret ARN for pulling container images from GHCR.
+repository_credentials_secret_arn = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/ghcr-credentials"
+
+# Use the immutable digest emitted by the image build pipeline.
+images = {
+  identity-service = "ghcr.io/example/pharmacy-central/identity-service@sha256:replace-me"
+  catalog-service = "ghcr.io/example/pharmacy-central/catalog-service@sha256:replace-me"
+  inventory-service = "ghcr.io/example/pharmacy-central/inventory-service@sha256:replace-me"
+  sales-service = "ghcr.io/example/pharmacy-central/sales-service@sha256:replace-me"
+  payment-service = "ghcr.io/example/pharmacy-central/payment-service@sha256:replace-me"
+  operations-query-service = "ghcr.io/example/pharmacy-central/operations-query-service@sha256:replace-me"
+}
+
+# Non-secret environment variables. Service URLs should use Cloud Map names, for example:
+# http://catalog-service.staging.pharmacy.internal:3002
+service_environment = {
+  inventory-service = {
+    CATALOG_SERVICE_URL = "http://catalog-service.staging.pharmacy.internal:3002"
+  }
+  sales-service = {
+    CATALOG_SERVICE_URL   = "http://catalog-service.staging.pharmacy.internal:3002"
+    INVENTORY_SERVICE_URL = "http://inventory-service.staging.pharmacy.internal:3004"
+  }
+  payment-service = {
+    CATALOG_SERVICE_URL = "http://catalog-service.staging.pharmacy.internal:3002"
+    SALES_SERVICE_URL   = "http://sales-service.staging.pharmacy.internal:3005"
+  }
+  operations-query-service = {
+    CATALOG_SERVICE_URL   = "http://catalog-service.staging.pharmacy.internal:3002"
+    INVENTORY_SERVICE_URL = "http://inventory-service.staging.pharmacy.internal:3004"
+    SALES_SERVICE_URL     = "http://sales-service.staging.pharmacy.internal:3005"
+  }
+}
+
+# Secret values belong in Secrets Manager. These maps contain ARNs only.
+shared_secrets = {
+  INTERNAL_IDENTITY_SECRET = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/internal-identity"
+  INTERNAL_SERVICE_SECRET  = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/internal-service"
+  RABBITMQ_URL             = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/rabbitmq-url"
+  VALKEY_URL               = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/valkey-url"
+}
+
+service_secrets = {
+  identity-service = {
+    DATABASE_URL = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/identity-db"
+  }
+  catalog-service = {
+    DATABASE_URL = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/catalog-db"
+  }
+  inventory-service = {
+    DATABASE_URL = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/inventory-db"
+  }
+  sales-service = {
+    DATABASE_URL = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/sales-db"
+  }
+  payment-service = {
+    DATABASE_URL         = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/payment-db"
+    SEPAY_WEBHOOK_SECRET = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/sepay-webhook"
+  }
+  operations-query-service = {
+    DATABASE_URL = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/operations-query-db"
+  }
+}
+
+authorizer_secrets = {
+  INTERNAL_IDENTITY_SECRET = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/internal-identity"
+  INTERNAL_SERVICE_SECRET  = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/internal-service"
+}
