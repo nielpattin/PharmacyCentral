@@ -1,43 +1,283 @@
+name: pharmacy-central
+
+x-backend-defaults: &backend-defaults
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    valkey:
+      condition: service_healthy
+    otel-collector:
+      condition: service_healthy
+  healthcheck:
+    test:
+      [
+        "CMD-SHELL",
+        'node -e "fetch(''http://127.0.0.1:'' + process.env.PORT + ''/health/ready'').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"',
+      ]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 10s
+
+x-backend-environment: &backend-environment
+  NODE_ENV: development
+  DATABASE_USER: ${POSTGRES_USER}
+  DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+  VALKEY_URL: redis://valkey:6379
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  INTERNAL_IDENTITY_SECRET: ${INTERNAL_IDENTITY_SECRET}
+  INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+
 services:
   postgres:
-    image: postgres:18
-    container_name: pharmacycentral-postgres
+    image: postgis/postgis:18-3.6@sha256:db8c151a4e1f4686b1a985a3490cf96f9f8c8c2725f58a46ef7a57e52f167cc3
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-pharmacycentral}
-      POSTGRES_USER: ${POSTGRES_USER:-pharmacycentral}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_this_password}
+      POSTGRES_DB: identity_service
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 12
     volumes:
-      - pharmacycentral-postgres-data:/var/lib/postgresql/data
+      - pharmacy-central-postgres-data:/var/lib/postgresql
+      - ./deploy/local/postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT}:5432"
 
-  pharmacycentral:
+  rabbitmq:
+    image: rabbitmq:4.3.5-management@sha256:397fde82bc04522d88680b57cbf5d70caae715a76c957404e52e3f0fa056b8f3
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "${RABBITMQ_AMQP_PORT}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+
+  valkey:
+    image: valkey/valkey:9.1.1@sha256:70739f85ad2ee01a726a965584a0f94895f01b0c60b3cc8b0aeef11eaa6888cf
+    restart: unless-stopped
+    command: ["valkey-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - pharmacy-central-valkey-data:/data
+    ports:
+      - "${VALKEY_PORT}:6379"
+
+  mailpit:
+    image: axllent/mailpit:v1.30.7@sha256:d5ecbb067db3705fa953d79e1b7f81ef84038df67aba6c52825d8c02a1ea748a
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8025/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "${MAILPIT_SMTP_PORT}:1025"
+      - "${MAILPIT_HTTP_PORT}:8025"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.159.0@sha256:1f2c54a30e713fac6b3ae77a1ec84010c2007e29ced8ec666214fc2f6739c1cc
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/collector.yaml"]
+    volumes:
+      - ./deploy/local/otel/collector.yaml:/etc/otelcol-contrib/collector.yaml:ro
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otelcol-contrib/collector.yaml"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+  gateway:
+    image: nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+    restart: unless-stopped
+    volumes:
+      - ./deploy/local/gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "${GATEWAY_PORT}:8080"
+
+  identity-service:
+    <<: *backend-defaults
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: pharmacycentral-app
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
+      dockerfile: apps/Dockerfile.service
+      args:
+        APP_NAME: "@pharmacy/identity-service"
+        APP_DIR: apps/identity-service
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
-      ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__PharmacyCentral: Host=postgres;Port=5432;Database=${POSTGRES_DB:-pharmacycentral};Username=${POSTGRES_USER:-pharmacycentral};Password=${POSTGRES_PASSWORD:-change_this_password}
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      <<: *backend-environment
+      PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/identity_service
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL}
+      EMAIL_FROM: ${EMAIL_FROM}
+      ARGON2_MEMORY_KIB: ${ARGON2_MEMORY_KIB}
+      ARGON2_PASSES: ${ARGON2_PASSES}
+      ARGON2_PARALLELISM: ${ARGON2_PARALLELISM}
     ports:
-      - "${APP_HTTP_PORT:-8080}:8080"
+      - "${IDENTITY_PORT}:3001"
+
+  catalog-service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: apps/Dockerfile.service
+      args:
+        APP_NAME: "@pharmacy/catalog-service"
+        APP_DIR: apps/catalog-service
+    environment:
+      <<: *backend-environment
+      PORT: 3002
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/catalog_service
+    ports:
+      - "${CATALOG_PORT}:3002"
+
+  inventory-service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: apps/Dockerfile.service
+      args:
+        APP_NAME: "@pharmacy/inventory-service"
+        APP_DIR: apps/inventory-service
+    environment:
+      <<: *backend-environment
+      PORT: 3004
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/inventory_service
+      CATALOG_SERVICE_URL: http://catalog-service:3002
+    ports:
+      - "${INVENTORY_PORT}:3004"
+
+  sales-service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: apps/Dockerfile.service
+      args:
+        APP_NAME: "@pharmacy/sales-service"
+        APP_DIR: apps/sales-service
+    environment:
+      <<: *backend-environment
+      PORT: 3005
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/sales_service
+      CATALOG_SERVICE_URL: http://catalog-service:3002
+      INVENTORY_SERVICE_URL: http://inventory-service:3004
+      OPENROUTESERVICE_BASE_URL: ${OPENROUTESERVICE_BASE_URL}
+      OPENROUTESERVICE_API_KEY: ${OPENROUTESERVICE_API_KEY}
+      DELIVERY_FEE_PER_KILOMETER: ${DELIVERY_FEE_PER_KILOMETER}
+      DELIVERY_FEE_MINIMUM: ${DELIVERY_FEE_MINIMUM}
+      DELIVERY_FEE_MAXIMUM: ${DELIVERY_FEE_MAXIMUM}
+    ports:
+      - "${SALES_PORT}:3005"
+
+  payment-service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: apps/Dockerfile.service
+      args:
+        APP_NAME: "@pharmacy/payment-service"
+        APP_DIR: apps/payment-service
+    environment:
+      <<: *backend-environment
+      PORT: 3006
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/payment_service
+      CATALOG_SERVICE_URL: http://catalog-service:3002
+      SALES_SERVICE_URL: http://sales-service:3005
+      SEPAY_WEBHOOK_SECRET: ${SEPAY_WEBHOOK_SECRET}
+      PHARMACY_PAYMENT_SEPAY_BANK: ${PHARMACY_PAYMENT_SEPAY_BANK}
+      PHARMACY_PAYMENT_SEPAY_ACCOUNT_NUMBER: ${PHARMACY_PAYMENT_SEPAY_ACCOUNT_NUMBER}
+      PHARMACY_PAYMENT_SEPAY_QR_BASE_URL: ${PHARMACY_PAYMENT_SEPAY_QR_BASE_URL}
+    ports:
+      - "${PAYMENT_PORT}:3006"
+
+  operations-query-service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: apps/Dockerfile.service
+      args:
+        APP_NAME: "@pharmacy/operations-query-service"
+        APP_DIR: apps/operations-query-service
+    environment:
+      <<: *backend-environment
+      PORT: 3007
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/operations_query_service
+      CATALOG_SERVICE_URL: http://catalog-service:3002
+      INVENTORY_SERVICE_URL: http://inventory-service:3004
+      SALES_SERVICE_URL: http://sales-service:3005
+    ports:
+      - "${OPERATIONS_QUERY_PORT}:3007"
+
+  customer-web:
+    build:
+      context: .
+      dockerfile: apps/Dockerfile.web
+      args:
+        APP_NAME: "@pharmacy/customer-web"
+        APP_DIR: apps/customer-web
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    ports:
+      - "${CUSTOMER_WEB_PORT}:8080"
+
+  staff-web:
+    build:
+      context: .
+      dockerfile: apps/Dockerfile.web
+      args:
+        APP_NAME: "@pharmacy/staff-web"
+        APP_DIR: apps/staff-web
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    ports:
+      - "${STAFF_WEB_PORT}:8080"
 
 volumes:
-  pharmacycentral-postgres-data:
+  pharmacy-central-postgres-data:
+  pharmacy-central-valkey-data:
