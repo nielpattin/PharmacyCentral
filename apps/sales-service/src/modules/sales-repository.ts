@@ -1,0 +1,568 @@
+import { createHash } from "node:crypto";
+
+import { and, asc, desc, eq } from "drizzle-orm";
+
+import type { SalesDatabase } from "../shared/infrastructure/database.ts";
+import {
+  cartLines,
+  carts,
+  deliveryAddresses,
+  orderDeliverySnapshots,
+  orderLines,
+  orders,
+  outboxMessages,
+  prescriptionLines,
+  prescriptions,
+  idempotencyRecords,
+} from "../shared/infrastructure/schema.ts";
+import { transitionOrder, type OrderStatus } from "./orders/domain/order-status.ts";
+import { transitionPrescription, type PrescriptionStatus } from "./prescriptions/domain/prescription-status.ts";
+
+type OrderLineInput = {
+  productId: string;
+  productUnitId: string;
+  productNameSnapshot: string;
+  unitPriceSnapshot: number;
+  quantity: number;
+};
+
+type DeliverySnapshotInput = Omit<typeof orderDeliverySnapshots.$inferInsert, "orderId" | "createdAt">;
+
+export class SalesRepository {
+  public constructor(private readonly database: SalesDatabase) {}
+
+  public async getCart(customerId: string | undefined, guestToken: string | undefined) {
+    const cart = await this.findCart(this.database.db, customerId, guestToken);
+    if (!cart) return undefined;
+    return this.withCartLines(this.database.db, cart);
+  }
+
+  public async getOrCreateCart(customerId: string | undefined, guestToken: string | undefined) {
+    this.assertCartIdentity(customerId, guestToken);
+    const existing = await this.getCart(customerId, guestToken);
+    if (existing) return existing;
+    const [cart] = await this.database.db
+      .insert(carts)
+      .values({
+        customerId: customerId ?? null,
+        guestTokenDigest: customerId ? null : digestToken(guestToken as string),
+      })
+      .returning();
+    if (!cart) throw new Error("Cart insert did not return a row");
+    return { ...cart, lines: [] };
+  }
+
+  public async addCartLine(
+    customerId: string | undefined,
+    guestToken: string | undefined,
+    input: { productId: string; productUnitId: string; quantity: number },
+  ) {
+    this.assertCartIdentity(customerId, guestToken);
+    const cart = await this.getOrCreateCart(customerId, guestToken);
+    await this.database.db.transaction(async (transaction) => {
+      const current = (
+        await transaction
+          .select()
+          .from(cartLines)
+          .where(
+            and(
+              eq(cartLines.cartId, cart.id),
+              eq(cartLines.productId, input.productId),
+              eq(cartLines.productUnitId, input.productUnitId),
+            ),
+          )
+          .limit(1)
+      )[0];
+      if (current) {
+        await transaction
+          .update(cartLines)
+          .set({ quantity: String(Number(current.quantity) + input.quantity) })
+          .where(eq(cartLines.id, current.id));
+      } else {
+        await transaction.insert(cartLines).values({
+          cartId: cart.id,
+          productId: input.productId,
+          productUnitId: input.productUnitId,
+          quantity: String(input.quantity),
+        });
+      }
+      await transaction.update(carts).set({ updatedAt: new Date() }).where(eq(carts.id, cart.id));
+    });
+    return this.getCart(customerId, guestToken);
+  }
+
+  public async clearCart(customerId: string | undefined, guestToken: string | undefined) {
+    this.assertCartIdentity(customerId, guestToken);
+    const cart = await this.getCart(customerId, guestToken);
+    if (!cart) return undefined;
+    await this.database.db.delete(cartLines).where(eq(cartLines.cartId, cart.id));
+    await this.database.db.update(carts).set({ updatedAt: new Date() }).where(eq(carts.id, cart.id));
+    return this.getCart(customerId, guestToken);
+  }
+
+  public async updateCartLine(
+    customerId: string | undefined,
+    guestToken: string | undefined,
+    lineId: string,
+    quantity: number,
+  ) {
+    this.assertCartIdentity(customerId, guestToken);
+    const cart = await this.getCart(customerId, guestToken);
+    if (!cart) return undefined;
+    if (quantity === 0)
+      await this.database.db.delete(cartLines).where(and(eq(cartLines.id, lineId), eq(cartLines.cartId, cart.id)));
+    else
+      await this.database.db
+        .update(cartLines)
+        .set({ quantity: String(quantity) })
+        .where(and(eq(cartLines.id, lineId), eq(cartLines.cartId, cart.id)));
+    return this.getCart(customerId, guestToken);
+  }
+
+  public async mergeGuestCart(customerId: string, guestToken: string) {
+    const guest = await this.getCart(undefined, guestToken);
+    const customer = await this.getOrCreateCart(customerId, undefined);
+    if (!guest || guest.id === customer.id) return customer;
+    await this.database.db.transaction(async (transaction) => {
+      for (const line of guest.lines) {
+        const current = (
+          await transaction
+            .select()
+            .from(cartLines)
+            .where(
+              and(
+                eq(cartLines.cartId, customer.id),
+                eq(cartLines.productId, line.productId),
+                eq(cartLines.productUnitId, line.productUnitId),
+              ),
+            )
+            .limit(1)
+        )[0];
+        if (current) {
+          await transaction
+            .update(cartLines)
+            .set({ quantity: String(Number(current.quantity) + Number(line.quantity)) })
+            .where(eq(cartLines.id, current.id));
+          await transaction.delete(cartLines).where(eq(cartLines.id, line.id));
+        } else {
+          await transaction.update(cartLines).set({ cartId: customer.id }).where(eq(cartLines.id, line.id));
+        }
+      }
+      await transaction.delete(carts).where(eq(carts.id, guest.id));
+      await transaction.update(carts).set({ updatedAt: new Date() }).where(eq(carts.id, customer.id));
+    });
+    return this.getCart(customerId, undefined);
+  }
+
+  public async createOrder(input: {
+    customerId: string;
+    selectedStoreId: string;
+    fulfillmentType: "pickup" | "delivery";
+    subtotal: number;
+    deliveryFee: number;
+    currency: string;
+    lines: OrderLineInput[];
+    delivery?: DeliverySnapshotInput;
+  }) {
+    return this.database.db.transaction(async (transaction) => {
+      const [order] = await transaction
+        .insert(orders)
+        .values({
+          customerId: input.customerId,
+          selectedStoreId: input.selectedStoreId,
+          fulfillmentType: input.fulfillmentType,
+          subtotal: String(input.subtotal),
+          deliveryFee: String(input.deliveryFee),
+          currency: input.currency,
+        })
+        .returning();
+      if (!order) throw new Error("Order insert did not return a row");
+      await transaction.insert(orderLines).values(
+        input.lines.map((line) => ({
+          orderId: order.id,
+          productId: line.productId,
+          productUnitId: line.productUnitId,
+          productNameSnapshot: line.productNameSnapshot,
+          unitPriceSnapshot: String(line.unitPriceSnapshot),
+          quantity: String(line.quantity),
+        })),
+      );
+      if (input.delivery)
+        await transaction.insert(orderDeliverySnapshots).values({ ...input.delivery, orderId: order.id });
+      await transaction.insert(outboxMessages).values({
+        eventType: "sales.order.created.v1",
+        aggregateId: order.id,
+        payload: JSON.stringify({
+          orderId: order.id,
+          customerId: order.customerId,
+          selectedStoreId: order.selectedStoreId,
+          fulfillmentType: order.fulfillmentType,
+        }),
+      });
+      return order;
+    });
+  }
+
+  public async listOrders(customerId?: string, status?: string) {
+    const filters = [
+      customerId ? eq(orders.customerId, customerId) : undefined,
+      status ? eq(orders.status, status) : undefined,
+    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
+    return this.database.db
+      .select()
+      .from(orders)
+      .where(filters.length ? and(...filters) : undefined)
+      .orderBy(desc(orders.createdAt));
+  }
+
+  public async getOrder(id: string) {
+    const order = (await this.database.db.select().from(orders).where(eq(orders.id, id)).limit(1))[0];
+    if (!order) return undefined;
+    return {
+      ...order,
+      lines: await this.database.db.select().from(orderLines).where(eq(orderLines.orderId, id)),
+      delivery: (
+        await this.database.db
+          .select()
+          .from(orderDeliverySnapshots)
+          .where(eq(orderDeliverySnapshots.orderId, id))
+          .limit(1)
+      )[0],
+    };
+  }
+
+  public async transitionOrder(id: string, next: OrderStatus) {
+    const current = (await this.database.db.select().from(orders).where(eq(orders.id, id)).limit(1))[0];
+    if (!current) return undefined;
+    transitionOrder(current.status as OrderStatus, next);
+    const [order] = await this.database.db
+      .update(orders)
+      .set({ status: next, updatedAt: new Date() })
+      .where(eq(orders.id, id))
+      .returning();
+    if (order)
+      await this.appendEvent("sales.order.status-changed.v1", order.id, { orderId: order.id, status: order.status });
+    return order;
+  }
+
+  public async setOrderPaymentStatus(id: string, status: "Pending" | "Paid" | "Failed" | "Refunded") {
+    const [order] = await this.database.db
+      .update(orders)
+      .set({ paymentStatus: status, updatedAt: new Date() })
+      .where(eq(orders.id, id))
+      .returning();
+    return order;
+  }
+
+  public async listDeliveryAddresses(customerId: string) {
+    return this.database.db
+      .select()
+      .from(deliveryAddresses)
+      .where(eq(deliveryAddresses.customerId, customerId))
+      .orderBy(desc(deliveryAddresses.updatedAt));
+  }
+
+  public async createDeliveryAddress(input: {
+    customerId: string;
+    label: string;
+    latitude: number;
+    longitude: number;
+    providerResolvedAddress: string;
+    addressNote?: string | null;
+  }) {
+    const [address] = await this.database.db
+      .insert(deliveryAddresses)
+      .values({
+        ...input,
+        latitude: String(input.latitude),
+        longitude: String(input.longitude),
+        addressNote: input.addressNote ?? null,
+      })
+      .returning();
+    return address;
+  }
+
+  public async deleteDeliveryAddress(customerId: string, id: string) {
+    const [address] = await this.database.db
+      .delete(deliveryAddresses)
+      .where(and(eq(deliveryAddresses.id, id), eq(deliveryAddresses.customerId, customerId)))
+      .returning();
+    return address;
+  }
+
+  public async createPrescription(input: {
+    siteId: string;
+    storageLocationId: string;
+    patientName: string;
+    patientPhone?: string | null;
+    doctorName?: string | null;
+    doctorLicense?: string | null;
+    notes?: string | null;
+    createdBy: string;
+    lines: Array<{
+      productId: string;
+      productUnitId: string;
+      prescribedQuantity: number;
+      dosage?: string | null;
+      frequency?: string | null;
+      duration?: string | null;
+      notes?: string | null;
+    }>;
+    idempotencyKey?: string | undefined;
+  }) {
+    return this.database.db.transaction(async (transaction) => {
+      if (input.idempotencyKey) {
+        const existing = (
+          await transaction
+            .select()
+            .from(idempotencyRecords)
+            .where(
+              and(
+                eq(idempotencyRecords.key, input.idempotencyKey),
+                eq(idempotencyRecords.scope, "sales.prescriptions.create"),
+                eq(idempotencyRecords.actorId, input.createdBy),
+              ),
+            )
+            .limit(1)
+        )[0];
+        if (existing) return { ...(JSON.parse(existing.response) as Record<string, unknown>), idempotentReplay: true };
+      }
+      const [prescription] = await transaction
+        .insert(prescriptions)
+        .values({
+          prescriptionNumber: `RX-${new Date()
+            .toISOString()
+            .replace(/[-:.TZ]/g, "")
+            .slice(0, 14)}-${Math.floor(Math.random() * 1000)
+            .toString()
+            .padStart(3, "0")}`,
+          siteId: input.siteId,
+          storageLocationId: input.storageLocationId,
+          patientName: input.patientName,
+          patientPhone: input.patientPhone ?? null,
+          doctorName: input.doctorName ?? null,
+          doctorLicense: input.doctorLicense ?? null,
+          notes: input.notes ?? null,
+          status: "Pending",
+          createdBy: input.createdBy,
+        })
+        .returning();
+      if (!prescription) throw new Error("Prescription insert did not return a row");
+      const lines = await transaction
+        .insert(prescriptionLines)
+        .values(
+          input.lines.map((line) => ({
+            ...line,
+            prescriptionId: prescription.id,
+            prescribedQuantity: String(line.prescribedQuantity),
+            dispensedQuantity: "0",
+          })),
+        )
+        .returning();
+      await transaction.insert(outboxMessages).values({
+        eventType: "sales.prescription.created.v1",
+        aggregateId: prescription.id,
+        payload: JSON.stringify({ prescriptionId: prescription.id, siteId: prescription.siteId }),
+      });
+      const result = { ...prescription, lines };
+      if (input.idempotencyKey)
+        await transaction.insert(idempotencyRecords).values({
+          key: input.idempotencyKey,
+          scope: "sales.prescriptions.create",
+          actorId: input.createdBy,
+          response: JSON.stringify(result),
+        });
+      return result;
+    });
+  }
+
+  public async getIdempotencyResponse(key: string, scope: string, actorId: string): Promise<unknown> {
+    const existing = (
+      await this.database.db
+        .select()
+        .from(idempotencyRecords)
+        .where(
+          and(
+            eq(idempotencyRecords.key, key),
+            eq(idempotencyRecords.scope, scope),
+            eq(idempotencyRecords.actorId, actorId),
+          ),
+        )
+        .limit(1)
+    )[0];
+    return existing ? (JSON.parse(existing.response) as unknown) : undefined;
+  }
+
+  public async getPrescription(id: string) {
+    const prescription = (
+      await this.database.db.select().from(prescriptions).where(eq(prescriptions.id, id)).limit(1)
+    )[0];
+    if (!prescription) return undefined;
+    return {
+      ...prescription,
+      lines: await this.database.db.select().from(prescriptionLines).where(eq(prescriptionLines.prescriptionId, id)),
+    };
+  }
+
+  public async listPrescriptions(input: { siteId?: string; status?: string; limit: number }) {
+    const filters = [
+      input.siteId ? eq(prescriptions.siteId, input.siteId) : undefined,
+      input.status ? eq(prescriptions.status, input.status) : undefined,
+    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
+    const rows = await this.database.db
+      .select()
+      .from(prescriptions)
+      .where(filters.length ? and(...filters) : undefined)
+      .orderBy(desc(prescriptions.createdAt))
+      .limit(Math.min(Math.max(input.limit, 1), 500));
+    return Promise.all(
+      rows.map(async (prescription) => ({
+        ...prescription,
+        lines: await this.database.db
+          .select()
+          .from(prescriptionLines)
+          .where(eq(prescriptionLines.prescriptionId, prescription.id)),
+      })),
+    );
+  }
+
+  public async cancelPrescription(id: string, cancelledBy: string) {
+    const current = (await this.database.db.select().from(prescriptions).where(eq(prescriptions.id, id)).limit(1))[0];
+    if (!current) return undefined;
+    transitionPrescription(current.status as PrescriptionStatus, "Cancelled");
+    const [prescription] = await this.database.db
+      .update(prescriptions)
+      .set({ status: "Cancelled", cancelledBy, updatedAt: new Date() })
+      .where(eq(prescriptions.id, id))
+      .returning();
+    if (prescription)
+      await this.appendEvent("sales.prescription.cancelled.v1", prescription.id, {
+        prescriptionId: prescription.id,
+        cancelledBy,
+      });
+    return prescription;
+  }
+
+  public async setPrescriptionReservation(id: string, reservationId: string) {
+    const [prescription] = await this.database.db
+      .update(prescriptions)
+      .set({ reservationId, updatedAt: new Date() })
+      .where(eq(prescriptions.id, id))
+      .returning();
+    return prescription;
+  }
+
+  public async dispensePrescription(
+    id: string,
+    input: Array<{ prescriptionLineId: string; productBatchId: string; dispensedQuantity: number }>,
+    dispensedBy: string,
+    idempotencyKey?: string,
+  ) {
+    return this.database.db.transaction(async (transaction) => {
+      const prescription = (await transaction.select().from(prescriptions).where(eq(prescriptions.id, id)).limit(1))[0];
+      if (!prescription) return undefined;
+      if (idempotencyKey) {
+        const existing = (
+          await transaction
+            .select()
+            .from(idempotencyRecords)
+            .where(
+              and(
+                eq(idempotencyRecords.key, idempotencyKey),
+                eq(idempotencyRecords.scope, "sales.prescriptions.dispense"),
+                eq(idempotencyRecords.actorId, dispensedBy),
+              ),
+            )
+            .limit(1)
+        )[0];
+        if (existing) return { ...(JSON.parse(existing.response) as Record<string, unknown>), idempotentReplay: true };
+      }
+      if (!["Pending", "PartiallyDispensed"].includes(prescription.status))
+        throw new Error("Prescription is not available for dispensing");
+      const lines = await transaction.select().from(prescriptionLines).where(eq(prescriptionLines.prescriptionId, id));
+      const requestedIds = new Set(input.map((line) => line.prescriptionLineId));
+      if (input.some((line) => !lines.some((existing) => existing.id === line.prescriptionLineId)))
+        throw new Error("Prescription line was not found");
+      for (const line of input) {
+        const existing = lines.find((candidate) => candidate.id === line.prescriptionLineId);
+        if (
+          !existing ||
+          Number(existing.dispensedQuantity) + line.dispensedQuantity > Number(existing.prescribedQuantity)
+        )
+          throw new Error("Dispensed quantity exceeds prescribed quantity");
+        await transaction
+          .update(prescriptionLines)
+          .set({
+            dispensedQuantity: String(Number(existing.dispensedQuantity) + line.dispensedQuantity),
+            productBatchId: line.productBatchId,
+          })
+          .where(eq(prescriptionLines.id, line.prescriptionLineId));
+      }
+      const refreshed = await transaction
+        .select()
+        .from(prescriptionLines)
+        .where(eq(prescriptionLines.prescriptionId, id));
+      const complete = refreshed.every((line) => Number(line.dispensedQuantity) >= Number(line.prescribedQuantity));
+      const anyDispensed = refreshed.some((line) => Number(line.dispensedQuantity) > 0);
+      const status = complete ? "Dispensed" : anyDispensed ? "PartiallyDispensed" : prescription.status;
+      const [updated] = await transaction
+        .update(prescriptions)
+        .set({
+          status,
+          ...(status === "Dispensed" ? { dispensedBy: dispensedBy, dispensedAt: new Date() } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(prescriptions.id, id))
+        .returning();
+      await transaction.insert(outboxMessages).values({
+        eventType: "sales.prescription.dispensed.v1",
+        aggregateId: id,
+        payload: JSON.stringify({ prescriptionId: id, dispensedBy, lineIds: [...requestedIds] }),
+      });
+      const result = updated ? { ...updated, lines: refreshed } : undefined;
+      if (result && idempotencyKey)
+        await transaction.insert(idempotencyRecords).values({
+          key: idempotencyKey,
+          scope: "sales.prescriptions.dispense",
+          actorId: dispensedBy,
+          response: JSON.stringify(result),
+        });
+      return result;
+    });
+  }
+
+  public async listCounterTransactions(input: { siteId?: string; status?: string; limit: number }) {
+    return this.listPrescriptions(input);
+  }
+
+  private async findCart(
+    database: SalesDatabase["db"],
+    customerId: string | undefined,
+    guestToken: string | undefined,
+  ) {
+    const digest = guestToken ? digestToken(guestToken) : undefined;
+    const condition = customerId
+      ? eq(carts.customerId, customerId)
+      : digest
+        ? eq(carts.guestTokenDigest, digest)
+        : undefined;
+    return (await database.select().from(carts).where(condition).limit(1))[0];
+  }
+
+  private async withCartLines(database: SalesDatabase["db"], cart: typeof carts.$inferSelect) {
+    return {
+      ...cart,
+      lines: await database.select().from(cartLines).where(eq(cartLines.cartId, cart.id)).orderBy(asc(cartLines.id)),
+    };
+  }
+
+  private assertCartIdentity(customerId: string | undefined, guestToken: string | undefined): void {
+    if (!customerId && !guestToken) throw new Error("A customer session or guest cart token is required");
+  }
+
+  private async appendEvent(eventType: string, aggregateId: string, payload: Record<string, unknown>): Promise<void> {
+    await this.database.db.insert(outboxMessages).values({ eventType, aggregateId, payload: JSON.stringify(payload) });
+  }
+}
+
+const digestToken = (token: string): string => createHash("sha256").update(token).digest("hex");
