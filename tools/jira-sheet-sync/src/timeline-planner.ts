@@ -1,4 +1,4 @@
-import type { JiraIssue, TimelinePlan, TimelineRow } from './models.js';
+import type { JiraIssue, TimelinePlan, TimelineRow } from './models.ts';
 
 export function buildPlan(issues: JiraIssue[], visibleRowLimit: number): TimelinePlan {
   if (issues.length === 0) {

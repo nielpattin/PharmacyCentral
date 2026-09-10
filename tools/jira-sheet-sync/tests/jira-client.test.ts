@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { JiraClient } from '../src/jira-client.js';
+import { JiraClient } from '../src/jira-client.ts';
 
 function mockFetch(handler: (request: Request) => Response): typeof globalThis.fetch {
   return ((input: RequestInfo | URL, init?: RequestInit) => {

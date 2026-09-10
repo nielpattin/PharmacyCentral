@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildPlan } from '../src/timeline-planner.js';
-import { createEpic, createStory, createSubtask } from '../src/models.js';
+import { buildPlan } from '../src/timeline-planner.ts';
+import { createEpic, createStory, createSubtask } from '../src/models.ts';
 
 describe('TimelinePlanner', () => {
   it('assigns hierarchical wbs numbers', () => {

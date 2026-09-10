@@ -1,4 +1,4 @@
-import type { TimelinePlan, TimelineRow } from './models.js';
+import type { TimelinePlan, TimelineRow } from './models.ts';
 
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 

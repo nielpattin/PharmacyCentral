@@ -1,10 +1,10 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { JiraClient } from './jira-client.js';
-import { buildPlan } from './timeline-planner.js';
-import { GoogleSheetsSync } from './google-sheets-sync.js';
-import { getAccessToken, setCredentialsPath } from './auth.js';
+import { JiraClient } from './jira-client.ts';
+import { buildPlan } from './timeline-planner.ts';
+import { GoogleSheetsSync } from './google-sheets-sync.ts';
+import { getAccessToken, setCredentialsPath } from './auth.ts';
 
 // Auto-load .env from repo root or cwd
 function loadEnv(): void {
@@ -197,7 +197,7 @@ export async function main(args: string[]): Promise<number> {
 }
 
 // When run directly
-const isDirectRun = process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js');
+const isDirectRun = process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.ts');
 if (isDirectRun) {
   main(process.argv.slice(2)).then((exitCode) => process.exit(exitCode));
 }

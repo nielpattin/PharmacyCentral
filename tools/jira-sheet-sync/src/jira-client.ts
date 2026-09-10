@@ -1,5 +1,5 @@
-import type { JiraIssue } from './models.js';
-import type { JiraSearchResponse, JiraIssueDto, JiraSprintDto } from './jira-api-models.js';
+import type { JiraIssue } from './models.ts';
+import type { JiraSearchResponse, JiraIssueDto, JiraSprintDto } from './jira-api-models.ts';
 
 interface HttpClient {
   baseUrl: string;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildHelperWriteBatches } from '../src/google-sheets-sync.js';
-import type { TimelineRow } from '../src/models.js';
+import { buildHelperWriteBatches } from '../src/google-sheets-sync.ts';
+import type { TimelineRow } from '../src/models.ts';
 
 describe('GoogleSheetsSync', () => {
   it('buildHelperWriteBatches splits large helper tables', () => {
