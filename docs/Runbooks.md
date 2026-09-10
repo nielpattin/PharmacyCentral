@@ -94,7 +94,7 @@ The ingress forwards paths with identical patterns:
 - `/api/operations*`, `/api/dashboard*`, `/api/finance*`, `/api/audit*`, `/api/reports*` -> `operations-query-service:3007`
 - `/` -> `customer-web`
 
-`/` serves `customer-web`. The rewrite strips `/api` before forwarding.
+`/` serves `customer-web`. The gateway strips `/api` before forwarding.
 
 ## Daily commands
 

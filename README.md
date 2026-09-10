@@ -86,7 +86,7 @@ Copy `.env.example` to a local environment file and replace development secrets.
 
 AWS deployment configuration is located under `deploy/aws`, defining AWS API Gateway HTTP API, Lambda authorizer, VPC Link, internal Application Load Balancer, and ECS Fargate services. This AWS configuration is configuration-only and no AWS resources were deployed.
 
-GitHub Actions validates affected projects on pushes to `rewrite/express-microservices` and `main` using Nx affected detection. Main pushes can build affected images, publish digest-addressed AWS ECR images, deploy staging, and deploy production behind the configured GitHub environment approval.
+GitHub Actions validates affected projects on pull requests and on demand through the `Workspace validation` workflow. Releases run on demand through the `Release application images` workflow, which validates the workspace and publishes digest-addressed GHCR application images for the requested version.
 
 ## Documentation
 

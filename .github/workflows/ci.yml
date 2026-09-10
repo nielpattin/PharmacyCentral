@@ -1,0 +1,76 @@
+name: Workspace validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 24.19.0
+  PNPM_VERSION: 12.3.4
+
+concurrency:
+  group: workspace-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate affected workspace
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - name: Verify runtime
+        run: |
+          test "$(node --version)" = "v${NODE_VERSION}"
+          test "$(pnpm --version)" = "${PNPM_VERSION}"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Restore Nx cache
+        uses: actions/cache@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            nx-${{ runner.os }}-${{ github.ref_name }}-
+            nx-${{ runner.os }}-
+      - name: Check formatting
+        run: pnpm run fmt:check
+      - name: Check TypeScript project references
+        run: pnpm run sync:check
+      - name: Compute comparison range
+        id: shas
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "base=$(git merge-base origin/main HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+          echo "head=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Run affected lint, typecheck, tests, and builds
+        run: >-
+          pnpm exec nx affected
+          -t lint,typecheck,test,build
+          --base=${{ steps.shas.outputs.base }}
+          --head=${{ steps.shas.outputs.head }}
+          --parallel=3
+          --outputStyle=static
+      - name: Validate Compose configuration
+        run: docker compose config --quiet

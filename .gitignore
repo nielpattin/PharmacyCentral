@@ -96,7 +96,6 @@ docs/*
 !docs/
 !docs/Architecture.md
 !docs/ProjectInfo.md
-!docs/RewriteParityMatrix.md
 !docs/Baseline.md
 !docs/Runbooks.md
 !docs/ProjectSummary.md

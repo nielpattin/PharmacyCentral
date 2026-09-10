@@ -64,6 +64,6 @@ Customers select a retail store and a destination marker. `sales-service` resolv
 
 ## Deployment
 
-Docker Compose provides the local topology. AWS ECS Fargate deployment configuration with AWS API Gateway, VPC Link, internal ALB, and Lambda Authorizer is defined in `deploy/aws` (configuration-only; no AWS resources were deployed). Images and platform dependencies use pinned digests. GitHub Actions runs Nx affected validation on pull requests and main pushes, publishes affected immutable GHCR image digests after main validation, and supports staging deployment followed by a production environment approval.
+Docker Compose provides the local topology. AWS ECS Fargate deployment configuration with AWS API Gateway, VPC Link, internal ALB, and Lambda Authorizer is defined in `deploy/aws` (configuration-only; no AWS resources were deployed). Images and platform dependencies use pinned digests. GitHub Actions runs Nx affected validation on pull requests. Releases run on demand through a manual workflow that validates the workspace and publishes digest-addressed GHCR application images for the requested version.
 
 See [Baseline.md](Baseline.md) and [Runbooks.md](Runbooks.md) for version constraints, migration, seed, and operational runbook details.
