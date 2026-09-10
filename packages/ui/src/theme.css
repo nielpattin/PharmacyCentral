@@ -1,0 +1,47 @@
+/* Shared Pharmacy Central design tokens (Tailwind v4 theme).
+   Single source of truth for color, radius, and shadow.
+   Legacy per-app stylesheets read the same values through var(). */
+
+@theme {
+  --color-background: oklch(0.982 0.004 260);
+  --color-surface: oklch(1 0 0);
+  --color-surface-soft: oklch(0.97 0.004 260);
+  --color-line: oklch(0.91 0.004 260);
+  --color-ink: oklch(0.16 0.01 260);
+  --color-muted: oklch(0.48 0.01 260);
+  --color-muted-soft: oklch(0.64 0.01 260);
+  --color-primary: oklch(0.52 0.18 256);
+  --color-primary-dark: oklch(0.42 0.18 256);
+  --color-primary-soft: oklch(0.95 0.02 256);
+  --color-danger: oklch(0.6 0.2 30);
+  --color-danger-soft: oklch(0.95 0.03 30);
+  --color-sidebar: oklch(0.19 0.025 247);
+  --color-sidebar-text: oklch(0.93 0.005 271);
+  --color-sidebar-muted: oklch(0.76 0.02 247);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+:root {
+  --bg: var(--color-background);
+  --surface: var(--color-surface);
+  --surface-soft: var(--color-surface-soft);
+  --line: var(--color-line);
+  --text: var(--color-ink);
+  --muted: var(--color-muted);
+  --muted-soft: var(--color-muted-soft);
+  --primary: var(--color-primary);
+  --primary-dark: var(--color-primary-dark);
+  --primary-soft: var(--color-primary-soft);
+  --danger: var(--color-danger);
+  --danger-soft: var(--color-danger-soft);
+  --sidebar-bg: var(--color-sidebar);
+  --sidebar-text: var(--color-sidebar-text);
+  --sidebar-muted: var(--color-sidebar-muted);
+  --sidebar-line: rgba(255, 255, 255, 0.1);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
