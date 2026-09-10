@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@source "../../../packages/ui/src";
+@import "@pharmacy/ui/theme.css";
+
+body {
+  background: var(--color-background);
+  color: var(--color-ink);
+}
