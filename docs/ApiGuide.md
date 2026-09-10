@@ -1,258 +1,99 @@
-# Hướng dẫn API Pharmacy Central
-
-API được expose dưới prefix `/api` từ project `Web.Api`.
-
-Development HTTPS endpoint thường là:
-
-```text
-https://localhost:7528/api
-```
-
-Nếu Aspire cấp URL khác, dùng đúng URL của resource đang chạy.
-
-## Authentication và CSRF
-
-API dùng cookie authentication và antiforgery validation cho các request thay đổi dữ liệu.
-
-Quy tắc quan trọng:
-
-- Dùng HTTPS cho CSRF trong development.
-- Lấy CSRF token trước khi login.
-- Login bằng token và session cookie.
-- Sau khi login, lấy CSRF token mới trước khi gọi POST/PUT/PATCH/DELETE.
-- Gửi token trong header `X-CSRF-TOKEN`.
-
-Example with `curl`:
-
-```bash
-BASE=https://localhost:7528/api
-COOKIE=.tmp/api-cookies.txt
-
-curl -k -c "$COOKIE" "$BASE/auth/csrf"
-TOKEN=$(curl -ks -b "$COOKIE" -c "$COOKIE" "$BASE/auth/csrf" | jq -r .token)
-
-curl -k -b "$COOKIE" -c "$COOKIE" \
-  -H "Content-Type: application/json" \
-  -H "X-CSRF-TOKEN: $TOKEN" \
-  -d '{"email":"admin@pharmacy.local","password":"Admin@123!","rememberMe":false}' \
-  "$BASE/auth/login"
-
-TOKEN=$(curl -ks -b "$COOKIE" -c "$COOKIE" "$BASE/auth/csrf" | jq -r .token)
-
-curl -k -b "$COOKIE" "$BASE/auth/me"
-```
-
-Payment provider webhook là ngoại lệ so với flow browser session bình thường. Webhook không dùng cookie authentication hoặc CSRF vì caller là payment provider bên ngoài. Endpoint webhook phải kiểm tra chữ ký đã cấu hình trước khi chấp nhận xác nhận thanh toán.
-
-## Idempotency
-
-Prescription creation và dispensing nhận header `Idempotency-Key`. Nếu dùng lại cùng key cho request đã thành công, API trả lại response thành công cũ thay vì thực hiện nghiệp vụ lần thứ hai.
-
-Ví dụ:
-
-```bash
--H "Idempotency-Key: prescription-create-2026-01-01-001"
-```
-
-Payment creation có thể dùng cùng pattern retry khi UI action có nguy cơ submit nhiều lần. Provider webhook confirmation phải idempotent theo provider transaction ID.
-
-## Mô hình phân quyền
-
-Endpoint enforce role policy và site access ở backend.
-
-| Policy area | Role được phép |
-| --- | --- |
-| Any app role | Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff |
-| Management | Platform Admin, Pharmacy Manager |
-| Counter sale | Pharmacist |
-| Warehouse | Platform Admin, Warehouse Staff |
-| Platform Admin | Platform Admin |
-
-User không phải Platform Admin chỉ truy cập được dữ liệu thuộc site được gán.
-
-## Endpoint thường dùng
-
-### Xác thực
-
-| Method | Path | Notes |
-| --- | --- | --- |
-| GET | `/api/auth/csrf` | Returns antiforgery token |
-| POST | `/api/auth/login` | Login |
-| POST | `/api/auth/logout` | Logout |
-| GET | `/api/auth/me` | Current user, roles, assigned sites |
-| POST | `/api/auth/register` | Development/internal registration path |
-| POST | `/api/auth/change-password` | Change the current user's password |
-
-### Người dùng admin
-
-| Method | Path |
-| --- | --- |
-| GET | `/api/admin/users` |
-| POST | `/api/admin/users` |
-| GET | `/api/admin/roles` |
-| PUT | `/api/admin/users/{id}/access` |
-| POST | `/api/admin/users/{id}/reset-password` | Reset a user's password |
-| POST | `/api/admin/users/{id}/revoke-sessions` | Sign out a user's active sessions |
-
-### Tổng quan, báo cáo và audit
-
-| Method | Path |
-| --- | --- |
-| GET | `/api/dashboard/summary` |
-| GET | `/api/audit/logs` |
-| GET | `/api/finance/summary` | Finance valuation and operational reconciliation |
-
-### Thanh toán và hóa đơn
-
-| Method | Path | Notes |
-| --- | --- | --- |
-| POST | `/api/payments/prescriptions/{prescriptionId}` | Create or return a payment invoice for a prescription |
-| GET | `/api/payments/{paymentId}` | Get payment status and payment instructions |
-| GET | `/api/payments/{paymentId}/invoice` | Get printable invoice details |
-| POST | `/api/payments/sepay/webhook` | SePay provider webhook; no session/CSRF, protected by HMAC |
-
-Các endpoint thanh toán tại quầy dùng policy CounterSale và site access enforcement. Endpoint SePay webhook public ở transport level nhưng bắt buộc kiểm tra header HMAC-SHA256 `x-SePay-Signature` trước khi map payload của provider vào use case xác nhận thanh toán trung lập.
-
-Yêu cầu xử lý webhook:
-
-- accept only inbound transfer confirmations;
-- match by payment code, provider and amount;
-- deduplicate by provider transaction ID;
-- update payment status atomically;
-- return `200 { "success": true }` quickly for accepted or duplicate confirmations;
-- avoid exposing secret values or raw provider internals in user-facing responses.
-
-### Dữ liệu nền
-
-| Area | Paths |
-| --- | --- |
-| Sites | `/api/sites`, `/api/sites/{id}` |
-| Storage locations | `/api/storage-locations`, `/api/storage-locations/{id}` |
-| Products | `/api/products`, `/api/products/{id}` |
-| Suppliers | `/api/suppliers`, `/api/suppliers/{id}` |
-
-### Định giá
-
-| Method | Path |
-| --- | --- |
-| GET | `/api/pricing/prices` |
-| POST | `/api/pricing/prices` |
-| POST | `/api/pricing/prices/{id}/publish` |
-| POST | `/api/pricing/prices/{id}/archive` |
-| GET | `/api/pricing/active?productId={id}&productUnitId={id}&siteId={id}&effectiveDate=2031-06-01` |
-
-### Mua hàng và nhận hàng
-
-| Method | Path |
-| --- | --- |
-| GET | `/api/purchase-orders` |
-| POST | `/api/purchase-orders` |
-| GET | `/api/purchase-orders/{id}` |
-| POST | `/api/purchase-orders/{id}/approve` |
-| POST | `/api/purchase-orders/{id}/cancel` |
-| GET | `/api/goods-receipts` |
-| POST | `/api/goods-receipts` |
-
-### Tồn kho
-
-| Method | Path |
-| --- | --- |
-| GET | `/api/inventory/balances` |
-| GET | `/api/inventory/ledger` |
-| POST | `/api/inventory/movements` |
-| POST | `/api/inventory/fefo-allocate` |
-
-### Chất lượng
-
-| Method | Path |
-| --- | --- |
-| POST | `/api/quality/batches/{batchId}/release` |
-| POST | `/api/quality/batches/{batchId}/reject` |
-
-### Quầy bán thuốc
-
-| Method | Path |
-| --- | --- |
-| GET | `/api/prescriptions` |
-| POST | `/api/prescriptions` |
-| GET | `/api/prescriptions/{id}` |
-| POST | `/api/prescriptions/{id}/dispense` |
-| POST | `/api/prescriptions/{id}/cancel` |
-
-Khi payment được bật và phiếu bán cần thanh toán, thao tác cấp phát bị chặn cho đến khi hóa đơn thanh toán liên quan được xác nhận đã thanh toán.
-
-### Yêu cầu bổ sung hàng
-
-| Method | Path |
-| --- | --- |
-| GET | `/api/replenishment-requests` |
-| POST | `/api/replenishment-requests` |
-| GET | `/api/replenishment-requests/{id}` |
-| POST | `/api/replenishment-requests/{id}/approve` |
-| POST | `/api/replenishment-requests/{id}/reject` |
-| POST | `/api/replenishment-requests/{id}/cancel` |
-
-Dược sĩ tạo và hủy yêu cầu của mình khi còn chờ xử lý. Warehouse Staff hoặc Platform Admin duyệt hoặc từ chối yêu cầu trong phạm vi site được phép. Pharmacy Manager không dùng nhóm endpoint này.
-
-### Điều chuyển
-
-| Method | Path |
-| --- | --- |
-| GET | `/api/transfers` |
-| POST | `/api/transfers` |
-| GET | `/api/transfers/{id}` |
-| POST | `/api/transfers/{id}/approve` |
-| POST | `/api/transfers/{id}/ship` |
-| POST | `/api/transfers/{id}/receive` |
-| POST | `/api/transfers/{id}/cancel` |
-
-### Trả hàng/loại bỏ
-
-| Method | Path |
-| --- | --- |
-| POST | `/api/returns` |
-
-### Kiểm kê và điều chỉnh
-
-| Method | Path |
-| --- | --- |
-| GET | `/api/stocktakes` |
-| POST | `/api/stocktakes` |
-| GET | `/api/stocktakes/{id}` |
-| POST | `/api/stocktakes/{id}/counts` |
-| POST | `/api/stocktakes/{id}/post-adjustments` |
-| GET | `/api/stock-adjustments` |
-| POST | `/api/stock-adjustments` |
-| POST | `/api/stock-adjustments/{id}/approve` |
-
-## Ví dụ: tạo sản phẩm
-
-```bash
-TOKEN=$(curl -ks -b "$COOKIE" -c "$COOKIE" "$BASE/auth/csrf" | jq -r .token)
-
-curl -k -b "$COOKIE" -c "$COOKIE" \
-  -H "Content-Type: application/json" \
-  -H "X-CSRF-TOKEN: $TOKEN" \
-  -d '{
-    "sku":"DEMO-001",
-    "name":"Demo product",
-    "category":"Demo",
-    "unit":"box",
-    "manufacturer":"Demo manufacturer",
-    "status":"Active",
-    "notes":"Created from API guide.",
-    "isActive":true
-  }' \
-  "$BASE/products"
-```
-
-## Xử lý lỗi
-
-The API returns standard HTTP statuses. Common responses:
-
-- `400` validation or business rule rejection
-- `401` unauthenticated
-- `403` missing role, missing site access, or invalid CSRF token
-- `404` not found
-- `409` conflict where applicable
-- `500` unexpected server error
+# Pharmacy Central API Guide
+
+Production clients send requests to `/api` routes on AWS API Gateway HTTP API. Local Compose clients send the same paths through the development-only Nginx gateway. Both ingress paths strip the `/api` prefix before forwarding to the corresponding service. The AWS configuration under `deploy/aws` is configuration-only and no AWS resources were deployed.
+
+## Authentication
+
+- `GET /api/auth/setup-status`
+- `POST /api/auth/setup-admin`
+- `POST /api/auth/register`
+- `GET /api/auth/verify-email`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `POST /api/auth/change-password`
+- `POST /api/auth/request-password-reset`
+- `POST /api/auth/reset-password`
+- `GET /api/auth/csrf`
+- `GET /api/auth/context`
+
+Authenticated browser mutations send the `pharmacy_session` cookie and `X-CSRF-TOKEN`. Authenticated service calls add the per-service token from `GET /api/auth/context` as `x-internal-identity-context`. Locally `identity-service` mints these tokens for the browser session; in production the Lambda authorizer mints them instead. Guest cart mutations use the `pharmacy_guest_cart` cookie. The Lambda Authorizer verifies session state with `identity-service`, sets `x-actor-id` and `x-actor-type`, and injects HMAC-signed `x-internal-identity-context`, discarding any client-supplied identity headers.
+
+## Customer catalog and sales
+
+- `GET /api/products`, `GET /api/products/{id}`, `GET /api/products/{id}/units`
+- `GET /api/stores`, `GET /api/stores/nearest`
+- `GET /api/pricing/active`
+- `GET /api/carts`
+- `POST /api/carts/lines`
+- `PATCH /api/carts/lines/{id}`
+- `DELETE /api/carts`
+- `POST /api/carts/merge`
+- `POST /api/delivery/calculate`
+- `GET /api/delivery/addresses`
+- `POST /api/delivery/addresses`
+- `DELETE /api/delivery/addresses/{id}`
+- `POST /api/orders`
+- `GET /api/orders`
+- `GET /api/orders/{id}`
+- `POST /api/orders/{id}/transition`
+
+`POST /api/orders` accepts product and unit IDs, quantity, selected store, and pickup or delivery choice. `sales-service` recalculates active prices and delivery server-side. Delivery snapshots contain the provider-resolved address, separate customer note, road distance, duration, fee, and GeoJSON route.
+
+## Staff sales and inventory
+
+- `GET /api/prescriptions`
+- `POST /api/prescriptions`
+- `GET /api/prescriptions/{id}`
+- `POST /api/prescriptions/{id}/cancel`
+- `POST /api/prescriptions/{id}/dispense`
+- `GET /api/counter-transactions`
+- `GET /api/inventory/balances`
+- `GET /api/inventory/batches`
+- `POST /api/inventory/batches`
+- `POST /api/inventory/reservations`
+- `POST /api/inventory/reservations/{id}/release`
+- `POST /api/inventory/reservations/{id}/consume`
+- `POST /api/inventory/movements`
+- `POST /api/inventory/transfers`
+- `POST /api/inventory/stocktakes`
+- `POST /api/inventory/returns`
+- `POST /api/inventory/replenishment`
+
+Prescription creation reserves FEFO stock through `inventory-service`. Cancellation releases the reservation. Dispensing consumes the reservation and records the prescription status transition.
+
+## Procurement and catalog administration
+
+- `/api/procurement/purchase-orders`
+- `/api/procurement/goods-receipts`
+- `/api/sites`
+- `/api/storage-locations`
+- `/api/products`
+- `/api/suppliers`
+- `/api/pricing/prices`
+- `/api/availability`
+
+Employee route groups require an employee session. Site-scoped authorization remains a service-level responsibility where a write use case requires it.
+
+## Payments
+
+- `POST /api/payments/invoices`
+- `POST /api/payments/prescriptions/{prescriptionId}`
+- `GET /api/payments/invoices`
+- `GET /api/payments/{id}`
+- `GET /api/payments/{id}/invoice`
+- `POST /api/payments/{id}/confirm-counter`
+- `POST /api/payments/{id}/refund`
+- `GET /api/payments/{id}/reconciliation`
+- `POST /api/payments/sepay/webhook`
+
+Payment invoices snapshot line prices. QR attempts use provider-neutral invoice data and configured SePay VietQR instructions. SePay webhooks use a passthrough integration at API Gateway that preserves raw request bytes, verify `x-sepay-signature` with HMAC-SHA256 in `payment-service`, accept inbound transfers only, match payment code and amount, and deduplicate provider transaction IDs.
+
+## Query projections
+
+- `GET /api/dashboard/summary`
+- `GET /api/finance/summary`
+- `GET /api/reports`
+- `GET /api/audit/logs`
+
+These endpoints read only `operations-query-service` projections. Projection lag is observable and does not change write-model truth.

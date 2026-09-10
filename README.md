@@ -1,221 +1,97 @@
 # Pharmacy Central
 
-Pharmacy Central is an internal pharmacy operations platform for managing pharmacy sites, product data, purchasing, receiving, batch quality review, inventory operations, counter sales, payment capture, reporting, finance reconciliation, audit trails, and user access.
+Pharmacy Central is a Node.js 24 pharmacy platform split into an Express 5 microservices monorepo. It supports customer catalog and checkout flows, staff operations, purchasing, inventory, counter sales, prescriptions, payments, reporting, finance reconciliation, audit projections, and role-scoped access.
 
-The application is a single internal web app backed by an ASP.NET Core API, PostgreSQL, Entity Framework Core migrations, and a React/Vite frontend. Aspire is used for local orchestration during development.
+## Architecture
 
-## What the app supports
+- AWS API Gateway HTTP API + Lambda authorizer manages public `/api` routes, sessions, CSRF, CORS, signed internal identity context forwarding, and routing through VPC Link and an internal Application Load Balancer to ECS Fargate backend services. The AWS configuration under `deploy/aws` is configuration-only. Local Compose retains a development-only Nginx gateway for the same path map.
+- `apps/identity-service`: customer and employee accounts, opaque sessions, password security, verification, and Google OIDC.
+- `apps/catalog-service`: products, units, suppliers, prices, retail sites, PostGIS coordinates, and availability projections.
+- `apps/inventory-service`: batches, quality, FEFO reservations, movements, transfers, returns, replenishment, stocktakes, purchase orders, goods receipts, and availability events.
+- `apps/sales-service`: guest and customer carts, orders, prescriptions, counter transactions, delivery calculation, and order events.
+- `apps/payment-service`: provider-neutral invoices, QR attempts, cash payments, SePay webhooks, refunds, and reconciliation.
+- `apps/operations-query-service`: RabbitMQ-fed dashboard, finance, reporting, and audit projections.
+- `apps/customer-web` and `apps/staff-web`: independently deployable React/Vite applications.
+- `packages/`: only stable technical packages and versioned transport contracts.
 
-- Authentication, CSRF protection, role-based access control, and site-scoped data access.
-- User and role management for Platform Admins.
-- Site and storage location management.
-- Product catalog, supplier catalog, pricing, and active price lookup.
-- Purchase orders and receiving.
-- Batch quality release/reject workflow.
-- Inventory visibility, inventory history, stocktake, and approved adjustments.
-- Warehouse transfers, returns/removals, recalls, and batch blocking.
-- Counter-sale workflow for Pharmacists, including stock reservation, dispensing, payment invoice creation, QR payment instructions, and printable invoice popup.
-- Dashboard, reporting, finance reconciliation, and audit log views.
-
-## Roles
-
-| Role | Main responsibility |
-| --- | --- |
-| Platform Admin | System administration, users, roles, site access, audit, and system oversight |
-| Pharmacy Manager | Master data, pricing, procurement, reporting, finance, and recalls |
-| Pharmacist | Counter-sale workflow, payment, and dispensing |
-| Warehouse Staff | Receiving, quality review, transfers, returns/removals, inventory, stocktake, and adjustments |
-
-Pharmacists do not access the general Inventory, Returns, or Transfers workspaces. They only see sale availability inside the counter-sale workflow for their assigned selling source.
-
-## Repository layout
-
-```text
-src/
-  AppHost/          Aspire orchestration
-  Web.Api/          ASP.NET Core API and endpoint adapters
-  Application/      Use cases organized by feature and workflow
-  Domain/           Domain entities and business statuses
-  Infrastructure/   EF Core, persistence, identity, authorization, provider adapters
-  Frontend/         React + Vite single-page app
-
-tests/
-  PharmacyCentral.UnitTests/  xUnit backend tests
-
-docs/
-  Architecture.md   System architecture and module boundaries
-  UserGuide.md      User-facing workflow guide
-  ApiGuide.md       API, auth, CSRF, and endpoint guide
-  Runbooks.md       Local operations and verification guide
-```
+PostgreSQL/PostGIS stores are service-owned databases. RabbitMQ carries integration events. Valkey provides delivery caching. OpenRouteService supplies server-side delivery address resolution, Matrix, Directions, distance, duration, and GeoJSON route data.
 
 ## Prerequisites
 
-Install the .NET SDK:
+- Node.js `24.19.0`, within `>=24.16.0 <25`.
+- pnpm `12.3.4`.
+- Docker Desktop with the Linux engine enabled for local infrastructure and image builds.
+
+Install dependencies without changing the lockfile:
 
 ```bash
-winget install Microsoft.DotNet.SDK.10
+pnpm install --frozen-lockfile
 ```
-
-Install the .NET Aspire CLI:
-
-```bash
-dotnet tool install -g Aspire.Cli
-```
-
-Install Node.js LTS:
-
-```bash
-winget install OpenJS.NodeJS.LTS
-```
-
-Install pnpm if it is not already available:
-
-```bash
-corepack enable
-corepack prepare pnpm@latest --activate
-```
-
-Trust the local development certificate:
-
-```bash
-dotnet dev-certs https --trust
-```
-
-Restart the terminal after installing tools so `dotnet`, `aspire`, `node`, and `pnpm` are available on PATH.
 
 ## Local development
 
-From the repository root:
+For local development, copy `.env.example` to `.env` and start the local gateway with the web applications:
 
 ```bash
-dotnet restore
+cp .env.example .env
+docker compose up -d --build
 ```
 
-Install frontend dependencies:
+The Compose web containers proxy `/api` requests through the local Nginx gateway. AWS deployment configuration is separate and remains configuration-only until provisioned.
+
+The default endpoints are:
+
+- Customer web: `http://localhost:5173`
+- Staff web: `http://localhost:5174`
+- RabbitMQ management: `http://localhost:15672`
+- Mailpit: `http://localhost:8025`
+
+For local source development, build the workspace and run service `dist/main.js` processes with the environment values from `.env.example`.
+
+## Migrations and seeds
+
+Each service owns its Drizzle migrations. Docker applies them before starting each service. For local source development, run them in dependency order:
 
 ```bash
-cd src/Frontend
-pnpm install
-cd ../..
+pnpm --dir apps/identity-service db:migrate
+pnpm --dir apps/catalog-service db:migrate
+pnpm --dir apps/inventory-service db:migrate
+pnpm --dir apps/sales-service db:migrate
+pnpm --dir apps/payment-service db:migrate
+pnpm --dir apps/operations-query-service db:migrate
 ```
 
-Start the Aspire AppHost:
+Seed all services deterministically:
 
 ```bash
-aspire run
+pnpm run seed:demo
 ```
 
-Aspire starts the API, PostgreSQL, and frontend together. Open the frontend endpoint from the Aspire dashboard. In the current AppHost setup, the frontend is usually served at:
+Demo credentials are documented in `docs/Runbooks.md` and are for local use only.
 
-```text
-http://app.pharmacy.dev.localhost:5200/
-```
-
-Use the AppHost URL above for browser checks instead of `localhost:5200`.
-
-## Demo and seed configuration
-
-Seed behavior is controlled by environment variables:
-
-```text
-PHARMACY_SEED_ADMIN_USER=true
-PHARMACY_SEED_DEMO_USERS=false
-PHARMACY_SEED_BUSINESS_DATA=false
-```
-
-Meaning:
-
-- `PHARMACY_SEED_ADMIN_USER`: creates the development Platform Admin account when the database is empty.
-- `PHARMACY_SEED_DEMO_USERS`: creates role-specific demo users when needed for demos.
-- `PHARMACY_SEED_BUSINESS_DATA`: creates demo business data such as products, batches, stock, documents, and history.
-
-To test the first-admin setup screen, use a disposable database and set:
-
-```text
-PHARMACY_SEED_ADMIN_USER=false
-```
-
-## Common verification commands
-
-Backend build:
+## Verification
 
 ```bash
-dotnet build --artifacts-path .tmp/readme/dotnet
+pnpm run fmt:check
+pnpm run typecheck
+pnpm run lint
+pnpm run build
+pnpm test
 ```
 
-Backend tests:
 
-```bash
-dotnet test PharmacyCentral.sln --artifacts-path .tmp/readme/tests
-```
+## Configuration and deployment
 
-Frontend checks:
+Copy `.env.example` to a local environment file and replace development secrets. Do not reuse demo secrets in production. Container startup runs `node dist/migrate.js` before `node dist/main.js`, and production deploys immutable digest-addressed GHCR images to ECS Fargate.
 
-```bash
-cd src/Frontend
-pnpm lint
-pnpm exec tsc --noEmit
-pnpm exec vite build --outDir ../../.tmp/readme/frontend
-```
+AWS deployment configuration is located under `deploy/aws`, defining AWS API Gateway HTTP API, Lambda authorizer, VPC Link, internal Application Load Balancer, and ECS Fargate services. This AWS configuration is configuration-only and no AWS resources were deployed.
 
-Use `.tmp/<task>/...` output folders for builds during active Aspire sessions so local build artifacts do not interfere with the running app.
-
-## Database and migrations
-
-Schema is managed by EF Core migrations. The application applies migrations on startup.
-
-Add a migration after domain/entity schema changes:
-
-```bash
-dotnet ef migrations add <MigrationName> --project src/Infrastructure --startup-project src/Web.Api
-```
-
-Do not add raw `CREATE TABLE` SQL to the seeder. The seeder inserts data only.
-
-To reset the local Aspire PostgreSQL database, use the reset script documented in `docs/Runbooks.md`.
-
-## Payment and local webhook development
-
-The payment workflow is provider-neutral. SePay is the first provider adapter for VietQR-style payment confirmation.
-
-Local SePay Test mode webhook delivery requires the API to be reachable from the public internet. Use the project-local Cloudflare Tunnel configuration under `.cloudflared/` when testing webhooks. Do not edit the global Cloudflare tunnel configuration for other projects.
-
-Payment config values live in environment variables, including provider, bank account information, webhook secret, QR settings, and feature toggle. See `deploy/pharmacycentral.env.example` and `docs/Runbooks.md`.
-
-## Local deployment package
-
-The repository includes a local production-like package for validation and handoff only. It does not push images or deploy to any external environment.
-
-Validate the compose configuration:
-
-```bash
-docker compose --env-file deploy/pharmacycentral.env.example config
-```
-
-Build the local package:
-
-```bash
-docker compose --env-file deploy/pharmacycentral.env.example build
-```
-
-Run it locally only when needed:
-
-```bash
-docker compose --env-file deploy/pharmacycentral.env.example up
-```
-
-Check health:
-
-```bash
-curl http://localhost:8080/health
-```
+GitHub Actions validates affected projects on pushes to `rewrite/express-microservices` and `main` using Nx affected detection. Main pushes can build affected images, publish digest-addressed AWS ECR images, deploy staging, and deploy production behind the configured GitHub environment approval.
 
 ## Documentation
 
 - [Architecture](docs/Architecture.md)
-- [User Guide](docs/UserGuide.md)
 - [API Guide](docs/ApiGuide.md)
+- [Dependency baseline](docs/Baseline.md)
 - [Runbooks](docs/Runbooks.md)
-
-Keep code and docs synchronized when changing roles, policies, workflows, routes, endpoints, or configuration.
+- [Project summary](docs/ProjectSummary.md)

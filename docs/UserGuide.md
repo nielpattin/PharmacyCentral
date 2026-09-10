@@ -1,246 +1,233 @@
-# Hướng dẫn sử dụng Pharmacy Central
+# Pharmacy Central User Guide
 
-## Mục đích
+## Purpose
 
-Tài liệu này mô tả cách các nhóm nội bộ sử dụng Pharmacy Central theo đúng vai trò nghiệp vụ đã triển khai. Nội dung viết theo hướng vận hành thực tế, không mô tả app như một màn hình admin tổng quát.
+This document describes how internal teams operate Pharmacy Central according to implemented business roles. It covers real operational workflows rather than generic administrative screens.
 
-## Đăng nhập
+## Sign in
 
-1. Khởi động app bằng Aspire hoặc gói chạy local.
-2. Mở frontend URL từ Aspire. Khi test qua AppHost, dùng `http://app.pharmacy.dev.localhost:5200/` nếu có.
-3. Đăng nhập bằng tài khoản nội bộ được cấp.
-4. Sidebar chỉ hiển thị workspace phù hợp với role của tài khoản đang đăng nhập.
+1. Start the local system with Docker Compose (`docker compose up -d`) or start the development server.
+2. Open the web interface: Customer Web at `http://localhost:5173/`, Staff Web at `http://localhost:5174/`.
+3. Sign in with your assigned staff account.
+4. The sidebar displays only the workspaces permitted for your role.
 
-Nếu hệ thống chưa có quản trị viên đầu tiên, trang đăng nhập hiển thị form tạo quản trị viên đầu tiên. Sau khi tài khoản Platform Admin đầu tiên được tạo, hệ thống quay lại luồng đăng nhập bình thường.
+If the system has no platform administrator, the sign-in page displays a form to create the initial administrator. Once created, the system returns to normal sign-in flow.
 
-Tài khoản admin local development khi bật seed admin:
+### Demo credentials
 
-```text
-Email: admin@pharmacy.local
-Password: Admin@123!
-```
+The deterministic local seed creates these development accounts:
 
-Khi bật seed demo users, local seed cũng tạo các tài khoản theo role:
+| Role | Email | Password | Site Access |
+| --- | --- | --- | --- |
+| Platform Admin | `admin@pharmacy.local` | `DemoPassword123!` | All sites |
+| Pharmacy Manager | `manager@pharmacy.local` | `DemoPassword123!` | Retail store (`SITE-RTL`) |
+| Customer | `customer@pharmacy.local` | `DemoPassword123!` | Customer portal |
 
-| Mục đích | Email | Password | Role | Site access |
-| --- | --- | --- | --- | --- |
-| Demo quản lý nghiệp vụ | `manager@pharmacy.local` | `Manager@123!` | Pharmacy Manager | HQ/store demo sites |
-| Demo dược sĩ tại quầy | `pharmacist@pharmacy.local` | `Pharmacist@123!` | Pharmacist | Store demo sites |
-| Demo nhân sự kho | `warehouse@pharmacy.local` | `Warehouse@123!` | Warehouse Staff | Warehouse/store demo sites |
+Seed accounts are for local development and demonstration only.
 
-Các tài khoản seed chỉ dùng cho môi trường local development/demo.
+## Role-based workspaces
 
-## App không phải app admin-only
+Pharmacy Central provides four business roles. Platform administrators manage the system rather than pharmacy counter operations. Pharmacists process counter sales and dispense medications.
 
-Pharmacy Central có bốn role nghiệp vụ. Platform Admin quản trị hệ thống, không phải nhân sự đứng tại hiệu thuốc. Dược sĩ mới là người xử lý giao dịch tại quầy bán thuốc.
-
-![App không phải app admin-only](diagrams/userguide-diagram-01-app-khong-phai-app-admin-only.png)
-
-*Nguồn chỉnh sửa: [userguide-diagram-01-app-khong-phai-app-admin-only.drawio](diagrams/userguide-diagram-01-app-khong-phai-app-admin-only.drawio).*
-
-| Role | Workspace chính |
+| Role | Primary Workspaces |
 | --- | --- |
-| Platform Admin | Users, phân quyền, audit, giám sát hệ thống |
+| Platform Admin | Users, roles, audit logs, system monitoring |
 | Pharmacy Manager | Sites, catalog, suppliers, pricing, procurement, reporting, finance |
-| Pharmacist | Quầy bán thuốc, thanh toán, cấp phát, gửi yêu cầu bổ sung hàng |
-| Warehouse Staff | Receiving, quality, transfers, replenishment requests, returns/removals, stocktake, adjustments |
+| Pharmacist | Pharmacy counter, payments, dispensing, replenishment requests |
+| Warehouse Staff | Receiving, quality, transfers, replenishment requests, returns, stocktake, adjustments |
 
-User không phải Platform Admin còn bị giới hạn theo site được gán. User chỉ xem và thao tác dữ liệu thuộc phạm vi site của mình.
+Users who are not Platform Admins are scoped to their assigned sites. They can only view and manage data within their assigned site scope.
 
-Khi đăng nhập, user chỉ có role Pharmacist đi thẳng vào **Quầy bán thuốc**. Dashboard tổng quan dành cho quản trị hệ thống, quản lý vận hành và kho, không phải màn làm việc của dược sĩ quầy.
+When signing in, users with only the Pharmacist role navigate directly to **Pharmacy Counter**. The operational overview dashboard is intended for administrators, operations managers, and warehouse staff.
 
-## Luồng sản phẩm chính
+## Product lifecycle
 
-![Luồng sản phẩm chính](diagrams/userguide-diagram-02-luong-san-pham-chinh.png)
+## Overview and reporting
 
-*Nguồn chỉnh sửa: [userguide-diagram-02-luong-san-pham-chinh.drawio](diagrams/userguide-diagram-02-luong-san-pham-chinh.drawio).*
+Use **Dashboard** to review operational summaries, alerts, and recent activities. The dashboard serves Platform Admins, Pharmacy Managers, and Warehouse Staff. Counter pharmacists work directly in **Pharmacy Counter**.
 
-## Tổng quan và báo cáo
+Use **Reporting** for broader operational visibility:
 
-Dùng **Dashboard** để xem tổng quan vận hành, cảnh báo và hoạt động gần đây. Dashboard dành cho Platform Admin, Pharmacy Manager và Warehouse Staff. Dược sĩ quầy làm việc trực tiếp trong **Quầy bán thuốc**.
+- Inventory risk summaries
+- Low stock and expiring stock warnings
+- Recent activities
+- Activity breakdown
 
-Dùng **Reporting** để xem rộng hơn về vận hành:
+Low-stock and expiring-stock thresholds align with the backend dashboard rules.
 
-- tổng hợp rủi ro tồn kho
-- hàng sắp thiếu và hàng gần hết hạn
-- hoạt động gần đây
-- phân nhóm hoạt động
+## Master data
 
-Quy tắc hàng sắp thiếu và gần hết hạn phải khớp định nghĩa backend dashboard.
+### Sites and storage locations
 
-## Dữ liệu nền
+Use **Sites** to manage pharmacies, warehouses, and associated storage locations.
 
-### Cơ sở và vị trí lưu trữ
+### Product catalog
 
-Dùng **Sites** để quản lý nhà thuốc, kho và vị trí lưu trữ liên quan.
+Use **Catalog** to manage product codes, names, manufacturers, statuses, units of measure, and conversion factors. Units of measure are strictly defined. Each medication has a base unit for inventory deduction and optional sale units such as blister packs, boxes, or bottles.
 
-### Danh mục sản phẩm
+### Suppliers
 
-Dùng **Catalog** để quản lý mã sản phẩm, tên, nhà sản xuất, trạng thái, đơn vị bán và hệ số quy đổi. Đơn vị không nhập tự do; mỗi thuốc có một đơn vị cơ sở nhỏ nhất để trừ tồn và có thể có thêm đơn vị bán như vỉ, hộp hoặc chai.
+Use **Suppliers** to manage approved vendors.
 
-### Nhà cung cấp
+## Catalog pricing
 
-Dùng **Suppliers** để quản lý nhà cung cấp được duyệt.
-
-## Giá bán trong danh mục
-
-Giá bán thuộc dữ liệu danh mục thuốc. Khi cấu hình thuốc, hệ thống quản lý giá theo từng đơn vị bán như viên, vỉ hoặc hộp, thay vì tách thành một workspace riêng.
+Product prices are configured within the catalog. The system manages prices per sale unit (tablet, blister, or box) rather than in a separate pricing module.
 
 Basic flow:
 
 1. Create a draft price for a product.
-2. Optionally scope it to one site, or leave it applicable to all sites.
-3. Set unit price, currency and effective dates.
-4. Publish the price when ready.
-5. Archive old prices when they should no longer be used.
+2. Scope the price to a specific site, or leave it applicable to all sites.
+3. Specify the unit price, currency, and effective dates.
+4. Publish the price.
+5. Archive expired or replaced prices.
 
-The app blocks overlapping published prices for the same product/site/effective period.
+The application prevents overlapping published prices for the same product, site, and effective period.
 
-## Mua hàng và nhận hàng
+## Purchasing and receiving
 
-### Đơn mua
+### Purchase orders
 
 Use **Procurement** to create and manage purchase orders.
 
 Basic flow:
 
-1. Create a purchase order for a supplier, site, expected date and product quantities.
-2. Approve the order.
-3. Receive goods against the approved order from the Receiving page.
-4. The order status updates as quantities are received.
+1. Create a purchase order with supplier, destination site, expected delivery date, and order lines.
+2. Approve the purchase order.
+3. Receive shipments against the approved purchase order from the Receiving page.
+4. Purchase order statuses update automatically as quantities arrive.
 
-### Nhận hàng
+### Receiving
 
 Use **Receiving** to record supplier deliveries.
 
 Basic flow:
 
-1. Choose supplier, site, storage location and receipt number.
-2. Optionally select an approved purchase order.
-3. Enter received product, batch number, expiry date and quantity.
+1. Select the supplier, site, storage location, and delivery receipt number.
+2. Optionally link the shipment to an approved purchase order.
+3. Enter the product, batch number, expiration date, and received quantity.
 4. Submit the receipt.
-5. Newly received batches wait for quality review before operational use.
+5. Newly received batches await quality review before operational use.
 
-## Kiểm tra chất lượng
+## Quality control
 
 Use **Quality** to review newly received batches.
 
-- Release accepted batches so they can be used operationally.
-- Reject batches that should not be used.
+- Release approved batches for operational use.
+- Reject batches that fail inspection.
 - Add review notes for traceability.
 
-## Tồn kho
+## Inventory management
 
-Dùng **Inventory** để xem số lượng theo lô, vị trí lưu trữ và lịch sử thay đổi tồn kho. Đây là workspace dành cho Warehouse Staff hoặc Platform Admin, không phải màn hình của dược sĩ tại quầy.
+Use **Inventory** to view batch quantities, storage locations, and movement history. This workspace serves Warehouse Staff and Platform Admins.
 
-Dược sĩ chỉ thấy tồn khả dụng trong **Quầy bán thuốc** theo nguồn bán đã gán cho quầy. Dược sĩ không cần biết toàn bộ SKU nằm ở vị trí nào trong cơ sở, và không được điều chỉnh số lượng tồn kho.
+Pharmacists view available quantities directly inside **Pharmacy Counter** based on the counter's assigned stock source. Pharmacists do not need warehouse location details and cannot adjust inventory balances directly.
 
-## Quầy bán thuốc và cấp phát
+## Pharmacy counter and dispensing
 
-**Quầy bán thuốc** là workspace chỉ dành cho **Pharmacist**. Platform Admin và Pharmacy Manager không đứng tại quầy và không tạo giao dịch với khách hàng. Mỗi dược sĩ xử lý một khách hiện tại tại POS terminal, không quản lý nhiều khách song song trên màn hình này.
-
-Luồng cơ bản:
-
-1. Hệ thống tự lấy cơ sở và vị trí bán hàng từ tài khoản/quầy được gán.
-2. Dược sĩ tìm sản phẩm theo tên hoặc mã sản phẩm.
-3. Dược sĩ thêm sản phẩm vào phiếu bán hiện tại và kiểm tra lô, hạn dùng, số lượng có thể bán và giá.
-4. Thông tin khách hàng chỉ nhập khi cần. Mặc định là khách lẻ.
-5. Tạo phiếu bán. Hệ thống giữ lượng hàng có thể bán cho giao dịch này.
-6. Tạo thanh toán, hiển thị hướng dẫn thanh toán và in hóa đơn demo nếu cần.
-7. Cấp phát sau khi thanh toán được xác nhận nếu luồng thanh toán đang bật.
-8. Hủy phiếu nếu giao dịch không tiếp tục. Khi hủy, lượng hàng đã giữ được trả lại.
-
-## Thanh toán và hóa đơn
-
-Panel thanh toán nằm trong **Quầy bán thuốc** và phục vụ giao dịch hiện tại của dược sĩ.
-
-Luồng cơ bản:
-
-1. Tạo phiếu bán hiện tại tại quầy.
-2. Tạo thanh toán cho phiếu hiện tại.
-3. Hiển thị QR, nội dung chuyển khoản và tổng tiền cho khách.
-4. Refresh hoặc chờ trạng thái thanh toán cập nhật sau khi khách thanh toán.
-5. Khi thanh toán xác nhận thành công, in hóa đơn nếu khách cần.
-6. Cấp phát thuốc trên cùng màn hình quầy.
-
-Hóa đơn in từ trình duyệt gồm cơ sở, thời điểm lập hóa đơn, mã thanh toán, dòng sản phẩm, số lượng, đơn giá, tổng tiền và trạng thái thanh toán. Đây là luồng in demo bằng trình duyệt, không tích hợp máy in thật.
-
-SePay Test mode trong môi trường development dùng để kiểm thử thanh toán mà không cần giao dịch thật với khách.
-
-## Điều chuyển
-
-Use **Transfers** to move stock between sites/locations.
+**Pharmacy Counter** is dedicated to **Pharmacist** users. Administrators and managers do not operate the counter or create customer sales transactions. Each pharmacist serves one customer at a time at the counter terminal.
 
 Basic flow:
 
-1. Create a transfer from a source site/location to a destination site/location.
-2. Approve with an eligible second user.
-3. Ship the transfer.
-4. Receive at the destination.
+1. The system determines the site and sales location from the assigned user or terminal.
+2. The pharmacist searches for products by name or code.
+3. The pharmacist adds products to the active prescription or sales draft, verifying batch, expiration date, available stock, and price.
+4. Customer details are optional. The default customer is a walk-in retail customer.
+5. Create the sales order. The system reserves stock for the transaction.
+6. Generate a payment invoice, display payment instructions, and print a receipt if requested.
+7. Confirm dispensing after payment verification.
+8. Cancel the transaction if the customer declines. Canceling releases all reserved inventory.
 
-Self-approval is blocked for transfer approval.
+## Payments and invoicing
 
-## Trả hàng và loại khỏi tồn
+The payment panel lives directly inside **Pharmacy Counter** to process the current transaction.
 
-Dùng **Returns** để xử lý trả nhà cung cấp, hàng hư hỏng, hàng hết hạn hoặc các trường hợp loại khỏi tồn kho. Đây là nghiệp vụ warehouse, không phải workflow khách trả hàng tại quầy.
+Basic flow:
 
-## Kiểm kê và điều chỉnh
+1. Create the counter transaction.
+2. Generate an invoice for the transaction.
+3. Display the VietQR code, transfer description, and total amount to the customer.
+4. Confirm payment status once the customer completes the transfer.
+5. Print a receipt if the customer requests one.
+6. Dispense medications on the counter screen.
 
-Use **Stocktake** to create count sessions, record counts and post resulting adjustments.
+Receipts printed from the browser display site details, timestamp, payment code, line items, quantities, unit prices, total amount, and payment status. Browser printing provides demonstration receipts without dedicated hardware printers.
 
-Use **Adjustments** to prepare and approve standalone stock adjustments. Approval requires an eligible user and records the decision.
+SePay test mode enables payment testing in local development without real bank transfers.
 
-## Đối soát tài chính
+## Stock transfers
 
-Use **Finance** to review inventory valuation and operational reconciliation by site and date range. It summarizes current value from published prices, received quantities, dispensing, returns/removals, adjustments and transfers.
+Use **Transfers** to move inventory between sites and storage locations.
 
-External accounting posting is not part of this workspace.
+Basic flow:
 
-## Nhật ký hoạt động
+1. Create a transfer request from a source location to a destination location.
+2. Approve the transfer with an eligible second staff account.
+3. Dispatch the shipment.
+4. Confirm receipt at the destination site.
 
-Use **Audit** to review recorded business activity. Audit details are intended for operational traceability and oversight.
+Self-approval is blocked on transfer requests.
 
-## Quản lý người dùng
+## Returns and removals
 
-Platform Admin users can use **Users** to:
+Use **Returns** to handle supplier returns, damaged products, expired stock, and inventory write-offs. This workflow belongs to warehouse staff rather than retail counter returns.
 
-- view users
-- create internal users
-- assign roles
-- assign site access
-- update access
-- reset a user's password when needed
-- sign out a user's active sessions after access changes or suspected account misuse
+## Stocktakes and adjustments
 
-## Luồng demo
+Use **Stocktake** to create count sessions, record physical counts, and post resulting reconciliation adjustments.
 
-Dùng luồng này để demo local ngắn gọn:
+Use **Adjustments** to prepare and approve standalone stock adjustments. Approvals require an authorized user and record an audit entry.
 
-1. Đăng nhập bằng tài khoản admin local để kiểm tra quản trị user, audit và dữ liệu hệ thống.
-2. Mở **Dashboard** để xem tổng quan, cảnh báo và navigation theo role.
-3. Mở **Sites**, **Catalog** và **Suppliers** để xem dữ liệu nền.
-4. Mở **Catalog** để kiểm tra thuốc, đơn vị bán và giá theo từng đơn vị bán.
-5. Mở **Procurement**, tạo và approve purchase order.
-6. Mở **Receiving**, ghi nhận hàng về theo đơn mua.
-7. Mở **Quality**, release lô hàng mới.
-8. Mở **Inventory**, xem số lượng có thể dùng và lịch sử.
-9. Đăng nhập bằng tài khoản **Pharmacist**, mở **Quầy bán thuốc**, tạo phiếu bán, thanh toán, in hóa đơn và cấp phát.
-10. Đăng nhập bằng tài khoản **Warehouse Staff**, mở **Transfers** để demo vòng đời tạo/duyệt/gửi/nhận nếu có tài khoản đủ điều kiện thứ hai.
-11. Mở **Returns** để demo lý do trả hàng hoặc loại khỏi tồn kho theo nghiệp vụ warehouse.
-12. Mở **Stocktake** và **Adjustments** để demo kiểm kê và duyệt điều chỉnh.
-14. Mở **Reporting**, **Finance** và **Audit** để xem khả năng quan sát và truy vết.
-15. Mở **Users** để xem quản lý role và site access.
+## Financial reconciliation
 
-## Lưu ý khi demo
+Use **Finance** to review inventory valuation and operational reconciliation by site and date range. It summarizes value based on published prices, receipts, dispensing, returns, adjustments, and transfers.
 
-- Use local/development data only.
-- Avoid real patient, supplier or staff information.
-- Do not reuse development credentials outside development.
-- If a workflow needs a second approver, create a dedicated demo user with the required role and site access.
+External accounting ledger posting is outside the scope of this workspace.
 
-## Thói quen vận hành tốt
+## Audit log
 
-- Use named staff accounts, not shared accounts.
-- Keep site access narrow for users who only work at specific sites.
-- Review quality, stock adjustment and audit records regularly.
-- Use development seed credentials only in development environments.
+Use **Audit** to review business activity logs. Audit records provide operational traceability and supervisory oversight.
+
+## User management
+
+Platform Admins use **Users** to:
+
+- View user accounts
+- Create internal staff accounts
+- Assign roles
+- Assign site access scopes
+- Update account permissions
+- Reset user passwords
+- Revoke active user sessions after security updates
+
+## Demo walkthrough
+
+Follow these steps for a complete local demonstration:
+
+1. Sign in with the local admin account to review user administration, audit logs, and system data.
+2. Open **Dashboard** to review summaries, alerts, and navigation.
+3. Open **Sites**, **Catalog**, and **Suppliers** to review master data.
+4. Open **Catalog** to inspect products, sale units, and unit pricing.
+5. Open **Procurement** to create and approve a purchase order.
+6. Open **Receiving** to record incoming goods against the purchase order.
+7. Open **Quality** to inspect and release the received batch.
+8. Open **Inventory** to inspect available balances and movement history.
+9. Sign in with a **Pharmacist** account, open **Pharmacy Counter**, create a sale, complete payment, print a receipt, and dispense medication.
+10. Sign in with a **Warehouse Staff** account, open **Transfers**, and demonstrate creating and dispatching a transfer.
+11. Open **Returns** to demonstrate inventory removals and supplier returns.
+12. Open **Stocktake** and **Adjustments** to demonstrate physical counting and approval.
+13. Open **Reporting**, **Finance**, and **Audit** to demonstrate operational visibility and traceability.
+14. Open **Users** to demonstrate role and site access controls.
+
+## Demonstration guidelines
+
+- Use local development data only.
+- Do not enter real patient, supplier, or employee personal information.
+- Do not reuse development credentials in production environments.
+- When a workflow requires dual approval, sign in with a second authorized demo user.
+
+## Operational best practices
+
+- Assign individual named accounts to staff rather than shared accounts.
+- Restrict site access scopes to the specific locations where staff members work.
+- Review quality inspection records, stock adjustments, and audit logs regularly.
+- Keep development seed credentials restricted to development environments.
