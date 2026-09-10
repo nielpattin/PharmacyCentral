@@ -1,5 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <RootNamespace>PharmacyCentral.Domain</RootNamespace>
-  </PropertyGroup>
-</Project>

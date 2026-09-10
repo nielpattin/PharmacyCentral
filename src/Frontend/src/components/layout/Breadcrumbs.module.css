@@ -1,9 +1,0 @@
-.current {
-   font-weight: 700;
-   color: var(--text);
-}
-
-.separator {
-   color: var(--muted-soft);
-   margin-right: 0.25rem;
-}
