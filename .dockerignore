@@ -9,7 +9,9 @@ obj
 **/bin
 **/obj
 **/node_modules
-src/Frontend/dist
+**/dist
+**/coverage
+**/*.tsbuildinfo
 openspec
 plans
 credentials.json

@@ -1,6 +1,5 @@
 bin/
 obj/
-/packages/
 riderModule.iml
 /_ReSharper.Caches/
 
@@ -84,13 +83,31 @@ RiderLink/
 
 # Node.js / TypeScript tools
 node_modules/
+.nx/
+dist/
+coverage/
 
 # Temporary files
 .tmp/
+.terraform/
+*.tfstate
+*.tfstate.*
 docs/*
 !docs/
 !docs/Architecture.md
 !docs/ProjectInfo.md
+!docs/RewriteParityMatrix.md
+!docs/Baseline.md
+!docs/Runbooks.md
+!docs/ProjectSummary.md
 bin-build
 .lazyweb/
 .cloudflared/
+
+
+tsconfig.tsbuildinfo
+
+AGENTS.md
+credentials.json
+plans/
+.pi/

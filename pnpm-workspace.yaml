@@ -1,0 +1,47 @@
+packages:
+  - apps/*
+  - packages/*
+
+catalogMode: strict
+engineStrict: true
+nodeVersion: 24.19.0
+strictPeerDependencies: true
+minimumReleaseAge: 1440
+allowBuilds:
+  esbuild: true
+  nx: true
+  protobufjs: true
+
+catalog:
+  "@nx/js": 23.1.1
+  "@tailwindcss/vite": 4.3.3
+  "@types/express": 5.0.6
+  "@types/node": 24.13.3
+  "@types/nodemailer": 8.0.1
+  "@types/pg": 8.23.1
+  "@types/react": 19.2.18
+  "@types/react-dom": 19.2.4
+  "@valkey/valkey-glide": 2.5.1
+  amqplib: 2.0.1
+  class-variance-authority: 0.7.1
+  clsx: 2.1.1
+  drizzle-kit: 0.31.10
+  drizzle-orm: 0.45.2
+  express: 5.2.1
+  maplibre-gl: 6.4.1
+  nodemailer: 9.0.5
+  openid-client: 6.8.7
+  oxfmt: 0.64.0
+  oxlint: 1.79.0
+  "@vitejs/plugin-react": 6.1.0
+  pg: 8.23.0
+  pino: 10.3.1
+  react: 19.2.8
+  react-dom: 19.2.8
+  resend: 6.21.0
+  tailwind-merge: 3.6.0
+  tailwindcss: 4.3.3
+  zod: 4.4.3
+  zod-openapi: 6.0.1
+  vite: 8.2.2
+  vitest: 4.1.11

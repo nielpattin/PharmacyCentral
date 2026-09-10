@@ -1,0 +1,33 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/operations-query-service"
+    },
+    {
+      "path": "./apps/inventory-service"
+    },
+    {
+      "path": "./apps/identity-service"
+    },
+    {
+      "path": "./apps/catalog-service"
+    },
+    {
+      "path": "./apps/payment-service"
+    },
+    {
+      "path": "./apps/sales-service"
+    },
+    {
+      "path": "./apps/customer-web"
+    },
+    {
+      "path": "./apps/staff-web"
+    },
+    {
+      "path": "./packages/ui"
+    }
+  ],
+  "extends": "./tsconfig.base.json"
+}

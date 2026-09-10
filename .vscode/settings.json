@@ -1,18 +1,18 @@
 {
    "editor.formatOnSave": false,
    // "editor.formatOnSaveMode": "file",
-   "oxc.fmt.configPath": "src/Frontend/oxfmt.config.ts",
-   "oxc.configPath": "src/Frontend/oxlint.config.ts",
-   "oxc.path.tsgolint": "src/Frontend/node_modules/.bin/tsgolint.cmd",
+   "oxc.fmt.configPath": "oxfmt.config.ts",
+   "oxc.configPath": "oxlint.config.ts",
+   "oxc.path.tsgolint": "node_modules/.bin/tsgolint.cmd",
    "editor.defaultFormatter": "oxc.oxc-vscode",
    "[csharp]": {
       "editor.defaultFormatter": "ms-dotnettools.csharp",
       "editor.formatOnSave": false,
       "editor.formatOnSaveMode": "file"
    },
-   "js/ts.tsdk.path": "src/Frontend/node_modules/typescript/lib",
+   "js/ts.tsdk.path": "node_modules/typescript/lib",
    "oxc.typeAware": true,
-   "oxc.tsConfigPath": "src/Frontend/tsconfig.json",
+   "oxc.tsConfigPath": "tsconfig.json",
    "oxc.requireConfig": true
    // "editor.codeActionsOnSave": {
    //    "source.format.oxc": "always"
