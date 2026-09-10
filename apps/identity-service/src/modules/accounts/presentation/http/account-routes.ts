@@ -1,0 +1,404 @@
+import { randomBytes, randomUUID } from "node:crypto";
+import { Router, type Request, type Response } from "express";
+import { z } from "zod";
+
+import { loginRequestSchema, registerRequestSchema } from "../../../../contracts/identity.ts";
+
+import type { Account } from "../../domain/account.ts";
+import type { AccountService } from "../../application/account-service.ts";
+import { signInternalIdentityContext } from "../../../../middleware/trusted-request.ts";
+import type { GoogleOidcClient } from "../../infrastructure/security/google-oidc-client.ts";
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  nextPassword: z.string().min(12).max(200),
+});
+const passwordResetRequestSchema = z.object({ email: z.string().email() });
+const passwordResetSchema = z.object({
+  accountId: z.string().uuid(),
+  token: z.string().min(1),
+  nextPassword: z.string().min(12).max(200),
+});
+const accountIdTokenSchema = z.object({ accountId: z.string().uuid(), token: z.string().min(1) });
+const adminUserSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(12).max(200),
+  displayName: z.string().trim().min(1).max(200),
+  roles: z.array(z.string()).max(8),
+  siteIds: z.array(z.string().uuid()).max(500),
+});
+const userAccessSchema = z.object({ roles: z.array(z.string()).max(8), siteIds: z.array(z.string().uuid()).max(500) });
+const userIdSchema = z.object({ id: z.string().uuid() });
+const sessionCookieName = "pharmacy_session";
+const csrfCookieName = "pharmacy_csrf";
+
+export const createAccountRouter = (service: AccountService, googleClient?: GoogleOidcClient): Router => {
+  const router = Router();
+
+  router.get("/setup-status", async (_request, response) => {
+    response.json(await service.getSetupStatus());
+  });
+
+  router.post("/setup-admin", async (request, response) => {
+    const parsed = registerRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    try {
+      const result = await service.createFirstAdmin(parsed.data);
+      setSessionCookie(response, result.session.rawToken);
+      response.status(201).json(toPublicAccount(result.account));
+    } catch (error) {
+      writeServiceError(response, error, 409);
+    }
+  });
+
+  const contextAudiences = [
+    "catalog-service",
+    "inventory-service",
+    "sales-service",
+    "payment-service",
+    "operations-query-service",
+  ];
+
+  router.get("/context", async (request, response) => {
+    const token = getSessionToken(request);
+    const current = token ? await service.currentSession(token) : undefined;
+    if (!current) {
+      response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
+      return;
+    }
+    const secret = process.env.INTERNAL_IDENTITY_SECRET;
+    if (!secret) {
+      response
+        .status(503)
+        .json({ title: "Identity signing is not configured", status: 503, code: "identity_unconfigured" });
+      return;
+    }
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 5 * 60_000).toISOString();
+    const contexts: Record<string, string> = {};
+    for (const audience of contextAudiences) {
+      contexts[audience] = signInternalIdentityContext(
+        {
+          version: "v1",
+          requestId: randomUUID(),
+          correlationId: randomUUID(),
+          actorId: current.account.id,
+          actorType: current.account.actorType,
+          roles: current.account.roles,
+          siteIds: current.account.siteIds,
+          issuedAt: now.toISOString(),
+          expiresAt,
+          audience,
+        },
+        secret,
+      );
+    }
+    response.json({ contexts, expiresAt });
+  });
+
+  router.get("/csrf", async (_request, response) => {
+    const token = randomBytes(32).toString("hex");
+    setReadableCookie(response, csrfCookieName, token, 3600);
+    response.json({ csrfToken: token });
+  });
+
+  router.post("/register", async (request, response) => {
+    const parsed = registerRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    try {
+      const result = await service.registerCustomer(parsed.data);
+      response.status(201).json({ account: toPublicAccount(result.account), emailVerificationRequired: true });
+    } catch (error) {
+      writeServiceError(response, error, 409);
+    }
+  });
+
+  router.get("/verify-email", async (request, response) => {
+    const parsed = accountIdTokenSchema.safeParse(request.query);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid verification request", status: 400 });
+      return;
+    }
+
+    try {
+      const account = await service.verifyEmail(parsed.data.accountId, parsed.data.token);
+      response.json({ account: toPublicAccount(account), verified: true });
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
+  router.get("/google/start", async (_request, response) => {
+    if (!googleClient) {
+      response
+        .status(503)
+        .json({ title: "Google login is not configured", status: 503, code: "google_not_configured" });
+      return;
+    }
+
+    try {
+      const authorization = await googleClient.beginAuthorization();
+      setCookie(response, "oauth_state", authorization.state, 600);
+      response.redirect(authorization.url.href);
+    } catch (error) {
+      writeServiceError(response, error, 503);
+    }
+  });
+
+  router.get("/google/callback", async (request, response) => {
+    if (!googleClient) {
+      response
+        .status(503)
+        .json({ title: "Google login is not configured", status: 503, code: "google_not_configured" });
+      return;
+    }
+
+    const state = typeof request.query.state === "string" ? request.query.state : undefined;
+    const expectedState = getCookie(request, "oauth_state");
+    if (!state || !expectedState || state !== expectedState) {
+      response
+        .status(400)
+        .json({ title: "Invalid Google authorization state", status: 400, code: "invalid_oauth_state" });
+      return;
+    }
+
+    try {
+      const callbackUrl = new URL(
+        request.originalUrl,
+        process.env.GOOGLE_REDIRECT_URI ?? "http://localhost:3001/auth/google/callback",
+      );
+      const profile = await googleClient.completeAuthorization(callbackUrl, state);
+      const result = await service.loginWithGoogle(profile);
+      setSessionCookie(response, result.session.rawToken);
+      clearCookie(response, "oauth_state");
+      response.json(toPublicAccount(result.account));
+    } catch (error) {
+      writeServiceError(response, error, 401);
+    }
+  });
+
+  router.post("/login", async (request, response) => {
+    const parsed = loginRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    try {
+      const result = await service.login(parsed.data);
+      setSessionCookie(response, result.session.rawToken);
+      response.json(toPublicAccount(result.account));
+    } catch (error) {
+      writeServiceError(response, error, 401);
+    }
+  });
+
+  router.post("/logout", async (request, response) => {
+    const token = getSessionToken(request);
+    if (token) {
+      await service.logout(token);
+    }
+    clearSessionCookie(response);
+    response.status(204).end();
+  });
+
+  router.get("/me", async (request, response) => {
+    const token = getSessionToken(request);
+    const current = token ? await service.currentSession(token) : undefined;
+    if (!current) {
+      response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
+      return;
+    }
+
+    response.json(toPublicAccount(current.account));
+  });
+
+  router.post("/request-password-reset", async (request, response) => {
+    const parsed = passwordResetRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    await service.requestPasswordReset(parsed.data.email);
+    response.status(202).json({ accepted: true });
+  });
+
+  router.post("/reset-password", async (request, response) => {
+    const parsed = passwordResetSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    try {
+      await service.resetPassword(parsed.data.accountId, parsed.data.token, parsed.data.nextPassword);
+      response.status(204).end();
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
+  router.post("/change-password", async (request, response) => {
+    const token = getSessionToken(request);
+    const current = token ? await service.currentSession(token) : undefined;
+    if (!current) {
+      response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
+      return;
+    }
+
+    const parsed = changePasswordSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    try {
+      await service.changePassword(current.account.id, parsed.data.currentPassword, parsed.data.nextPassword);
+      clearSessionCookie(response);
+      response.status(204).end();
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
+  return router;
+};
+
+export const createAdminRouter = (service: AccountService): Router => {
+  const router = Router();
+
+  router.use(async (request, response, next) => {
+    const token = getSessionToken(request);
+    const current = token ? await service.currentSession(token) : undefined;
+    if (!current) {
+      response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
+      return;
+    }
+    if (!current.account.roles.includes("Platform Admin")) {
+      response.status(403).json({ title: "Platform Admin role required", status: 403, code: "forbidden" });
+      return;
+    }
+
+    next();
+  });
+
+  router.get("/roles", async (_request, response) => response.json({ roles: await service.listRoles() }));
+  router.get("/users", async (_request, response) => response.json((await service.listUsers()).map(toPublicAccount)));
+
+  router.post("/users", async (request, response) => {
+    const parsed = adminUserSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    try {
+      response.status(201).json(toPublicAccount(await service.createEmployee(parsed.data)));
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
+  router.put("/users/:id/access", async (request, response) => {
+    const id = userIdSchema.safeParse(request.params);
+    const parsed = userAccessSchema.safeParse(request.body);
+    if (!id.success || !parsed.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    try {
+      response.json(
+        toPublicAccount(await service.updateUserAccess(id.data.id, parsed.data.roles, parsed.data.siteIds)),
+      );
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
+  router.post("/users/:id/reset-password", async (request, response) => {
+    const id = userIdSchema.safeParse(request.params);
+    const password = z.object({ password: z.string().min(12).max(200) }).safeParse(request.body);
+    if (!id.success || !password.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    try {
+      await service.resetUserPassword(id.data.id, password.data.password);
+      response.status(204).end();
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
+  router.post("/users/:id/revoke-sessions", async (request, response) => {
+    const id = userIdSchema.safeParse(request.params);
+    if (!id.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    try {
+      await service.revokeAllSessions(id.data.id);
+      response.status(204).end();
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
+  return router;
+};
+
+const toPublicAccount = (account: Account) => ({
+  id: account.id,
+  actorType: account.actorType,
+  email: account.email,
+  displayName: account.displayName,
+  emailVerified: account.emailVerifiedAt !== undefined,
+  roles: account.roles,
+  siteIds: account.siteIds,
+});
+
+const getSessionToken = (request: Request): string | undefined => getCookie(request, sessionCookieName);
+
+const getCookie = (request: Request, name: string): string | undefined => {
+  const cookieHeader = request.headers.cookie;
+  const match = cookieHeader?.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match?.[1];
+};
+
+const setReadableCookie = (response: Response, name: string, value: string, maxAge: number): void => {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  response.setHeader("Set-Cookie", `${name}=${value}; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`);
+};
+
+const setSessionCookie = (response: Response, token: string): void => {
+  setCookie(response, sessionCookieName, token, 604800);
+};
+
+const setCookie = (response: Response, name: string, value: string, maxAge: number): void => {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  response.setHeader("Set-Cookie", `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`);
+};
+
+const clearSessionCookie = (response: Response): void => clearCookie(response, sessionCookieName);
+
+const clearCookie = (response: Response, name: string): void => {
+  response.setHeader("Set-Cookie", `${name}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+};
+
+const writeServiceError = (response: Response, error: unknown, defaultStatus: number): void => {
+  const message = error instanceof Error ? error.message : "Request failed";
+  const status = message.includes("already exists") ? 409 : defaultStatus;
+  response.status(status).json({ title: message, status, code: status === 409 ? "conflict" : "request_failed" });
+};
