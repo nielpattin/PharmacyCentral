@@ -9,7 +9,7 @@ type Point = { latitude: number; longitude: number };
 
 type DeliveryMapProps = {
   store: Point;
-  destination: Point;
+  destination?: Point | undefined;
   route?: Array<[number, number]>;
   onDestinationChange?: (point: Point) => void;
 };
@@ -32,15 +32,18 @@ export const DeliveryMap = ({
     const storeMarker = new maplibregl.Marker({ color: "#1769aa" })
       .setLngLat([store.longitude, store.latitude])
       .addTo(map);
-    const destinationMarker = new maplibregl.Marker({ color: "#c62828", draggable: true })
-      .setLngLat([destination.longitude, destination.latitude])
-      .addTo(map);
-    destinationMarker.on("dragend", () => {
+    const destinationMarker = destination
+      ? new maplibregl.Marker({ color: "#c62828", draggable: true })
+          .setLngLat([destination.longitude, destination.latitude])
+          .addTo(map)
+      : undefined;
+    destinationMarker?.on("dragend", () => {
       const position = destinationMarker.getLngLat();
       onDestinationChange?.({ latitude: position.lat, longitude: position.lng });
     });
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.on("load", () => {
+      if (!destination) return;
       const bounds = new maplibregl.LngLatBounds(
         [store.longitude, store.latitude],
         [destination.longitude, destination.latitude],
@@ -62,14 +65,14 @@ export const DeliveryMap = ({
     });
     return () => {
       storeMarker.remove();
-      destinationMarker.remove();
+      destinationMarker?.remove();
       map.remove();
     };
   });
   return (
     <div
       ref={containerRef}
-      aria-label="Delivery route map. Drag the red destination marker."
+      aria-label={destination ? "Bản đồ lộ trình giao hàng. Kéo điểm đỏ để đổi điểm giao." : "Bản đồ vị trí nhà thuốc."}
       style={{ minHeight: 360, width: "100%" }}
     />
   );

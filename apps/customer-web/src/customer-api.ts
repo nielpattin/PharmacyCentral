@@ -41,7 +41,7 @@ export const request = async <T>(url: string, options: ApiRequestOptions = {}): 
       return attempt(true);
     }
     if (!response.ok) {
-      let detail = `API request failed with status ${response.status}`;
+      let detail = `Không thực hiện được yêu cầu (mã ${response.status})`;
       try {
         const problem = (await response.json()) as { title?: string; detail?: string };
         detail = problem.detail ?? problem.title ?? detail;
@@ -56,24 +56,48 @@ export const request = async <T>(url: string, options: ApiRequestOptions = {}): 
   return attempt(false);
 };
 
+export type CatalogUnit = {
+  id: string;
+  productId: string;
+  unitName: string;
+  conversionFactorToBaseUnit: string;
+  isBaseUnit: boolean;
+  isDefaultSaleUnit: boolean;
+  isDefaultPurchaseUnit: boolean;
+  barcode: string | null;
+  sortOrder: number;
+};
 export type CatalogProduct = {
   id: string;
   sku: string;
+  barcode: string | null;
   name: string;
-  category: string;
-  manufacturer: string;
-  isActive?: boolean;
+  category: string | null;
+  manufacturer: string | null;
+  status: string;
+  notes: string | null;
+  isActive: boolean;
+  units: CatalogUnit[];
 };
-export type CatalogUnit = { id: string; unitName: string; conversionFactorToBaseUnit: string };
-export type CatalogPrice = { productId: string; productUnitId: string; unitPrice: string; currency: string };
+export type CatalogPrice = {
+  id: string;
+  productId: string;
+  productUnitId: string;
+  siteId: string | null;
+  unitPrice: string;
+  currency: string;
+  status: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+};
+export type CatalogAvailability = { productId: string; siteId: string; inStock: boolean; updatedAt: string };
 export type CatalogStore = {
   id: string;
   code: string;
   name: string;
   address: string | null;
-  coordinates?: { latitude: number; longitude: number } | null;
-  latitude?: number;
-  longitude?: number;
+  coordinates: { latitude: number; longitude: number } | null;
+  straightLineMeters?: number;
 };
 export type CartLine = { id: string; productId: string; productUnitId: string; quantity: string };
 export type Cart = { id: string; lines: CartLine[] };
@@ -131,14 +155,35 @@ export type PaymentInvoice = {
   paymentInstruction?: { qrImageUrl: string; transferContent: string };
 };
 
-export const listProducts = (search = ""): Promise<CatalogProduct[]> =>
-  request(`/api/products?limit=20${search ? `&search=${encodeURIComponent(search)}` : ""}`);
+export type ProductQuery = {
+  search?: string | undefined;
+  category?: string | undefined;
+  limit?: number | undefined;
+};
+
+export const listProducts = (query: ProductQuery = {}): Promise<CatalogProduct[]> => {
+  const params = new URLSearchParams();
+  params.set("limit", String(query.limit ?? 60));
+  if (query.search) params.set("search", query.search);
+  if (query.category) params.set("category", query.category);
+  return request(`/api/products?${params.toString()}`);
+};
+export const getProduct = (id: string): Promise<CatalogProduct> => request(`/api/products/${id}`);
 export const listStores = (): Promise<CatalogStore[]> => request("/api/stores?limit=50");
+export const listNearestStores = (latitude: number, longitude: number, limit = 5): Promise<CatalogStore[]> =>
+  request(`/api/stores/nearest?latitude=${latitude}&longitude=${longitude}&limit=${limit}`);
+export const listPublishedPrices = (): Promise<CatalogPrice[]> =>
+  request("/api/pricing/prices?status=Published&limit=500");
+export const listAvailability = (siteId?: string): Promise<CatalogAvailability[]> => {
+  const params = new URLSearchParams();
+  if (siteId) params.set("siteId", siteId);
+  return request(`/api/availability${params.size ? `?${params.toString()}` : ""}`);
+};
 export const getProductUnits = (productId: string): Promise<CatalogUnit[]> =>
   request(`/api/products/${productId}/units`);
-export const getActivePrice = (productId: string, productUnitId: string, siteId: string): Promise<CatalogPrice> =>
+export const getActivePrice = (productId: string, productUnitId: string): Promise<CatalogPrice> =>
   request(
-    `/api/pricing/active?productId=${productId}&productUnitId=${productUnitId}&siteId=${siteId}&effectiveDate=${new Date().toISOString().slice(0, 10)}`,
+    `/api/pricing/active?productId=${productId}&productUnitId=${productUnitId}&effectiveDate=${new Date().toISOString().slice(0, 10)}`,
   );
 export const getCart = (): Promise<Cart> => request("/api/carts");
 export const clearCart = (): Promise<Cart> => request("/api/carts", { method: "DELETE", body: JSON.stringify({}) });
