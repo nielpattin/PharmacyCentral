@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   geometry,
   index,
@@ -135,6 +137,7 @@ export const productPrices = pgTable(
       table.status,
       table.effectiveFrom,
     ),
+    check("product_prices_global_scope_check", sql`${table.siteId} IS NULL`),
   ],
 );
 

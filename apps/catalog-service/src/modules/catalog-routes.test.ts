@@ -138,4 +138,28 @@ describe("catalog API", () => {
       expect.objectContaining({ status: "Active", notes: "Supplier note", isActive: true }),
     );
   });
+  it("rejects site-specific price drafts", async () => {
+    const createPrice = vi
+      .fn<(input: Record<string, unknown>) => Promise<unknown>>()
+      .mockResolvedValue({ id: "price" });
+    const repository = { createPrice } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/pricing/prices`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        productId: ids.product,
+        productUnitId: ids.unit,
+        siteId: ids.site,
+        unitPrice: 12500,
+        currency: "VND",
+        effectiveFrom: "2026-01-01",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(createPrice).not.toHaveBeenCalled();
+  });
 });

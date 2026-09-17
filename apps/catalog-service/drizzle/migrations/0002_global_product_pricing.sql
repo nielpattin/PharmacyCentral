@@ -1,0 +1,1 @@
+ALTER TABLE "product_prices" ADD CONSTRAINT "product_prices_global_scope_check" CHECK ("product_prices"."site_id" IS NULL);

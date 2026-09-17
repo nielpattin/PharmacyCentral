@@ -75,7 +75,7 @@ const productUnitInputSchema = z.object({
 const priceInputSchema = z.object({
   productId: z.string().uuid(),
   productUnitId: z.string().uuid(),
-  siteId: z.string().uuid().nullable().optional(),
+  siteId: z.null().optional(),
   unitPrice: z.coerce.number().positive(),
   currency: z.string().regex(/^[A-Za-z]{3}$/),
   effectiveFrom: z.string().date(),
@@ -84,14 +84,12 @@ const priceInputSchema = z.object({
 });
 const priceQuerySchema = z.object({
   productId: z.string().uuid().optional(),
-  siteId: z.string().uuid().optional(),
   status: z.string().trim().max(20).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
 });
 const activePriceQuerySchema = z.object({
   productId: z.string().uuid(),
   productUnitId: z.string().uuid(),
-  siteId: z.string().uuid().optional(),
   effectiveDate: z.string().date(),
 });
 
@@ -380,7 +378,6 @@ export const createCatalogRouter = (repository: DrizzleStoreRepository | undefin
     const price = await repository.getActivePrice(
       parsed.data.productId,
       parsed.data.productUnitId,
-      parsed.data.siteId,
       parsed.data.effectiveDate,
     );
     if (!price) return response.status(404).json({ title: "Active price not found", status: 404 });

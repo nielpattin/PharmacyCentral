@@ -424,13 +424,11 @@ export class DrizzleStoreRepository {
 
   public async listPrices(input: {
     productId?: string | undefined;
-    siteId?: string | undefined;
     status?: string | undefined;
     limit?: number | undefined;
   }): Promise<Array<typeof productPrices.$inferSelect>> {
     const filters = [
       input.productId ? eq(productPrices.productId, input.productId) : undefined,
-      input.siteId ? or(eq(productPrices.siteId, input.siteId), isNull(productPrices.siteId)) : undefined,
       input.status ? eq(productPrices.status, input.status) : undefined,
     ].filter((filter): filter is NonNullable<typeof filter> => filter !== undefined);
     const query = this.database.db.select().from(productPrices);
@@ -441,6 +439,7 @@ export class DrizzleStoreRepository {
   }
 
   public async createPrice(input: typeof productPrices.$inferInsert): Promise<typeof productPrices.$inferSelect> {
+    if (input.siteId !== null && input.siteId !== undefined) throw new Error("Prices are global across pharmacies");
     if (Number(input.unitPrice) <= 0) throw new Error("Unit price must be greater than zero");
     const currency = input.currency ?? "VND";
     if (currency.length !== 3) throw new Error("Currency must be a three-letter code");
@@ -448,7 +447,7 @@ export class DrizzleStoreRepository {
       throw new Error("Effective end date must not precede start date");
     const [price] = await this.database.db
       .insert(productPrices)
-      .values({ ...input, currency, status: "Draft" })
+      .values({ ...input, siteId: null, currency, status: "Draft" })
       .returning();
     if (!price) throw new Error("Price insert did not return a row");
     return price;
@@ -473,7 +472,7 @@ export class DrizzleStoreRepository {
           and(
             eq(productPrices.productId, current[0].productId),
             eq(productPrices.productUnitId, current[0].productUnitId),
-            current[0].siteId ? eq(productPrices.siteId, current[0].siteId) : isNull(productPrices.siteId),
+            isNull(productPrices.siteId),
             eq(productPrices.status, "Published"),
             lte(productPrices.effectiveFrom, current[0].effectiveTo ?? "9999-12-31"),
             or(isNull(productPrices.effectiveTo), gte(productPrices.effectiveTo, current[0].effectiveFrom)),
@@ -502,25 +501,21 @@ export class DrizzleStoreRepository {
   public async getActivePrice(
     productId: string,
     productUnitId: string,
-    siteId: string | undefined,
     effectiveDate: string,
   ): Promise<typeof productPrices.$inferSelect | undefined> {
     const filters = [
       eq(productPrices.productId, productId),
       eq(productPrices.productUnitId, productUnitId),
       eq(productPrices.status, "Published"),
+      isNull(productPrices.siteId),
       lte(productPrices.effectiveFrom, effectiveDate),
       or(isNull(productPrices.effectiveTo), gte(productPrices.effectiveTo, effectiveDate)),
-      siteId ? or(eq(productPrices.siteId, siteId), isNull(productPrices.siteId)) : isNull(productPrices.siteId),
     ];
     const rows = await this.database.db
       .select()
       .from(productPrices)
       .where(and(...filters))
-      .orderBy(
-        sql`CASE WHEN ${productPrices.siteId} = ${siteId ?? null} THEN 0 ELSE 1 END`,
-        sql`${productPrices.effectiveFrom} DESC`,
-      )
+      .orderBy(sql`${productPrices.effectiveFrom} DESC`)
       .limit(1);
     return rows[0];
   }
