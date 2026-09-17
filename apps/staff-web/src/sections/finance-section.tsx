@@ -1,10 +1,11 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { DataTable } from "../components/data-table.tsx";
 import { Field, RefreshButton, SubTabs } from "../components/forms.tsx";
-import { useMountEffect } from "../hooks/useMountEffect.ts";
 import { translateText } from "../i18n.ts";
-import { readOne, readRows, text, writeJson, type JsonRecord } from "../staff-api.ts";
+import { readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
+import { useStaffMutation } from "../hooks/useStaffMutation.ts";
 
 export const FinanceSection = ({
   initialTab = "Summary",
@@ -12,15 +13,33 @@ export const FinanceSection = ({
   initialTab?: "Summary" | "Reports";
 }): React.JSX.Element => {
   const [tab, setTab] = useState<string>(initialTab);
-  const [summary, setSummary] = useState<JsonRecord>();
-  const [invoices, setInvoices] = useState<JsonRecord[]>([]);
-  const [reports, setReports] = useState<JsonRecord[]>([]);
   const [reportType, setReportType] = useState("sales");
   const [error, setError] = useState<string>();
+  const mutation = useStaffMutation();
+  const financeQuery = useQuery({
+    queryKey: ["finance", reportType],
+    queryFn: async () => {
+      const [summary, invoices, reports] = await Promise.all([
+        readOne<JsonRecord>("/api/finance/summary"),
+        readRows("/api/payments/invoices"),
+        readRows("/api/reports?reportType=" + encodeURIComponent(reportType) + "&limit=100"),
+      ]);
+      return { summary, invoices, reports };
+    },
+  });
+  const summary = financeQuery.data?.summary;
+  const invoices = financeQuery.data?.invoices ?? [];
+  const reports = financeQuery.data?.reports ?? [];
+  const queryError = financeQuery.error instanceof Error ? financeQuery.error.message : undefined;
+  const visibleError = error ?? queryError;
   const confirmCash = async (id: string): Promise<void> => {
     try {
-      await writeJson(`/api/payments/${id}/confirm-counter`, "POST");
-      await load();
+      await mutation.mutateAsync({
+        path: `/api/payments/${id}/confirm-counter`,
+        method: "POST",
+        invalidate: [["finance"]],
+      });
+      setError(undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to confirm payment");
     }
@@ -29,30 +48,26 @@ export const FinanceSection = ({
     const reasonText = window.prompt(translateText("Refund reason:"), translateText("Operational correction"));
     if (!reasonText) return;
     try {
-      await writeJson(`/api/payments/${id}/refund`, "POST", { reason: reasonText });
-      await load();
+      await mutation.mutateAsync({
+        path: `/api/payments/${id}/refund`,
+        method: "POST",
+        body: { reason: reasonText },
+        invalidate: [["finance"]],
+      });
+      setError(undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to refund payment");
     }
   };
   const load = async (): Promise<void> => {
+    setError(undefined);
     try {
-      setError(undefined);
-      const [nextSummary, nextInvoices, nextReports] = await Promise.all([
-        readOne<JsonRecord>("/api/finance/summary"),
-        readRows("/api/payments/invoices"),
-        readRows(`/api/reports?reportType=${encodeURIComponent(reportType)}&limit=100`),
-      ]);
-      setSummary(nextSummary);
-      setInvoices(nextInvoices);
-      setReports(nextReports);
+      const result = await financeQuery.refetch();
+      if (result.error) throw result.error;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load finance");
     }
   };
-  useMountEffect(() => {
-    void load();
-  });
   return (
     <section className="staff-section">
       <div className="page-head">
@@ -62,7 +77,7 @@ export const FinanceSection = ({
         </div>
         <RefreshButton onClick={() => void load()} />
       </div>
-      {error ? <p className="notice">{translateText(error)}</p> : null}
+      {visibleError ? <p className="notice">{translateText(visibleError)}</p> : null}
       <SubTabs tabs={["Summary", "Invoices", "Reports"]} active={tab} onChange={setTab} />
       {tab === "Summary" ? (
         <>

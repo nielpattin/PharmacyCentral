@@ -1,24 +1,19 @@
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import { useMountEffect } from "../hooks/useMountEffect.ts";
+import { RefreshButton } from "../components/forms.tsx";
 import { translateText } from "../i18n.ts";
 import { readOne, text, numberValue, type JsonRecord } from "../staff-api.ts";
-import { RefreshButton } from "../components/forms.tsx";
 
 export const DashboardSection = (): React.JSX.Element => {
-  const [dashboard, setDashboard] = useState<JsonRecord>();
-  const [error, setError] = useState<string>();
-  const load = async (): Promise<void> => {
-    try {
-      setError(undefined);
-      setDashboard(await readOne<JsonRecord>("/api/dashboard/summary"));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load dashboard");
-    }
-  };
-  useMountEffect(() => {
-    void load();
+  const dashboardQuery = useQuery({
+    queryKey: ["dashboard-summary"],
+    queryFn: () => readOne<JsonRecord>("/api/dashboard/summary"),
   });
+  const dashboard = dashboardQuery.data;
+  const error = dashboardQuery.error instanceof Error ? dashboardQuery.error.message : undefined;
+  const load = async (): Promise<void> => {
+    await dashboardQuery.refetch();
+  };
   const recent = Array.isArray(dashboard?.recentActivity)
     ? dashboard.recentActivity.filter((item): item is JsonRecord => typeof item === "object" && item !== null)
     : [];

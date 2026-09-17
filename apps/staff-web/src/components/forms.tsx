@@ -11,6 +11,8 @@ type FieldProps = {
   type?: "text" | "email" | "date" | "number" | "datetime-local";
   required?: boolean;
   placeholder?: string;
+  hint?: string | undefined;
+  onBlur?: (() => void) | undefined;
 };
 
 export const Field = ({
@@ -20,13 +22,16 @@ export const Field = ({
   type = "text",
   required,
   placeholder,
+  hint,
+  onBlur,
 }: FieldProps): React.JSX.Element => (
-  <UiField label={translateText(label)}>
+  <UiField label={translateText(label)} {...(hint ? { hint: translateText(hint) } : {})}>
     <Input
       type={type}
       value={value}
       required={required}
       placeholder={placeholder ? translateText(placeholder) : undefined}
+      onBlur={onBlur}
       onChange={(event) => onChange(event.target.value)}
     />
   </UiField>

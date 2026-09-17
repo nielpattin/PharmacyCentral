@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { useMountEffect } from "./useMountEffect.ts";
 import { readRows, type JsonRecord } from "../staff-api.ts";
 
 export type StaffReferences = {
@@ -14,42 +13,42 @@ export type StaffReferences = {
   reload: () => Promise<void>;
 };
 
+type StaffReferenceData = Omit<StaffReferences, "loading" | "error" | "reload">;
+
+const referenceQueryKey = ["staff-references"] as const;
+
+const loadReferences = async (): Promise<StaffReferenceData> => {
+  const [sites, locations, suppliers, products, batches] = await Promise.all([
+    readRows("/api/sites"),
+    readRows("/api/storage-locations"),
+    readRows("/api/suppliers"),
+    readRows("/api/products?limit=100"),
+    readRows("/api/inventory/batches"),
+  ]);
+  return { sites, locations, suppliers, products, batches };
+};
+
 export const useStaffReferences = (): StaffReferences => {
-  const [sites, setSites] = useState<JsonRecord[]>([]);
-  const [locations, setLocations] = useState<JsonRecord[]>([]);
-  const [suppliers, setSuppliers] = useState<JsonRecord[]>([]);
-  const [products, setProducts] = useState<JsonRecord[]>([]);
-  const [batches, setBatches] = useState<JsonRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>();
-
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: referenceQueryKey, queryFn: loadReferences });
   const reload = async (): Promise<void> => {
-    try {
-      setLoading(true);
-      setError(undefined);
-      const [nextSites, nextLocations, nextSuppliers, nextProducts, nextBatches] = await Promise.all([
-        readRows("/api/sites"),
-        readRows("/api/storage-locations"),
-        readRows("/api/suppliers"),
-        readRows("/api/products?limit=100"),
-        readRows("/api/inventory/batches"),
-      ]);
-      setSites(nextSites);
-      setLocations(nextLocations);
-      setSuppliers(nextSuppliers);
-      setProducts(nextProducts);
-      setBatches(nextBatches);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load staff reference data");
-    } finally {
-      setLoading(false);
-    }
+    await queryClient.invalidateQueries({ queryKey: referenceQueryKey });
   };
-
-  useMountEffect(() => {
-    void reload();
-  });
-  return { sites, locations, suppliers, products, batches, loading, error, reload };
+  return {
+    sites: query.data?.sites ?? [],
+    locations: query.data?.locations ?? [],
+    suppliers: query.data?.suppliers ?? [],
+    products: query.data?.products ?? [],
+    batches: query.data?.batches ?? [],
+    loading: query.isPending,
+    error:
+      query.error instanceof Error
+        ? query.error.message
+        : query.error
+          ? "Unable to load staff reference data"
+          : undefined,
+    reload,
+  };
 };
 
 export const referenceOptions = (

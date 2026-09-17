@@ -24,7 +24,9 @@ export const DataTable = ({
       rows={rows}
       columns={uiColumns}
       empty={translateText(empty)}
-      getKey={(row, index) => `${idOf(row)}-${index}`}
+      getKey={(row, index) => idOf(row) + "-" + index}
+      interactive
+      virtualize
     />
   );
 };

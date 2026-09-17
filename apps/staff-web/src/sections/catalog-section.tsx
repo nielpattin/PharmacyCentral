@@ -1,11 +1,13 @@
+import { useForm } from "@tanstack/react-form";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { DataTable } from "../components/data-table.tsx";
 import { Field, FormCard, RefreshButton, SelectField, SubTabs } from "../components/forms.tsx";
-import { useMountEffect } from "../hooks/useMountEffect.ts";
 import { translateText } from "../i18n.ts";
 import { referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
-import { readRows, text, writeJson, type JsonRecord } from "../staff-api.ts";
+import { readRows, text, type JsonRecord } from "../staff-api.ts";
+import { useStaffMutation } from "../hooks/useStaffMutation.ts";
 
 const productInitial = {
   sku: "",
@@ -37,16 +39,14 @@ const priceInitial = {
   notes: "",
 };
 
+const requiredText = ({ value }: { value: string }): string | undefined =>
+  value.trim() ? undefined : "This field is required";
 export const CatalogSection = ({
   initialTab = "Products",
 }: {
   initialTab?: "Products" | "Create product" | "Units" | "Pricing";
 }): React.JSX.Element => {
   const [tab, setTab] = useState<string>(initialTab);
-  const [products, setProducts] = useState<JsonRecord[]>([]);
-  const [prices, setPrices] = useState<JsonRecord[]>([]);
-  const [units, setUnits] = useState<JsonRecord[]>([]);
-  const [product, setProduct] = useState(productInitial);
   const [unit, setUnit] = useState(unitInitial);
   const [price, setPrice] = useState(priceInitial);
   const [selectedProduct, setSelectedProduct] = useState("");
@@ -54,23 +54,34 @@ export const CatalogSection = ({
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const references = useStaffReferences();
-  const load = async (): Promise<void> => {
-    try {
-      setError(undefined);
-      const [nextProducts, nextPrices] = await Promise.all([
-        readRows("/api/products?limit=100"),
-        readRows("/api/pricing/prices?limit=500"),
-      ]);
-      setProducts(nextProducts);
-      setPrices(nextPrices);
-      if (selectedProduct) setUnits(await readRows(`/api/products/${selectedProduct}/units`));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load catalog");
-    }
-  };
-  useMountEffect(() => {
-    void load();
+  const mutation = useStaffMutation();
+  const productsQuery = useQuery({
+    queryKey: ["staff-products"],
+    queryFn: () => readRows("/api/products?limit=100"),
   });
+  const pricesQuery = useQuery({
+    queryKey: ["staff-prices"],
+    queryFn: () => readRows("/api/pricing/prices?limit=500"),
+  });
+  const unitsQuery = useQuery({
+    queryKey: ["staff-product-units", selectedProduct],
+    queryFn: () => readRows(`/api/products/${selectedProduct}/units`),
+    enabled: Boolean(selectedProduct),
+  });
+  const products = productsQuery.data ?? [];
+  const prices = pricesQuery.data ?? [];
+  const units = unitsQuery.data ?? [];
+  const queryError = productsQuery.error ?? pricesQuery.error ?? unitsQuery.error;
+  const loadError = queryError instanceof Error ? queryError.message : undefined;
+  const load = async (): Promise<void> => {
+    setError(undefined);
+    await Promise.all([
+      productsQuery.refetch(),
+      pricesQuery.refetch(),
+      ...(selectedProduct ? [unitsQuery.refetch()] : []),
+    ]);
+  };
+  const visibleError = error ?? loadError;
   const setValue =
     <T extends Record<string, string>>(setter: React.Dispatch<React.SetStateAction<T>>, key: keyof T) =>
     (value: string): void =>
@@ -80,35 +91,51 @@ export const CatalogSection = ({
     method: "POST" | "PUT" | "DELETE",
     body: JsonRecord | undefined,
     success: string,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     try {
-      await writeJson(path, method, body);
+      await mutation.mutateAsync({
+        path,
+        method,
+        body,
+        invalidate: [
+          ["staff-products"],
+          ["staff-prices"],
+          ["staff-product-units", selectedProduct],
+          ["staff-references"],
+        ],
+      });
       setMessage(success);
-      await load();
+      setError(undefined);
+      return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Catalog operation failed");
+      return false;
     }
   };
-  const saveProduct = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    await submit(
-      selectedProduct ? `/api/products/${selectedProduct}` : "/api/products",
-      selectedProduct ? "PUT" : "POST",
-      {
-        sku: product.sku,
-        barcode: product.barcode || null,
-        name: product.name,
-        category: product.category || null,
-        manufacturer: product.manufacturer || null,
-        status: product.status,
-        notes: product.notes || null,
-        isActive: product.isActive === "true",
-      },
-      selectedProduct ? "Product updated." : "Product created.",
-    );
-    setProduct(productInitial);
-    setSelectedProduct("");
-  };
+  const productForm = useForm({
+    defaultValues: productInitial,
+    onSubmit: async ({ value }) => {
+      const succeeded = await submit(
+        selectedProduct ? `/api/products/${selectedProduct}` : "/api/products",
+        selectedProduct ? "PUT" : "POST",
+        {
+          sku: value.sku,
+          barcode: value.barcode || null,
+          name: value.name,
+          category: value.category || null,
+          manufacturer: value.manufacturer || null,
+          status: value.status,
+          notes: value.notes || null,
+          isActive: value.isActive === "true",
+        },
+        selectedProduct ? "Product updated." : "Product created.",
+      );
+      if (succeeded) {
+        productForm.reset(productInitial);
+        setSelectedProduct("");
+      }
+    },
+  });
   const saveUnit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const productId = unit.productId || selectedProduct;
@@ -137,7 +164,6 @@ export const CatalogSection = ({
       {
         productId: price.productId,
         productUnitId: price.productUnitId,
-        siteId: price.siteId || null,
         unitPrice: Number(price.unitPrice),
         currency: price.currency,
         effectiveFrom: price.effectiveFrom,
@@ -150,7 +176,7 @@ export const CatalogSection = ({
   };
   const edit = (row: JsonRecord): void => {
     setSelectedProduct(text(row.id));
-    setProduct({
+    const values = {
       sku: text(row.sku, ""),
       barcode: text(row.barcode, ""),
       name: text(row.name, ""),
@@ -159,24 +185,24 @@ export const CatalogSection = ({
       status: text(row.status, "Active"),
       notes: text(row.notes, ""),
       isActive: text(row.isActive ?? true),
-    });
+    };
+    productForm.reset();
+    productForm.setFieldValue("sku", values.sku, { dontUpdateMeta: true, dontValidate: true });
+    productForm.setFieldValue("barcode", values.barcode, { dontUpdateMeta: true, dontValidate: true });
+    productForm.setFieldValue("name", values.name, { dontUpdateMeta: true, dontValidate: true });
+    productForm.setFieldValue("category", values.category, { dontUpdateMeta: true, dontValidate: true });
+    productForm.setFieldValue("manufacturer", values.manufacturer, { dontUpdateMeta: true, dontValidate: true });
+    productForm.setFieldValue("status", values.status, { dontUpdateMeta: true, dontValidate: true });
+    productForm.setFieldValue("notes", values.notes, { dontUpdateMeta: true, dontValidate: true });
+    productForm.setFieldValue("isActive", values.isActive, { dontUpdateMeta: true, dontValidate: true });
     setTab("Create product");
   };
   const remove = async (id: string): Promise<void> => {
     if (window.confirm(translateText("Delete this product?")))
       await submit(`/api/products/${id}`, "DELETE", undefined, "Product deleted.");
   };
-  const fetchUnits = async (id: string): Promise<void> => {
+  const fetchUnits = (id: string): void => {
     setSelectedProduct(id);
-    if (!id) {
-      setUnits([]);
-      return;
-    }
-    try {
-      setUnits(await readRows(`/api/products/${id}/units`));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load units");
-    }
   };
   const editUnit = (row: JsonRecord): void => {
     setSelectedUnit(text(row.id));
@@ -195,12 +221,12 @@ export const CatalogSection = ({
       await submit(`/api/products/${selectedProduct}/units/${id}`, "DELETE", undefined, "Product unit deleted.");
   };
   const loadUnits = async (id: string): Promise<void> => {
-    await fetchUnits(id);
+    fetchUnits(id);
     setTab("Units");
   };
   const choosePriceProduct = (value: string): void => {
     setPrice((current) => ({ ...current, productId: value, productUnitId: "" }));
-    void fetchUnits(value);
+    fetchUnits(value);
   };
   return (
     <section className="staff-section">
@@ -211,7 +237,7 @@ export const CatalogSection = ({
         </div>
         <RefreshButton onClick={() => void load()} />
       </div>
-      {error ? <p className="notice">{translateText(error)}</p> : null}
+      {visibleError ? <p className="notice">{translateText(visibleError)}</p> : null}
       {references.error ? <p className="notice">{translateText(references.error)}</p> : null}
       {message ? <p className="success-note">{translateText(message)}</p> : null}
       <SubTabs tabs={["Products", "Create product", "Units", "Pricing"]} active={tab} onChange={setTab} />
@@ -246,17 +272,63 @@ export const CatalogSection = ({
       {tab === "Create product" ? (
         <FormCard
           title={selectedProduct ? "Edit product" : "Create product"}
-          onSubmit={(event) => void saveProduct(event)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void productForm.handleSubmit();
+          }}
           submitLabel={selectedProduct ? "Save product" : "Create product"}
         >
-          <Field label="SKU" value={product.sku} onChange={setValue(setProduct, "sku")} required />
-          <Field label="Barcode" value={product.barcode} onChange={setValue(setProduct, "barcode")} />
-          <Field label="Name" value={product.name} onChange={setValue(setProduct, "name")} required />
-          <Field label="Category" value={product.category} onChange={setValue(setProduct, "category")} />
-          <Field label="Manufacturer" value={product.manufacturer} onChange={setValue(setProduct, "manufacturer")} />
-          <Field label="Status" value={product.status} onChange={setValue(setProduct, "status")} required />
-          <Field label="Notes" value={product.notes} onChange={setValue(setProduct, "notes")} />
-          <Field label="Active (true/false)" value={product.isActive} onChange={setValue(setProduct, "isActive")} />
+          <productForm.Field name="sku" validators={{ onBlur: requiredText }}>
+            {(field) => (
+              <Field
+                label="SKU"
+                value={field.state.value}
+                onChange={field.handleChange}
+                onBlur={field.handleBlur}
+                hint={field.state.meta.errors[0] ? String(field.state.meta.errors[0]) : undefined}
+                required
+              />
+            )}
+          </productForm.Field>
+          <productForm.Field name="barcode">
+            {(field) => <Field label="Barcode" value={field.state.value} onChange={field.handleChange} />}
+          </productForm.Field>
+          <productForm.Field name="name" validators={{ onBlur: requiredText }}>
+            {(field) => (
+              <Field
+                label="Name"
+                value={field.state.value}
+                onChange={field.handleChange}
+                onBlur={field.handleBlur}
+                hint={field.state.meta.errors[0] ? String(field.state.meta.errors[0]) : undefined}
+                required
+              />
+            )}
+          </productForm.Field>
+          <productForm.Field name="category">
+            {(field) => <Field label="Category" value={field.state.value} onChange={field.handleChange} />}
+          </productForm.Field>
+          <productForm.Field name="manufacturer">
+            {(field) => <Field label="Manufacturer" value={field.state.value} onChange={field.handleChange} />}
+          </productForm.Field>
+          <productForm.Field name="status" validators={{ onBlur: requiredText }}>
+            {(field) => (
+              <Field
+                label="Status"
+                value={field.state.value}
+                onChange={field.handleChange}
+                onBlur={field.handleBlur}
+                hint={field.state.meta.errors[0] ? String(field.state.meta.errors[0]) : undefined}
+                required
+              />
+            )}
+          </productForm.Field>
+          <productForm.Field name="notes">
+            {(field) => <Field label="Notes" value={field.state.value} onChange={field.handleChange} />}
+          </productForm.Field>
+          <productForm.Field name="isActive">
+            {(field) => <Field label="Active (true/false)" value={field.state.value} onChange={field.handleChange} />}
+          </productForm.Field>
         </FormCard>
       ) : null}
       {tab === "Units" ? (
@@ -336,12 +408,6 @@ export const CatalogSection = ({
               onChange={setValue(setPrice, "productUnitId")}
               options={referenceOptions(units, ["unitName"])}
               required
-            />
-            <SelectField
-              label="Site (optional)"
-              value={price.siteId}
-              onChange={setValue(setPrice, "siteId")}
-              options={referenceOptions(references.sites, ["code", "name"])}
             />
             <Field
               label="Unit price"

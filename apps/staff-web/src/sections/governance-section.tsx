@@ -1,15 +1,17 @@
+import { useForm } from "@tanstack/react-form";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { DataTable } from "../components/data-table.tsx";
 import { Field, FormCard, MultiSelectField, RefreshButton, SelectField, SubTabs } from "../components/forms.tsx";
-import { useMountEffect } from "../hooks/useMountEffect.ts";
 import { translateText } from "../i18n.ts";
 import { referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
-import { readOne, readRows, text, writeJson, type JsonRecord } from "../staff-api.ts";
+import { useStaffMutation } from "../hooks/useStaffMutation.ts";
+import { readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
 
 const userInitial = {
   email: "",
-  password: "DemoPassword123!",
+  password: "",
   displayName: "",
   roles: [] as string[],
   siteIds: [] as string[],
@@ -25,87 +27,107 @@ export const GovernanceSection = ({
   initialTab?: "Audit" | "Users" | "Create user" | "Edit access";
 }): React.JSX.Element => {
   const [tab, setTab] = useState<string>(initialTab);
-  const [audit, setAudit] = useState<JsonRecord[]>([]);
-  const [users, setUsers] = useState<JsonRecord[]>([]);
-  const [roles, setRoles] = useState<string[]>([]);
-  const [user, setUser] = useState(userInitial);
-  const [access, setAccess] = useState(accessInitial);
   const [auditFilters, setAuditFilters] = useState(auditInitial);
-  const [error, setError] = useState<string>();
-  const [message, setMessage] = useState<string>();
-  const references = useStaffReferences();
-  const load = async (): Promise<void> => {
-    try {
-      setError(undefined);
+  const governanceQuery = useQuery({
+    queryKey: ["governance", auditFilters],
+    queryFn: async () => {
       const query = new URLSearchParams(Object.entries(auditFilters).filter(([, value]) => value.length > 0));
-      const [nextAudit, nextUsers, roleResult] = await Promise.all([
-        readRows(`/api/audit/logs?${query.toString()}`),
+      const [audit, users, roleResult] = await Promise.all([
+        readRows("/api/audit/logs?" + query.toString()),
         readRows("/api/admin/users"),
         readOne<JsonRecord>("/api/admin/roles"),
       ]);
-      setAudit(nextAudit);
-      setUsers(nextUsers);
-      setRoles(
-        Array.isArray(roleResult.roles)
-          ? roleResult.roles.filter((role): role is string => typeof role === "string")
-          : [],
-      );
+      const roles = Array.isArray(roleResult.roles)
+        ? roleResult.roles.filter((role): role is string => typeof role === "string")
+        : [];
+      return { audit, users, roles };
+    },
+  });
+  const audit = governanceQuery.data?.audit ?? [];
+  const users = governanceQuery.data?.users ?? [];
+  const roles = governanceQuery.data?.roles ?? [];
+  const [error, setError] = useState<string>();
+  const [message, setMessage] = useState<string>();
+  const references = useStaffReferences();
+  const mutation = useStaffMutation();
+  const load = async (): Promise<void> => {
+    setError(undefined);
+    try {
+      const result = await governanceQuery.refetch();
+      if (result.error) throw result.error;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load governance data");
     }
   };
-  useMountEffect(() => {
-    void load();
+  const visibleError = error ?? (governanceQuery.error instanceof Error ? governanceQuery.error.message : undefined);
+  const userForm = useForm({
+    defaultValues: userInitial,
+    onSubmit: async ({ value }) => {
+      try {
+        await mutation.mutateAsync({
+          path: "/api/admin/users",
+          method: "POST",
+          body: {
+            email: value.email,
+            password: value.password,
+            displayName: value.displayName,
+            roles: value.roles,
+            siteIds: value.siteIds,
+          },
+          invalidate: [["governance"]],
+        });
+        userForm.reset(userInitial);
+        setMessage("Employee account created.");
+        setError(undefined);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Unable to create employee");
+      }
+    },
   });
-  const setValue =
-    (key: "email" | "password" | "displayName") =>
-    (value: string): void =>
-      setUser((current) => ({ ...current, [key]: value }));
-  const createUser = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    try {
-      await writeJson("/api/admin/users", "POST", {
-        email: user.email,
-        password: user.password,
-        displayName: user.displayName,
-        roles: user.roles,
-        siteIds: user.siteIds,
-      });
-      setUser(userInitial);
-      setMessage("Employee account created.");
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to create employee");
-    }
-  };
-  const updateAccess = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    try {
-      await writeJson(`/api/admin/users/${access.id}/access`, "PUT", { roles: access.roles, siteIds: access.siteIds });
-      setMessage("Employee access updated.");
-      setTab("Users");
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to update employee access");
-    }
-  };
+  const accessForm = useForm({
+    defaultValues: accessInitial,
+    onSubmit: async ({ value }) => {
+      try {
+        await mutation.mutateAsync({
+          path: `/api/admin/users/${value.id}/access`,
+          method: "PUT",
+          body: { roles: value.roles, siteIds: value.siteIds },
+          invalidate: [["governance"]],
+        });
+        setMessage("Employee access updated.");
+        setError(undefined);
+        setTab("Users");
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Unable to update employee access");
+      }
+    },
+  });
   const editAccess = (row: JsonRecord): void => {
-    setAccess({ id: text(row.id, ""), roles: strings(row.roles), siteIds: strings(row.siteIds) });
+    accessForm.reset({ id: text(row.id, ""), roles: strings(row.roles), siteIds: strings(row.siteIds) });
     setTab("Edit access");
   };
   const revoke = async (id: string): Promise<void> => {
     try {
-      await writeJson(`/api/admin/users/${id}/revoke-sessions`, "POST");
+      await mutation.mutateAsync({
+        path: `/api/admin/users/${id}/revoke-sessions`,
+        method: "POST",
+        invalidate: [["governance"]],
+      });
       setMessage("Sessions revoked.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to revoke sessions");
     }
   };
   const reset = async (id: string): Promise<void> => {
-    const password = window.prompt(translateText("New password, at least 12 characters:"), "DemoPassword123!");
+    const password = window.prompt(translateText("New password, at least 12 characters:"));
     if (!password) return;
     try {
-      await writeJson(`/api/admin/users/${id}/reset-password`, "POST", { password });
+      await mutation.mutateAsync({
+        path: `/api/admin/users/${id}/reset-password`,
+        method: "POST",
+        body: { password },
+        invalidate: [["governance"]],
+      });
       setMessage("Password reset.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to reset password");
@@ -120,7 +142,7 @@ export const GovernanceSection = ({
         </div>
         <RefreshButton onClick={() => void load()} />
       </div>
-      {error ? <p className="notice">{translateText(error)}</p> : null}
+      {visibleError ? <p className="notice">{translateText(visibleError)}</p> : null}
       {references.error ? <p className="notice">{translateText(references.error)}</p> : null}
       {message ? <p className="success-note">{translateText(message)}</p> : null}
       <SubTabs tabs={["Audit", "Users", "Create user", "Edit access"]} active={tab} onChange={setTab} />
@@ -208,44 +230,78 @@ export const GovernanceSection = ({
         />
       ) : null}
       {tab === "Edit access" ? (
-        <FormCard title="Edit employee access" onSubmit={(event) => void updateAccess(event)} submitLabel="Save access">
-          <MultiSelectField
-            label="Roles"
-            value={access.roles}
-            onChange={(value) => setAccess((current) => ({ ...current, roles: value }))}
-            options={roles.map((role) => ({ value: role, label: role }))}
-            required
-          />
-          <MultiSelectField
-            label="Site access"
-            value={access.siteIds}
-            onChange={(value) => setAccess((current) => ({ ...current, siteIds: value }))}
-            options={referenceOptions(references.sites, ["code", "name"])}
-          />
+        <FormCard
+          title="Edit employee access"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void accessForm.handleSubmit();
+          }}
+          submitLabel="Save access"
+        >
+          <accessForm.Field name="roles">
+            {(field) => (
+              <MultiSelectField
+                label="Roles"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={roles.map((role) => ({ value: role, label: role }))}
+                required
+              />
+            )}
+          </accessForm.Field>
+          <accessForm.Field name="siteIds">
+            {(field) => (
+              <MultiSelectField
+                label="Site access"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={referenceOptions(references.sites, ["code", "name"])}
+              />
+            )}
+          </accessForm.Field>
         </FormCard>
       ) : null}
       {tab === "Create user" ? (
         <FormCard
           title="Create employee account"
-          onSubmit={(event) => void createUser(event)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void userForm.handleSubmit();
+          }}
           submitLabel="Create employee"
         >
-          <Field label="Email" type="email" value={user.email} onChange={setValue("email")} required />
-          <Field label="Password" value={user.password} onChange={setValue("password")} required />
-          <Field label="Display name" value={user.displayName} onChange={setValue("displayName")} required />
-          <MultiSelectField
-            label="Roles"
-            value={user.roles}
-            onChange={(value) => setUser((current) => ({ ...current, roles: value }))}
-            options={roles.map((role) => ({ value: role, label: role }))}
-            required
-          />
-          <MultiSelectField
-            label="Site access"
-            value={user.siteIds}
-            onChange={(value) => setUser((current) => ({ ...current, siteIds: value }))}
-            options={referenceOptions(references.sites, ["code", "name"])}
-          />
+          <userForm.Field name="email">
+            {(field) => (
+              <Field label="Email" type="email" value={field.state.value} onChange={field.handleChange} required />
+            )}
+          </userForm.Field>
+          <userForm.Field name="password">
+            {(field) => <Field label="Password" value={field.state.value} onChange={field.handleChange} required />}
+          </userForm.Field>
+          <userForm.Field name="displayName">
+            {(field) => <Field label="Display name" value={field.state.value} onChange={field.handleChange} required />}
+          </userForm.Field>
+          <userForm.Field name="roles">
+            {(field) => (
+              <MultiSelectField
+                label="Roles"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={roles.map((role) => ({ value: role, label: role }))}
+                required
+              />
+            )}
+          </userForm.Field>
+          <userForm.Field name="siteIds">
+            {(field) => (
+              <MultiSelectField
+                label="Site access"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={referenceOptions(references.sites, ["code", "name"])}
+              />
+            )}
+          </userForm.Field>
         </FormCard>
       ) : null}
     </section>

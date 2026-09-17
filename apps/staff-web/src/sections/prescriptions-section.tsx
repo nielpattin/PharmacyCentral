@@ -1,11 +1,13 @@
+import { useForm } from "@tanstack/react-form";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { DataTable } from "../components/data-table.tsx";
 import { Field, FormCard, RefreshButton, SelectField, SubTabs } from "../components/forms.tsx";
-import { useMountEffect } from "../hooks/useMountEffect.ts";
 import { translateText } from "../i18n.ts";
 import { referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
-import { readOne, readRows, text, writeJson, type JsonRecord } from "../staff-api.ts";
+import { useStaffMutation } from "../hooks/useStaffMutation.ts";
+import { readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
 
 type PrescriptionLine = {
   productId: string;
@@ -27,6 +29,7 @@ const initial = {
   doctorLicense: "",
   notes: "",
 };
+const dispenseInitial = { prescriptionId: "" };
 const prescriptionLineInitial = (): PrescriptionLine => ({
   productId: "",
   productUnitId: "",
@@ -48,41 +51,78 @@ export const PrescriptionsSection = ({
   initialTab?: "Prescriptions" | "Create" | "Dispense" | "Counter transactions";
 }): React.JSX.Element => {
   const [tab, setTab] = useState<string>(initialTab);
-  const [rows, setRows] = useState<JsonRecord[]>([]);
-  const [transactions, setTransactions] = useState<JsonRecord[]>([]);
-  const [invoices, setInvoices] = useState<JsonRecord[]>([]);
-  const [form, setForm] = useState(initial);
+  const prescriptionsQuery = useQuery({
+    queryKey: ["prescriptions"],
+    queryFn: async () => {
+      const [rows, transactions, invoices] = await Promise.all([
+        readRows("/api/prescriptions?limit=100"),
+        readRows("/api/counter-transactions?limit=100"),
+        readRows("/api/payments/invoices"),
+      ]);
+      return { rows, transactions, invoices };
+    },
+  });
+  const rows = prescriptionsQuery.data?.rows ?? [];
+  const transactions = prescriptionsQuery.data?.transactions ?? [];
+  const invoices = prescriptionsQuery.data?.invoices ?? [];
   const [prescriptionLines, setPrescriptionLines] = useState<PrescriptionLine[]>([prescriptionLineInitial()]);
   const [dispenseLines, setDispenseLines] = useState<DispenseLine[]>([dispenseLineInitial()]);
-  const [selectedId, setSelectedId] = useState("");
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [unitsByProduct, setUnitsByProduct] = useState<Record<string, JsonRecord[]>>({});
   const [selectedPrescriptionLines, setSelectedPrescriptionLines] = useState<JsonRecord[]>([]);
   const references = useStaffReferences();
+  const mutation = useStaffMutation();
 
   const load = async (): Promise<void> => {
+    setError(undefined);
     try {
-      setError(undefined);
-      const [prescriptions, counter, nextInvoices] = await Promise.all([
-        readRows("/api/prescriptions?limit=100"),
-        readRows("/api/counter-transactions?limit=100"),
-        readRows("/api/payments/invoices"),
-      ]);
-      setRows(prescriptions);
-      setTransactions(counter);
-      setInvoices(nextInvoices);
+      const result = await prescriptionsQuery.refetch();
+      if (result.error) throw result.error;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load prescriptions");
     }
   };
+  const visibleError =
+    error ?? (prescriptionsQuery.error instanceof Error ? prescriptionsQuery.error.message : undefined);
 
-  useMountEffect(() => {
-    void load();
+  const prescriptionForm = useForm({
+    defaultValues: initial,
+    onSubmit: async ({ value }) => {
+      try {
+        await mutation.mutateAsync({
+          path: "/api/prescriptions",
+          method: "POST",
+          body: {
+            siteId: value.siteId,
+            storageLocationId: value.storageLocationId,
+            patientName: value.patientName,
+            patientPhone: value.patientPhone || null,
+            doctorName: value.doctorName || null,
+            doctorLicense: value.doctorLicense || null,
+            notes: value.notes || null,
+            lines: prescriptionLines.map((line) => ({
+              productId: line.productId,
+              productUnitId: line.productUnitId,
+              prescribedQuantity: Number(line.prescribedQuantity),
+              dosage: line.dosage || null,
+              frequency: line.frequency || null,
+              duration: line.duration || null,
+              notes: line.notes || null,
+            })),
+          },
+          invalidate: [["prescriptions"]],
+        });
+        prescriptionForm.reset(initial);
+        setPrescriptionLines([prescriptionLineInitial()]);
+        setMessage("Prescription created and stock reservation requested.");
+        setError(undefined);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Unable to create prescription");
+      }
+    },
   });
 
-  const updateForm = (key: keyof typeof form, value: string): void =>
-    setForm((current) => ({ ...current, [key]: value }));
   const updatePrescriptionLine = (index: number, key: keyof PrescriptionLine, value: string): void =>
     setPrescriptionLines((current) =>
       current.map((line, lineIndex) => (lineIndex === index ? { ...line, [key]: value } : line)),
@@ -108,7 +148,7 @@ export const PrescriptionsSection = ({
 
   const selectPrescription = async (id: string): Promise<void> => {
     if (!id) return;
-    setSelectedId(id);
+    dispenseForm.setFieldValue("prescriptionId", id);
     setTab("Dispense");
     try {
       const detail = await readOne<JsonRecord>(`/api/prescriptions/${id}`);
@@ -128,63 +168,41 @@ export const PrescriptionsSection = ({
     }
   };
 
-  const create = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    try {
-      await writeJson("/api/prescriptions", "POST", {
-        siteId: form.siteId,
-        storageLocationId: form.storageLocationId,
-        patientName: form.patientName,
-        patientPhone: form.patientPhone || null,
-        doctorName: form.doctorName || null,
-        doctorLicense: form.doctorLicense || null,
-        notes: form.notes || null,
-        lines: prescriptionLines.map((line) => ({
-          productId: line.productId,
-          productUnitId: line.productUnitId,
-          prescribedQuantity: Number(line.prescribedQuantity),
-          dosage: line.dosage || null,
-          frequency: line.frequency || null,
-          duration: line.duration || null,
-          notes: line.notes || null,
-        })),
-      });
-      setForm(initial);
-      setPrescriptionLines([prescriptionLineInitial()]);
-      setMessage("Prescription created and stock reservation requested.");
-      setError(undefined);
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to create prescription");
-    }
-  };
-
   const cancel = async (id: string): Promise<void> => {
     try {
-      await writeJson(`/api/prescriptions/${id}/cancel`, "POST");
+      await mutation.mutateAsync({
+        path: `/api/prescriptions/${id}/cancel`,
+        method: "POST",
+        invalidate: [["prescriptions"]],
+      });
       setMessage("Prescription cancelled.");
       setError(undefined);
-      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to cancel prescription");
     }
   };
   const createInvoice = async (prescriptionId: string): Promise<void> => {
     try {
-      await writeJson(`/api/payments/prescriptions/${prescriptionId}`, "POST");
+      await mutation.mutateAsync({
+        path: `/api/payments/prescriptions/${prescriptionId}`,
+        method: "POST",
+        invalidate: [["prescriptions"]],
+      });
       setMessage("Counter invoice created.");
       setError(undefined);
-      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to create counter invoice");
     }
   };
   const confirmCash = async (invoiceId: string): Promise<void> => {
     try {
-      await writeJson(`/api/payments/${invoiceId}/confirm-counter`, "POST");
+      await mutation.mutateAsync({
+        path: `/api/payments/${invoiceId}/confirm-counter`,
+        method: "POST",
+        invalidate: [["prescriptions"]],
+      });
       setMessage("Counter payment confirmed.");
       setError(undefined);
-      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to confirm counter payment");
     }
@@ -193,35 +211,45 @@ export const PrescriptionsSection = ({
     const reasonText = window.prompt(translateText("Refund reason:"), translateText("Customer request"));
     if (!reasonText) return;
     try {
-      await writeJson(`/api/payments/${invoiceId}/refund`, "POST", { reason: reasonText });
+      await mutation.mutateAsync({
+        path: `/api/payments/${invoiceId}/refund`,
+        method: "POST",
+        body: { reason: reasonText },
+        invalidate: [["prescriptions"]],
+      });
       setMessage("Payment refunded.");
       setError(undefined);
-      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to refund payment");
     }
   };
-  const dispensePrescription = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    if (!selectedId) return;
-    try {
-      await writeJson(`/api/prescriptions/${selectedId}/dispense`, "POST", {
-        lines: dispenseLines.map((line) => ({
-          prescriptionLineId: line.prescriptionLineId,
-          productBatchId: line.productBatchId,
-          dispensedQuantity: Number(line.dispensedQuantity),
-        })),
-      });
-      setMessage("Prescription dispensed.");
-      setError(undefined);
-      setSelectedId("");
-      setSelectedPrescriptionLines([]);
-      setDispenseLines([dispenseLineInitial()]);
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to dispense prescription");
-    }
-  };
+  const dispenseForm = useForm({
+    defaultValues: dispenseInitial,
+    onSubmit: async ({ value }) => {
+      if (!value.prescriptionId) return;
+      try {
+        await mutation.mutateAsync({
+          path: `/api/prescriptions/${value.prescriptionId}/dispense`,
+          method: "POST",
+          body: {
+            lines: dispenseLines.map((line) => ({
+              prescriptionLineId: line.prescriptionLineId,
+              productBatchId: line.productBatchId,
+              dispensedQuantity: Number(line.dispensedQuantity),
+            })),
+          },
+          invalidate: [["prescriptions"]],
+        });
+        setMessage("Prescription dispensed.");
+        setError(undefined);
+        dispenseForm.reset(dispenseInitial);
+        setSelectedPrescriptionLines([]);
+        setDispenseLines([dispenseLineInitial()]);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Unable to dispense prescription");
+      }
+    },
+  });
 
   const productOptions = referenceOptions(references.products, ["sku", "name"]);
 
@@ -234,7 +262,7 @@ export const PrescriptionsSection = ({
         </div>
         <RefreshButton onClick={() => void load()} />
       </div>
-      {error ? <p className="notice">{translateText(error)}</p> : null}
+      {visibleError ? <p className="notice">{translateText(visibleError)}</p> : null}
       {references.error ? <p className="notice">{translateText(references.error)}</p> : null}
       {message ? <p className="success-note">{translateText(message)}</p> : null}
       <SubTabs tabs={["Prescriptions", "Create", "Dispense", "Counter transactions"]} active={tab} onChange={setTab} />
@@ -272,38 +300,48 @@ export const PrescriptionsSection = ({
         />
       ) : null}
       {tab === "Create" ? (
-        <FormCard title="Create prescription" onSubmit={(event) => void create(event)} submitLabel="Create and reserve">
-          <SelectField
-            label="Site"
-            value={form.siteId}
-            onChange={(value) => updateForm("siteId", value)}
-            options={referenceOptions(references.sites, ["code", "name"])}
-            required
-          />
-          <SelectField
-            label="Storage location"
-            value={form.storageLocationId}
-            onChange={(value) => updateForm("storageLocationId", value)}
-            options={referenceOptions(references.locations, ["code", "name"])}
-            required
-          />
-          <Field
-            label="Patient name"
-            value={form.patientName}
-            onChange={(value) => updateForm("patientName", value)}
-            required
-          />
-          <Field
-            label="Patient phone"
-            value={form.patientPhone}
-            onChange={(value) => updateForm("patientPhone", value)}
-          />
-          <Field label="Doctor name" value={form.doctorName} onChange={(value) => updateForm("doctorName", value)} />
-          <Field
-            label="Doctor license"
-            value={form.doctorLicense}
-            onChange={(value) => updateForm("doctorLicense", value)}
-          />
+        <FormCard
+          title="Create prescription"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void prescriptionForm.handleSubmit();
+          }}
+          submitLabel="Create and reserve"
+        >
+          <prescriptionForm.Field name="siteId">
+            {(field) => (
+              <SelectField
+                label="Site"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={referenceOptions(references.sites, ["code", "name"])}
+                required
+              />
+            )}
+          </prescriptionForm.Field>
+          <prescriptionForm.Field name="storageLocationId">
+            {(field) => (
+              <SelectField
+                label="Storage location"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={referenceOptions(references.locations, ["code", "name"])}
+                required
+              />
+            )}
+          </prescriptionForm.Field>
+          <prescriptionForm.Field name="patientName">
+            {(field) => <Field label="Patient name" value={field.state.value} onChange={field.handleChange} required />}
+          </prescriptionForm.Field>
+          <prescriptionForm.Field name="patientPhone">
+            {(field) => <Field label="Patient phone" value={field.state.value} onChange={field.handleChange} />}
+          </prescriptionForm.Field>
+          <prescriptionForm.Field name="doctorName">
+            {(field) => <Field label="Doctor name" value={field.state.value} onChange={field.handleChange} />}
+          </prescriptionForm.Field>
+          <prescriptionForm.Field name="doctorLicense">
+            {(field) => <Field label="Doctor license" value={field.state.value} onChange={field.handleChange} />}
+          </prescriptionForm.Field>
           <div className="line-list">
             {prescriptionLines.map((line, index) => (
               <div className="line-card" key={index}>
@@ -376,22 +414,31 @@ export const PrescriptionsSection = ({
               {translateText("Add line")}
             </button>
           </div>
-          <Field label="Notes" value={form.notes} onChange={(value) => updateForm("notes", value)} />
+          <prescriptionForm.Field name="notes">
+            {(field) => <Field label="Notes" value={field.state.value} onChange={field.handleChange} />}
+          </prescriptionForm.Field>
         </FormCard>
       ) : null}
       {tab === "Dispense" ? (
         <FormCard
           title="Dispense prescription"
-          onSubmit={(event) => void dispensePrescription(event)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void dispenseForm.handleSubmit();
+          }}
           submitLabel="Dispense"
         >
-          <SelectField
-            label="Prescription"
-            value={selectedId}
-            onChange={(value) => void selectPrescription(value)}
-            options={referenceOptions(rows, ["patientName", "status"])}
-            required
-          />
+          <dispenseForm.Field name="prescriptionId">
+            {(field) => (
+              <SelectField
+                label="Prescription"
+                value={field.state.value}
+                onChange={(value) => void selectPrescription(value)}
+                options={referenceOptions(rows, ["patientName", "status"])}
+                required
+              />
+            )}
+          </dispenseForm.Field>
           <div className="line-list">
             {dispenseLines.map((line, index) => {
               const prescriptionLine = selectedPrescriptionLines.find(

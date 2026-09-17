@@ -1,11 +1,13 @@
+import { useForm } from "@tanstack/react-form";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { DataTable } from "../components/data-table.tsx";
 import { Field, FormCard, RefreshButton, SelectField, SubTabs } from "../components/forms.tsx";
-import { useMountEffect } from "../hooks/useMountEffect.ts";
 import { translateText } from "../i18n.ts";
 import { referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
-import { action, readOne, readRows, text, writeJson, type JsonRecord } from "../staff-api.ts";
+import { useStaffMutation } from "../hooks/useStaffMutation.ts";
+import { readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
 
 type PurchaseOrderLine = { productId: string; orderedQuantity: string; notes: string };
 type ReceiptLine = {
@@ -44,44 +46,38 @@ export const ProcurementSection = ({
   initialTab?: "Purchase orders" | "Create order" | "Goods receipts" | "Receive goods";
 }): React.JSX.Element => {
   const [tab, setTab] = useState<string>(initialTab);
-  const [orders, setOrders] = useState<JsonRecord[]>([]);
-  const [receipts, setReceipts] = useState<JsonRecord[]>([]);
+  const procurementQuery = useQuery({
+    queryKey: ["procurement"],
+    queryFn: async () => {
+      const [orders, receipts] = await Promise.all([
+        readRows("/api/procurement/purchase-orders"),
+        readRows("/api/procurement/goods-receipts"),
+      ]);
+      return { orders, receipts };
+    },
+  });
+  const orders = procurementQuery.data?.orders ?? [];
+  const receipts = procurementQuery.data?.receipts ?? [];
   const [selectedOrder, setSelectedOrder] = useState<JsonRecord>();
   const [selectedReceipt, setSelectedReceipt] = useState<JsonRecord>();
-  const [po, setPo] = useState(poInitial);
   const [poLines, setPoLines] = useState<PurchaseOrderLine[]>([poLineInitial()]);
-  const [receipt, setReceipt] = useState(receiptInitial);
   const [receiptLines, setReceiptLines] = useState<ReceiptLine[]>([receiptLineInitial()]);
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const references = useStaffReferences();
+  const mutation = useStaffMutation();
 
   const load = async (): Promise<void> => {
+    setError(undefined);
     try {
-      setError(undefined);
-      const [nextOrders, nextReceipts] = await Promise.all([
-        readRows("/api/procurement/purchase-orders"),
-        readRows("/api/procurement/goods-receipts"),
-      ]);
-      setOrders(nextOrders);
-      setReceipts(nextReceipts);
+      const result = await procurementQuery.refetch();
+      if (result.error) throw result.error;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load procurement");
     }
   };
+  const visibleError = error ?? (procurementQuery.error instanceof Error ? procurementQuery.error.message : undefined);
 
-  useMountEffect(() => {
-    void load();
-  });
-
-  const setPoValue =
-    (key: keyof typeof po) =>
-    (value: string): void =>
-      setPo((current) => ({ ...current, [key]: value }));
-  const setReceiptValue =
-    (key: keyof typeof receipt) =>
-    (value: string): void =>
-      setReceipt((current) => ({ ...current, [key]: value }));
   const updatePoLine = (index: number, key: keyof PurchaseOrderLine, value: string): void =>
     setPoLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, [key]: value } : line)));
   const updateReceiptLine = (index: number, key: keyof ReceiptLine, value: string): void =>
@@ -91,61 +87,73 @@ export const ProcurementSection = ({
   const removeLine = <T,>(setter: React.Dispatch<React.SetStateAction<T[]>>, index: number): void =>
     setter((current) => (current.length <= 1 ? current : current.filter((_line, lineIndex) => lineIndex !== index)));
 
-  const createPo = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    try {
-      await writeJson("/api/procurement/purchase-orders", "POST", {
-        purchaseOrderNumber: po.purchaseOrderNumber || undefined,
-        supplierId: po.supplierId,
-        siteId: po.siteId,
-        expectedDate: po.expectedDate || undefined,
-        notes: po.notes || undefined,
-        lines: poLines.map((line) => ({
-          productId: line.productId,
-          orderedQuantity: Number(line.orderedQuantity),
-          notes: line.notes || undefined,
-        })),
-      });
-      setPo(poInitial);
-      setPoLines([poLineInitial()]);
-      setMessage("Purchase order created.");
-      setError(undefined);
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to create purchase order");
-    }
-  };
+  const poForm = useForm({
+    defaultValues: poInitial,
+    onSubmit: async ({ value }) => {
+      try {
+        await mutation.mutateAsync({
+          path: "/api/procurement/purchase-orders",
+          method: "POST",
+          body: {
+            purchaseOrderNumber: value.purchaseOrderNumber || undefined,
+            supplierId: value.supplierId,
+            siteId: value.siteId,
+            expectedDate: value.expectedDate || undefined,
+            notes: value.notes || undefined,
+            lines: poLines.map((line) => ({
+              productId: line.productId,
+              orderedQuantity: Number(line.orderedQuantity),
+              notes: line.notes || undefined,
+            })),
+          },
+          invalidate: [["procurement"], ["staff-references"]],
+        });
+        poForm.reset(poInitial);
+        setPoLines([poLineInitial()]);
+        setMessage("Purchase order created.");
+        setError(undefined);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Unable to create purchase order");
+      }
+    },
+  });
 
-  const createReceipt = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    try {
-      await writeJson("/api/procurement/goods-receipts", "POST", {
-        receiptNumber: receipt.receiptNumber,
-        supplierId: receipt.supplierId,
-        siteId: receipt.siteId,
-        storageLocationId: receipt.storageLocationId,
-        purchaseOrderId: receipt.purchaseOrderId || undefined,
-        notes: receipt.notes || undefined,
-        receivedAt: new Date().toISOString(),
-        lines: receiptLines.map((line) => ({
-          productId: line.productId,
-          batchNumber: line.batchNumber,
-          expiryDate: line.expiryDate,
-          manufacturedDate: line.manufacturedDate || undefined,
-          manufacturer: line.manufacturer || undefined,
-          quantity: Number(line.quantity),
-          notes: line.notes || undefined,
-        })),
-      });
-      setReceipt(receiptInitial);
-      setReceiptLines([receiptLineInitial()]);
-      setMessage("Goods receipt created.");
-      setError(undefined);
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to create goods receipt");
-    }
-  };
+  const receiptForm = useForm({
+    defaultValues: receiptInitial,
+    onSubmit: async ({ value }) => {
+      try {
+        await mutation.mutateAsync({
+          path: "/api/procurement/goods-receipts",
+          method: "POST",
+          body: {
+            receiptNumber: value.receiptNumber,
+            supplierId: value.supplierId,
+            siteId: value.siteId,
+            storageLocationId: value.storageLocationId,
+            purchaseOrderId: value.purchaseOrderId || undefined,
+            notes: value.notes || undefined,
+            receivedAt: new Date().toISOString(),
+            lines: receiptLines.map((line) => ({
+              productId: line.productId,
+              batchNumber: line.batchNumber,
+              expiryDate: line.expiryDate,
+              manufacturedDate: line.manufacturedDate || undefined,
+              manufacturer: line.manufacturer || undefined,
+              quantity: Number(line.quantity),
+              notes: line.notes || undefined,
+            })),
+          },
+          invalidate: [["procurement"], ["staff-references"]],
+        });
+        receiptForm.reset(receiptInitial);
+        setReceiptLines([receiptLineInitial()]);
+        setMessage("Goods receipt created.");
+        setError(undefined);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Unable to create goods receipt");
+      }
+    },
+  });
 
   const viewOrder = async (id: string): Promise<void> => {
     try {
@@ -163,10 +171,14 @@ export const ProcurementSection = ({
   };
   const transition = async (id: string, value: "approve" | "cancel"): Promise<void> => {
     try {
-      await action(`/api/procurement/purchase-orders/${id}/action`, value);
+      await mutation.mutateAsync({
+        path: `/api/procurement/purchase-orders/${id}/action`,
+        method: "POST",
+        body: { action: value },
+        invalidate: [["procurement"]],
+      });
       setMessage(`Purchase order ${value}d.`);
       setError(undefined);
-      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to transition purchase order");
     }
@@ -183,7 +195,7 @@ export const ProcurementSection = ({
         </div>
         <RefreshButton onClick={() => void load()} />
       </div>
-      {error ? <p className="notice">{translateText(error)}</p> : null}
+      {visibleError ? <p className="notice">{translateText(visibleError)}</p> : null}
       {references.error ? <p className="notice">{translateText(references.error)}</p> : null}
       {message ? <p className="success-note">{translateText(message)}</p> : null}
       <SubTabs
@@ -257,27 +269,44 @@ export const ProcurementSection = ({
         </>
       ) : null}
       {tab === "Create order" ? (
-        <FormCard title="Create purchase order" onSubmit={(event) => void createPo(event)} submitLabel="Create order">
-          <Field
-            label="Purchase order number"
-            value={po.purchaseOrderNumber}
-            onChange={setPoValue("purchaseOrderNumber")}
-          />
-          <SelectField
-            label="Supplier"
-            value={po.supplierId}
-            onChange={setPoValue("supplierId")}
-            options={referenceOptions(references.suppliers, ["code", "name"])}
-            required
-          />
-          <SelectField
-            label="Site"
-            value={po.siteId}
-            onChange={setPoValue("siteId")}
-            options={referenceOptions(references.sites, ["code", "name"])}
-            required
-          />
-          <Field label="Expected date" type="date" value={po.expectedDate} onChange={setPoValue("expectedDate")} />
+        <FormCard
+          title="Create purchase order"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void poForm.handleSubmit();
+          }}
+          submitLabel="Create order"
+        >
+          <poForm.Field name="purchaseOrderNumber">
+            {(field) => <Field label="Purchase order number" value={field.state.value} onChange={field.handleChange} />}
+          </poForm.Field>
+          <poForm.Field name="supplierId">
+            {(field) => (
+              <SelectField
+                label="Supplier"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={referenceOptions(references.suppliers, ["code", "name"])}
+                required
+              />
+            )}
+          </poForm.Field>
+          <poForm.Field name="siteId">
+            {(field) => (
+              <SelectField
+                label="Site"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={referenceOptions(references.sites, ["code", "name"])}
+                required
+              />
+            )}
+          </poForm.Field>
+          <poForm.Field name="expectedDate">
+            {(field) => (
+              <Field label="Expected date" type="date" value={field.state.value} onChange={field.handleChange} />
+            )}
+          </poForm.Field>
           <div className="line-list">
             {poLines.map((line, index) => (
               <div className="line-card" key={index}>
@@ -324,7 +353,9 @@ export const ProcurementSection = ({
               {translateText("Add line")}
             </button>
           </div>
-          <Field label="Notes" value={po.notes} onChange={setPoValue("notes")} />
+          <poForm.Field name="notes">
+            {(field) => <Field label="Notes" value={field.state.value} onChange={field.handleChange} />}
+          </poForm.Field>
         </FormCard>
       ) : null}
       {tab === "Goods receipts" ? (
@@ -381,46 +412,66 @@ export const ProcurementSection = ({
       {tab === "Receive goods" ? (
         <FormCard
           title="Create goods receipt"
-          onSubmit={(event) => void createReceipt(event)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void receiptForm.handleSubmit();
+          }}
           submitLabel="Receive goods"
         >
-          <Field
-            label="Receipt number"
-            value={receipt.receiptNumber}
-            onChange={setReceiptValue("receiptNumber")}
-            required
-          />
-          <SelectField
-            label="Supplier"
-            value={receipt.supplierId}
-            onChange={setReceiptValue("supplierId")}
-            options={referenceOptions(references.suppliers, ["code", "name"])}
-            required
-          />
-          <SelectField
-            label="Site"
-            value={receipt.siteId}
-            onChange={setReceiptValue("siteId")}
-            options={referenceOptions(references.sites, ["code", "name"])}
-            required
-          />
-          <SelectField
-            label="Storage location"
-            value={receipt.storageLocationId}
-            onChange={setReceiptValue("storageLocationId")}
-            options={referenceOptions(
-              references.locations.filter((row) => text(row.siteId) === receipt.siteId),
-              ["code", "name"],
+          <receiptForm.Field name="receiptNumber">
+            {(field) => (
+              <Field label="Receipt number" value={field.state.value} onChange={field.handleChange} required />
             )}
-            required
-          />
-          <SelectField
-            label="Purchase order (optional)"
-            value={receipt.purchaseOrderId}
-            onChange={setReceiptValue("purchaseOrderId")}
-            options={referenceOptions(orders, ["purchaseOrderNumber"])}
-          />
-          <Field label="Notes" value={receipt.notes} onChange={setReceiptValue("notes")} />
+          </receiptForm.Field>
+          <receiptForm.Field name="supplierId">
+            {(field) => (
+              <SelectField
+                label="Supplier"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={referenceOptions(references.suppliers, ["code", "name"])}
+                required
+              />
+            )}
+          </receiptForm.Field>
+          <receiptForm.Field name="siteId">
+            {(field) => (
+              <SelectField
+                label="Site"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={referenceOptions(references.sites, ["code", "name"])}
+                required
+              />
+            )}
+          </receiptForm.Field>
+          <receiptForm.Field name="storageLocationId">
+            {(field) => (
+              <SelectField
+                label="Storage location"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={referenceOptions(
+                  references.locations.filter((row) => text(row.siteId) === receiptForm.state.values.siteId),
+                  ["code", "name"],
+                )}
+                required
+              />
+            )}
+          </receiptForm.Field>
+          <receiptForm.Field name="purchaseOrderId">
+            {(field) => (
+              <SelectField
+                label="Purchase order (optional)"
+                value={field.state.value}
+                onChange={field.handleChange}
+                options={referenceOptions(orders, ["purchaseOrderNumber"])}
+              />
+            )}
+          </receiptForm.Field>
+          <receiptForm.Field name="notes">
+            {(field) => <Field label="Notes" value={field.state.value} onChange={field.handleChange} />}
+          </receiptForm.Field>
           <div className="line-list">
             {receiptLines.map((line, index) => (
               <div className="line-card" key={index}>

@@ -1,11 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { DataTable } from "../components/data-table.tsx";
 import { Field, FormCard, RefreshButton, SelectField, SubTabs } from "../components/forms.tsx";
-import { useMountEffect } from "../hooks/useMountEffect.ts";
 import { translateText } from "../i18n.ts";
 import { referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
-import { readRows, text, writeJson, type JsonRecord } from "../staff-api.ts";
+import { useStaffMutation } from "../hooks/useStaffMutation.ts";
+import { readRows, text, type JsonRecord } from "../staff-api.ts";
 
 const siteInitial = {
   code: "",
@@ -46,9 +47,20 @@ export const MasterDataSection = ({
   initialTab?: "Sites" | "Create site" | "Locations" | "Create location" | "Suppliers" | "Create supplier";
 }): React.JSX.Element => {
   const [tab, setTab] = useState<string>(initialTab);
-  const [sites, setSites] = useState<JsonRecord[]>([]);
-  const [locations, setLocations] = useState<JsonRecord[]>([]);
-  const [suppliers, setSuppliers] = useState<JsonRecord[]>([]);
+  const masterQuery = useQuery({
+    queryKey: ["master-data"],
+    queryFn: async () => {
+      const [sites, locations, suppliers] = await Promise.all([
+        readRows("/api/sites"),
+        readRows("/api/storage-locations"),
+        readRows("/api/suppliers"),
+      ]);
+      return { sites, locations, suppliers };
+    },
+  });
+  const sites = masterQuery.data?.sites ?? [];
+  const locations = masterQuery.data?.locations ?? [];
+  const suppliers = masterQuery.data?.suppliers ?? [];
   const [site, setSite] = useState(siteInitial);
   const [location, setLocation] = useState(locationInitial);
   const [supplier, setSupplier] = useState(supplierInitial);
@@ -56,24 +68,17 @@ export const MasterDataSection = ({
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
   const references = useStaffReferences();
+  const mutation = useStaffMutation();
   const load = async (): Promise<void> => {
+    setError(undefined);
     try {
-      setError(undefined);
-      const [nextSites, nextLocations, nextSuppliers] = await Promise.all([
-        readRows("/api/sites"),
-        readRows("/api/storage-locations"),
-        readRows("/api/suppliers"),
-      ]);
-      setSites(nextSites);
-      setLocations(nextLocations);
-      setSuppliers(nextSuppliers);
+      const result = await masterQuery.refetch();
+      if (result.error) throw result.error;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load master data");
     }
   };
-  useMountEffect(() => {
-    void load();
-  });
+  const visibleError = error ?? (masterQuery.error instanceof Error ? masterQuery.error.message : undefined);
   const setValue =
     <T extends Record<string, string>>(setter: React.Dispatch<React.SetStateAction<T>>, key: keyof T) =>
     (value: string): void =>
@@ -85,10 +90,15 @@ export const MasterDataSection = ({
     success: string,
   ): Promise<void> => {
     try {
-      await writeJson(path, method, body);
+      await mutation.mutateAsync({
+        path,
+        method,
+        body,
+        invalidate: [["master-data"], ["staff-references"]],
+      });
       setMessage(success);
+      setError(undefined);
       setSelectedId("");
-      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Master data operation failed");
     }
@@ -209,7 +219,7 @@ export const MasterDataSection = ({
         </div>
         <RefreshButton onClick={() => void load()} />
       </div>
-      {error ? <p className="notice">{translateText(error)}</p> : null}
+      {visibleError ? <p className="notice">{translateText(visibleError)}</p> : null}
       {references.error ? <p className="notice">{translateText(references.error)}</p> : null}
       {message ? <p className="success-note">{translateText(message)}</p> : null}
       <SubTabs
