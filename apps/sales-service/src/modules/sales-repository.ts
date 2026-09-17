@@ -47,9 +47,13 @@ export class SalesRepository {
         customerId: customerId ?? null,
         guestTokenDigest: customerId ? null : digestToken(guestToken as string),
       })
+      .onConflictDoNothing({ target: customerId ? carts.customerId : carts.guestTokenDigest })
       .returning();
-    if (!cart) throw new Error("Cart insert did not return a row");
-    return { ...cart, lines: [] };
+    if (cart) return { ...cart, lines: [] };
+
+    const concurrentCart = await this.getCart(customerId, guestToken);
+    if (!concurrentCart) throw new Error("Cart insert did not return a row");
+    return concurrentCart;
   }
 
   public async addCartLine(

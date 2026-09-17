@@ -192,7 +192,7 @@ export const createSalesRouter = (
     if (!customerId) return unauthorized(response);
     if (!parsed.success) return invalid(response);
     try {
-      const lines = await resolveOrderLines(parsed.data.lines, parsed.data.selectedStoreId, options.catalogServiceUrl);
+      const lines = await resolveOrderLines(parsed.data.lines, options.catalogServiceUrl);
       const subtotal = lines.reduce((total, line) => total + line.unitPriceSnapshot * line.quantity, 0);
       let delivery: DeliveryCalculation | undefined;
       if (parsed.data.fulfillmentType === "delivery") {
@@ -391,8 +391,7 @@ export const createSalesRouter = (
 
 const resolveOrderLines = async (
   lines: Array<{ productId: string; productUnitId: string; quantity: number }>,
-  siteId: string,
-  baseUrl = process.env.CATALOG_SERVICE_URL ?? "http://localhost:3002",
+  baseUrl: string | undefined = process.env.CATALOG_SERVICE_URL ?? "http://localhost:3002",
 ): Promise<
   Array<{
     productId: string;
@@ -410,7 +409,7 @@ const resolveOrderLines = async (
           signal: AbortSignal.timeout(2_000),
         }),
         fetch(
-          `${baseUrl}/pricing/active?productId=${line.productId}&productUnitId=${line.productUnitId}&siteId=${siteId}&effectiveDate=${new Date().toISOString().slice(0, 10)}`,
+          `${baseUrl}/pricing/active?productId=${line.productId}&productUnitId=${line.productUnitId}&effectiveDate=${new Date().toISOString().slice(0, 10)}`,
           { headers: internalServiceHeaders(), signal: AbortSignal.timeout(2_000) },
         ),
       ]);
