@@ -4,14 +4,17 @@ import {
   BarChart3,
   Building2,
   ClipboardList,
+  ChevronDown,
   FileText,
   LayoutDashboard,
   LogOut,
+  Menu,
   Package,
   Settings,
   ShieldCheck,
   ShoppingBag,
   Tags,
+  X,
 } from "lucide-react";
 
 import { Alert, Button, Field, Input } from "@pharmacy/ui";
@@ -29,7 +32,7 @@ import { MasterDataSection } from "./sections/master-data-section.tsx";
 import { PrescriptionsSection } from "./sections/prescriptions-section.tsx";
 import { ProcurementSection } from "./sections/procurement-section.tsx";
 import { request, setIdentityContextsEnabled } from "./staff-api.ts";
-import { pathForSection, sectionFromPath, type Section } from "./router.ts";
+import { governanceTabPaths, pathForSection, sectionFromPath, type Section } from "./router.ts";
 import "./styles.css";
 
 export type NavItem = { key: Section; label: string; icon: React.JSX.Element };
@@ -129,10 +132,20 @@ export const App = (): React.JSX.Element => {
   const requestedSection = sectionFromPath(location.pathname);
   const activeSection =
     requestedSection && canAccessSection(requestedSection, roles) ? requestedSection : firstVisibleSection;
+
+  const governanceTab =
+    location.pathname === governanceTabPaths.createUser
+      ? "Create user"
+      : location.pathname === governanceTabPaths.editAccess
+        ? "Edit access"
+        : location.pathname === governanceTabPaths.users
+          ? "Users"
+          : "Audit";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>();
   const [authReady, setAuthReady] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useMountEffect(() => {
     void request("/api/auth/csrf")
@@ -249,9 +262,9 @@ export const App = (): React.JSX.Element => {
       case "finance":
         return <FinanceSection key={activeSection} initialTab="Summary" />;
       case "users":
-        return <GovernanceSection key={activeSection} initialTab="Users" />;
+        return <GovernanceSection key={location.pathname} initialTab={governanceTab} />;
       case "audit":
-        return <GovernanceSection key={activeSection} initialTab="Audit" />;
+        return <GovernanceSection key={location.pathname} initialTab={governanceTab} />;
       case "dashboard":
         return <DashboardSection key={activeSection} />;
     }
@@ -260,8 +273,17 @@ export const App = (): React.JSX.Element => {
   return (
     <div className="app-shell">
       <div className="app">
-        <aside className="sidebar">
+        <aside id="staff-navigation" className={`sidebar${mobileNavOpen ? " mobile-open" : ""}`}>
           <BrandBlock />
+          <button
+            type="button"
+            className="mobile-nav-close"
+            onClick={() => setMobileNavOpen(false)}
+            aria-label={translateText("Close navigation")}
+          >
+            <X size={18} strokeWidth={2} aria-hidden="true" />
+            <span>{translateText("Close navigation")}</span>
+          </button>
           <div className="sidebar-scroll">
             {visibleNavGroups.map((group) => (
               <section key={group.id} className="sidebar-section">
@@ -274,6 +296,7 @@ export const App = (): React.JSX.Element => {
                         key={item.key}
                         to={pathForSection(item.key)}
                         className={active ? "active" : undefined}
+                        onClick={() => setMobileNavOpen(false)}
                         {...(active ? { "aria-current": "page" as const } : {})}
                       >
                         {active ? <span className="sidebar-nav-active-indicator" aria-hidden="true" /> : null}
@@ -289,14 +312,33 @@ export const App = (): React.JSX.Element => {
             ))}
           </div>
         </aside>
+        {mobileNavOpen ? (
+          <button
+            type="button"
+            className="mobile-nav-backdrop"
+            onClick={() => setMobileNavOpen(false)}
+            aria-label={translateText("Close navigation")}
+          />
+        ) : null}
         <main className="main">
           <div className="topbar">
+            <button
+              type="button"
+              className="mobile-nav-toggle"
+              onClick={() => setMobileNavOpen(true)}
+              aria-controls="staff-navigation"
+              aria-expanded={mobileNavOpen}
+              aria-label={translateText("Open navigation")}
+            >
+              <Menu size={19} strokeWidth={2} aria-hidden="true" />
+            </button>
             <details className="profile-menu">
               <summary className="profile-trigger">
                 <span className="profile-copy">
                   <strong>{email || translateText("Staff account")}</strong>
                   <span>{translateText("Employee")}</span>
                 </span>
+                <ChevronDown className="profile-chevron" size={16} strokeWidth={2} aria-hidden="true" />
               </summary>
               <div className="profile-dropdown">
                 <div className="profile-menu-label">{email || translateText("Employee account")}</div>

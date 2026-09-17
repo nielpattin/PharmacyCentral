@@ -9,10 +9,12 @@ export const DataTable = ({
   rows,
   columns,
   empty = "No records found",
+  loading = false,
 }: {
   rows: JsonRecord[];
   columns: Column[];
   empty?: string;
+  loading?: boolean;
 }): React.JSX.Element => {
   const uiColumns: Array<DataColumn<JsonRecord>> = columns.map((column) => ({
     key: column.key,
@@ -24,6 +26,16 @@ export const DataTable = ({
       rows={rows}
       columns={uiColumns}
       empty={translateText(empty)}
+      loading={loading}
+      labels={{
+        filterAriaLabel: translateText("Filter table"),
+        filterPlaceholder: translateText("Filter rows"),
+        singularRow: translateText("row"),
+        pluralRows: translateText("rows"),
+        page: translateText("Page"),
+        previous: translateText("Previous"),
+        next: translateText("Next"),
+      }}
       getKey={(row, index) => idOf(row) + "-" + index}
       interactive
       virtualize

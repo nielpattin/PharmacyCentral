@@ -66,3 +66,15 @@ export const referenceOptions = (
       return { value: id, label: label || id };
     })
     .filter((option) => option.value.length > 0);
+
+export const referenceLabel = (rows: JsonRecord[], id: unknown, nameKeys: string[] = ["name"]): string => {
+  const idValue = typeof id === "string" || typeof id === "number" || typeof id === "bigint" ? id.toString() : "";
+  const row = rows.find((candidate) => candidate.id === idValue);
+  if (!row) return idValue;
+  const label = nameKeys
+    .map((key) => row[key])
+    .map((value) => (typeof value === "string" ? value : ""))
+    .filter(Boolean)
+    .join(" - ");
+  return label || idValue;
+};

@@ -76,6 +76,8 @@ export const MultiSelectField = ({
   <UiField label={translateText(label)}>
     <Select
       multiple
+      size={Math.max(3, Math.min(options.length, 6))}
+      className="h-auto min-h-24 py-1"
       value={value}
       required={required}
       onChange={(event) => onChange(Array.from(event.target.selectedOptions, (option) => option.value))}

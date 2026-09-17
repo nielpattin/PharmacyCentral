@@ -84,6 +84,25 @@ export const numberValue = (value: unknown, fallback = 0): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+export const formatQuantity = (value: unknown): string =>
+  new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(numberValue(value));
+
+export const formatDateTime = (value: unknown): string => {
+  const raw = text(value, "");
+  if (!raw) return "-";
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime())
+    ? raw
+    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+};
+
+export const formatDate = (value: unknown): string => {
+  const raw = text(value, "");
+  if (!raw) return "-";
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? raw : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+};
+
 export const idOf = (row: JsonRecord): string => text(row.id ?? row.productId ?? row.siteId ?? row.purchaseOrderId);
 
 export const readRows = async (path: string): Promise<JsonRecord[]> => asRows(await request<unknown>(path));

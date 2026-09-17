@@ -1,13 +1,16 @@
 import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { DataTable } from "../components/data-table.tsx";
 import { Field, FormCard, MultiSelectField, RefreshButton, SelectField, SubTabs } from "../components/forms.tsx";
 import { translateText } from "../i18n.ts";
-import { referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
+import { referenceLabel, referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { useStaffMutation } from "../hooks/useStaffMutation.ts";
-import { readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
+import { formatDateTime, readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
+
+import type { GovernancePath } from "../router.ts";
 
 const userInitial = {
   email: "",
@@ -18,15 +21,32 @@ const userInitial = {
 };
 const accessInitial = { id: "", roles: [] as string[], siteIds: [] as string[] };
 const auditInitial = { userId: "", siteId: "", entityType: "", entityId: "", action: "", limit: "200" };
+
+type GovernanceTab = "Audit" | "Users" | "Create user" | "Edit access";
+const governanceTabs: GovernanceTab[] = ["Audit", "Users", "Create user", "Edit access"];
+const governancePathForTab: Record<GovernanceTab, GovernancePath> = {
+  Audit: "/audit",
+  Users: "/users",
+  "Create user": "/users/create",
+  "Edit access": "/users/access",
+};
+
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
-export const GovernanceSection = ({
-  initialTab = "Audit",
-}: {
-  initialTab?: "Audit" | "Users" | "Create user" | "Edit access";
-}): React.JSX.Element => {
-  const [tab, setTab] = useState<string>(initialTab);
+const formatAuditDetails = (value: unknown): string => {
+  if (typeof value === "string") {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  return JSON.stringify(value ?? {}, null, 2);
+};
+
+export const GovernanceSection = ({ initialTab = "Audit" }: { initialTab?: GovernanceTab }): React.JSX.Element => {
+  const [tab, setTab] = useState<GovernanceTab>(initialTab);
   const [auditFilters, setAuditFilters] = useState(auditInitial);
   const governanceQuery = useQuery({
     queryKey: ["governance", auditFilters],
@@ -50,6 +70,11 @@ export const GovernanceSection = ({
   const [message, setMessage] = useState<string>();
   const references = useStaffReferences();
   const mutation = useStaffMutation();
+  const navigate = useNavigate();
+  const selectTab = (nextTab: GovernanceTab): void => {
+    setTab(nextTab);
+    void navigate({ to: governancePathForTab[nextTab] });
+  };
   const load = async (): Promise<void> => {
     setError(undefined);
     try {
@@ -96,7 +121,7 @@ export const GovernanceSection = ({
         });
         setMessage("Employee access updated.");
         setError(undefined);
-        setTab("Users");
+        selectTab("Users");
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Unable to update employee access");
       }
@@ -104,7 +129,7 @@ export const GovernanceSection = ({
   });
   const editAccess = (row: JsonRecord): void => {
     accessForm.reset({ id: text(row.id, ""), roles: strings(row.roles), siteIds: strings(row.siteIds) });
-    setTab("Edit access");
+    selectTab("Edit access");
   };
   const revoke = async (id: string): Promise<void> => {
     try {
@@ -137,7 +162,7 @@ export const GovernanceSection = ({
     <section className="staff-section">
       <div className="page-head">
         <div>
-          <h2>{translateText("Governance")}</h2>
+          <h1>{translateText("Governance")}</h1>
           <p className="page-subtitle">{translateText("Audit activity and employee access controls.")}</p>
         </div>
         <RefreshButton onClick={() => void load()} />
@@ -145,7 +170,7 @@ export const GovernanceSection = ({
       {visibleError ? <p className="notice">{translateText(visibleError)}</p> : null}
       {references.error ? <p className="notice">{translateText(references.error)}</p> : null}
       {message ? <p className="success-note">{translateText(message)}</p> : null}
-      <SubTabs tabs={["Audit", "Users", "Create user", "Edit access"]} active={tab} onChange={setTab} />
+      <SubTabs tabs={governanceTabs} active={tab} onChange={(nextTab) => selectTab(nextTab as GovernanceTab)} />
       {tab === "Audit" ? (
         <>
           <div className="filter-grid">
@@ -186,20 +211,30 @@ export const GovernanceSection = ({
             </button>
           </div>
           <DataTable
+            loading={governanceQuery.isPending && !governanceQuery.data}
             rows={audit}
             columns={[
               { key: "action", label: "Action" },
               { key: "entityType", label: "Entity" },
               { key: "actorId", label: "Actor" },
-              { key: "siteId", label: "Site" },
-              { key: "occurredAt", label: "Occurred" },
-              { key: "payload", label: "Details", render: (row) => <code>{JSON.stringify(row.payload ?? {})}</code> },
+              {
+                key: "siteId",
+                label: "Site",
+                render: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
+              },
+              { key: "occurredAt", label: "Occurred", render: (row) => formatDateTime(row.occurredAt) },
+              {
+                key: "payload",
+                label: "Details",
+                render: (row) => <code className="audit-details">{formatAuditDetails(row.payload)}</code>,
+              },
             ]}
           />
         </>
       ) : null}
       {tab === "Users" ? (
         <DataTable
+          loading={governanceQuery.isPending && !governanceQuery.data}
           rows={users}
           columns={[
             { key: "email", label: "Email" },

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { DataTable } from "../components/data-table.tsx";
 import { Field, FormCard, RefreshButton, SelectField, SubTabs } from "../components/forms.tsx";
 import { translateText } from "../i18n.ts";
-import { referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
+import { referenceLabel, referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { useStaffMutation } from "../hooks/useStaffMutation.ts";
 import { readRows, text, type JsonRecord } from "../staff-api.ts";
 
@@ -214,7 +214,7 @@ export const MasterDataSection = ({
     <section className="staff-section">
       <div className="page-head">
         <div>
-          <h2>{translateText("Master data")}</h2>
+          <h1>{translateText("Master data")}</h1>
           <p className="page-subtitle">{translateText("Sites, storage locations, and supplier records.")}</p>
         </div>
         <RefreshButton onClick={() => void load()} />
@@ -229,6 +229,7 @@ export const MasterDataSection = ({
       />
       {tab === "Sites" ? (
         <DataTable
+          loading={masterQuery.isPending && !masterQuery.data}
           rows={sites}
           columns={[
             { key: "code", label: "Code" },
@@ -280,11 +281,16 @@ export const MasterDataSection = ({
       ) : null}
       {tab === "Locations" ? (
         <DataTable
+          loading={masterQuery.isPending && !masterQuery.data}
           rows={locations}
           columns={[
             { key: "code", label: "Code" },
             { key: "name", label: "Name" },
-            { key: "siteId", label: "Site" },
+            {
+              key: "siteId",
+              label: "Site",
+              render: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
+            },
             { key: "locationType", label: "Type" },
             {
               key: "actions",
@@ -340,6 +346,7 @@ export const MasterDataSection = ({
       ) : null}
       {tab === "Suppliers" ? (
         <DataTable
+          loading={masterQuery.isPending && !masterQuery.data}
           rows={suppliers}
           columns={[
             { key: "code", label: "Code" },

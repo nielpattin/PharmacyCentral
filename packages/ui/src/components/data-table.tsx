@@ -24,6 +24,16 @@ export type DataColumn<T> = {
   enableSorting?: boolean;
 };
 
+export type DataTableLabels = {
+  filterAriaLabel?: string;
+  filterPlaceholder?: string;
+  singularRow?: string;
+  pluralRows?: string;
+  page?: string;
+  previous?: string;
+  next?: string;
+};
+
 const formatCell = (value: unknown): string => {
   if (value === null || value === undefined) return "";
   if (typeof value === "object") return JSON.stringify(value);
@@ -43,6 +53,8 @@ export const DataTable = <T,>({
   getKey,
   virtualize = false,
   interactive = false,
+  loading = false,
+  labels = {},
 }: {
   rows: T[];
   columns: Array<DataColumn<T>>;
@@ -50,6 +62,8 @@ export const DataTable = <T,>({
   getKey?: (row: T, index: number) => string;
   virtualize?: boolean;
   interactive?: boolean;
+  loading?: boolean;
+  labels?: DataTableLabels;
 }): React.JSX.Element => {
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -81,7 +95,27 @@ export const DataTable = <T,>({
     overscan: 8,
   });
 
-  if (rows.length === 0) return <p className="py-6 text-center text-sm text-muted">{empty}</p>;
+  if (loading && rows.length === 0) {
+    return (
+      <p
+        className="my-8 rounded-lg border border-dashed border-line bg-surface-soft px-6 py-12 text-center text-sm text-muted"
+        role="status"
+      >
+        Loading…
+      </p>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <p
+        className="my-8 rounded-lg border border-dashed border-line bg-surface-soft px-6 py-12 text-center text-sm text-muted"
+        role="status"
+      >
+        {empty}
+      </p>
+    );
+  }
 
   const header = (
     <TableHeader>
@@ -129,21 +163,21 @@ export const DataTable = <T,>({
   const toolbar = interactive ? (
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
       <Input
-        aria-label="Filter table"
+        aria-label={labels.filterAriaLabel ?? "Filter table"}
         value={globalFilter}
         onChange={(event) => setGlobalFilter(event.target.value)}
-        placeholder="Filter rows"
+        placeholder={labels.filterPlaceholder ?? "Filter rows"}
         className="max-w-sm"
       />
       <span className="text-xs text-muted">
-        {tableRows.length} {tableRows.length === 1 ? "row" : "rows"}
+        {tableRows.length} {tableRows.length === 1 ? (labels.singularRow ?? "row") : (labels.pluralRows ?? "rows")}
       </span>
     </div>
   ) : null;
   const paginationControls = interactive ? (
     <div className="mt-3 flex items-center justify-between gap-3 text-sm text-muted">
       <span>
-        Page {pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
+        {labels.page ?? "Page"} {pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
       </span>
       <div className="flex gap-2">
         <Button
@@ -153,7 +187,7 @@ export const DataTable = <T,>({
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
-          Previous
+          {labels.previous ?? "Previous"}
         </Button>
         <Button
           type="button"
@@ -162,7 +196,7 @@ export const DataTable = <T,>({
           onClick={() => table.nextPage()}
           disabled={!table.getCanNextPage()}
         >
-          Next
+          {labels.next ?? "Next"}
         </Button>
       </div>
     </div>
@@ -172,7 +206,12 @@ export const DataTable = <T,>({
     return (
       <>
         {toolbar}
-        <p className="py-6 text-center text-sm text-muted">{empty}</p>
+        <p
+          className="my-8 rounded-lg border border-dashed border-line bg-surface-soft px-6 py-12 text-center text-sm text-muted"
+          role="status"
+        >
+          {empty}
+        </p>
       </>
     );
   }

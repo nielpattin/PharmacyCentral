@@ -232,7 +232,7 @@ export const CatalogSection = ({
     <section className="staff-section">
       <div className="page-head">
         <div>
-          <h2>{translateText("Catalog and pricing")}</h2>
+          <h1>{translateText("Catalog and pricing")}</h1>
           <p className="page-subtitle">{translateText("Manage products, units, prices, and lifecycle actions.")}</p>
         </div>
         <RefreshButton onClick={() => void load()} />
@@ -243,6 +243,7 @@ export const CatalogSection = ({
       <SubTabs tabs={["Products", "Create product", "Units", "Pricing"]} active={tab} onChange={setTab} />
       {tab === "Products" ? (
         <DataTable
+          loading={productsQuery.isPending && !productsQuery.data}
           rows={products}
           columns={[
             { key: "sku", label: "SKU" },
@@ -367,6 +368,7 @@ export const CatalogSection = ({
             />
           </FormCard>
           <DataTable
+            loading={unitsQuery.isPending && !unitsQuery.data}
             rows={units}
             columns={[
               { key: "unitName", label: "Unit" },
@@ -433,6 +435,7 @@ export const CatalogSection = ({
             <Field label="Notes" value={price.notes} onChange={setValue(setPrice, "notes")} />
           </FormCard>
           <DataTable
+            loading={pricesQuery.isPending && !pricesQuery.data}
             rows={prices}
             columns={[
               { key: "productId", label: "Product" },

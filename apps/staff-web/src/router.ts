@@ -45,6 +45,15 @@ export const sectionPaths = {
   audit: "/audit",
 } as const satisfies Record<Section, string>;
 
+export const governanceTabPaths = {
+  audit: "/audit",
+  users: "/users",
+  createUser: "/users/create",
+  editAccess: "/users/access",
+} as const;
+
+export type GovernancePath = (typeof governanceTabPaths)[keyof typeof governanceTabPaths];
+
 export type StaffPath = (typeof sectionPaths)[Section];
 
 const sectionsByPath: Record<string, Section> = {
@@ -66,6 +75,8 @@ const sectionsByPath: Record<string, Section> = {
   "/reporting": "reporting",
   "/finance": "finance",
   "/users": "users",
+  "/users/create": "users",
+  "/users/access": "users",
   "/audit": "audit",
 };
 
@@ -98,6 +109,9 @@ const financeRoute = createRoute({ getParentRoute: () => rootRoute, path: "/fina
 const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users" });
 const auditRoute = createRoute({ getParentRoute: () => rootRoute, path: "/audit" });
 
+const createUserRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users/create" });
+const editAccessRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users/access" });
+
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   pharmacistOverviewRoute,
@@ -117,6 +131,8 @@ const routeTree = rootRoute.addChildren([
   reportingRoute,
   financeRoute,
   usersRoute,
+  createUserRoute,
+  editAccessRoute,
   auditRoute,
 ]);
 

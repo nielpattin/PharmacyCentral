@@ -4,7 +4,7 @@ import { useState } from "react";
 import { DataTable } from "../components/data-table.tsx";
 import { Field, RefreshButton, SubTabs } from "../components/forms.tsx";
 import { translateText } from "../i18n.ts";
-import { readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
+import { formatDateTime, readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
 import { useStaffMutation } from "../hooks/useStaffMutation.ts";
 
 export const FinanceSection = ({
@@ -72,7 +72,7 @@ export const FinanceSection = ({
     <section className="staff-section">
       <div className="page-head">
         <div>
-          <h2>{translateText("Finance and reporting")}</h2>
+          <h1>{translateText("Finance and reporting")}</h1>
           <p className="page-subtitle">{translateText("Payment status, reconciliation, and operational reports.")}</p>
         </div>
         <RefreshButton onClick={() => void load()} />
@@ -106,6 +106,7 @@ export const FinanceSection = ({
           </dl>
           <h3 className="section-title">{translateText("Inventory activity")}</h3>
           <DataTable
+            loading={financeQuery.isPending && !financeQuery.data}
             rows={
               Array.isArray(summary?.activityLines)
                 ? summary.activityLines.filter(
@@ -118,11 +119,12 @@ export const FinanceSection = ({
               { key: "count", label: "Count" },
               { key: "quantityIn", label: "Quantity in" },
               { key: "quantityOut", label: "Quantity out" },
-              { key: "latestActivityAtUtc", label: "Latest" },
+              { key: "latestActivityAtUtc", label: "Latest", render: (row) => formatDateTime(row.latestActivityAtUtc) },
             ]}
           />
           <h3 className="section-title">{translateText("Inventory valuation")}</h3>
           <DataTable
+            loading={financeQuery.isPending && !financeQuery.data}
             rows={
               Array.isArray(summary?.valuationLines)
                 ? summary.valuationLines.filter(
@@ -143,6 +145,7 @@ export const FinanceSection = ({
       ) : null}
       {tab === "Invoices" ? (
         <DataTable
+          loading={financeQuery.isPending && !financeQuery.data}
           rows={invoices}
           columns={[
             { key: "id", label: "Invoice" },
@@ -196,12 +199,13 @@ export const FinanceSection = ({
             </button>
           </div>
           <DataTable
+            loading={financeQuery.isPending && !financeQuery.data}
             rows={reports}
             columns={[
               { key: "reportType", label: "Type" },
               { key: "subjectId", label: "Subject" },
               { key: "value", label: "Value" },
-              { key: "occurredAt", label: "Occurred" },
+              { key: "occurredAt", label: "Occurred", render: (row) => formatDateTime(row.occurredAt) },
               { key: "payload", label: "Details", render: (row) => <code>{text(row.payload)}</code> },
             ]}
           />

@@ -5,9 +5,9 @@ import { useState } from "react";
 import { DataTable } from "../components/data-table.tsx";
 import { Field, FormCard, RefreshButton, SelectField, SubTabs } from "../components/forms.tsx";
 import { translateText } from "../i18n.ts";
-import { referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
+import { referenceLabel, referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { useStaffMutation } from "../hooks/useStaffMutation.ts";
-import { readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
+import { formatDateTime, readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
 
 type PrescriptionLine = {
   productId: string;
@@ -257,7 +257,7 @@ export const PrescriptionsSection = ({
     <section className="staff-section">
       <div className="page-head">
         <div>
-          <h2>{translateText("Prescriptions and counter sales")}</h2>
+          <h1>{translateText("Prescriptions and counter sales")}</h1>
           <p className="page-subtitle">{translateText("Create, reserve, dispense, and cancel prescriptions.")}</p>
         </div>
         <RefreshButton onClick={() => void load()} />
@@ -268,6 +268,7 @@ export const PrescriptionsSection = ({
       <SubTabs tabs={["Prescriptions", "Create", "Dispense", "Counter transactions"]} active={tab} onChange={setTab} />
       {tab === "Prescriptions" ? (
         <DataTable
+          loading={prescriptionsQuery.isPending && !prescriptionsQuery.data}
           rows={rows}
           columns={[
             { key: "patientName", label: "Patient" },
@@ -276,8 +277,12 @@ export const PrescriptionsSection = ({
               label: "Status",
               render: (row) => <span className="status-chip">{translateText(text(row.status))}</span>,
             },
-            { key: "siteId", label: "Site" },
-            { key: "createdAt", label: "Created", render: (row) => new Date(text(row.createdAt)).toLocaleString() },
+            {
+              key: "siteId",
+              label: "Site",
+              render: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
+            },
+            { key: "createdAt", label: "Created", render: (row) => formatDateTime(row.createdAt) },
             {
               key: "actions",
               label: "Actions",
@@ -486,6 +491,7 @@ export const PrescriptionsSection = ({
       ) : null}
       {tab === "Counter transactions" ? (
         <DataTable
+          loading={prescriptionsQuery.isPending && !prescriptionsQuery.data}
           rows={invoices.length > 0 ? invoices : transactions}
           columns={[
             { key: "paymentCode", label: "Invoice" },
@@ -500,7 +506,7 @@ export const PrescriptionsSection = ({
               ),
             },
             { key: "amount", label: "Amount" },
-            { key: "createdAt", label: "Created" },
+            { key: "createdAt", label: "Created", render: (row) => formatDateTime(row.createdAt) },
             {
               key: "actions",
               label: "Actions",

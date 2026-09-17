@@ -5,9 +5,9 @@ import { useState } from "react";
 import { DataTable } from "../components/data-table.tsx";
 import { Field, FormCard, RefreshButton, SelectField, SubTabs } from "../components/forms.tsx";
 import { translateText } from "../i18n.ts";
-import { referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
+import { referenceLabel, referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { useStaffMutation } from "../hooks/useStaffMutation.ts";
-import { readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
+import { formatDate, formatDateTime, formatQuantity, readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
 
 type PurchaseOrderLine = { productId: string; orderedQuantity: string; notes: string };
 type ReceiptLine = {
@@ -190,7 +190,7 @@ export const ProcurementSection = ({
     <section className="staff-section">
       <div className="page-head">
         <div>
-          <h2>{translateText("Procurement and receiving")}</h2>
+          <h1>{translateText("Procurement and receiving")}</h1>
           <p className="page-subtitle">{translateText("Manage purchase orders and receive supplier stock.")}</p>
         </div>
         <RefreshButton onClick={() => void load()} />
@@ -206,6 +206,7 @@ export const ProcurementSection = ({
       {tab === "Purchase orders" ? (
         <>
           <DataTable
+            loading={procurementQuery.isPending && !procurementQuery.data}
             rows={orders}
             columns={[
               { key: "purchaseOrderNumber", label: "Number" },
@@ -214,8 +215,16 @@ export const ProcurementSection = ({
                 label: "Status",
                 render: (row) => <span className="status-chip">{translateText(text(row.status))}</span>,
               },
-              { key: "siteId", label: "Site" },
-              { key: "supplierId", label: "Supplier" },
+              {
+                key: "siteId",
+                label: "Site",
+                render: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
+              },
+              {
+                key: "supplierId",
+                label: "Supplier",
+                render: (row) => referenceLabel(references.suppliers, row.supplierId, ["code", "name"]),
+              },
               {
                 key: "actions",
                 label: "Actions",
@@ -250,6 +259,7 @@ export const ProcurementSection = ({
                 {text(selectedOrder.purchaseOrderNumber)} · {translateText(text(selectedOrder.status))}
               </p>
               <DataTable
+                loading={procurementQuery.isPending && !procurementQuery.data}
                 rows={
                   Array.isArray(selectedOrder.lines)
                     ? selectedOrder.lines.filter(
@@ -258,9 +268,13 @@ export const ProcurementSection = ({
                     : []
                 }
                 columns={[
-                  { key: "productId", label: "Product" },
-                  { key: "orderedQuantity", label: "Ordered" },
-                  { key: "receivedQuantity", label: "Received" },
+                  {
+                    key: "productId",
+                    label: "Product",
+                    render: (row) => referenceLabel(references.products, row.productId, ["sku", "name"]),
+                  },
+                  { key: "orderedQuantity", label: "Ordered", render: (row) => formatQuantity(row.orderedQuantity) },
+                  { key: "receivedQuantity", label: "Received", render: (row) => formatQuantity(row.receivedQuantity) },
                   { key: "notes", label: "Notes" },
                 ]}
               />
@@ -361,6 +375,7 @@ export const ProcurementSection = ({
       {tab === "Goods receipts" ? (
         <>
           <DataTable
+            loading={procurementQuery.isPending && !procurementQuery.data}
             rows={receipts}
             columns={[
               { key: "receiptNumber", label: "Receipt" },
@@ -369,8 +384,12 @@ export const ProcurementSection = ({
                 label: "Status",
                 render: (row) => <span className="status-chip">{translateText(text(row.status))}</span>,
               },
-              { key: "siteId", label: "Site" },
-              { key: "receivedAt", label: "Received" },
+              {
+                key: "siteId",
+                label: "Site",
+                render: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
+              },
+              { key: "receivedAt", label: "Received", render: (row) => formatDateTime(row.receivedAt) },
               {
                 key: "actions",
                 label: "Actions",
@@ -389,6 +408,7 @@ export const ProcurementSection = ({
                 {text(selectedReceipt.receiptNumber)} · {text(selectedReceipt.notes)}
               </p>
               <DataTable
+                loading={procurementQuery.isPending && !procurementQuery.data}
                 rows={
                   Array.isArray(selectedReceipt.lines)
                     ? selectedReceipt.lines.filter(
@@ -397,11 +417,15 @@ export const ProcurementSection = ({
                     : []
                 }
                 columns={[
-                  { key: "productId", label: "Product" },
+                  {
+                    key: "productId",
+                    label: "Product",
+                    render: (row) => referenceLabel(references.products, row.productId, ["sku", "name"]),
+                  },
                   { key: "batchNumber", label: "Batch" },
-                  { key: "manufacturedDate", label: "Manufactured" },
+                  { key: "manufacturedDate", label: "Manufactured", render: (row) => formatDate(row.manufacturedDate) },
                   { key: "manufacturer", label: "Manufacturer" },
-                  { key: "quantity", label: "Quantity" },
+                  { key: "quantity", label: "Quantity", render: (row) => formatQuantity(row.quantity) },
                   { key: "notes", label: "Notes" },
                 ]}
               />

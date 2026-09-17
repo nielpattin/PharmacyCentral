@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { RefreshButton } from "../components/forms.tsx";
 import { translateText } from "../i18n.ts";
-import { readOne, text, numberValue, type JsonRecord } from "../staff-api.ts";
+import { formatDateTime, numberValue, readOne, text, type JsonRecord } from "../staff-api.ts";
 
 export const DashboardSection = (): React.JSX.Element => {
   const dashboardQuery = useQuery({
@@ -21,7 +21,7 @@ export const DashboardSection = (): React.JSX.Element => {
     <section className="staff-section">
       <div className="page-head">
         <div>
-          <h2>{translateText("Dashboard")}</h2>
+          <h1>{translateText("Dashboard")}</h1>
           <p className="page-subtitle">{translateText("Operational overview and recent activity.")}</p>
         </div>
         <RefreshButton onClick={() => void load()} />
@@ -55,7 +55,7 @@ export const DashboardSection = (): React.JSX.Element => {
       <ul className="activity-list">
         {recent.map((item, index) => (
           <li key={text(item.eventId, String(index))}>
-            {text(item.eventType)} at {new Date(text(item.occurredAt)).toLocaleString()}
+            {text(item.eventType)} at {formatDateTime(item.occurredAt)}
           </li>
         ))}
       </ul>

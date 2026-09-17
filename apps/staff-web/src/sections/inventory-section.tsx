@@ -5,9 +5,9 @@ import { useState } from "react";
 import { DataTable } from "../components/data-table.tsx";
 import { Field, FormCard, RefreshButton, SelectField, SubTabs } from "../components/forms.tsx";
 import { translateText } from "../i18n.ts";
-import { referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
+import { referenceLabel, referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { useStaffMutation } from "../hooks/useStaffMutation.ts";
-import { readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
+import { formatDate, formatDateTime, formatQuantity, readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
 
 type TransferLine = {
   productId: string;
@@ -461,7 +461,7 @@ export const InventorySection = ({
     <section className="staff-section">
       <div className="page-head">
         <div>
-          <h2>{translateText("Inventory operations")}</h2>
+          <h1>{translateText("Inventory operations")}</h1>
           <p className="page-subtitle">
             {translateText("Stock, quality, movements, transfers, stocktakes, returns, and replenishment.")}
           </p>
@@ -490,28 +490,38 @@ export const InventorySection = ({
       />
       {tab === "Balances" ? (
         <DataTable
+          loading={inventoryQuery.isPending && !inventoryQuery.data}
           rows={balances}
           columns={[
-            { key: "productId", label: "Product" },
+            {
+              key: "productId",
+              label: "Product",
+              render: (row) => referenceLabel(references.products, row.productId, ["sku", "name"]),
+            },
             { key: "batchNumber", label: "Batch" },
-            { key: "quantityOnHand", label: "On hand" },
-            { key: "quantityReserved", label: "Reserved" },
-            { key: "expiryDate", label: "Expiry" },
+            { key: "quantityOnHand", label: "On hand", render: (row) => formatQuantity(row.quantityOnHand) },
+            { key: "quantityReserved", label: "Reserved", render: (row) => formatQuantity(row.quantityReserved) },
+            { key: "expiryDate", label: "Expiry", render: (row) => formatDate(row.expiryDate) },
           ]}
         />
       ) : null}
       {tab === "Batches" ? (
         <DataTable
+          loading={inventoryQuery.isPending && !inventoryQuery.data}
           rows={batches}
           columns={[
             { key: "batchNumber", label: "Batch" },
-            { key: "productId", label: "Product" },
+            {
+              key: "productId",
+              label: "Product",
+              render: (row) => referenceLabel(references.products, row.productId, ["sku", "name"]),
+            },
             {
               key: "qualityStatus",
               label: "Quality",
               render: (row) => <span className="status-chip">{translateText(text(row.qualityStatus))}</span>,
             },
-            { key: "expiryDate", label: "Expiry" },
+            { key: "expiryDate", label: "Expiry", render: (row) => formatDate(row.expiryDate) },
             {
               key: "actions",
               label: "Actions",
@@ -587,14 +597,23 @@ export const InventorySection = ({
       {tab === "Movements" ? (
         <>
           <DataTable
+            loading={inventoryQuery.isPending && !inventoryQuery.data}
             rows={movements}
             columns={[
-              { key: "productId", label: "Product" },
-              { key: "productBatchId", label: "Batch" },
-              { key: "quantityDelta", label: "Change" },
-              { key: "quantityAfter", label: "After" },
+              {
+                key: "productId",
+                label: "Product",
+                render: (row) => referenceLabel(references.products, row.productId, ["sku", "name"]),
+              },
+              {
+                key: "productBatchId",
+                label: "Batch",
+                render: (row) => referenceLabel(references.batches, row.productBatchId, ["batchNumber"]),
+              },
+              { key: "quantityDelta", label: "Change", render: (row) => formatQuantity(row.quantityDelta) },
+              { key: "quantityAfter", label: "After", render: (row) => formatQuantity(row.quantityAfter) },
               { key: "movementType", label: "Type" },
-              { key: "occurredAt", label: "Occurred" },
+              { key: "occurredAt", label: "Occurred", render: (row) => formatDateTime(row.occurredAt) },
             ]}
           />
           <FormCard
@@ -693,11 +712,16 @@ export const InventorySection = ({
       {tab === "Adjustments" ? (
         <>
           <DataTable
+            loading={inventoryQuery.isPending && !inventoryQuery.data}
             rows={adjustments}
             columns={[
-              { key: "productId", label: "Product" },
+              {
+                key: "productId",
+                label: "Product",
+                render: (row) => referenceLabel(references.products, row.productId, ["sku", "name"]),
+              },
               { key: "adjustmentType", label: "Type" },
-              { key: "quantity", label: "Quantity" },
+              { key: "quantity", label: "Quantity", render: (row) => formatQuantity(row.quantity) },
               { key: "reason", label: "Reason" },
               {
                 key: "status",
@@ -818,6 +842,7 @@ export const InventorySection = ({
       {tab === "Transfers" ? (
         <>
           <DataTable
+            loading={inventoryQuery.isPending && !inventoryQuery.data}
             rows={transfers}
             columns={[
               { key: "transferNumber", label: "Transfer" },
@@ -1072,10 +1097,15 @@ export const InventorySection = ({
       {tab === "Stocktake" ? (
         <>
           <DataTable
+            loading={inventoryQuery.isPending && !inventoryQuery.data}
             rows={stocktakes}
             columns={[
               { key: "id", label: "Session" },
-              { key: "siteId", label: "Site" },
+              {
+                key: "siteId",
+                label: "Site",
+                render: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
+              },
               { key: "storageLocationId", label: "Location" },
               {
                 key: "status",
@@ -1112,6 +1142,7 @@ export const InventorySection = ({
                 {text(selectedStocktake.notes)} · {translateText(text(selectedStocktake.status))}
               </p>
               <DataTable
+                loading={inventoryQuery.isPending && !inventoryQuery.data}
                 rows={
                   Array.isArray(selectedStocktake.lines)
                     ? selectedStocktake.lines.filter(
@@ -1120,7 +1151,11 @@ export const InventorySection = ({
                     : []
                 }
                 columns={[
-                  { key: "productId", label: "Product" },
+                  {
+                    key: "productId",
+                    label: "Product",
+                    render: (row) => referenceLabel(references.products, row.productId, ["sku", "name"]),
+                  },
                   { key: "productBatchId", label: "Batch" },
                   { key: "systemQuantity", label: "System quantity" },
                   { key: "countedQuantity", label: "Counted quantity" },
@@ -1281,17 +1316,22 @@ export const InventorySection = ({
       {tab === "Returns" ? (
         <>
           <DataTable
+            loading={inventoryQuery.isPending && !inventoryQuery.data}
             rows={returns}
             columns={[
               { key: "id", label: "Return" },
-              { key: "siteId", label: "Site" },
+              {
+                key: "siteId",
+                label: "Site",
+                render: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
+              },
               { key: "reason", label: "Reason" },
               {
                 key: "status",
                 label: "Status",
                 render: (row) => <span className="status-chip">{translateText(text(row.status))}</span>,
               },
-              { key: "createdAt", label: "Created" },
+              { key: "createdAt", label: "Created", render: (row) => formatDateTime(row.createdAt) },
             ]}
           />
           <FormCard
@@ -1415,12 +1455,21 @@ export const InventorySection = ({
       {tab === "Replenishment" ? (
         <>
           <DataTable
+            loading={inventoryQuery.isPending && !inventoryQuery.data}
             rows={replenishments}
             columns={[
               { key: "id", label: "Request" },
-              { key: "productId", label: "Product" },
-              { key: "siteId", label: "Site" },
-              { key: "requestedQuantity", label: "Quantity" },
+              {
+                key: "productId",
+                label: "Product",
+                render: (row) => referenceLabel(references.products, row.productId, ["sku", "name"]),
+              },
+              {
+                key: "siteId",
+                label: "Site",
+                render: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
+              },
+              { key: "requestedQuantity", label: "Quantity", render: (row) => formatQuantity(row.requestedQuantity) },
               { key: "lines", label: "Lines", render: (row) => (Array.isArray(row.lines) ? row.lines.length : 1) },
               {
                 key: "status",
