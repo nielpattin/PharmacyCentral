@@ -21,7 +21,7 @@ await client.connect();
 try {
   await client.query("BEGIN");
   await client.query(
-    `INSERT INTO audit_events (event_id, actor_id, action, entity_type, entity_id, payload, occurred_at) VALUES ($1, '00000000-0000-4000-8000-000000000001', 'DemoSeed', 'Seed', $1, '{"source":"deterministic-demo-seed"}', now()) ON CONFLICT (event_id) DO NOTHING`,
+    `INSERT INTO audit_events (event_id, actor_id, action, entity_type, entity_id, payload, occurred_at) VALUES ($1, '00000000-0000-4000-8000-000000000001', 'SeedInitialDataset', 'System', $1, '{"source":"deterministic seed"}', now()) ON CONFLICT (event_id) DO UPDATE SET action = EXCLUDED.action, entity_type = EXCLUDED.entity_type, payload = EXCLUDED.payload`,
     ["00000000-0000-4500-8500-000000000501"],
   );
   await client.query(

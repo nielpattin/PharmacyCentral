@@ -22,9 +22,9 @@ try {
   await client.query("BEGIN");
   const catalog = await connectDatabase("catalog_service");
   try {
-    const product = (await catalog.query("SELECT id FROM products WHERE sku = 'DEMO-001'")).rows[0]?.id;
+    const product = (await catalog.query("SELECT id FROM products WHERE sku = 'THU-0001'")).rows[0]?.id;
     const unit = (
-      await catalog.query("SELECT id FROM product_units WHERE product_id = $1 AND unit_name = 'box'", [product])
+      await catalog.query("SELECT id FROM product_units WHERE product_id = $1 AND unit_name = 'hộp'", [product])
     ).rows[0]?.id;
     const store = (await catalog.query("SELECT id FROM sites WHERE code = 'SITE-RTL'")).rows[0]?.id;
     if (!product || !unit || !store) throw new Error("Catalog seed must run before sales seed");
@@ -36,7 +36,7 @@ try {
     );
     const actualCart = (await client.query("SELECT id FROM carts WHERE customer_id = $1", [customerId])).rows[0].id;
     await client.query(
-      `INSERT INTO cart_lines (id, cart_id, product_id, product_unit_id, quantity) VALUES ($1, $2, $3, $4, 2) ON CONFLICT (id) DO UPDATE SET quantity = 2`,
+      `INSERT INTO cart_lines (id, cart_id, product_id, product_unit_id, quantity) VALUES ($1, $2, $3, $4, 2) ON CONFLICT (id) DO UPDATE SET product_id = EXCLUDED.product_id, product_unit_id = EXCLUDED.product_unit_id, quantity = 2`,
       ["00000000-0000-4300-8300-000000000302", actualCart, product, unit],
     );
     const orderId = "00000000-0000-4300-8300-000000000303";
@@ -45,7 +45,7 @@ try {
       [orderId, customerId, store],
     );
     await client.query(
-      `INSERT INTO order_lines (id, order_id, product_id, product_unit_id, product_name_snapshot, unit_price_snapshot, quantity) VALUES ($1, $2, $3, $4, 'Demo product 1', 12500, 1) ON CONFLICT (id) DO NOTHING`,
+      `INSERT INTO order_lines (id, order_id, product_id, product_unit_id, product_name_snapshot, unit_price_snapshot, quantity) VALUES ($1, $2, $3, $4, 'Paracetamol 500mg (hộp 100 viên)', 12500, 1) ON CONFLICT (id) DO UPDATE SET product_id = EXCLUDED.product_id, product_unit_id = EXCLUDED.product_unit_id, product_name_snapshot = EXCLUDED.product_name_snapshot, unit_price_snapshot = EXCLUDED.unit_price_snapshot, quantity = EXCLUDED.quantity`,
       ["00000000-0000-4300-8300-000000000304", orderId, product, unit],
     );
   } finally {

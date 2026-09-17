@@ -22,11 +22,11 @@ try {
   await client.query("BEGIN");
   const invoiceId = "00000000-0000-4400-8400-000000000401";
   await client.query(
-    `INSERT INTO payment_invoices (id, payment_code, customer_id, amount, currency, status) VALUES ($1, 'PC-DEMO0001', '00000000-0000-4000-8000-000000000002', 12500, 'VND', 'Pending') ON CONFLICT (id) DO UPDATE SET amount = 12500, status = 'Pending', updated_at = now()`,
+    `INSERT INTO payment_invoices (id, payment_code, customer_id, amount, currency, status) VALUES ($1, 'PC-5B3F7A1C9E24D608', '00000000-0000-4000-8000-000000000002', 12500, 'VND', 'Pending') ON CONFLICT (id) DO UPDATE SET payment_code = EXCLUDED.payment_code, amount = 12500, status = 'Pending', updated_at = now()`,
     [invoiceId],
   );
   await client.query(
-    `INSERT INTO payment_invoice_lines (id, payment_invoice_id, product_id, product_unit_id, description, quantity, unit_price, currency) VALUES ($1, $2, '00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000000', 'Demo invoice', 1, 12500, 'VND') ON CONFLICT (id) DO NOTHING`,
+    `INSERT INTO payment_invoice_lines (id, payment_invoice_id, product_id, product_unit_id, description, quantity, unit_price, currency) VALUES ($1, $2, '00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000000', 'Paracetamol 500mg (hộp 100 viên)', 1, 12500, 'VND') ON CONFLICT (id) DO UPDATE SET description = EXCLUDED.description, quantity = EXCLUDED.quantity, unit_price = EXCLUDED.unit_price`,
     ["00000000-0000-4400-8400-000000000402", invoiceId],
   );
   await client.query("COMMIT");

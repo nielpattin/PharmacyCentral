@@ -25,19 +25,13 @@ try {
   await client.query("BEGIN");
   const passwordHash = await hashPassword("DemoPassword123!");
   const users = [
-    ["00000000-0000-4000-8000-000000000001", "employee", "admin@pharmacy.local", "Demo Platform Admin", passwordHash],
-    ["00000000-0000-4000-8000-000000000002", "customer", "customer@pharmacy.local", "Demo Customer", passwordHash],
-    [
-      "00000000-0000-4000-8000-000000000003",
-      "employee",
-      "manager@pharmacy.local",
-      "Demo Pharmacy Manager",
-      passwordHash,
-    ],
+    ["00000000-0000-4000-8000-000000000001", "employee", "admin@pharmacycentral.vn", "Nguyễn Quốc Bảo", passwordHash],
+    ["00000000-0000-4000-8000-000000000002", "customer", "khachhang@pharmacycentral.vn", "Trần Thu Hà", passwordHash],
+    ["00000000-0000-4000-8000-000000000003", "employee", "manager@pharmacycentral.vn", "Lê Minh Châu", passwordHash],
   ];
   for (const [id, actorType, email, displayName, hash] of users) {
     await client.query(
-      `INSERT INTO users (id, actor_type, email, display_name, password_hash, email_verified_at, is_active) VALUES ($1, $2, $3, $4, $5, now(), true) ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash, email_verified_at = EXCLUDED.email_verified_at, is_active = true`,
+      `INSERT INTO users (id, actor_type, email, display_name, password_hash, email_verified_at, is_active) VALUES ($1, $2, $3, $4, $5, now(), true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, actor_type = EXCLUDED.actor_type, display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash, email_verified_at = EXCLUDED.email_verified_at, is_active = true`,
       [id, actorType, email, displayName, hash],
     );
   }

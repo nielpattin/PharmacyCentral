@@ -74,7 +74,7 @@ Browsers authenticate with the `pharmacy_session` cookie. Authenticated service 
 
 ```bash
 curl -s -c cookies.txt http://localhost:8080/api/auth/csrf
-curl -s -b cookies.txt -c cookies.txt -X POST http://localhost:8080/api/auth/login   -H 'Content-Type: application/json'   -d '{"email":"admin@pharmacy.local","password":"DemoPassword123!"}'
+curl -s -b cookies.txt -c cookies.txt -X POST http://localhost:8080/api/auth/login   -H 'Content-Type: application/json'   -d '{"email":"admin@pharmacycentral.vn","password":"DemoPassword123!"}'
 CTX=$(curl -s -b cookies.txt http://localhost:8080/api/auth/context)
 SALES=$(echo "$CTX" | python3 -c "import json,sys; print(json.load(sys.stdin)['contexts']['sales-service'])")
 curl -s -b cookies.txt http://localhost:8080/api/orders -H "x-internal-identity-context: $SALES"
@@ -198,9 +198,9 @@ Demo credentials for local development:
 
 | Role | Email | Password | Site Access |
 | --- | --- | --- | --- |
-| Platform Admin | `admin@pharmacy.local` | `DemoPassword123!` | All sites |
-| Pharmacy Manager | `manager@pharmacy.local` | `DemoPassword123!` | Retail store (`SITE-RTL`) |
-| Customer | `customer@pharmacy.local` | `DemoPassword123!` | Customer portal |
+| Platform Admin | `admin@pharmacycentral.vn` | `DemoPassword123!` | All sites |
+| Pharmacy Manager | `manager@pharmacycentral.vn` | `DemoPassword123!` | Retail store (`SITE-RTL`) |
+| Customer | `khachhang@pharmacycentral.vn` | `DemoPassword123!` | Customer portal |
 
 ## Workspace verification
 
@@ -242,7 +242,7 @@ Set a local `SEPAY_WEBHOOK_SECRET`, create an invoice, and sign the raw JSON byt
 curl -X POST http://localhost:3006/payments/sepay/webhook \
   -H "Content-Type: application/json" \
   -H "x-sepay-signature: <computed-hmac-sha256>" \
-  -d '{"gateway":"VietQR","transactionDate":"2026-08-28 10:00:00","accountNumber":"0123456789","code":"PC-DEMO0001","content":"PC-DEMO0001","transferType":"in","transferAmount":12500,"referenceCode":"REF123"}'
+  -d '{"gateway":"VietQR","transactionDate":"2026-08-28 10:00:00","accountNumber":"0123456789","code":"PC-5B3F7A1C9E24D608","content":"PC-5B3F7A1C9E24D608","transferType":"in","transferAmount":12500,"referenceCode":"REF123"}'
 ```
 
 `payment-service` verifies the signature, requires an inbound transfer, matches payment code and invoice amount, and updates the payment status.
