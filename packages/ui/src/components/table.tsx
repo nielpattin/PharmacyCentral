@@ -1,3 +1,5 @@
+import { forwardRef } from "react";
+
 import { cn } from "../cn.ts";
 
 type TableProps = React.TableHTMLAttributes<HTMLTableElement>;
@@ -18,8 +20,10 @@ export const TableBody = (props: React.HTMLAttributes<HTMLTableSectionElement>):
   <tbody {...props} />
 );
 
-export const TableRow = ({ className, ...props }: React.HTMLAttributes<HTMLTableRowElement>): React.JSX.Element => (
-  <tr className={cn("border-b border-line last:border-0", className)} {...props} />
+export const TableRow = forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(
+  ({ className, ...props }, ref) => (
+    <tr ref={ref} className={cn("border-b border-line last:border-0", className)} {...props} />
+  ),
 );
 
 export const TableHead = ({ className, ...props }: HeaderCellProps): React.JSX.Element => (
