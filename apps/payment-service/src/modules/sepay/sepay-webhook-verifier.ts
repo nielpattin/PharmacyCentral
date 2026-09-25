@@ -1,15 +1,27 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+// SePay signs `${unixTimestampSeconds}.${rawBody}` with the webhook Secret Key and sends the
+// digest in `X-SePay-Signature` as `sha256=<hex>` plus the timestamp in `X-SePay-Timestamp`.
+// https://developer.sepay.vn/en/sepay-webhooks/xac-thuc
+const replayWindowSeconds = 300;
+
 export class SePayWebhookVerifier {
   public constructor(private readonly secret: string) {}
 
-  public verify(rawBody: Buffer | string, signatureHeader: string | undefined): boolean {
-    if (!this.secret || !signatureHeader) return false;
+  public verify(
+    rawBody: Buffer | string,
+    signatureHeader: string | undefined,
+    timestampHeader: string | undefined,
+  ): boolean {
+    if (!this.secret || !signatureHeader || !timestampHeader) return false;
+    const timestamp = Number(timestampHeader.trim());
+    if (!Number.isInteger(timestamp)) return false;
+    if (Math.abs(Date.now() / 1000 - timestamp) > replayWindowSeconds) return false;
     const provided = signatureHeader
       .trim()
       .replace(/^sha256=/i, "")
       .toLowerCase();
-    const expected = createHmac("sha256", this.secret).update(rawBody).digest("hex");
+    const expected = createHmac("sha256", this.secret).update(`${timestamp}.`).update(rawBody).digest("hex");
     const expectedBytes = Buffer.from(expected, "utf8");
     const providedBytes = Buffer.from(provided, "utf8");
     return expectedBytes.length === providedBytes.length && timingSafeEqual(expectedBytes, providedBytes);

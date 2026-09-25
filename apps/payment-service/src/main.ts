@@ -41,19 +41,19 @@ app.post(
   async (request, response, next) => {
     const signature =
       typeof request.headers["x-sepay-signature"] === "string" ? request.headers["x-sepay-signature"] : undefined;
-    if (!sePayVerifier.verify(request.body as Buffer, signature)) {
+    const timestamp =
+      typeof request.headers["x-sepay-timestamp"] === "string" ? request.headers["x-sepay-timestamp"] : undefined;
+    if (!sePayVerifier.verify(request.body as Buffer, signature, timestamp)) {
       response.status(401).json({ title: "Invalid webhook signature", status: 401, code: "invalid_signature" });
       return;
     }
     try {
-      const result = await applyWebhook(repository, JSON.parse((request.body as Buffer).toString("utf8")));
-      response
-        .status(result ? 202 : 422)
-        .json(
-          result
-            ? { accepted: true, ...result }
-            : { title: "Webhook payload did not identify an invoice", status: 422 },
-        );
+      const payload: unknown = JSON.parse((request.body as Buffer).toString("utf8"));
+      const result = await applyWebhook(repository, payload);
+      // SePay only records a delivery as successful for HTTP 200 with a body of exactly {"success": true}.
+      if (result) logger.info({ result }, "sepay webhook applied");
+      else logger.warn({ payload }, "sepay webhook did not identify an invoice");
+      response.status(200).json({ success: true });
     } catch (error) {
       next(error);
     }

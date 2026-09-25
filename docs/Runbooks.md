@@ -296,16 +296,25 @@ pnpm test
 
 ## Payment webhook test
 
-Set a local `SEPAY_WEBHOOK_SECRET`, create an invoice, and sign the raw JSON bytes with HMAC-SHA256:
+SePay signs `${timestamp}.${rawBody}` with the webhook Secret Key over the raw request bytes and sends
+`X-SePay-Signature: sha256=<hex>` plus `X-SePay-Timestamp` (Unix seconds, replay window 5 minutes). Configure the webhook on
+my.sepay.vn with payload format **JSON**, event **Tiền vào** (in), auth **HMAC-SHA256**, and payment code prefix `PC` so SePay
+reports `code` for our `PC-…` transfer content. Create an invoice, then replay a signed payload:
 
 ```bash
-curl -X POST http://localhost:3006/payments/sepay/webhook \
+body='{"gateway":"MBBank","transactionDate":"2026-08-28 10:00:00","accountNumber":"0000000001","code":"PC-5B3F7A1C9E24D608","content":"PC-5B3F7A1C9E24D608 thanh toan","transferType":"in","transferAmount":12500,"referenceCode":"SB123"}'
+timestamp=$(date +%s)
+signature=$(printf '%s.%s' "$timestamp" "$body" | openssl dgst -sha256 -hmac "$SEPAY_WEBHOOK_SECRET" -r | cut -d' ' -f1)
+curl -sS -X POST http://localhost:3006/payments/sepay/webhook \
   -H "Content-Type: application/json" \
-  -H "x-sepay-signature: <computed-hmac-sha256>" \
-  -d '{"gateway":"VietQR","transactionDate":"2026-08-28 10:00:00","accountNumber":"0123456789","code":"PC-5B3F7A1C9E24D608","content":"PC-5B3F7A1C9E24D608","transferType":"in","transferAmount":12500,"referenceCode":"REF123"}'
+  -H "x-sepay-timestamp: $timestamp" \
+  -H "x-sepay-signature: sha256=$signature" \
+  -d "$body"
 ```
 
-`payment-service` verifies the signature, requires an inbound transfer, matches payment code and invoice amount, and updates the payment status.
+`payment-service` verifies the signature and timestamp, requires an inbound transfer, matches payment code and invoice amount, and
+updates the payment status. Verified deliveries always answer `200 {"success": true}` — SePay treats any other status or body as a
+failed delivery and retries; an unverifiable signature answers `401` and is never processed.
 
 ## Migration recovery
 

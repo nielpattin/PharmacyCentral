@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import type { PaymentDatabase } from "../shared/infrastructure/database.ts";
 import {
@@ -163,20 +163,22 @@ export class PaymentRepository {
   }
 
   public async applyProviderTransaction(input: {
-    paymentCode: string;
+    paymentCodes: string[];
     provider: string;
     providerTransactionId: string;
     amount: number;
     metadata?: Record<string, unknown>;
   }) {
     return this.database.db.transaction(async (transaction) => {
-      const invoice = (
-        await transaction
-          .select()
-          .from(paymentInvoices)
-          .where(eq(paymentInvoices.paymentCode, input.paymentCode.toUpperCase()))
-          .limit(1)
-      )[0];
+      const matching = await transaction
+        .select()
+        .from(paymentInvoices)
+        .where(inArray(paymentInvoices.paymentCode, input.paymentCodes));
+      let invoice: (typeof matching)[number] | undefined;
+      for (const paymentCode of input.paymentCodes) {
+        invoice = matching.find((candidate) => candidate.paymentCode === paymentCode);
+        if (invoice) break;
+      }
       if (!invoice) return undefined;
       const existingTransaction = (
         await transaction

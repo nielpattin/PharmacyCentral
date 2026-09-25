@@ -87,7 +87,7 @@ Employee route groups require an employee session. Site-scoped authorization rem
 - `GET /api/payments/{id}/reconciliation`
 - `POST /api/payments/sepay/webhook`
 
-Payment invoices snapshot line prices. QR attempts use provider-neutral invoice data and configured SePay VietQR instructions. SePay webhooks use a passthrough integration at API Gateway that preserves raw request bytes, verify `x-sepay-signature` with HMAC-SHA256 in `payment-service`, accept inbound transfers only, match payment code and amount, and deduplicate provider transaction IDs.
+Payment invoices snapshot line prices. QR attempts use provider-neutral invoice data and configured SePay VietQR instructions. SePay webhooks use a passthrough integration at API Gateway that preserves raw request bytes, verify `x-sepay-signature` (HMAC-SHA256 over `${x-sepay-timestamp}.${rawBody}`) in `payment-service`, answer `200 {"success": true}` for every verified delivery, accept inbound transfers only, match payment code and amount, and deduplicate provider transaction IDs.
 
 ## Query projections
 

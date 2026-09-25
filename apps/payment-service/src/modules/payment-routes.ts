@@ -215,14 +215,14 @@ export const applyWebhook = async (repository: PaymentRepository | undefined, pa
   const value = payload as Record<string, unknown>;
   const transferType = typeof value.transferType === "string" ? value.transferType.toLowerCase() : "in";
   if (transferType !== "in") return { accepted: false, reason: "outbound_transfer" };
-  const paymentCode = extractPaymentCode(value);
+  const paymentCodes = extractPaymentCodes(value);
   const rawTransactionId = value.id ?? value.transactionId;
   const providerTransactionId =
     typeof rawTransactionId === "string" || typeof rawTransactionId === "number" ? String(rawTransactionId) : "";
   const amount = Number(value.transferAmount ?? value.amount ?? 0);
-  if (!paymentCode || !providerTransactionId || !Number.isFinite(amount) || amount <= 0) return undefined;
+  if (paymentCodes.length === 0 || !providerTransactionId || !Number.isFinite(amount) || amount <= 0) return undefined;
   return repository.applyProviderTransaction({
-    paymentCode,
+    paymentCodes,
     provider: "sepay",
     providerTransactionId,
     amount,
@@ -230,14 +230,22 @@ export const applyWebhook = async (repository: PaymentRepository | undefined, pa
   });
 };
 
-const extractPaymentCode = (value: Record<string, unknown>): string | undefined => {
-  const candidates = [value.code, value.content, value.description];
-  for (const candidate of candidates) {
+// Our payment codes are `PC-` plus 16 hex characters. Banks may drop the hyphen and may append further
+// characters to the memo, and SePay's own code detection never matches across the hyphen, so scan every field
+// SePay populates for a `PC` followed by 16 hex characters and let the repository resolve the first code it knows.
+const paymentCodePattern = /PC-?([0-9A-F]{16})/g;
+const extractPaymentCodes = (value: Record<string, unknown>): string[] => {
+  const codes: string[] = [];
+  for (const candidate of [value.code, value.content, value.description]) {
     if (typeof candidate !== "string") continue;
-    const match = candidate.toUpperCase().match(/PC-[A-Z0-9]+/);
-    if (match) return match[0];
+    for (const match of candidate.toUpperCase().matchAll(paymentCodePattern)) {
+      const suffix = match[1];
+      if (!suffix) continue;
+      const code = `PC-${suffix}`;
+      if (!codes.includes(code)) codes.push(code);
+    }
   }
-  return undefined;
+  return codes;
 };
 
 const canReadInvoice = (request: import("express").Request, customerId: string | null): boolean =>
