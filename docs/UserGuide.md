@@ -15,13 +15,13 @@ If the system has no platform administrator, the sign-in page displays a form to
 
 ### Demo credentials
 
-The deterministic local seed creates these development accounts:
+The `pnpm run seed:accounts` seed creates these development accounts. The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`.
 
-| Role | Email | Password | Site Access |
-| --- | --- | --- | --- |
-| Platform Admin | `admin@pharmacy.local` | `DemoPassword123!` | All sites |
-| Pharmacy Manager | `manager@pharmacy.local` | `DemoPassword123!` | Retail store (`SITE-RTL`) |
-| Customer | `customer@pharmacy.local` | `DemoPassword123!` | Customer portal |
+| Role | Email | Site Access |
+| --- | --- | --- |
+| Platform Admin | `admin@pharmacycentral.vn` | All sites |
+| Pharmacy Manager | `manager@pharmacycentral.vn` | Assign an imported site from the Users screen |
+| Customer | `khachhang@pharmacycentral.vn` | Customer portal |
 
 Seed accounts are for local development and demonstration only.
 
@@ -68,6 +68,21 @@ Use **Catalog** to manage product codes, names, manufacturers, statuses, units o
 ### Suppliers
 
 Use **Suppliers** to manage approved vendors.
+
+### Importing master data
+
+Use **Data import** to load sites, storage locations, suppliers, products with units and prices, and opening
+stock balances from a CSV file.
+
+1. Pick the dataset tab.
+2. Download the CSV template. The template contains column headers only; it never ships sample records.
+3. Fill the file with the actual data from the supplier, distributor, or internal system.
+4. Upload the CSV file and confirm the summary.
+
+Import order matters: sites before storage locations, and products before opening balances. The uploaded file is
+the only copy of the source data inside the browser. Master data lives in the owning service database afterwards,
+and product images live in object storage, so the file does not need to be kept inside the application. Imports
+are repeatable: matching codes, SKUs, and batch numbers update the existing rows instead of duplicating them.
 
 ## Catalog pricing
 

@@ -8,14 +8,16 @@ All local work runs on Docker Compose. Start here once:
 pnpm install --frozen-lockfile
 cp .env.example .env   # then fill in secrets
 pnpm run infra:up
-docker compose ps   # postgres, rabbitmq, valkey, mailpit, otel-collector healthy
+docker compose ps   # postgres, rabbitmq, valkey, mailpit, otel-collector, minio healthy
 ```
 
-Create the databases and load demo data. Seeds read `.env` on their own:
+MinIO is local product-image object storage. `minio-init` creates the `product-media` bucket and grants local public-download access. The MinIO API is at `http://localhost:9000` and its console is at `http://localhost:9001`; set the ports and credentials in `.env` before starting Compose. Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies (the other groups keep Nginx's 1 MB default). `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; other JSON routes keep the 1 MB service default.
+
+Create the databases and seed the local accounts. The seed reads `.env` on its own:
 
 ```bash
 pnpm run db:migrate
-pnpm run seed:demo
+pnpm run seed:accounts
 ```
 
 `API_BASE_URL=http://localhost:8080` in `.env` points browsers and Vite `dev` at the local `gateway`. Never change it per service.
@@ -124,10 +126,10 @@ Open backing tools on your laptop (ports come from `.env`):
 # RabbitMQ management UI at http://localhost:15672, Mailpit UI at http://localhost:8025
 ```
 
-Seed one service database:
+Seed the local demo accounts:
 
 ```bash
-pnpm --dir apps/<service> seed
+pnpm run seed:accounts
 ```
 
 Tear everything down:
@@ -177,30 +179,88 @@ pnpm run db:migrate
 
 In containers, each service executes its compiled `node dist/migrate.js` on startup.
 
-### Run seeds
+### Seed demo accounts
 
-The seed is deterministic and idempotent. It creates demo users, catalog sites, locations, products, pricing, suppliers, inventory batches, purchase orders, carts, orders, invoices, and audit projections.
+Only `identity-service` seeds data, and it seeds local login accounts only. Business master data is imported through the staff import center or the catalog/inventory import APIs.
 
 ```bash
-# Seed all services in dependency order
-pnpm run seed:demo
+# Seed the three local accounts
+pnpm run seed:accounts
 
-# Dry-run validation
-pnpm run seed:demo --dry-run
-
-# Or seed an individual service directly
-pnpm --dir apps/catalog-service seed
+# Validate without writing
+pnpm --dir apps/identity-service seed -- --dry-run
 ```
+
+`DEMO_ACCOUNT_PASSWORD` from `.env` becomes the password for the seeded accounts. Site access is not seeded; a Pharmacy Manager must be assigned to an imported site from the Users screen.
+
+### Import staff-managed data
+
+Staff import CSV files from the Data import screen in `staff-web`. The matching API endpoints are:
+
+| Dataset | Endpoint |
+| --- | --- |
+| Sites, storage locations, suppliers, products, units, prices | `POST /api/products/imports` |
+| Opening stock balances | `POST /api/inventory/imports/opening-balances` |
+
+The screen generates one CSV template per dataset in the browser from the same column list the parser uses.
+Templates contain headers only: no sample records ship with the web app, and nothing under an app `public/`
+directory is a data store. The browser converts the CSV into the JSON payload that the service validates; the
+HTTP contract stays JSON.
+
+Import order matters, because rows are resolved by natural key: sites first, then storage locations and
+suppliers, then products, then opening balances.
+
+Source files stay outside the application image. The committed fixture set lives in `data/`: the sample CSVs in
+`data/import-samples/` and the coursework image set as `data/product-images/images.tar.gz`, so a fresh checkout can
+exercise both flows. Any other file comes from the operator machine (`~/Downloads/...`), and the API never reads a
+server-side path. Import in dependency order: images (`images:import`, since `products.csv` carries MinIO URLs whose
+object keys are content hashes), then sites, storage locations, suppliers, products, and finally opening balances. After
+an import the truth lives in the owning service database: catalog data in `catalog-service`, stock in
+`inventory-service`, images in MinIO. Extracted images, original downloads, source-verification records
+(`provenance/`), and research dumps (`research/`) stay local.
+
+Imports are idempotent on natural keys (`code`, `sku`, `batchNumber`). An opening balance row is accepted only while the batch and storage location have no stock balance or ledger history. Reimporting the same quantity is a no-op; changing an existing balance requires a stock adjustment so the ledger keeps an audit trail.
+
+```bash
+pnpm run infra:up
+```
+
+Then open `http://127.0.0.1:5174/imports` from the staff web app.
+
+### Import local product images
+
+The image command uploads the committed image archive to the local MinIO bucket and prints the public URL
+of each image. It does not touch the database.
+
+```bash
+pnpm run infra:up
+pnpm run images:import        # data/product-images/images.tar.gz -> MinIO, prints sku,imageUrl
+```
+
+The committed image set is one gzip archive (`data/product-images/images.tar.gz`) and every member is named
+`<SKU>.<ext>`, so the command takes the SKU from the file name: no manifest, no extraction, no flags. It
+validates every file before uploading anything, then prints `sku,imageUrl` per image. The URLs are exactly
+the ones `data/import-samples/products.csv` already carries, because the object key is the content hash
+(`product-images/<SKU>/<sha256>.<ext>`), so they are reproducible for everyone who runs the command.
+
+The files keep their source formats and pixel dimensions (30 JPEG + 20 PNG, 44.2 MB → 16.8 MB) and are sized
+down by re-encoding only: indexed-colour PNG (≤256 colours) and JPEG quality 92 at 4:4:4. The originals stay
+local in the ignored `data/product-images/originals/`. `images:pack` regenerates the archive after the set
+changes; `images:unpack` extracts it with `tar` for inspection (the import does not need it).
+
+`data/` is excluded from container builds via `.dockerignore`, so the images only reach MinIO through that
+command. Source-verification records (source URLs, byte counts, SHA-256, download summary, review sheet) stay
+local in `data/product-images/provenance/`.
 
 ### Demo credentials
 
-Demo credentials for local development:
+Demo credentials for local development. The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`.
 
-| Role | Email | Password | Site Access |
-| --- | --- | --- | --- |
-| Platform Admin | `admin@pharmacycentral.vn` | `DemoPassword123!` | All sites |
-| Pharmacy Manager | `manager@pharmacycentral.vn` | `DemoPassword123!` | Retail store (`SITE-RTL`) |
-| Customer | `khachhang@pharmacycentral.vn` | `DemoPassword123!` | Customer portal |
+| Role | Email | Site access |
+| --- | --- | --- |
+| Platform Admin | `admin@pharmacycentral.vn` | All sites |
+| Pharmacy Manager | `manager@pharmacycentral.vn` | Assign after importing sites from the Users screen |
+| Customer | `khachhang@pharmacycentral.vn` | Customer portal |
 
 ## Workspace verification
 

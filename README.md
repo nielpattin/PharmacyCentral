@@ -61,13 +61,25 @@ pnpm --dir apps/payment-service db:migrate
 pnpm --dir apps/operations-query-service db:migrate
 ```
 
-Seed all services deterministically:
+Seed the local demo accounts:
 
 ```bash
-pnpm run seed:demo
+pnpm run seed:accounts
 ```
 
 Demo credentials are documented in `docs/Runbooks.md` and are for local use only.
+
+Import master data and product images:
+
+```bash
+# Fixtures live in data/: sample CSVs, plus the image set as one archive.
+pnpm run images:import
+```
+
+Staff users import CSV files from the Data import screen in `staff-web`, which generates a header-only CSV
+template in the browser, previews the parsed rows, and reads the imported records back from the owning
+service. Master data belongs to the service that owns it (catalog and inventory databases, images in
+MinIO/S3). See `data/README.md` for what is committed and what stays local.
 
 ## Verification
 
