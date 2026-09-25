@@ -50,7 +50,7 @@ export const SiteHeader = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur">
+    <header className="border-b border-line bg-surface">
       <div className="bg-primary-dark text-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-1.5 text-xs">
           <p className="flex items-center gap-1.5">
@@ -123,7 +123,7 @@ export const SiteHeader = ({
 
       {categories.length > 0 ? (
         <nav className="border-t border-line" aria-label="Danh mục sản phẩm">
-          <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-1 px-4 py-1">
             <button
               type="button"
               onClick={() => setMenuOpen((open) => !open)}

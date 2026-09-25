@@ -72,6 +72,14 @@ export type CatalogProduct = {
   sku: string;
   barcode: string | null;
   name: string;
+  genericName: string | null;
+  activeIngredient: string | null;
+  strength: string | null;
+  dosageForm: string | null;
+  packageDescription: string | null;
+  registrationNumber: string | null;
+  prescriptionRequired: boolean;
+  imageUrl: string | null;
   category: string | null;
   manufacturer: string | null;
   status: string;

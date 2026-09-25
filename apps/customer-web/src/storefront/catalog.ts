@@ -5,14 +5,84 @@ const CATEGORY_LABELS: Record<string, string> = {
   "Medical supply": "Vật tư y tế",
   "Medical device": "Thiết bị y tế",
   Supplement: "Thực phẩm chức năng",
+  "Vitamin and supplement": "Vitamin và thực phẩm bổ sung",
+  "Allergy relief": "Dị ứng",
+  "Cardiovascular care": "Tim mạch",
+  "Diabetes care": "Tiểu đường",
+  "Digestive health": "Tiêu hóa",
+  "Respiratory care": "Hô hấp",
+  "Wound care": "Chăm sóc vết thương",
+  "Family planning": "Kế hoạch hóa gia đình",
+  "Home care": "Chăm sóc tại nhà",
   Cosmetic: "Dược mỹ phẩm",
   "Personal care": "Chăm sóc cá nhân",
 };
 
 export const categoryLabel = (category: string | null): string => {
   if (!category) return "Chưa phân loại";
-  return CATEGORY_LABELS[category] ?? category;
+  return CATEGORY_LABELS[category] ?? "Khác";
 };
+
+const PRODUCT_TERM_LABELS: Record<string, string> = {
+  "Oral rehydration salts": "Muối bù nước điện giải",
+  "Medical face mask": "Khẩu trang y tế",
+  "Sterile gauze": "Gạc vô trùng",
+  "Disposable syringe": "Bơm tiêm dùng một lần",
+  "Nitrile examination gloves": "Găng tay khám bệnh nitrile",
+  "Digital thermometer": "Nhiệt kế điện tử",
+  "Blood pressure monitor": "Máy đo huyết áp",
+  "Absorbent cotton": "Bông thấm hút",
+  "Blood glucose test strip": "Que thử đường huyết",
+  "Disposable glove": "Găng tay dùng một lần",
+  "Adhesive roll": "Cuộn băng dính y tế",
+  "Urine pregnancy test": "Que thử thai bằng nước tiểu",
+  "Compressor nebulizer": "Máy khí dung nén",
+  "Blood glucose meter": "Máy đo đường huyết",
+  "Alcohol prep pad": "Gạc tẩm cồn",
+  "Elastic bandage": "Băng thun",
+  "Sterile wound dressing": "Băng vết thương vô trùng",
+  "Disposable shoe cover": "Bao giày dùng một lần",
+  "Disposable surgical cap": "Mũ phẫu thuật dùng một lần",
+  "Hot and cold therapy pack": "Túi chườm nóng lạnh",
+  "Disposable mask": "Khẩu trang dùng một lần",
+  "Gauze dressing": "Gạc y tế",
+  "Sterile syringe": "Bơm tiêm vô trùng",
+  "Electronic device": "Thiết bị điện tử",
+  "Diagnostic strip": "Que thử chẩn đoán",
+  "Cotton wool": "Bông y tế",
+  "Soft capsule": "Viên nang mềm",
+  "Effervescent granules": "Cốm sủi",
+  "Topical solution": "Dung dịch dùng ngoài",
+  "Disposable pad": "Miếng lau dùng một lần",
+  "Bandage roll": "Cuộn băng",
+  "Sterile dressing": "Băng vết thương vô trùng",
+  "Disposable cover": "Đồ bảo hộ dùng một lần",
+  "Disposable cap": "Mũ dùng một lần",
+  "Reusable pack": "Túi chườm tái sử dụng",
+  "Film-coated tablet": "Viên nén bao phim",
+  "Gastro-resistant capsule": "Viên nang bao tan trong ruột",
+  "Gastro-resistant tablet": "Viên nén bao tan trong ruột",
+  "Modified-release tablet": "Viên nén giải phóng biến đổi",
+  "Oral powder": "Bột uống",
+  "Oral suspension": "Hỗn dịch uống",
+  Solution: "Dung dịch",
+  Tablet: "Viên nén",
+  Capsule: "Viên nang",
+};
+
+const productTermLabel = (value: string | null): string | null =>
+  value ? (PRODUCT_TERM_LABELS[value] ?? value) : null;
+
+export const productMetadataLabel = (
+  product: Pick<CatalogProduct, "genericName" | "activeIngredient" | "strength" | "dosageForm">,
+): string =>
+  [
+    productTermLabel(product.genericName ?? product.activeIngredient),
+    product.strength,
+    productTermLabel(product.dosageForm),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
 const TILE_TONES = [
   "bg-gradient-to-br from-primary-soft to-primary/25",

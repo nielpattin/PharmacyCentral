@@ -6,3 +6,20 @@ body {
   background: var(--color-background);
   color: var(--color-ink);
 }
+
+button:not(:disabled),
+a[href],
+[role="button"],
+select:not(:disabled),
+summary,
+input[type="button"]:not(:disabled),
+input[type="submit"]:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled,
+input[type="button"]:disabled,
+input[type="submit"]:disabled {
+  cursor: not-allowed;
+}

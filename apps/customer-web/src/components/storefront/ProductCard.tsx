@@ -1,7 +1,7 @@
 import { Badge, Button, cn } from "@pharmacy/ui";
 
 import type { CatalogPrice, CatalogProduct, CatalogUnit } from "../../customer-api.ts";
-import { activeUnit, categoryLabel, priceFor } from "../../storefront/catalog.ts";
+import { activeUnit, categoryLabel, priceFor, productMetadataLabel } from "../../storefront/catalog.ts";
 import { formatMoney } from "../../storefront/format.ts";
 import { ProductTile } from "./ProductTile.tsx";
 
@@ -17,11 +17,12 @@ export const ProductCard = ({ product, priceIndex, inStock, adding, onAdd }: Pro
   const unit = activeUnit(product);
   const price = unit ? priceFor(priceIndex, product.id, unit.id) : undefined;
   const unavailable = inStock === false;
+  const productDetails = productMetadataLabel(product);
 
   return (
     <article className="group flex flex-col rounded-lg border border-line bg-surface p-3 transition-shadow hover:shadow-md">
       <div className="relative">
-        <ProductTile name={product.name} seed={product.sku} />
+        <ProductTile name={product.name} seed={product.sku} imageUrl={product.imageUrl} />
         <div className="absolute left-2 top-2">
           {unavailable ? (
             <Badge variant="danger">Hết hàng</Badge>
@@ -37,6 +38,7 @@ export const ProductCard = ({ product, priceIndex, inStock, adding, onAdd }: Pro
           {product.name}
         </h3>
         <p className="mt-1 line-clamp-1 text-xs text-muted">{product.manufacturer ?? "Đang cập nhật nhà sản xuất"}</p>
+        {productDetails ? <p className="mt-1 line-clamp-2 text-xs text-muted-soft">{productDetails}</p> : null}
         <p className="mt-1 text-xs text-muted-soft">
           {categoryLabel(product.category)}
           {unit ? ` · ${unit.unitName}` : ""}
