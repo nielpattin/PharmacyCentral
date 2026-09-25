@@ -121,6 +121,15 @@ export type DeliveryCalculation = {
   currency: string;
   route: { type: "LineString"; coordinates: Array<[number, number]> };
 };
+export type OrderLine = {
+  productId: string;
+  productUnitId: string;
+  productNameSnapshot: string;
+  unitPriceSnapshot: string;
+  quantity: string;
+};
+
+/** A row of `GET /orders`: the sales service lists orders without their lines or delivery snapshot. */
 export type CustomerOrder = {
   id: string;
   status: string;
@@ -131,13 +140,11 @@ export type CustomerOrder = {
   deliveryFee: string;
   currency: string;
   createdAt: string;
-  lines: Array<{
-    productId: string;
-    productUnitId: string;
-    productNameSnapshot: string;
-    unitPriceSnapshot: string;
-    quantity: string;
-  }>;
+};
+
+/** `POST /orders` and `GET /orders/:id` answer with the order, its lines, and the delivery snapshot when there is one. */
+export type CustomerOrderDetail = CustomerOrder & {
+  lines: OrderLine[];
   delivery?: {
     providerResolvedAddress: string;
     addressNote: string | null;
@@ -215,7 +222,7 @@ export const createOrder = (input: {
   fulfillmentType: "pickup" | "delivery";
   lines: Array<{ productId: string; productUnitId: string; quantity: number }>;
   delivery?: { destination: { latitude: number; longitude: number }; addressNote?: string };
-}): Promise<CustomerOrder> =>
+}): Promise<CustomerOrderDetail> =>
   request("/api/orders", { method: "POST", body: JSON.stringify(input), idempotencyKey: crypto.randomUUID() });
 export const createPaymentInvoice = (input: {
   invoiceId: string;
@@ -232,7 +239,7 @@ export const createPaymentInvoice = (input: {
 }): Promise<PaymentInvoice> =>
   request("/api/payments/invoices", { method: "POST", body: JSON.stringify(input), idempotencyKey: input.invoiceId });
 export const listOrders = (): Promise<CustomerOrder[]> => request("/api/orders");
-export const getOrder = (id: string): Promise<CustomerOrder> => request(`/api/orders/${id}`);
+export const getOrder = (id: string): Promise<CustomerOrderDetail> => request(`/api/orders/${id}`);
 export const listDeliveryAddresses = (): Promise<DeliveryAddress[]> => request("/api/delivery/addresses");
 export const saveDeliveryAddress = (input: {
   label: string;

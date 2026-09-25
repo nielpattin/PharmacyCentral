@@ -101,3 +101,42 @@ export const IconShield = ({ className }: IconProps): React.JSX.Element => (
     <path d="m9 12 2 2 4-4" />
   </Svg>
 );
+
+export const IconPlus = ({ className }: IconProps): React.JSX.Element => (
+  <Svg className={className}>
+    <path d="M12 5v14M5 12h14" />
+  </Svg>
+);
+
+export const IconMinus = ({ className }: IconProps): React.JSX.Element => (
+  <Svg className={className}>
+    <path d="M5 12h14" />
+  </Svg>
+);
+
+export const IconTrash = ({ className }: IconProps): React.JSX.Element => (
+  <Svg className={className}>
+    <path d="M4 6.5h16M9.5 6.5V4h5v2.5M6.8 6.5 7.7 20h8.6l.9-13.5M10.4 10v6.4M13.6 10v6.4" />
+  </Svg>
+);
+
+export const IconReceipt = ({ className }: IconProps): React.JSX.Element => (
+  <Svg className={className}>
+    <path d="M6 3h12v18l-3-1.7-3 1.7-3-1.7L6 21Z" />
+    <path d="M9.5 8h5M9.5 12h5" />
+  </Svg>
+);
+
+export const IconCrosshair = ({ className }: IconProps): React.JSX.Element => (
+  <Svg className={className}>
+    <circle cx="12" cy="12" r="7" />
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+  </Svg>
+);
+
+export const IconCopy = ({ className }: IconProps): React.JSX.Element => (
+  <Svg className={className}>
+    <rect x="9" y="9" width="11" height="11" rx="1.6" />
+    <path d="M15 5.4A1.4 1.4 0 0 0 13.6 4H5.4A1.4 1.4 0 0 0 4 5.4v8.2A1.4 1.4 0 0 0 5.4 15" />
+  </Svg>
+);

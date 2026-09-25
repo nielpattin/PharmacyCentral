@@ -1,8 +1,9 @@
 import { useForm } from "@tanstack/react-form";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
-import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, DataTable, Input, Select } from "@pharmacy/ui";
+import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input } from "@pharmacy/ui";
 
 import {
   addCartLine,
@@ -11,48 +12,110 @@ import {
   createOrder,
   createPaymentInvoice,
   currentUser,
-  getActivePrice,
   getCart,
-  getProductUnits,
+  listAvailability,
+  listDeliveryAddresses,
   listOrders,
   listProducts,
+  listPublishedPrices,
   listStores,
-  listDeliveryAddresses,
   loginCustomer,
   mergeGuestCart,
+  registerCustomer,
   request,
   searchAddress,
-  type CatalogProduct,
-  type CatalogStore,
-  type CustomerOrder,
-  type DeliveryCalculation,
-  type DeliveryAddress,
-  registerCustomer,
   setIdentityContextsEnabled,
+  updateCartLine,
+  type Cart,
+  type CatalogProduct,
+  type CatalogUnit,
+  type CustomerOrder,
+  type CustomerOrderDetail,
+  type DeliveryAddress,
+  type DeliveryCalculation,
+  type PaymentInvoice,
 } from "../customer-api.ts";
 import { setSessionSnapshot, useSession } from "../auth.ts";
-import { DeliveryMap } from "../components/DeliveryMap.tsx";
+import { CartItems } from "../components/checkout/CartItems.tsx";
+import { CheckoutSteps, type CheckoutStep } from "../components/checkout/CheckoutSteps.tsx";
+import { DeliveryPointPanel, type AddressResult, type Point } from "../components/checkout/DeliveryPointPanel.tsx";
+import { FulfillmentPanel } from "../components/checkout/FulfillmentPanel.tsx";
+import { OrderHistory } from "../components/checkout/OrderHistory.tsx";
+import { OrderSummary } from "../components/checkout/OrderSummary.tsx";
+import { PaymentPanel } from "../components/checkout/PaymentPanel.tsx";
+import { ProductPicker } from "../components/checkout/ProductPicker.tsx";
+import { CartFeedback } from "../components/storefront/CartFeedback.tsx";
 import { Link } from "../components/storefront/Link.tsx";
-import { formatDateTime, formatQuantity } from "../storefront/format.ts";
+import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
+import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
+import { IconChevronRight, IconUser } from "../components/storefront/icons.tsx";
+import { buildPriceIndex, buildStockIndex, uniqueCategories } from "../storefront/catalog.ts";
+import { buildCheckoutLines, checkoutTotals, type CheckoutLine } from "../storefront/checkout.ts";
+import { formatMoney, initials } from "../storefront/format.ts";
+import { scrollToSection } from "../storefront/scroll.ts";
 
-type Point = { latitude: number; longitude: number };
+type FulfillmentType = "pickup" | "delivery";
+type PaymentMethod = "sepay_qr" | "cash_on_delivery";
+
 const defaultDestination: Point = { latitude: 10.7905, longitude: 106.682 };
 
-const getStorePoint = (store: CatalogStore | undefined): Point | undefined => store?.coordinates ?? undefined;
+/** How long a confirmation or failure stays on screen before clearing itself. */
+const FEEDBACK_TIMEOUT_MS = 4000;
 
+const PRODUCTS_SECTION_ID = "chon-thuoc";
+const RESULT_SECTION_ID = "ket-qua-dat-hang";
+
+type Feedback = { kind: "notice" | "error"; message: string };
+
+type PlacedOrder = { order: CustomerOrderDetail; invoice: PaymentInvoice; paymentMethod: PaymentMethod };
+
+/**
+ * The order form is plain component state rather than a form library: every field is a single choice with no
+ * validation, and the values are read while rendering (cart totals, delivery panel, summary) rather than only at
+ * submit time.
+ */
 export const CheckoutPage = (): React.JSX.Element => {
   const session = useSession();
+  const navigate = useNavigate();
+  const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>("delivery");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("sepay_qr");
+  const [selectedStoreId, setSelectedStoreId] = useState<string>();
+  const [addressNote, setAddressNote] = useState("");
+  const [addressQuery, setAddressQuery] = useState("");
+  const [productSearch, setProductSearch] = useState("");
   const [destination, setDestination] = useState(defaultDestination);
   const [delivery, setDelivery] = useState<DeliveryCalculation>();
   const [submittedSearch, setSubmittedSearch] = useState<string>();
-  const [addressResults, setAddressResults] = useState<
-    Array<{ displayName: string; latitude: number; longitude: number }>
-  >([]);
+  const [addressResults, setAddressResults] = useState<AddressResult[]>([]);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [busy, setBusy] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [pendingLineId, setPendingLineId] = useState<string>();
+  const [addingProductId, setAddingProductId] = useState<string>();
   const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const [feedback, setFeedback] = useState<Feedback>();
+  const [placed, setPlaced] = useState<PlacedOrder>();
   const queryClient = useQueryClient();
+  // Newest cart message wins: a timer only clears the feedback it was scheduled for.
+  const feedbackToken = useRef(0);
+
+  const showFeedback = (next: Feedback): void => {
+    feedbackToken.current += 1;
+    const token = feedbackToken.current;
+    setFeedback(next);
+    setTimeout(() => {
+      setFeedback((current) => (token === feedbackToken.current ? undefined : current));
+    }, FEEDBACK_TIMEOUT_MS);
+  };
+
+  /** Every cart mutation lands in both caches: this page renders from the bootstrap payload, the header from ["cart"]. */
+  const applyCart = (nextCart: Cart): void => {
+    queryClient.setQueryData(["checkout-bootstrap"], (current) =>
+      current && typeof current === "object" ? { ...current, cart: nextCart } : current,
+    );
+    queryClient.setQueryData(["cart"], nextCart);
+  };
+
   const checkoutQuery = useQuery({
     queryKey: ["checkout-bootstrap"],
     queryFn: async () => {
@@ -93,7 +156,9 @@ export const CheckoutPage = (): React.JSX.Element => {
     queryFn: () => listProducts({ search: submittedSearch }),
     enabled: submittedSearch !== undefined,
   });
+  const pricesQuery = useQuery({ queryKey: ["published-prices"], queryFn: listPublishedPrices });
   const products = submittedSearch === undefined ? (checkoutQuery.data?.products ?? []) : (productsQuery.data ?? []);
+  const bootstrapProducts = checkoutQuery.data?.products;
   const stores = checkoutQuery.data?.stores ?? [];
   const cart = checkoutQuery.data?.cart;
   const orders = checkoutQuery.data?.orders ?? [];
@@ -102,16 +167,19 @@ export const CheckoutPage = (): React.JSX.Element => {
   const queryError = checkoutQuery.error ?? productsQuery.error;
   const loadError = queryError instanceof Error ? queryError.message : undefined;
   const visibleError = error ?? loadError;
+
   const authForm = useForm({
     defaultValues: { email: "", password: "", displayName: "" },
     onSubmit: async ({ value }) => {
       setBusy(true);
       setError(undefined);
-      setNotice(undefined);
       try {
         if (authMode === "register") {
           await registerCustomer(value.email, value.password, value.displayName);
-          setNotice("Đã tạo tài khoản. Vui lòng xác thực email trước khi đăng nhập.");
+          showFeedback({
+            kind: "notice",
+            message: "Đã tạo tài khoản. Kiểm tra email để xác thực rồi đăng nhập để đặt hàng.",
+          });
         } else {
           const user = (await loginCustomer(value.email, value.password)) as {
             id: string;
@@ -125,17 +193,18 @@ export const CheckoutPage = (): React.JSX.Element => {
             listOrders(),
             listDeliveryAddresses(),
           ]);
+          applyCart(nextCart);
           queryClient.setQueryData(["checkout-bootstrap"], (current) =>
             current && typeof current === "object"
               ? {
                   ...current,
-                  cart: nextCart,
                   orders: nextOrders,
                   addresses: nextAddresses,
                   profile: { displayName: user.displayName, email: user.email },
                 }
               : current,
           );
+          showFeedback({ kind: "notice", message: `Xin chào ${user.displayName}, giỏ thuốc của bạn đã được đồng bộ.` });
         }
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Đăng nhập thất bại");
@@ -144,110 +213,93 @@ export const CheckoutPage = (): React.JSX.Element => {
       }
     },
   });
-  const productSearchForm = useForm({
-    defaultValues: { search: "" },
-    onSubmit: ({ value }) => {
-      setSubmittedSearch(value.search);
-      setError(undefined);
-    },
-  });
-  const checkoutForm = useForm({
-    defaultValues: {
-      selectedStoreId: "",
-      fulfillmentType: "delivery" as "pickup" | "delivery",
-      paymentMethod: "sepay_qr" as "sepay_qr" | "cash_on_delivery",
-      addressNote: "",
-    },
-    onSubmit: async ({ value }) => {
-      const selectedStoreForOrder = stores.find((store) => store.id === value.selectedStoreId) ?? stores[0];
-      if (!selectedStoreForOrder || !cart?.lines.length) return;
-      setBusy(true);
-      setError(undefined);
-      try {
-        const lines = await Promise.all(
-          cart.lines.map(async (line) => {
-            const price = await getActivePrice(line.productId, line.productUnitId);
-            return {
-              productId: line.productId,
-              productUnitId: line.productUnitId,
-              quantity: Number(line.quantity),
-              unitPrice: Number(price.unitPrice),
-            };
-          }),
-        );
-        const order = await createOrder({
-          selectedStoreId: selectedStoreForOrder.id,
-          fulfillmentType: value.fulfillmentType,
-          lines: lines.map(({ productId, productUnitId, quantity }) => ({ productId, productUnitId, quantity })),
-          ...(value.fulfillmentType === "delivery"
-            ? { delivery: { destination, ...(value.addressNote ? { addressNote: value.addressNote } : {}) } }
-            : {}),
-        });
-        const invoice = await createPaymentInvoice({
-          invoiceId: order.id,
-          orderId: order.id,
-          paymentMethod: value.paymentMethod,
-          lines: order.lines.map((line) => ({
-            productId: line.productId,
-            productUnitId: line.productUnitId,
-            description: line.productNameSnapshot,
-            quantity: Number(line.quantity),
-            unitPrice: Number(line.unitPriceSnapshot),
-            currency: order.currency,
-          })),
-        });
-        const nextCart = await clearCart();
-        queryClient.setQueryData(["checkout-bootstrap"], (current) =>
-          current && typeof current === "object" ? { ...current, cart: nextCart, orders: [order, ...orders] } : current,
-        );
-        queryClient.setQueryData(["cart"], nextCart);
-        setNotice(
-          `Đã tạo đơn hàng. Thanh toán ${invoice.paymentCode} đang ở trạng thái ${invoice.status}.${value.fulfillmentType === "delivery" ? " Lộ trình giao hàng đã được tính lại theo điểm giao bạn chọn." : ""}`,
-        );
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Đặt hàng thất bại");
-      } finally {
-        setBusy(false);
-      }
-    },
-  });
-  const addressSearchForm = useForm({
-    defaultValues: { query: "" },
-    onSubmit: async ({ value }) => {
-      try {
-        setAddressResults(await searchAddress(value.query));
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Tìm địa chỉ thất bại");
-      }
-    },
-  });
-  const selectedStore = stores.find((store) => store.id === checkoutForm.state.values.selectedStoreId) ?? stores[0];
-  const storePoint = getStorePoint(selectedStore);
 
-  const addProduct = async (product: CatalogProduct): Promise<void> => {
-    setBusy(true);
+  const priceIndex = useMemo(
+    () => buildPriceIndex(pricesQuery.data ?? [], new Date().toISOString().slice(0, 10)),
+    [pricesQuery.data],
+  );
+  const categories = useMemo(() => uniqueCategories(bootstrapProducts ?? []), [bootstrapProducts]);
+
+  const selectedStore = stores.find((store) => store.id === selectedStoreId) ?? stores[0];
+  const availabilityQuery = useQuery({
+    queryKey: ["availability", selectedStore?.id],
+    queryFn: () => listAvailability(selectedStore?.id),
+    enabled: Boolean(selectedStore),
+  });
+  const stockIndex = useMemo(() => buildStockIndex(availabilityQuery.data ?? []), [availabilityQuery.data]);
+  const cartLines = useMemo(
+    () => buildCheckoutLines(cart?.lines ?? [], bootstrapProducts ?? [], priceIndex, stockIndex),
+    [cart, bootstrapProducts, priceIndex, stockIndex],
+  );
+  const cartQuantities = useMemo(() => {
+    const quantities = new Map<string, number>();
+    for (const line of cartLines) quantities.set(line.productId, (quantities.get(line.productId) ?? 0) + line.quantity);
+    return quantities;
+  }, [cartLines]);
+
+  const shippingFee = fulfillmentType === "delivery" ? delivery?.fee : undefined;
+  const totals = useMemo(() => checkoutTotals(cartLines, shippingFee), [cartLines, shippingFee]);
+  const step: CheckoutStep = placed ? 3 : cartLines.length === 0 ? 1 : 2;
+  const canSubmit = Boolean(
+    cartLines.length && session.authenticated && (fulfillmentType === "pickup" || selectedStore),
+  );
+  const blockedReason = !session.authenticated
+    ? "Đăng nhập tài khoản khách hàng để đặt hàng."
+    : cartLines.length === 0
+      ? "Thêm thuốc vào giỏ để đặt hàng."
+      : !selectedStore
+        ? "Chọn nhà thuốc xuất đơn."
+        : undefined;
+
+  const changeLineQuantity = async (line: CheckoutLine, quantity: number): Promise<void> => {
+    setPendingLineId(line.id);
     setError(undefined);
     try {
-      const unit = (await getProductUnits(product.id))[0];
-      if (!unit) throw new Error("Sản phẩm chưa có đơn vị bán");
-      const nextCart = await addCartLine(product.id, unit.id, 1);
-      queryClient.setQueryData(["checkout-bootstrap"], (current) =>
-        current && typeof current === "object" ? { ...current, cart: nextCart } : current,
-      );
-      queryClient.setQueryData(["cart"], nextCart);
+      applyCart(await updateCartLine(line.id, quantity));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thêm được sản phẩm");
+      setError(reason instanceof Error ? reason.message : "Không cập nhật được giỏ hàng");
     } finally {
+      setPendingLineId(undefined);
+    }
+  };
+
+  const removeLine = async (line: CheckoutLine): Promise<void> => {
+    setPendingLineId(line.id);
+    setError(undefined);
+    try {
+      applyCart(await updateCartLine(line.id, 0));
+      showFeedback({ kind: "notice", message: `Đã xoá “${line.productName}” khỏi giỏ thuốc.` });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Không xoá được sản phẩm khỏi giỏ");
+    } finally {
+      setPendingLineId(undefined);
+    }
+  };
+
+  const addProduct = async (product: CatalogProduct, unit: CatalogUnit): Promise<void> => {
+    setBusy(true);
+    setAddingProductId(product.id);
+    setError(undefined);
+    try {
+      applyCart(await addCartLine(product.id, unit.id, 1));
+      showFeedback({ kind: "notice", message: `Đã thêm “${product.name}” vào giỏ thuốc.` });
+      setPlaced(undefined);
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Không thêm được sản phẩm";
+      setError(message);
+      showFeedback({ kind: "error", message });
+    } finally {
+      setAddingProductId(undefined);
       setBusy(false);
     }
   };
 
-  const calculate = async (): Promise<void> => {
+  const calculateFee = async (): Promise<void> => {
     if (!selectedStore) return;
     setBusy(true);
     setError(undefined);
     try {
-      setDelivery(await calculateDelivery(selectedStore.id, destination, checkoutForm.state.values.addressNote));
+      setDelivery(await calculateDelivery(selectedStore.id, destination, addressNote));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không tính được phí giao hàng");
     } finally {
@@ -255,387 +307,363 @@ export const CheckoutPage = (): React.JSX.Element => {
     }
   };
 
+  const submitAddressSearch = async (): Promise<void> => {
+    setSearching(true);
+    setError(undefined);
+    try {
+      setAddressResults(await searchAddress(addressQuery));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Tìm địa chỉ thất bại");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const submitProductSearch = (): void => {
+    setSubmittedSearch(productSearch);
+    setError(undefined);
+  };
+
+  const chooseFulfillment = (value: FulfillmentType): void => {
+    setFulfillmentType(value);
+    setDelivery(undefined);
+  };
+
+  const chooseStore = (storeId: string): void => {
+    setSelectedStoreId(storeId);
+    setDelivery(undefined);
+  };
+
   const locateMe = (): void => {
     navigator.geolocation?.getCurrentPosition(
       (position) => {
         setDestination({ latitude: position.coords.latitude, longitude: position.coords.longitude });
         setDelivery(undefined);
+        setAddressResults([]);
       },
       () => setError("Bạn chưa cho phép truy cập vị trí"),
     );
   };
 
+  const chooseDestination = (point: Point): void => {
+    setDestination(point);
+    setDelivery(undefined);
+    setAddressResults([]);
+    setPlaced(undefined);
+  };
+
+  const placeOrder = async (): Promise<void> => {
+    if (!selectedStore || !cart?.lines.length) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const order = await createOrder({
+        selectedStoreId: selectedStore.id,
+        fulfillmentType,
+        lines: cart.lines.map((line) => ({
+          productId: line.productId,
+          productUnitId: line.productUnitId,
+          quantity: Number(line.quantity),
+        })),
+        ...(fulfillmentType === "delivery"
+          ? { delivery: { destination, ...(addressNote ? { addressNote } : {}) } }
+          : {}),
+      });
+      const invoice = await createPaymentInvoice({
+        invoiceId: order.id,
+        orderId: order.id,
+        paymentMethod,
+        lines: order.lines.map((line) => ({
+          productId: line.productId,
+          productUnitId: line.productUnitId,
+          description: line.productNameSnapshot,
+          quantity: Number(line.quantity),
+          unitPrice: Number(line.unitPriceSnapshot),
+          currency: order.currency,
+        })),
+      });
+      applyCart(await clearCart());
+      queryClient.setQueryData(["checkout-bootstrap"], (current) =>
+        current && typeof current === "object" ? { ...current, orders: [order, ...orders] } : current,
+      );
+      setPlaced({ order, invoice, paymentMethod });
+      setDelivery(undefined);
+      showFeedback({
+        kind: "notice",
+        message:
+          paymentMethod === "sepay_qr"
+            ? `Đã tạo đơn #${order.id.slice(0, 8).toUpperCase()}. Quét mã QR để hoàn tất thanh toán.`
+            : `Đã tạo đơn #${order.id.slice(0, 8).toUpperCase()}. Bạn thanh toán khi nhận thuốc.`,
+      });
+      scrollToSection(RESULT_SECTION_ID);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Đặt hàng thất bại");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <main className="mx-auto max-w-5xl space-y-6 bg-background p-6 text-ink">
-      <header>
-        <Link className="text-sm font-medium text-primary hover:underline" href="/">
-          ← Về trang chủ
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold">Đặt hàng &amp; thanh toán</h1>
-        <p className="mt-1 text-sm text-muted">
-          Quản lý giỏ hàng, tính phí giao hàng theo khoảng cách và theo dõi đơn hàng đã đặt.
-        </p>
-      </header>
-      {visibleError ? <Alert variant="danger">{visibleError}</Alert> : null}
-      {notice ? <Alert>{notice}</Alert> : null}
-      <Card>
-        <CardHeader>
-          <CardTitle>Tài khoản khách hàng</CardTitle>
-        </CardHeader>
-        {session.authenticated ? (
-          <CardContent>
-            <p className="text-sm text-ink">
-              <span className="font-medium">{profile?.displayName ?? "Khách hàng"}</span>
-              {profile?.email ? <span className="text-muted"> · {profile.email}</span> : null}
+    <div className="min-h-screen bg-background text-ink">
+      <SiteHeader storeCount={stores.length} onSearch={(term) => void navigate({ to: "/", search: { q: term } })} />
+
+      <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
+        <nav aria-label="Đường dẫn" className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+          <Link className="hover:text-primary" href="/">
+            Trang chủ
+          </Link>
+          <IconChevronRight className="size-3" />
+          <span className="font-medium text-ink">Đặt hàng &amp; thanh toán</span>
+        </nav>
+
+        <div className="grid gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-ink sm:text-2xl">Đặt hàng &amp; thanh toán</h1>
+            <p className="mt-1 text-sm text-muted">
+              Kiểm tra giỏ thuốc, chọn nhà thuốc xuất đơn, tính phí giao hàng và theo dõi đơn đã đặt.
             </p>
-          </CardContent>
-        ) : session.resolved ? (
-          <CardContent>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void authForm.handleSubmit();
-              }}
-              className="grid max-w-md gap-3"
-            >
-              {authMode === "register" ? (
-                <authForm.Field name="displayName">
-                  {(field) => (
-                    <Input
-                      aria-label="Tên hiển thị"
-                      value={field.state.value}
-                      onChange={(event) => field.handleChange(event.target.value)}
-                      placeholder="Tên hiển thị"
-                      required
-                    />
-                  )}
-                </authForm.Field>
-              ) : null}
-              <authForm.Field name="email">
-                {(field) => (
-                  <Input
-                    aria-label="Email"
-                    type="email"
-                    value={field.state.value}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="Email"
-                    required
-                  />
-                )}
-              </authForm.Field>
-              <authForm.Field name="password">
-                {(field) => (
-                  <Input
-                    aria-label="Mật khẩu"
-                    type="password"
-                    value={field.state.value}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="Mật khẩu"
-                    required
-                  />
-                )}
-              </authForm.Field>
-              <div className="flex gap-2">
-                <Button type="submit" disabled={busy}>
-                  {authMode === "register" ? "Tạo tài khoản" : "Đăng nhập"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}
-                >
-                  {authMode === "login" ? "Tạo tài khoản mới" : "Dùng tài khoản có sẵn"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        ) : (
-          // Neither the account nor the sign-in form is knowable yet: a returning shopper must not be shown a
-          // login screen they are about to lose.
-          <CardContent>
-            <p role="status" className="text-sm text-muted">
-              Đang kiểm tra đăng nhập…
-            </p>
-          </CardContent>
-        )}
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Danh mục sản phẩm</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void productSearchForm.handleSubmit();
-            }}
-            className="flex gap-2"
-          >
-            <productSearchForm.Field name="search">
-              {(field) => (
-                <Input
-                  aria-label="Tìm kiếm sản phẩm"
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="Tìm theo tên hoặc mã SKU"
-                />
-              )}
-            </productSearchForm.Field>
-            <Button type="submit">Tìm kiếm</Button>
-          </form>
-          <DataTable
-            rows={products}
-            getKey={(product) => product.id}
-            empty="Không có sản phẩm"
-            columns={[
-              {
-                key: "name",
-                label: "Sản phẩm",
-                render: (product) => (
-                  <span>
-                    {product.name} <span className="text-muted">({product.sku})</span>
-                  </span>
-                ),
-              },
-              {
-                key: "action",
-                label: "",
-                render: (product) => (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void addProduct(product)}
-                    disabled={busy}
-                  >
-                    Thêm vào giỏ
-                  </Button>
-                ),
-              },
-            ]}
+          </div>
+          <CheckoutSteps current={step} />
+        </div>
+
+        {visibleError ? <Alert variant="danger">{visibleError}</Alert> : null}
+
+        {placed ? (
+          <PaymentPanel
+            order={placed.order}
+            invoice={placed.invoice}
+            paymentMethod={placed.paymentMethod}
+            storeName={stores.find((store) => store.id === placed.order.selectedStoreId)?.name}
           />
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Giỏ hàng &amp; thanh toán</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ul className="divide-y divide-line rounded-md border border-line">
-            {(cart?.lines ?? []).map((line) => {
-              const product = products.find((item) => item.id === line.productId);
-              const unit = product?.units.find((item) => item.id === line.productUnitId);
-              return (
-                <li key={line.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                  <span className="truncate">
-                    {product?.name ?? "Sản phẩm không còn bán"}
-                    {unit ? <span className="text-muted"> · {unit.unitName}</span> : null}
+        ) : null}
+
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="grid gap-5">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <IconUser className="size-4 text-primary" />
+                  Tài khoản khách hàng
+                </CardTitle>
+                <CardDescription>
+                  Đơn thuốc gắn với tài khoản của bạn để theo dõi trạng thái và nhận thông báo từ nhà thuốc.
+                </CardDescription>
+              </CardHeader>
+              {session.authenticated ? (
+                <CardContent className="flex items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="grid size-11 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-semibold text-primary-dark"
+                  >
+                    {initials(profile?.displayName ?? "Khách hàng")}
                   </span>
-                  <Badge variant="secondary">{formatQuantity(line.quantity)}</Badge>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <checkoutForm.Field name="fulfillmentType">
-              {(field) => (
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Hình thức nhận hàng
-                  <Select
-                    value={field.state.value}
-                    onChange={(event) => {
-                      field.handleChange(event.target.value as "pickup" | "delivery");
-                      setDelivery(undefined);
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink">{profile?.displayName ?? "Khách hàng"}</p>
+                    {profile?.email ? <p className="truncate text-xs text-muted">{profile.email}</p> : null}
+                  </div>
+                </CardContent>
+              ) : session.resolved ? (
+                <CardContent>
+                  <form
+                    className="grid max-w-md gap-3"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void authForm.handleSubmit();
                     }}
                   >
-                    <option value="delivery">Giao tận nơi</option>
-                    <option value="pickup">Nhận tại nhà thuốc</option>
-                  </Select>
-                </label>
+                    {authMode === "register" ? (
+                      <authForm.Field name="displayName">
+                        {(field) => (
+                          <Field label="Tên hiển thị">
+                            <Input
+                              value={field.state.value}
+                              onChange={(event) => field.handleChange(event.target.value)}
+                              placeholder="Nguyễn Văn A"
+                              required
+                            />
+                          </Field>
+                        )}
+                      </authForm.Field>
+                    ) : null}
+                    <authForm.Field name="email">
+                      {(field) => (
+                        <Field label="Email">
+                          <Input
+                            type="email"
+                            value={field.state.value}
+                            onChange={(event) => field.handleChange(event.target.value)}
+                            placeholder="ban@email.com"
+                            required
+                          />
+                        </Field>
+                      )}
+                    </authForm.Field>
+                    <authForm.Field name="password">
+                      {(field) => (
+                        <Field
+                          label="Mật khẩu"
+                          hint={
+                            authMode === "register"
+                              ? "Tối thiểu 8 ký tự, nên có chữ và số."
+                              : "Mật khẩu của tài khoản khách hàng."
+                          }
+                        >
+                          <Input
+                            type="password"
+                            value={field.state.value}
+                            onChange={(event) => field.handleChange(event.target.value)}
+                            placeholder="••••••••"
+                            required
+                          />
+                        </Field>
+                      )}
+                    </authForm.Field>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="submit" disabled={busy}>
+                        {authMode === "register" ? "Tạo tài khoản" : "Đăng nhập"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}
+                      >
+                        {authMode === "login" ? "Tạo tài khoản mới" : "Dùng tài khoản có sẵn"}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              ) : (
+                // Neither the account nor the sign-in form is knowable yet: a returning shopper must not be shown a
+                // login screen they are about to lose.
+                <CardContent>
+                  <p role="status" className="text-sm text-muted">
+                    Đang kiểm tra đăng nhập…
+                  </p>
+                </CardContent>
               )}
-            </checkoutForm.Field>
-            <checkoutForm.Field name="paymentMethod">
-              {(field) => (
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Thanh toán
-                  <Select
-                    value={field.state.value}
-                    onChange={(event) => field.handleChange(event.target.value as "sepay_qr" | "cash_on_delivery")}
-                  >
-                    <option value="sepay_qr">SePay QR</option>
-                    <option value="cash_on_delivery">Thanh toán khi nhận hàng</option>
-                  </Select>
-                </label>
-              )}
-            </checkoutForm.Field>
-          </div>
-          <Button
-            type="button"
-            onClick={() => void checkoutForm.handleSubmit()}
-            disabled={busy || !cart?.lines.length || !session.authenticated}
-          >
-            Đặt hàng (giá được hệ thống tính lại)
-          </Button>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Điểm giao hàng</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <checkoutForm.Field name="selectedStoreId">
-            {(field) => (
-              <label className="grid max-w-md gap-1.5 text-sm font-medium">
-                Nhà thuốc
-                <Select
-                  value={field.state.value}
-                  onChange={(event) => {
-                    field.handleChange(event.target.value);
-                    setDelivery(undefined);
-                  }}
-                >
-                  {stores.map((store) => (
-                    <option key={store.id} value={store.id}>
-                      {store.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-            )}
-          </checkoutForm.Field>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void addressSearchForm.handleSubmit();
-            }}
-            className="flex max-w-md gap-2"
-          >
-            <addressSearchForm.Field name="query">
-              {(field) => (
-                <Input
-                  aria-label="Tìm địa chỉ"
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="Tìm địa chỉ giao hàng"
+            </Card>
+
+            <Card>
+              <CardHeader className="flex items-center justify-between gap-2">
+                <CardTitle>Giỏ thuốc</CardTitle>
+                <span className="text-xs text-muted">{cartLines.length} sản phẩm</span>
+              </CardHeader>
+              <CardContent>
+                <CartItems
+                  lines={cartLines}
+                  pendingLineId={pendingLineId}
+                  busy={busy}
+                  onQuantityChange={(line, quantity) => void changeLineQuantity(line, quantity)}
+                  onRemove={(line) => void removeLine(line)}
+                  onBrowse={() => scrollToSection(PRODUCTS_SECTION_ID)}
                 />
-              )}
-            </addressSearchForm.Field>
-            <Button type="submit">Tìm</Button>
-          </form>
-          {addressResults.length ? (
-            <ul className="divide-y divide-line rounded-md border border-line">
-              {addressResults.map((result) => (
-                <li key={`${result.latitude}:${result.longitude}`}>
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-2 text-left text-sm hover:bg-surface-soft"
-                    onClick={() => {
-                      setDestination({ latitude: result.latitude, longitude: result.longitude });
-                      setAddressResults([]);
-                    }}
-                  >
-                    {result.displayName}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <checkoutForm.Field name="addressNote">
-            {(field) => (
-              <Input
-                aria-label="Ghi chú địa chỉ"
-                value={field.state.value}
-                onChange={(event) => field.handleChange(event.target.value)}
-                placeholder="Số nhà, toà nhà, hẻm..."
-              />
-            )}
-          </checkoutForm.Field>
-          <p className="text-sm text-muted">Chọn điểm giao trên bản đồ, tìm theo địa chỉ, hoặc dùng vị trí hiện tại.</p>
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={locateMe}>
-              Dùng vị trí hiện tại
-            </Button>
-            <Button type="button" onClick={() => void calculate()} disabled={busy || !selectedStore}>
-              Tính phí giao hàng
-            </Button>
-          </div>
-          {storePoint ? (
-            <DeliveryMap
-              key={`${selectedStore?.id ?? "none"}:${destination.latitude}:${destination.longitude}:${delivery?.route.coordinates.length ?? 0}`}
-              store={storePoint}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Hình thức nhận hàng &amp; thanh toán</CardTitle>
+                <CardDescription>
+                  Đơn thuốc được soạn tại nhà thuốc bạn chọn và giao hoặc giữ tại quầy theo lựa chọn bên dưới.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FulfillmentPanel
+                  fulfillmentType={fulfillmentType}
+                  paymentMethod={paymentMethod}
+                  disabled={busy}
+                  paymentHint={
+                    paymentMethod === "sepay_qr"
+                      ? "Sau khi đặt hàng, hệ thống hiển thị mã VietQR và nội dung chuyển khoản để bạn thanh toán."
+                      : `Vui lòng chuẩn bị ${formatMoney(totals.total, totals.currency)} tiền mặt khi nhận thuốc.`
+                  }
+                  onFulfillmentChange={chooseFulfillment}
+                  onPaymentChange={setPaymentMethod}
+                />
+              </CardContent>
+            </Card>
+
+            <DeliveryPointPanel
+              stores={stores}
+              selectedStore={selectedStore}
+              selectedStoreId={selectedStore?.id ?? ""}
+              fulfillmentType={fulfillmentType}
+              addresses={addresses}
               destination={destination}
-              onDestinationChange={(point) => {
-                setDestination(point);
-                setDelivery(undefined);
-              }}
-              {...(delivery ? { route: delivery.route.coordinates } : {})}
+              delivery={delivery}
+              addressNote={addressNote}
+              query={addressQuery}
+              results={addressResults}
+              mapKey={`${selectedStore?.id ?? "none"}:${destination.latitude}:${destination.longitude}:${delivery?.route.coordinates.length ?? 0}`}
+              busy={busy}
+              searching={searching}
+              onSelectStore={chooseStore}
+              onDestinationChange={chooseDestination}
+              onAddressNoteChange={setAddressNote}
+              onQueryChange={setAddressQuery}
+              onSearchSubmit={() => void submitAddressSearch()}
+              onPickResult={(result) => chooseDestination({ latitude: result.latitude, longitude: result.longitude })}
+              onPickSavedAddress={(address) =>
+                chooseDestination({ latitude: Number(address.latitude), longitude: Number(address.longitude) })
+              }
+              onLocateMe={locateMe}
+              onCalculate={() => void calculateFee()}
             />
-          ) : (
-            <div className="grid min-h-[320px] place-items-center rounded-md border border-dashed border-line bg-surface-soft p-8 text-center">
-              <p className="max-w-xs text-sm text-muted">
-                Nhà thuốc đang chọn chưa có toạ độ trên bản đồ. Dùng tìm kiếm địa chỉ hoặc vị trí hiện tại để chọn điểm
-                giao hàng.
-              </p>
-            </div>
-          )}
-          {delivery ? (
-            <p className="rounded-md bg-surface-soft p-3 text-sm">
-              Địa chỉ: {delivery.providerResolvedAddress}. Khoảng cách: {(delivery.distanceMeters / 1000).toFixed(2)}{" "}
-              km. Thời gian: {Math.ceil(delivery.durationSeconds / 60)} phút. Phí:{" "}
-              {delivery.fee.toLocaleString("vi-VN")} {delivery.currency}.
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
-      {session.authenticated ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Đơn hàng của tôi</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DataTable
-              rows={orders}
-              getKey={(order) => order.id}
-              empty="Chưa có đơn hàng"
-              columns={[
-                {
-                  key: "createdAt",
-                  label: "Ngày đặt",
-                  render: (order) => <span className="text-muted">{formatDateTime(order.createdAt)}</span>,
-                },
-                { key: "status", label: "Trạng thái", render: (order) => <Badge>{order.status}</Badge> },
-                { key: "fulfillmentType", label: "Nhận hàng" },
-                {
-                  key: "total",
-                  label: "Tổng cộng",
-                  render: (order) => `${Number(order.subtotal) + Number(order.deliveryFee)} ${order.currency}`,
-                },
-                {
-                  key: "delivery",
-                  label: "Địa chỉ giao",
-                  render: (order) => order.delivery?.providerResolvedAddress ?? "",
-                },
-              ]}
+          </div>
+
+          <aside className="lg:sticky lg:top-5">
+            <OrderSummary
+              lines={cartLines}
+              totals={totals}
+              fulfillmentType={fulfillmentType}
+              destinationLabel={delivery?.providerResolvedAddress}
+              storeName={selectedStore?.name}
+              shippingKnown={Boolean(delivery)}
+              busy={busy}
+              canSubmit={canSubmit}
+              blockedReason={blockedReason}
+              onSubmit={() => void placeOrder()}
+              onGoToCart={() => scrollToSection(PRODUCTS_SECTION_ID)}
             />
-          </CardContent>
-        </Card>
-      ) : null}
-      {session.authenticated && addresses.length ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Địa chỉ đã lưu</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="divide-y divide-line rounded-md border border-line">
-              {addresses.map((address) => (
-                <li key={address.id} className="px-3 py-2 text-sm">
-                  <span className="font-medium">{address.label}:</span> {address.providerResolvedAddress}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      ) : null}
-    </main>
+          </aside>
+
+          <div className="grid gap-5 lg:col-start-1">
+            <Card id={PRODUCTS_SECTION_ID} className="scroll-mt-24">
+              <CardHeader className="flex items-center justify-between gap-2">
+                <CardTitle>Chọn thuốc &amp; vật tư y tế</CardTitle>
+                {submittedSearch !== undefined ? (
+                  <span className="text-xs text-muted">Kết quả cho “{submittedSearch || "tất cả sản phẩm"}”</span>
+                ) : null}
+              </CardHeader>
+              <CardContent>
+                <ProductPicker
+                  key={submittedSearch ?? "all-products"}
+                  products={products}
+                  priceIndex={priceIndex}
+                  pricesPending={pricesQuery.isPending}
+                  stockIndex={stockIndex}
+                  cartQuantities={cartQuantities}
+                  searchTerm={productSearch}
+                  loading={productsQuery.isFetching}
+                  addingProductId={addingProductId}
+                  busy={busy}
+                  onSearchChange={setProductSearch}
+                  onSearchSubmit={submitProductSearch}
+                  onAdd={(product, unit) => void addProduct(product, unit)}
+                />
+              </CardContent>
+            </Card>
+
+            {session.authenticated ? <OrderHistory orders={orders} stores={stores} /> : null}
+          </div>
+        </div>
+      </main>
+
+      <SiteFooter categories={categories} />
+      <CartFeedback
+        notice={feedback?.kind === "notice" ? feedback.message : undefined}
+        error={feedback?.kind === "error" ? feedback.message : undefined}
+      />
+    </div>
   );
 };
