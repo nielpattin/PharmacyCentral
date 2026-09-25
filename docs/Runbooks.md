@@ -259,7 +259,7 @@ Demo credentials for local development. The password is the `DEMO_ACCOUNT_PASSWO
 | Role | Email | Site access |
 | --- | --- | --- |
 | Platform Admin | `admin@pharmacycentral.vn` | All sites |
-| Pharmacy Manager | `manager@pharmacycentral.vn` | Assign after importing sites from the Users screen |
+| Pharmacy Manager, Pharmacist | `manager@pharmacycentral.vn` | Assign after importing sites from the Users screen |
 | Customer | `khachhang@pharmacycentral.vn` | Customer portal |
 
 ## Workspace verification

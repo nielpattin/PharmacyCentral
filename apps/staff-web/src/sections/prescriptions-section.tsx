@@ -65,6 +65,8 @@ export const PrescriptionsSection = ({
   const rows = prescriptionsQuery.data?.rows ?? [];
   const transactions = prescriptionsQuery.data?.transactions ?? [];
   const invoices = prescriptionsQuery.data?.invoices ?? [];
+  // An online order carries the order it was raised for; those invoices belong to the orders screen, not the counter.
+  const counterInvoices = invoices.filter((invoice) => !invoice.orderId);
   const [prescriptionLines, setPrescriptionLines] = useState<PrescriptionLine[]>([prescriptionLineInitial()]);
   const [dispenseLines, setDispenseLines] = useState<DispenseLine[]>([dispenseLineInitial()]);
   const [error, setError] = useState<string>();
@@ -492,7 +494,7 @@ export const PrescriptionsSection = ({
       {tab === "Counter transactions" ? (
         <DataTable
           loading={prescriptionsQuery.isPending && !prescriptionsQuery.data}
-          rows={invoices.length > 0 ? invoices : transactions}
+          rows={counterInvoices.length > 0 ? counterInvoices : transactions}
           columns={[
             { key: "paymentCode", label: "Invoice" },
             { key: "prescriptionId", label: "Prescription" },

@@ -35,6 +35,7 @@ import { GovernanceSection } from "./sections/governance-section.tsx";
 import { ImportSection } from "./sections/import-section.tsx";
 import { InventorySection } from "./sections/inventory-section.tsx";
 import { MasterDataSection } from "./sections/master-data-section.tsx";
+import { OrdersSection } from "./sections/orders-section.tsx";
 import { PrescriptionsSection } from "./sections/prescriptions-section.tsx";
 import { ProcurementSection } from "./sections/procurement-section.tsx";
 import { request, setIdentityContextsEnabled } from "./staff-api.ts";
@@ -46,8 +47,9 @@ type NavGroup = { id: string; label: string; items: NavItem[] };
 
 const sectionRoles: Record<Section, readonly string[]> = {
   dashboard: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
-  pharmacistOverview: ["Pharmacist"],
-  prescriptions: ["Pharmacist"],
+  pharmacistOverview: ["Pharmacist", "Pharmacy Manager"],
+  prescriptions: ["Pharmacist", "Pharmacy Manager"],
+  orders: ["Pharmacist", "Pharmacy Manager"],
   transfers: ["Warehouse Staff"],
   replenishment: ["Pharmacist", "Warehouse Staff"],
   sites: ["Platform Admin", "Pharmacy Manager"],
@@ -85,6 +87,7 @@ const navGroups: NavGroup[] = [
       { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} strokeWidth={2} /> },
       { key: "pharmacistOverview", label: "Pharmacist overview", icon: <FileText size={16} strokeWidth={2} /> },
       { key: "prescriptions", label: "Prescriptions", icon: <FileText size={16} strokeWidth={2} /> },
+      { key: "orders", label: "Online orders", icon: <ShoppingBag size={16} strokeWidth={2} /> },
       { key: "transfers", label: "Transfers", icon: <Package size={16} strokeWidth={2} /> },
       { key: "replenishment", label: "Replenishment", icon: <Package size={16} strokeWidth={2} /> },
       { key: "procurement", label: "Procurement", icon: <ShoppingBag size={16} strokeWidth={2} /> },
@@ -265,6 +268,8 @@ export const App = (): React.JSX.Element => {
         return <PrescriptionsSection key={activeSection} initialTab="Counter transactions" />;
       case "prescriptions":
         return <PrescriptionsSection key={activeSection} initialTab="Prescriptions" />;
+      case "orders":
+        return <OrdersSection key={activeSection} />;
       case "transfers":
         return <InventorySection key={activeSection} initialTab="Transfers" />;
       case "replenishment":

@@ -6,6 +6,7 @@ export type Section =
   | "dashboard"
   | "pharmacistOverview"
   | "prescriptions"
+  | "orders"
   | "transfers"
   | "replenishment"
   | "sites"
@@ -35,6 +36,7 @@ export const sectionPaths = {
   dashboard: "/",
   pharmacistOverview: "/pharmacist-overview",
   prescriptions: "/prescriptions",
+  orders: "/orders",
   transfers: "/transfers",
   replenishment: "/replenishment",
   sites: "/sites",
@@ -76,6 +78,7 @@ const sectionsByPath: Record<string, Section> = {
   "/": "dashboard",
   "/pharmacist-overview": "pharmacistOverview",
   "/prescriptions": "prescriptions",
+  "/orders": "orders",
   "/transfers": "transfers",
   "/replenishment": "replenishment",
   "/sites": "sites",
@@ -116,6 +119,7 @@ const rootRoute = createRootRoute({
 const dashboardRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
 const pharmacistOverviewRoute = createRoute({ getParentRoute: () => rootRoute, path: "/pharmacist-overview" });
 const prescriptionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/prescriptions" });
+const ordersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/orders" });
 const transfersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/transfers" });
 const replenishmentRoute = createRoute({ getParentRoute: () => rootRoute, path: "/replenishment" });
 const sitesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sites" });
@@ -148,6 +152,7 @@ const routeTree = rootRoute.addChildren([
   dashboardRoute,
   pharmacistOverviewRoute,
   prescriptionsRoute,
+  ordersRoute,
   transfersRoute,
   replenishmentRoute,
   sitesRoute,

@@ -2531,6 +2531,18 @@ export function translate(language: Language, key: string, params?: TranslationP
 }
 
 const literalTranslations: Record<string, string> = {
+  "Online orders": "Đơn hàng online",
+  "Orders shoppers placed on the customer website.": "Đơn khách đặt trên website khách hàng.",
+  "Unable to load online orders": "Không tải được đơn hàng online.",
+  Order: "Đơn hàng",
+  Store: "Nhà thuốc",
+  Placed: "Đặt lúc",
+  Fulfillment: "Hình thức nhận",
+  Pickup: "Nhận tại quầy",
+  Delivery: "Giao tận nơi",
+  Confirmed: "Đã xác nhận",
+  Preparing: "Đang soạn",
+  Delivering: "Đang giao",
   Operations: "Vận hành",
   Dashboard: "Bảng điều khiển",
   "Pharmacist overview": "Tổng quan quầy",

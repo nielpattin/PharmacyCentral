@@ -40,7 +40,7 @@ try {
     );
   }
   await client.query(
-    `INSERT INTO user_roles (user_id, role_name) VALUES ('00000000-0000-4000-8000-000000000001', 'Platform Admin'), ('00000000-0000-4000-8000-000000000003', 'Pharmacy Manager') ON CONFLICT DO NOTHING`,
+    `INSERT INTO user_roles (user_id, role_name) VALUES ('00000000-0000-4000-8000-000000000001', 'Platform Admin'), ('00000000-0000-4000-8000-000000000003', 'Pharmacy Manager'), ('00000000-0000-4000-8000-000000000003', 'Pharmacist') ON CONFLICT DO NOTHING`,
   );
   await client.query("COMMIT");
   console.log(
