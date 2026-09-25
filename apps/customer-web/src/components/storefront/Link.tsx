@@ -16,40 +16,28 @@ const homeSearchFromUrl = (url: URL): HomeSearch => ({
   "nha-thuoc": url.searchParams.get("nha-thuoc") || undefined,
 });
 
+/**
+ * The router only routes the paths it has typed routes for, so an `href` written as plain markup has to be mapped
+ * back onto one. The two parameterised routes carry their own params; everything else is the home storefront.
+ */
+const linkTarget = (target: URL) => {
+  const categorySlug = /^\/danh-muc\/([^/]+)$/.exec(target.pathname)?.[1];
+  if (categorySlug) return { to: "/danh-muc/$slug", params: { slug: categorySlug } } as const;
+  const productId = /^\/san-pham\/([^/]+)$/.exec(target.pathname)?.[1];
+  if (productId) return { to: "/san-pham/$productId", params: { productId } } as const;
+  if (target.pathname === "/don-hang") return { to: "/don-hang" } as const;
+  if (target.pathname === "/don-hang-cua-toi") return { to: "/don-hang-cua-toi" } as const;
+  return {
+    to: "/",
+    search: homeSearchFromUrl(target),
+    ...(target.hash ? { hash: target.hash.slice(1) } : {}),
+  } as const;
+};
+
 export const Link = ({ href, className, current, children }: LinkProps): React.JSX.Element => {
   const target = new URL(href, window.location.origin);
-  const ariaCurrent = current ? ("page" as const) : undefined;
-  const categorySlug = /^\/danh-muc\/([^/]+)$/.exec(target.pathname)?.[1];
-  if (categorySlug) {
-    return (
-      <RouterLink to="/danh-muc/$slug" params={{ slug: categorySlug }} className={className} aria-current={ariaCurrent}>
-        {children}
-      </RouterLink>
-    );
-  }
-  const productId = /^\/san-pham\/([^/]+)$/.exec(target.pathname)?.[1];
-  if (productId) {
-    return (
-      <RouterLink to="/san-pham/$productId" params={{ productId }} className={className} aria-current={ariaCurrent}>
-        {children}
-      </RouterLink>
-    );
-  }
-  if (target.pathname === "/don-hang") {
-    return (
-      <RouterLink to="/don-hang" className={className} aria-current={ariaCurrent}>
-        {children}
-      </RouterLink>
-    );
-  }
   return (
-    <RouterLink
-      to="/"
-      search={homeSearchFromUrl(target)}
-      className={className}
-      aria-current={ariaCurrent}
-      {...(target.hash ? { hash: target.hash.slice(1) } : {})}
-    >
+    <RouterLink {...linkTarget(target)} className={className} aria-current={current ? ("page" as const) : undefined}>
       {children}
     </RouterLink>
   );

@@ -1,5 +1,7 @@
 import { apiServiceForPath, createIdentityContextCache, type IdentityContexts } from "@pharmacy/ui";
 
+import { setSessionSnapshot } from "./auth.ts";
+
 export type ApiRequestOptions = RequestInit & {
   csrfToken?: string;
   idempotencyKey?: string;
@@ -129,6 +131,7 @@ export type OrderLine = {
   quantity: string;
 };
 
+export type Customer = { id: string; displayName: string; email: string };
 /** A row of `GET /orders`: the sales service lists orders without their lines or delivery snapshot. */
 export type CustomerOrder = {
   id: string;
@@ -240,6 +243,8 @@ export const createPaymentInvoice = (input: {
   request("/api/payments/invoices", { method: "POST", body: JSON.stringify(input), idempotencyKey: input.invoiceId });
 export const listOrders = (): Promise<CustomerOrder[]> => request("/api/orders");
 export const getOrder = (id: string): Promise<CustomerOrderDetail> => request(`/api/orders/${id}`);
+/** The invoice as the payment service has it now, which is how a shopper's page learns the transfer has landed. */
+export const getPaymentInvoice = (id: string): Promise<PaymentInvoice> => request(`/api/payments/invoices/${id}`);
 export const listDeliveryAddresses = (): Promise<DeliveryAddress[]> => request("/api/delivery/addresses");
 export const saveDeliveryAddress = (input: {
   label: string;
@@ -252,8 +257,24 @@ export const registerCustomer = (email: string, password: string, displayName: s
   request("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password, displayName }) });
 export const loginCustomer = (email: string, password: string) =>
   request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
-export const currentUser = (): Promise<{ id: string; displayName: string; email: string } | undefined> =>
-  request("/api/auth/me");
+
+export const currentUser = (): Promise<Customer | undefined> => request("/api/auth/me");
+
+/**
+ * Resolves the shopper's session for a page that can be opened directly: probes the session cookie and publishes the
+ * answer, so a deep link or a reload shows the right UI instead of guessing "signed out".
+ */
+export const resolveCustomerSession = async (): Promise<Customer | undefined> => {
+  await request("/api/auth/csrf");
+  const customer = await currentUser().catch(() => undefined);
+  if (!customer) {
+    setSessionSnapshot({ authenticated: false, resolved: true });
+    return undefined;
+  }
+  setSessionSnapshot({ authenticated: true, resolved: true, userId: customer.id });
+  setIdentityContextsEnabled(true);
+  return customer;
+};
 export const searchAddress = async (
   query: string,
 ): Promise<{ displayName: string; latitude: number; longitude: number }[]> => {

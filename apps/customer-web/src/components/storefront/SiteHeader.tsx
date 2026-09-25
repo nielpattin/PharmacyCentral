@@ -13,6 +13,7 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconPin,
+  IconReceipt,
   IconSearch,
   IconStore,
   IconUser,
@@ -59,8 +60,8 @@ export const SiteHeader = ({
               <IconPin className="size-3.5" />
               Tìm nhà thuốc
             </a>
-            <Link className="flex items-center gap-1 hover:underline" href="/don-hang">
-              <IconUser className="size-3.5" />
+            <Link className="flex items-center gap-1 hover:underline" href="/don-hang-cua-toi">
+              <IconReceipt className="size-3.5" />
               Đơn hàng của tôi
             </Link>
           </p>
@@ -96,8 +97,15 @@ export const SiteHeader = ({
 
         <div className="flex shrink-0 items-center gap-2">
           <Link
+            className="flex items-center gap-1.5 rounded-md border border-line bg-surface-soft px-3 py-2 text-sm font-medium text-ink hover:border-primary hover:text-primary"
+            href="/don-hang-cua-toi"
+          >
+            <IconReceipt className="size-4 text-primary" />
+            <span className="hidden sm:inline">Đơn của tôi</span>
+          </Link>
+          <Link
             className="hidden items-center gap-2 rounded-md px-3 py-2 text-sm text-ink hover:bg-surface-soft md:flex"
-            href="/don-hang"
+            href="/don-hang#tai-khoan"
           >
             <IconUser />
             <span>Tài khoản</span>

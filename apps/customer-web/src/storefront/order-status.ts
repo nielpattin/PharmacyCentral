@@ -28,3 +28,10 @@ export const orderStatusBadge = (status: string): StatusBadge => describe(ORDER_
 
 /** Payment service invoice status; the sales service mirrors it on the order. */
 export const paymentStatusBadge = (status: string): StatusBadge => describe(PAYMENT_STATUS, status);
+
+/** The invoice status is capitalised on the wire, so views read this vocabulary instead of comparing strings. */
+export const invoicePaid = (status: string): boolean => status.toLowerCase() === "paid";
+
+/** An invoice without an answer yet is still open, which is what a caller waiting on the money has to keep reading. */
+export const invoicePending = (status: string | undefined): boolean =>
+  status === undefined || status.toLowerCase() === "pending";

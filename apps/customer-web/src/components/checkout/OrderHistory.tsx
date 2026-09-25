@@ -14,8 +14,8 @@ export const OrderHistory = ({
 }): React.JSX.Element => (
   <Card>
     <CardHeader className="flex items-center justify-between gap-2">
-      <CardTitle>Đơn hàng của tôi</CardTitle>
-      {orders.length > 0 ? <span className="text-xs text-muted">{orders.length} đơn gần đây</span> : null}
+      <CardTitle>Đơn gần đây</CardTitle>
+      {orders.length > 0 ? <span className="text-xs text-muted">{orders.length} đơn</span> : null}
     </CardHeader>
     <CardContent>
       {orders.length === 0 ? (

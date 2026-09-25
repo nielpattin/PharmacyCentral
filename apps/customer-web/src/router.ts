@@ -4,6 +4,7 @@ import { CategoryPage } from "./pages/CategoryPage.tsx";
 import { CheckoutPage } from "./pages/CheckoutPage.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
 import { NotFoundPage } from "./pages/NotFoundPage.tsx";
+import { OrdersPage } from "./pages/OrdersPage.tsx";
 import { ProductDetailPage } from "./pages/ProductDetailPage.tsx";
 import type { SortMode } from "./storefront/catalog.ts";
 
@@ -38,6 +39,11 @@ const checkoutRoute = createRoute({
   path: "/don-hang",
   component: CheckoutPage,
 });
+const ordersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/don-hang-cua-toi",
+  component: OrdersPage,
+});
 const categoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/danh-muc/$slug",
@@ -49,7 +55,7 @@ const productRoute = createRoute({
   component: ProductDetailPage,
 });
 
-const routeTree = rootRoute.addChildren([homeRoute, categoryRoute, productRoute, checkoutRoute]);
+const routeTree = rootRoute.addChildren([homeRoute, categoryRoute, productRoute, checkoutRoute, ordersRoute]);
 
 export const router = createRouter({
   routeTree,

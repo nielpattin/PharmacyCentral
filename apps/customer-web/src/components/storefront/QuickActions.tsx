@@ -1,5 +1,5 @@
 import { Link } from "./Link.tsx";
-import { IconCart, IconPin, IconQr, IconStore, IconTruck } from "./icons.tsx";
+import { IconCart, IconPin, IconQr, IconReceipt, IconStore, IconTruck } from "./icons.tsx";
 
 type QuickAction = {
   label: string;
@@ -12,6 +12,7 @@ type QuickAction = {
 export const QuickActions = ({ onFindNearest }: { onFindNearest: () => void }): React.JSX.Element => {
   const actions: QuickAction[] = [
     { label: "Tìm nhà thuốc", detail: "Theo vị trí của bạn", icon: <IconPin />, onSelect: onFindNearest },
+    { label: "Đơn của tôi", detail: "Tra cứu đơn hàng", icon: <IconReceipt />, href: "/don-hang-cua-toi" },
     { label: "Giao hàng", detail: "Tính phí theo km", icon: <IconTruck />, href: "/don-hang" },
     { label: "Nhận tại quầy", detail: "Chọn nhà thuốc", icon: <IconStore />, href: "/don-hang" },
     { label: "Thanh toán QR", detail: "SePay hoặc COD", icon: <IconQr />, href: "/don-hang" },
@@ -20,7 +21,7 @@ export const QuickActions = ({ onFindNearest }: { onFindNearest: () => void }): 
 
   return (
     <section className="rounded-lg border border-line bg-surface p-2">
-      <ul className="grid grid-cols-3 gap-1 sm:grid-cols-5">
+      <ul className="grid grid-cols-3 gap-1 sm:grid-cols-6">
         {actions.map((action) => (
           <li key={action.label}>
             <ActionTarget action={action} />
