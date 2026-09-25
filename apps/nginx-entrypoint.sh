@@ -12,6 +12,7 @@ server {
     index index.html;
 
     location /api/ {
+        client_max_body_size 25m;
         proxy_pass $TARGET/api/;
         proxy_http_version 1.1;
         proxy_set_header Host \$proxy_host;

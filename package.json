@@ -9,7 +9,7 @@
     "fmt:check": "oxfmt --check -c oxfmt.config.ts",
     "graph": "nx graph",
     "infra:down": "docker compose down",
-    "infra:up": "docker compose up -d postgres rabbitmq valkey mailpit otel-collector",
+    "infra:up": "docker compose up -d postgres rabbitmq valkey mailpit otel-collector minio minio-init",
     "seed:demo": "node --env-file=.env tools/demo-seed.mjs",
     "sync:check": "nx sync:check",
     "lint": "nx run-many -t lint --all",
