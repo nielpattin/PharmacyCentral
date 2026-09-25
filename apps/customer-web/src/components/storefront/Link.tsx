@@ -27,6 +27,14 @@ export const Link = ({ href, className, current, children }: LinkProps): React.J
       </RouterLink>
     );
   }
+  const productId = /^\/san-pham\/([^/]+)$/.exec(target.pathname)?.[1];
+  if (productId) {
+    return (
+      <RouterLink to="/san-pham/$productId" params={{ productId }} className={className} aria-current={ariaCurrent}>
+        {children}
+      </RouterLink>
+    );
+  }
   if (target.pathname === "/don-hang") {
     return (
       <RouterLink to="/don-hang" className={className} aria-current={ariaCurrent}>

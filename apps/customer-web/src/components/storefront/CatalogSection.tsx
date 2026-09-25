@@ -13,6 +13,7 @@ export type CatalogSectionProps = {
   category: string | undefined;
   sort: SortMode;
   priceIndex: Map<string, CatalogPrice>;
+  pricesPending: boolean;
   stockIndex: Map<string, boolean>;
   onSortChange: (sort: SortMode) => void;
   onClearFilters: () => void;
@@ -23,6 +24,7 @@ export const CatalogSection = ({
   category,
   sort,
   priceIndex,
+  pricesPending,
   stockIndex,
   onSortChange,
   onClearFilters,
@@ -79,6 +81,7 @@ export const CatalogSection = ({
         status={status}
         error={loadError}
         priceIndex={priceIndex}
+        pricesPending={pricesPending}
         stockIndex={stockIndex}
         empty={
           <div className="rounded-md border border-dashed border-line p-8 text-center">

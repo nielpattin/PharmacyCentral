@@ -1,8 +1,8 @@
 import { Alert } from "@pharmacy/ui";
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { addCartLine, type CatalogPrice, type CatalogProduct, type CatalogUnit } from "../../customer-api.ts";
+import { type CatalogPrice, type CatalogProduct, type CatalogUnit } from "../../customer-api.ts";
+import { useAddToCart } from "../../hooks/useAddToCart.ts";
+import { CartFeedback } from "./CartFeedback.tsx";
 import { ProductCard } from "./ProductCard.tsx";
 import { ProductGridSkeleton } from "./ProductCardSkeleton.tsx";
 
@@ -15,6 +15,8 @@ type ProductGridProps = {
   empty: React.ReactNode;
   priceIndex: Map<string, CatalogPrice>;
   stockIndex: Map<string, boolean>;
+  /** True while published prices are still in flight, so cards stay neutral instead of claiming "no price". */
+  pricesPending: boolean;
 };
 
 export const ProductGrid = ({
@@ -24,27 +26,12 @@ export const ProductGrid = ({
   empty,
   priceIndex,
   stockIndex,
+  pricesPending,
 }: ProductGridProps): React.JSX.Element => {
-  const queryClient = useQueryClient();
-  const [notice, setNotice] = useState<string>();
-  const [addError, setAddError] = useState<string>();
-  const addMutation = useMutation({
-    mutationFn: ({ productId, unitId }: { productId: string; unitId: string }) => addCartLine(productId, unitId, 1),
-    onSuccess: (cart) => {
-      queryClient.setQueryData(["cart"], cart);
-    },
-  });
-  const addingId = addMutation.isPending ? addMutation.variables?.productId : undefined;
+  const { add, pendingProductId, error: addError, notice } = useAddToCart();
 
-  const addToCart = async (product: CatalogProduct, unit: CatalogUnit): Promise<void> => {
-    setAddError(undefined);
-    setNotice(undefined);
-    try {
-      await addMutation.mutateAsync({ productId: product.id, unitId: unit.id });
-      setNotice(`Đã thêm “${product.name}” vào giỏ hàng`);
-    } catch (reason) {
-      setAddError(reason instanceof Error ? reason.message : "Không thêm được sản phẩm vào giỏ hàng");
-    }
+  const addToCart = (product: CatalogProduct, unit: CatalogUnit): void => {
+    void add({ productId: product.id, productUnitId: unit.id, quantity: 1, productName: product.name });
   };
 
   return (
@@ -54,12 +41,6 @@ export const ProductGrid = ({
           {error}
         </Alert>
       ) : null}
-      {addError ? (
-        <Alert variant="danger" className="mb-4">
-          {addError}
-        </Alert>
-      ) : null}
-      {notice ? <Alert className="mb-4">{notice}</Alert> : null}
 
       {status === "loading" ? <ProductGridSkeleton /> : null}
 
@@ -78,13 +59,16 @@ export const ProductGrid = ({
               key={product.id}
               product={product}
               priceIndex={priceIndex}
+              pricesPending={pricesPending}
               inStock={stockIndex.get(product.id)}
-              adding={addingId === product.id}
-              onAdd={(target, unit) => void addToCart(target, unit)}
+              adding={pendingProductId === product.id}
+              onAdd={addToCart}
             />
           ))}
         </div>
       ) : null}
+
+      <CartFeedback notice={notice} error={addError} />
     </>
   );
 };

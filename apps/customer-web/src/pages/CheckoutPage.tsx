@@ -67,13 +67,16 @@ export const CheckoutPage = (): React.JSX.Element => {
       let orders: CustomerOrder[] = [];
       let addresses: DeliveryAddress[] = [];
       if (user) {
-        setSessionSnapshot({ authenticated: true, userId: user.id });
+        setSessionSnapshot({ authenticated: true, resolved: true, userId: user.id });
         setIdentityContextsEnabled(true);
         [orders, addresses, cart] = await Promise.all([
           listOrders(),
           listDeliveryAddresses(),
           mergeGuestCart().catch(() => loadedCart),
         ]);
+      } else {
+        // A failed probe collapses to the safe state: signed out, which is what a form can act on.
+        setSessionSnapshot({ authenticated: false, resolved: true });
       }
       return {
         products,
@@ -115,7 +118,7 @@ export const CheckoutPage = (): React.JSX.Element => {
             displayName: string;
             email: string;
           };
-          setSessionSnapshot({ authenticated: true, userId: user.id });
+          setSessionSnapshot({ authenticated: true, resolved: true, userId: user.id });
           setIdentityContextsEnabled(true);
           const [nextCart, nextOrders, nextAddresses] = await Promise.all([
             mergeGuestCart(),
@@ -286,7 +289,7 @@ export const CheckoutPage = (): React.JSX.Element => {
               {profile?.email ? <span className="text-muted"> · {profile.email}</span> : null}
             </p>
           </CardContent>
-        ) : (
+        ) : session.resolved ? (
           <CardContent>
             <form
               onSubmit={(event) => {
@@ -345,6 +348,14 @@ export const CheckoutPage = (): React.JSX.Element => {
                 </Button>
               </div>
             </form>
+          </CardContent>
+        ) : (
+          // Neither the account nor the sign-in form is knowable yet: a returning shopper must not be shown a
+          // login screen they are about to lose.
+          <CardContent>
+            <p role="status" className="text-sm text-muted">
+              Đang kiểm tra đăng nhập…
+            </p>
           </CardContent>
         )}
       </Card>

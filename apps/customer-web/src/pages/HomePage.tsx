@@ -112,6 +112,7 @@ export const HomePage = (): React.JSX.Element => {
           category={filters.category}
           sort={filters.sort}
           priceIndex={priceIndex}
+          pricesPending={pricesQuery.isPending}
           stockIndex={stockIndex}
           onSortChange={(sort) => applyFilters({ sort }, { replace: true })}
           onClearFilters={() => {

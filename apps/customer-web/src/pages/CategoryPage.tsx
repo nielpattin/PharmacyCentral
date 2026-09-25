@@ -144,6 +144,7 @@ export const CategoryPage = (): React.JSX.Element => {
               products={visibleProducts}
               status={status}
               priceIndex={priceIndex}
+              pricesPending={pricesQuery.isPending}
               stockIndex={stockIndex}
               empty={
                 <div className="rounded-md border border-dashed border-line p-8 text-center">
