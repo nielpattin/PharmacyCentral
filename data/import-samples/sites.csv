@@ -1,0 +1,5 @@
+code,name,siteType,address,latitude,longitude,isCustomerFacing,isActive,status
+SITE-HQ,Trụ sở Pharmacy Central,Headquarters,"126 Nguyễn Thị Minh Khai, Quận 3, TP. Hồ Chí Minh",10.7769,106.7009,false,false,Active
+SITE-WH,Kho trung tâm Bình Thạnh,Warehouse,"212 Điện Biên Phủ, Bình Thạnh, TP. Hồ Chí Minh",10.789,106.72,false,false,Active
+SITE-HUB,Kho vệ tinh Phú Nhuận,RegionalHub,"15 Hoàng Văn Thụ, Phú Nhuận, TP. Hồ Chí Minh",10.8,106.68,false,false,Active
+SITE-RTL,Nhà thuốc Pharmacy Central Quận 4,RetailStore,"268 Tôn Đản, Quận 4, TP. Hồ Chí Minh",10.773,106.704,true,true,Active

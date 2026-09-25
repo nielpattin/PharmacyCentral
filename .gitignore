@@ -89,6 +89,21 @@ coverage/
 
 # Temporary files
 .tmp/
+
+# Local data. Committed on purpose: data/README.md, the sample CSV inputs under
+# data/import-samples/, and the coursework product-image set as a single archive
+# (data/product-images/images.tar.gz), so every developer gets the same fixtures.
+# Extracted images, original downloads, generated output, source-verification
+# records, and scratch research stay local.
+/data/*
+!/data/README.md
+!/data/import-samples/
+!/data/import-samples/*.csv
+!/data/product-images/
+/data/product-images/images/
+/data/product-images/originals/
+/data/product-images/image-urls.csv
+/data/product-images/provenance/
 .terraform/
 *.tfstate
 *.tfstate.*
@@ -109,4 +124,4 @@ tsconfig.tsbuildinfo
 AGENTS.md
 credentials.json
 plans/
-.pi/
+.omp/
