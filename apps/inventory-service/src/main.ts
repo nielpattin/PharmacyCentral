@@ -5,6 +5,9 @@ import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware } from "./middleware/trusted-request.ts";
 
 import { AvailabilityPublisher } from "./modules/availability-publisher.ts";
+import { CatalogServiceReferenceResolver } from "./modules/catalog-reference-resolver.ts";
+import { createInventoryImportRouter } from "./modules/inventory-import-routes.ts";
+import { InventoryImportService } from "./modules/inventory-import-service.ts";
 import { createInventoryRouter } from "./modules/inventory-routes.ts";
 import { InventoryRepository } from "./modules/inventory-repository.ts";
 import { createProcurementRouter } from "./modules/procurement-routes.ts";
@@ -27,6 +30,11 @@ await availabilityPublisher
   .catch((error: unknown) => logger.warn({ error }, "availability publisher unavailable"));
 const repository = database
   ? new InventoryRepository(database, (input) => availabilityPublisher.publish(input))
+  : undefined;
+const inventoryImportService = database
+  ? new InventoryImportService(database, new CatalogServiceReferenceResolver(catalogServiceUrl), (input) =>
+      availabilityPublisher.publish(input),
+    )
   : undefined;
 const procurementRepository = database
   ? new ProcurementRepository(database, async (input) => {
@@ -58,6 +66,7 @@ const procurementRepository = database
   : undefined;
 
 app.disable("x-powered-by");
+app.use("/inventory/imports", express.json({ limit: "25mb" }));
 app.use(express.json({ limit: "1mb" }));
 // Inventory and procurement routes require a signed identity context minted by identity-service (/auth/context).
 app.use(createTrustedRequestMiddleware({ expectedAudience: serviceName }));
@@ -65,6 +74,7 @@ app.get("/health/live", (_request, response) => response.json({ status: "ok", se
 app.get("/health/ready", (_request, response) =>
   response.status(database ? 200 : 503).json({ status: database ? "ok" : "degraded", service: serviceName }),
 );
+app.use(createInventoryImportRouter(inventoryImportService));
 app.use(createInventoryRouter(repository));
 app.use(createProcurementRouter(procurementRepository));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
