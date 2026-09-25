@@ -11,25 +11,23 @@ import {
   clearCart,
   createOrder,
   createPaymentInvoice,
-  currentUser,
   getCart,
+  getPaymentInvoice,
   listAvailability,
   listDeliveryAddresses,
-  listOrders,
   listProducts,
   listPublishedPrices,
   listStores,
   loginCustomer,
   mergeGuestCart,
   registerCustomer,
-  request,
+  resolveCustomerSession,
   searchAddress,
   setIdentityContextsEnabled,
   updateCartLine,
-  type Cart,
   type CatalogProduct,
   type CatalogUnit,
-  type CustomerOrder,
+  type Customer,
   type CustomerOrderDetail,
   type DeliveryAddress,
   type DeliveryCalculation,
@@ -40,7 +38,6 @@ import { CartItems } from "../components/checkout/CartItems.tsx";
 import { CheckoutSteps, type CheckoutStep } from "../components/checkout/CheckoutSteps.tsx";
 import { DeliveryPointPanel, type AddressResult, type Point } from "../components/checkout/DeliveryPointPanel.tsx";
 import { FulfillmentPanel } from "../components/checkout/FulfillmentPanel.tsx";
-import { OrderHistory } from "../components/checkout/OrderHistory.tsx";
 import { OrderSummary } from "../components/checkout/OrderSummary.tsx";
 import { PaymentPanel } from "../components/checkout/PaymentPanel.tsx";
 import { ProductPicker } from "../components/checkout/ProductPicker.tsx";
@@ -49,9 +46,11 @@ import { Link } from "../components/storefront/Link.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
 import { IconChevronRight, IconUser } from "../components/storefront/icons.tsx";
+import { checkoutQueryKey, writeCart } from "../storefront/cart-cache.ts";
 import { buildPriceIndex, buildStockIndex, uniqueCategories } from "../storefront/catalog.ts";
 import { buildCheckoutLines, checkoutTotals, type CheckoutLine } from "../storefront/checkout.ts";
 import { formatMoney, initials } from "../storefront/format.ts";
+import { invoicePending } from "../storefront/order-status.ts";
 import { scrollToSection } from "../storefront/scroll.ts";
 
 type FulfillmentType = "pickup" | "delivery";
@@ -61,6 +60,12 @@ const defaultDestination: Point = { latitude: 10.7905, longitude: 106.682 };
 
 /** How long a confirmation or failure stays on screen before clearing itself. */
 const FEEDBACK_TIMEOUT_MS = 4000;
+
+/**
+ * The SePay webhook reaches the payment service a moment after the shopper transfers, so the panel re-reads the
+ * invoice while it is still open instead of trusting the status the create call answered with.
+ */
+const PAYMENT_POLL_INTERVAL_MS = 4000;
 
 const PRODUCTS_SECTION_ID = "chon-thuoc";
 const RESULT_SECTION_ID = "ket-qua-dat-hang";
@@ -108,46 +113,26 @@ export const CheckoutPage = (): React.JSX.Element => {
     }, FEEDBACK_TIMEOUT_MS);
   };
 
-  /** Every cart mutation lands in both caches: this page renders from the bootstrap payload, the header from ["cart"]. */
-  const applyCart = (nextCart: Cart): void => {
-    queryClient.setQueryData(["checkout-bootstrap"], (current) =>
-      current && typeof current === "object" ? { ...current, cart: nextCart } : current,
-    );
-    queryClient.setQueryData(["cart"], nextCart);
-  };
-
   const checkoutQuery = useQuery({
-    queryKey: ["checkout-bootstrap"],
+    queryKey: checkoutQueryKey,
     queryFn: async () => {
-      await request("/api/auth/csrf");
-      const [products, stores, loadedCart, user] = await Promise.all([
+      const [products, stores, loadedCart, customer] = await Promise.all([
         listProducts(),
         listStores(),
         getCart(),
-        currentUser().catch(() => undefined),
+        resolveCustomerSession(),
       ]);
       let cart = loadedCart;
-      let orders: CustomerOrder[] = [];
       let addresses: DeliveryAddress[] = [];
-      if (user) {
-        setSessionSnapshot({ authenticated: true, resolved: true, userId: user.id });
-        setIdentityContextsEnabled(true);
-        [orders, addresses, cart] = await Promise.all([
-          listOrders(),
-          listDeliveryAddresses(),
-          mergeGuestCart().catch(() => loadedCart),
-        ]);
-      } else {
-        // A failed probe collapses to the safe state: signed out, which is what a form can act on.
-        setSessionSnapshot({ authenticated: false, resolved: true });
+      if (customer) {
+        [addresses, cart] = await Promise.all([listDeliveryAddresses(), mergeGuestCart().catch(() => loadedCart)]);
       }
       return {
         products,
         stores,
         cart,
-        orders,
         addresses,
-        profile: user ? { displayName: user.displayName, email: user.email } : undefined,
+        profile: customer ? { displayName: customer.displayName, email: customer.email } : undefined,
       };
     },
   });
@@ -157,16 +142,28 @@ export const CheckoutPage = (): React.JSX.Element => {
     enabled: submittedSearch !== undefined,
   });
   const pricesQuery = useQuery({ queryKey: ["published-prices"], queryFn: listPublishedPrices });
+  const placedInvoiceId = placed?.invoice.id;
+  const placedInvoiceQuery = useQuery({
+    queryKey: ["payment-invoice", placedInvoiceId],
+    queryFn: async () => {
+      if (!placedInvoiceId) throw new Error("Không có hóa đơn để theo dõi");
+      return getPaymentInvoice(placedInvoiceId);
+    },
+    enabled: placedInvoiceId !== undefined,
+    // Keep re-reading until the money lands, which is what lets the panel stop showing the QR code.
+    refetchInterval: (query) => (invoicePending(query.state.data?.status) ? PAYMENT_POLL_INTERVAL_MS : false),
+  });
   const products = submittedSearch === undefined ? (checkoutQuery.data?.products ?? []) : (productsQuery.data ?? []);
   const bootstrapProducts = checkoutQuery.data?.products;
   const stores = checkoutQuery.data?.stores ?? [];
   const cart = checkoutQuery.data?.cart;
-  const orders = checkoutQuery.data?.orders ?? [];
   const addresses = checkoutQuery.data?.addresses ?? [];
   const profile = checkoutQuery.data?.profile;
   const queryError = checkoutQuery.error ?? productsQuery.error;
   const loadError = queryError instanceof Error ? queryError.message : undefined;
   const visibleError = error ?? loadError;
+  /** The invoice the shopper pays against: the live one once it is read, the create response before that. */
+  const placedInvoice = placedInvoiceQuery.data ?? placed?.invoice;
 
   const authForm = useForm({
     defaultValues: { email: "", password: "", displayName: "" },
@@ -181,30 +178,25 @@ export const CheckoutPage = (): React.JSX.Element => {
             message: "Đã tạo tài khoản. Kiểm tra email để xác thực rồi đăng nhập để đặt hàng.",
           });
         } else {
-          const user = (await loginCustomer(value.email, value.password)) as {
-            id: string;
-            displayName: string;
-            email: string;
-          };
-          setSessionSnapshot({ authenticated: true, resolved: true, userId: user.id });
+          const customer = (await loginCustomer(value.email, value.password)) as Customer;
+          setSessionSnapshot({ authenticated: true, resolved: true, userId: customer.id });
           setIdentityContextsEnabled(true);
-          const [nextCart, nextOrders, nextAddresses] = await Promise.all([
-            mergeGuestCart(),
-            listOrders(),
-            listDeliveryAddresses(),
-          ]);
-          applyCart(nextCart);
-          queryClient.setQueryData(["checkout-bootstrap"], (current) =>
+          const [nextCart, nextAddresses] = await Promise.all([mergeGuestCart(), listDeliveryAddresses()]);
+          writeCart(queryClient, nextCart);
+          queryClient.setQueryData(checkoutQueryKey, (current) =>
             current && typeof current === "object"
               ? {
                   ...current,
-                  orders: nextOrders,
                   addresses: nextAddresses,
-                  profile: { displayName: user.displayName, email: user.email },
+                  profile: { displayName: customer.displayName, email: customer.email },
                 }
               : current,
           );
-          showFeedback({ kind: "notice", message: `Xin chào ${user.displayName}, giỏ thuốc của bạn đã được đồng bộ.` });
+          void queryClient.invalidateQueries({ queryKey: ["customer-orders"] });
+          showFeedback({
+            kind: "notice",
+            message: `Xin chào ${customer.displayName}, giỏ thuốc của bạn đã được đồng bộ.`,
+          });
         }
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Đăng nhập thất bại");
@@ -255,7 +247,7 @@ export const CheckoutPage = (): React.JSX.Element => {
     setPendingLineId(line.id);
     setError(undefined);
     try {
-      applyCart(await updateCartLine(line.id, quantity));
+      writeCart(queryClient, await updateCartLine(line.id, quantity));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không cập nhật được giỏ hàng");
     } finally {
@@ -267,7 +259,7 @@ export const CheckoutPage = (): React.JSX.Element => {
     setPendingLineId(line.id);
     setError(undefined);
     try {
-      applyCart(await updateCartLine(line.id, 0));
+      writeCart(queryClient, await updateCartLine(line.id, 0));
       showFeedback({ kind: "notice", message: `Đã xoá “${line.productName}” khỏi giỏ thuốc.` });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không xoá được sản phẩm khỏi giỏ");
@@ -281,7 +273,7 @@ export const CheckoutPage = (): React.JSX.Element => {
     setAddingProductId(product.id);
     setError(undefined);
     try {
-      applyCart(await addCartLine(product.id, unit.id, 1));
+      writeCart(queryClient, await addCartLine(product.id, unit.id, 1));
       showFeedback({ kind: "notice", message: `Đã thêm “${product.name}” vào giỏ thuốc.` });
       setPlaced(undefined);
     } catch (reason) {
@@ -382,10 +374,8 @@ export const CheckoutPage = (): React.JSX.Element => {
           currency: order.currency,
         })),
       });
-      applyCart(await clearCart());
-      queryClient.setQueryData(["checkout-bootstrap"], (current) =>
-        current && typeof current === "object" ? { ...current, orders: [order, ...orders] } : current,
-      );
+      writeCart(queryClient, await clearCart());
+      void queryClient.invalidateQueries({ queryKey: ["customer-orders"] });
       setPlaced({ order, invoice, paymentMethod });
       setDelivery(undefined);
       showFeedback({
@@ -428,10 +418,10 @@ export const CheckoutPage = (): React.JSX.Element => {
 
         {visibleError ? <Alert variant="danger">{visibleError}</Alert> : null}
 
-        {placed ? (
+        {placed && placedInvoice ? (
           <PaymentPanel
             order={placed.order}
-            invoice={placed.invoice}
+            invoice={placedInvoice}
             paymentMethod={placed.paymentMethod}
             storeName={stores.find((store) => store.id === placed.order.selectedStoreId)?.name}
           />
@@ -439,7 +429,7 @@ export const CheckoutPage = (): React.JSX.Element => {
 
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid gap-5">
-            <Card>
+            <Card id="tai-khoan" className="scroll-mt-24">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <IconUser className="size-4 text-primary" />
@@ -653,8 +643,6 @@ export const CheckoutPage = (): React.JSX.Element => {
                 />
               </CardContent>
             </Card>
-
-            {session.authenticated ? <OrderHistory orders={orders} stores={stores} /> : null}
           </div>
         </div>
       </main>
