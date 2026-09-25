@@ -64,7 +64,6 @@ export const HomePage = (): React.JSX.Element => {
 
   const priceIndex = useMemo(() => buildPriceIndex(prices, new Date().toISOString().slice(0, 10)), [prices]);
   const stockIndex = useMemo(() => buildStockIndex(availability), [availability]);
-  const selectedStore = stores.find((store) => store.id === selectedStoreId) ?? stores[0];
 
   const applyFilters = (next: Partial<Filters>, options?: { replace?: boolean }): void => {
     const nextFilters = {
@@ -103,13 +102,7 @@ export const HomePage = (): React.JSX.Element => {
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
         {error ? <Alert variant="danger">{error}</Alert> : null}
 
-        <HeroPanel
-          productCount={categories.length > 0 ? categories.reduce((total, item) => total + item.count, 0) : undefined}
-          storeCount={storesStatus === "ready" ? stores.length : undefined}
-          stores={stores}
-          selectedStore={selectedStore}
-          onSelectStore={(storeId) => changeStore(storeId)}
-        />
+        <HeroPanel />
 
         <QuickActions onFindNearest={() => scrollToSection("nha-thuoc")} />
 

@@ -51,12 +51,6 @@ export const IconCheck = ({ className }: IconProps): React.JSX.Element => (
   </Svg>
 );
 
-export const IconCross = ({ className }: IconProps): React.JSX.Element => (
-  <Svg className={className}>
-    <path d="M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5V3Z" />
-  </Svg>
-);
-
 export const IconTruck = ({ className }: IconProps): React.JSX.Element => (
   <Svg className={className}>
     <path d="M2 6.5h10.5v9H2zM12.5 10h4l3.5 3.5v2h-7.5z" />
