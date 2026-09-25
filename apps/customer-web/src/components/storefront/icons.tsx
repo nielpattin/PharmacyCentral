@@ -45,12 +45,6 @@ export const IconUser = ({ className }: IconProps): React.JSX.Element => (
   </Svg>
 );
 
-export const IconMenu = ({ className }: IconProps): React.JSX.Element => (
-  <Svg className={className}>
-    <path d="M3 6h18M3 12h18M3 18h18" />
-  </Svg>
-);
-
 export const IconCheck = ({ className }: IconProps): React.JSX.Element => (
   <Svg className={className}>
     <path d="m5 12.5 4.5 4.5L19 7" />
@@ -91,6 +85,12 @@ export const IconQr = ({ className }: IconProps): React.JSX.Element => (
 export const IconChevronRight = ({ className }: IconProps): React.JSX.Element => (
   <Svg className={className}>
     <path d="m9.5 6 6 6-6 6" />
+  </Svg>
+);
+
+export const IconChevronDown = ({ className }: IconProps): React.JSX.Element => (
+  <Svg className={className}>
+    <path d="m6 9.5 6 6 6-6" />
   </Svg>
 );
 

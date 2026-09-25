@@ -1,5 +1,4 @@
-import { categoryLabel } from "../../storefront/catalog.ts";
-import type { HeaderCategory } from "./SiteHeader.tsx";
+import { categoryLabel, type CategoryOption } from "../../storefront/catalog.ts";
 import { BrandMark } from "./BrandMark.tsx";
 import { Link } from "./Link.tsx";
 import { IconChevronRight, IconQr, IconShield, IconStore, IconTruck } from "./icons.tsx";
@@ -15,7 +14,7 @@ const PAYMENT_METHODS = [
   { label: "Thanh toán khi nhận hàng", icon: <IconTruck /> },
 ];
 
-export const SiteFooter = ({ categories = [] }: { categories?: HeaderCategory[] | undefined }): React.JSX.Element => (
+export const SiteFooter = ({ categories = [] }: { categories?: CategoryOption[] | undefined }): React.JSX.Element => (
   <footer className="mt-10 border-t border-line bg-surface">
     <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:grid-cols-2 lg:grid-cols-4">
       <div>

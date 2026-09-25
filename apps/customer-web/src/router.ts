@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 
+import { CategoryPage } from "./pages/CategoryPage.tsx";
 import { CheckoutPage } from "./pages/CheckoutPage.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
 import { NotFoundPage } from "./pages/NotFoundPage.tsx";
@@ -36,8 +37,13 @@ const checkoutRoute = createRoute({
   path: "/don-hang",
   component: CheckoutPage,
 });
+const categoryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/danh-muc/$slug",
+  component: CategoryPage,
+});
 
-const routeTree = rootRoute.addChildren([homeRoute, checkoutRoute]);
+const routeTree = rootRoute.addChildren([homeRoute, categoryRoute, checkoutRoute]);
 
 export const router = createRouter({
   routeTree,

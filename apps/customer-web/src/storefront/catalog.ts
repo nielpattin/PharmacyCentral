@@ -174,7 +174,9 @@ export const sortProducts = (
   return sorted;
 };
 
-export const uniqueCategories = (products: CatalogProduct[]): Array<{ value: string; count: number }> => {
+export type CategoryOption = { value: string; count: number };
+
+export const uniqueCategories = (products: CatalogProduct[]): CategoryOption[] => {
   const counts = new Map<string, number>();
   for (const product of products) {
     if (!product.category) continue;

@@ -1,21 +1,12 @@
-import { Alert, Button, Select } from "@pharmacy/ui";
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button, Select } from "@pharmacy/ui";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import {
-  addCartLine,
-  listProducts,
-  type CatalogPrice,
-  type CatalogProduct,
-  type CatalogUnit,
-} from "../../customer-api.ts";
+import { listProducts, type CatalogPrice } from "../../customer-api.ts";
 import { categoryLabel, SORT_OPTIONS, sortProducts, type SortMode } from "../../storefront/catalog.ts";
-import { ProductCard } from "./ProductCard.tsx";
-import { ProductGridSkeleton } from "./ProductCardSkeleton.tsx";
+import { ProductGrid, type ProductListStatus } from "./ProductGrid.tsx";
 import { SectionHeading } from "./SectionHeading.tsx";
 import { IconCart } from "./icons.tsx";
-
-type LoadStatus = "loading" | "ready" | "error";
 
 export type CatalogSectionProps = {
   search: string;
@@ -36,39 +27,16 @@ export const CatalogSection = ({
   onSortChange,
   onClearFilters,
 }: CatalogSectionProps): React.JSX.Element => {
-  const queryClient = useQueryClient();
   const productsQuery = useQuery({
     queryKey: ["products", { search, category }],
     queryFn: () => listProducts({ search, category }),
   });
   const products = productsQuery.data ?? [];
-  const status: LoadStatus = productsQuery.isPending ? "loading" : productsQuery.isError ? "error" : "ready";
+  const status: ProductListStatus = productsQuery.isPending ? "loading" : productsQuery.isError ? "error" : "ready";
   const loadError = productsQuery.error instanceof Error ? productsQuery.error.message : undefined;
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const addMutation = useMutation({
-    mutationFn: ({ productId, unitId }: { productId: string; unitId: string }) => addCartLine(productId, unitId, 1),
-    onSuccess: (cart) => {
-      queryClient.setQueryData(["cart"], cart);
-    },
-  });
-  const addingId = addMutation.isPending ? addMutation.variables?.productId : undefined;
-  const visibleError = error ?? loadError;
+  const hasFilters = Boolean(search || category);
 
   const visibleProducts = useMemo(() => sortProducts(products, sort, priceIndex), [products, sort, priceIndex]);
-
-  const addToCart = async (product: CatalogProduct, unit: CatalogUnit): Promise<void> => {
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      await addMutation.mutateAsync({ productId: product.id, unitId: unit.id });
-      setNotice(`Đã thêm “${product.name}” vào giỏ hàng`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thêm được sản phẩm vào giỏ hàng");
-    }
-  };
-
-  const hasFilters = Boolean(search || category);
 
   return (
     <section id="san-pham" className="scroll-mt-40">
@@ -106,53 +74,30 @@ export const CatalogSection = ({
         }
       />
 
-      {visibleError ? (
-        <Alert variant="danger" className="mb-4">
-          {visibleError}
-        </Alert>
-      ) : null}
-      {notice ? <Alert className="mb-4">{notice}</Alert> : null}
-
-      {status === "loading" ? <ProductGridSkeleton /> : null}
-
-      {status === "error" ? (
-        <p className="rounded-md border border-dashed border-danger/40 bg-danger-soft/40 p-6 text-center text-sm text-danger">
-          Không hiển thị được sản phẩm. Vui lòng kiểm tra kết nối mạng và tải lại trang.
-        </p>
-      ) : null}
-
-      {status === "ready" && visibleProducts.length === 0 ? (
-        <div className="rounded-md border border-dashed border-line p-8 text-center">
-          <p className="text-sm font-medium text-ink">
-            {hasFilters ? "Không tìm thấy sản phẩm phù hợp" : "Chưa có sản phẩm nào"}
-          </p>
-          <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-            {hasFilters
-              ? "Thử từ khoá khác, hoặc xoá bộ lọc để xem toàn bộ danh mục sản phẩm."
-              : "Danh mục sản phẩm đang được cập nhật. Vui lòng quay lại sau."}
-          </p>
-          {hasFilters ? (
-            <Button variant="outline" className="mt-4" onClick={onClearFilters}>
-              Xoá bộ lọc
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {status === "ready" && visibleProducts.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {visibleProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              priceIndex={priceIndex}
-              inStock={stockIndex.get(product.id)}
-              adding={addingId === product.id}
-              onAdd={(target, unit) => void addToCart(target, unit)}
-            />
-          ))}
-        </div>
-      ) : null}
+      <ProductGrid
+        products={visibleProducts}
+        status={status}
+        error={loadError}
+        priceIndex={priceIndex}
+        stockIndex={stockIndex}
+        empty={
+          <div className="rounded-md border border-dashed border-line p-8 text-center">
+            <p className="text-sm font-medium text-ink">
+              {hasFilters ? "Không tìm thấy sản phẩm phù hợp" : "Chưa có sản phẩm nào"}
+            </p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-muted">
+              {hasFilters
+                ? "Thử từ khoá khác, hoặc xoá bộ lọc để xem toàn bộ danh mục sản phẩm."
+                : "Danh mục sản phẩm đang được cập nhật. Vui lòng quay lại sau."}
+            </p>
+            {hasFilters ? (
+              <Button variant="outline" className="mt-4" onClick={onClearFilters}>
+                Xoá bộ lọc
+              </Button>
+            ) : null}
+          </div>
+        }
+      />
     </section>
   );
 };

@@ -88,23 +88,16 @@ export const HomePage = (): React.JSX.Element => {
     applyFilters({ storeId }, { replace: true });
   };
 
-  const selectCategory = (category: string | undefined): void => {
-    applyFilters({ category });
-    scrollToProducts();
-  };
-
   return (
     <div className="min-h-screen bg-background text-ink">
       <SiteHeader
         categories={categories}
         storeCount={storesStatus === "ready" ? stores.length : undefined}
         searchTerm={filters.search}
-        activeCategory={filters.category}
         onSearch={(term) => {
           applyFilters({ search: term });
           scrollToProducts();
         }}
-        onSelectCategory={selectCategory}
       />
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">

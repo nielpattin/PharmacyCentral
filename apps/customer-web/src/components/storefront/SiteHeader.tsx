@@ -1,52 +1,48 @@
 import { Badge, Button, Input, cn } from "@pharmacy/ui";
-import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { getCart } from "../../customer-api.ts";
-import { categoryLabel } from "../../storefront/catalog.ts";
+import type { CategoryOption } from "../../storefront/catalog.ts";
+import { buildCategoryPages } from "../../storefront/navigation.ts";
 import { BrandMark } from "./BrandMark.tsx";
 import { Link } from "./Link.tsx";
-import { IconCart, IconCheck, IconMenu, IconPin, IconSearch, IconUser } from "./icons.tsx";
-
-export type HeaderCategory = { value: string; count: number };
+import {
+  IconCart,
+  IconCheck,
+  IconChevronDown,
+  IconChevronRight,
+  IconPin,
+  IconSearch,
+  IconStore,
+  IconUser,
+} from "./icons.tsx";
 
 type SiteHeaderProps = {
-  categories?: HeaderCategory[] | undefined;
+  categories?: CategoryOption[] | undefined;
   storeCount?: number | undefined;
   searchTerm?: string | undefined;
-  activeCategory?: string | undefined;
+  activeSlug?: string | undefined;
   onSearch?: ((term: string) => void) | undefined;
-  onSelectCategory?: ((category: string | undefined) => void) | undefined;
 };
+
+const BAR_ITEM = "relative flex items-center whitespace-nowrap py-3.5 text-[13px] transition-colors";
 
 export const SiteHeader = ({
   categories = [],
   storeCount,
   searchTerm = "",
-  activeCategory,
+  activeSlug,
   onSearch,
-  onSelectCategory,
 }: SiteHeaderProps): React.JSX.Element => {
-  const navigate = useNavigate();
   const cartQuery = useQuery({ queryKey: ["cart"], queryFn: getCart, retry: false });
   const cartCount = cartQuery.data?.lines.reduce((total, line) => total + Number(line.quantity), 0) ?? 0;
   const [term, setTerm] = useState(searchTerm);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const pages = buildCategoryPages(categories);
 
   const submit = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    setMenuOpen(false);
     onSearch?.(term.trim());
-  };
-
-  const selectCategory = (category: string | undefined): void => {
-    setMenuOpen(false);
-    if (onSelectCategory) {
-      onSelectCategory(category);
-      return;
-    }
-    void navigate({ to: "/", search: category ? { "danh-muc": category } : {} });
   };
 
   return (
@@ -121,63 +117,54 @@ export const SiteHeader = ({
         </div>
       </div>
 
-      {categories.length > 0 ? (
+      {pages.length > 0 ? (
         <nav className="border-t border-line" aria-label="Danh mục sản phẩm">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-1 px-4 py-1">
-            <button
-              type="button"
-              onClick={() => setMenuOpen((open) => !open)}
-              aria-expanded={menuOpen}
-              className="flex shrink-0 items-center gap-2 rounded-t-md bg-primary px-4 py-2.5 text-sm font-medium text-white"
-            >
-              <IconMenu className="size-4" />
-              <span>Danh mục</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => selectCategory(undefined)}
-              className={cn(
-                "shrink-0 rounded-md px-3 py-2.5 text-sm transition-colors hover:bg-surface-soft",
-                activeCategory ? "text-ink" : "font-medium text-primary",
-              )}
-            >
-              Tất cả sản phẩm
-            </button>
-            {categories.map((category) => (
-              <button
-                key={category.value}
-                type="button"
-                onClick={() => selectCategory(category.value)}
-                className={cn(
-                  "shrink-0 whitespace-nowrap rounded-md px-3 py-2.5 text-sm transition-colors hover:bg-surface-soft",
-                  activeCategory === category.value ? "font-medium text-primary" : "text-ink",
-                )}
-              >
-                {categoryLabel(category.value)}
-              </button>
-            ))}
-            <span className="ml-auto hidden shrink-0 pl-4 text-xs text-muted lg:block">
-              Giá thống nhất tại mọi nhà thuốc
-            </span>
-          </div>
-
-          {menuOpen ? (
-            <div className="border-t border-line bg-surface">
-              <div className="mx-auto grid max-w-7xl gap-2 px-4 py-4 sm:grid-cols-2 lg:grid-cols-3">
-                {categories.map((category) => (
-                  <button
-                    key={category.value}
-                    type="button"
-                    onClick={() => selectCategory(category.value)}
-                    className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2.5 text-left text-sm hover:bg-surface-soft"
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-2 px-4">
+            {pages.map((page) => {
+              const active = activeSlug === page.slug || page.children.some((child) => child.slug === activeSlug);
+              return (
+                <div key={page.slug} className="group relative">
+                  <Link
+                    className={cn(
+                      BAR_ITEM,
+                      "gap-1.5",
+                      active ? "font-semibold text-primary" : "font-medium text-ink hover:text-primary",
+                    )}
+                    href={`/danh-muc/${page.slug}`}
+                    current={active}
                   >
-                    <span className="font-medium text-ink">{categoryLabel(category.value)}</span>
-                    <span className="text-xs text-muted">{category.count} sản phẩm</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
+                    {page.label}
+                    {page.children.length > 0 ? <IconChevronDown className="size-3.5 text-muted-soft" /> : null}
+                    {active ? <span className="absolute inset-x-0 bottom-1 h-0.5 rounded-full bg-primary" /> : null}
+                  </Link>
+                  {page.children.length > 0 ? (
+                    <div className="invisible absolute left-0 top-full z-30 hidden w-72 rounded-b-lg border border-line bg-surface p-1.5 opacity-0 shadow-lg transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 lg:block">
+                      {page.children.map((child) => (
+                        <Link
+                          key={child.slug}
+                          className="flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-ink hover:bg-surface-soft hover:text-primary"
+                          href={`/danh-muc/${child.slug}`}
+                        >
+                          {child.label}
+                          <IconChevronRight className="size-3.5 text-muted-soft" />
+                        </Link>
+                      ))}
+                      <Link
+                        className="mt-1 flex items-center gap-1.5 border-t border-line px-3 pb-1.5 pt-2 text-sm font-medium text-primary hover:underline"
+                        href={`/danh-muc/${page.slug}`}
+                      >
+                        Xem tất cả {page.label}
+                      </Link>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+            <Link className={cn(BAR_ITEM, "gap-1.5 font-medium text-ink hover:text-primary")} href="/#nha-thuoc">
+              <IconStore className="size-4" />
+              <span>Hệ thống nhà thuốc</span>
+            </Link>
+          </div>
         </nav>
       ) : null}
     </header>
