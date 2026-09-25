@@ -158,3 +158,46 @@ describe("sales prescription API", () => {
     expect(dispensePrescription.mock.calls[0]?.[2]).toBe(ids.actor);
   });
 });
+
+describe("sales order listing API", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) await closeServer(server);
+    server = undefined;
+    vi.unstubAllGlobals();
+  });
+
+  it("lists every shopper's orders for pharmacy staff and only the caller's own for a customer", async () => {
+    const listOrders = vi
+      .fn<(input: Parameters<SalesRepository["listOrders"]>[0]) => Promise<unknown>>()
+      .mockResolvedValue([]);
+    const repository = { listOrders } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const staffResponse = await httpFetch(`${testServer.url}/orders?status=Confirmed&paymentStatus=Paid&limit=25`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+    });
+    const staffFilter = listOrders.mock.calls[0]?.[0];
+    expect(staffResponse.status).toBe(200);
+    expect(staffFilter?.customerId).toBeUndefined();
+    expect(staffFilter?.status).toBe("Confirmed");
+    expect(staffFilter?.paymentStatus).toBe("Paid");
+    expect(staffFilter?.limit).toBe(25);
+
+    const shopperResponse = await httpFetch(`${testServer.url}/orders?status=Confirmed&paymentStatus=Paid`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "customer" },
+    });
+    const shopperFilter = listOrders.mock.calls[1]?.[0];
+    expect(shopperResponse.status).toBe(200);
+    expect(shopperFilter?.customerId).toBe(ids.actor);
+    expect(shopperFilter?.status).toBe("Confirmed");
+    expect(shopperFilter?.paymentStatus).toBeUndefined();
+    expect(shopperFilter?.limit).toBe(100);
+
+    const anonymousResponse = await httpFetch(`${testServer.url}/orders`);
+    expect(anonymousResponse.status).toBe(401);
+    expect(listOrders).toHaveBeenCalledTimes(2);
+  });
+});

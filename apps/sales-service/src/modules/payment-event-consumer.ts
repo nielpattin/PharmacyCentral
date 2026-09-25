@@ -37,9 +37,9 @@ export class SalesPaymentEventConsumer {
         typeof orderId === "string" &&
         (event.eventType === "payment.invoice.paid.v1" || event.eventType === "payment.invoice.refunded.v1")
       ) {
-        await this.repository.setOrderPaymentStatus(
+        await this.repository.applyPaymentStatus(
           orderId,
-          event.eventType.endsWith("refunded.v1") ? "Refunded" : "Paid",
+          event.eventType === "payment.invoice.refunded.v1" ? "Refunded" : "Paid",
         );
       }
       this.channel?.ack(message);

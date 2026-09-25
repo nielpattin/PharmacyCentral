@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import { Router } from "express";
+import type { Request, Response } from "express";
 import { z } from "zod";
 
 import {
@@ -16,8 +17,13 @@ import type { DeliveryCalculation, DeliveryCalculator } from "./delivery/domain/
 import { SalesRepository } from "./sales-repository.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
-const actor = (request: import("express").Request): string | undefined => request.header("X-Actor-Id") ?? undefined;
-const guestToken = (request: import("express").Request): string | undefined =>
+const actor = (request: Request): string | undefined => request.header("X-Actor-Id") ?? undefined;
+/** Pharmacy staff and internal services read every customer's orders; a shopper only reads their own. */
+const readsEveryOrder = (request: Request): boolean => {
+  const type = request.header("X-Actor-Type");
+  return type === "employee" || type === "system";
+};
+const guestToken = (request: Request): string | undefined =>
   request.header("X-Guest-Cart-Token") ?? request.headers.cookie?.match(/(?:^|;\s*)pharmacy_guest_cart=([^;]+)/)?.[1];
 
 export type SalesRouterOptions = {
@@ -155,15 +161,23 @@ export const createSalesRouter = (
 
   router.get("/orders", async (request, response, next) => {
     if (!repository) return unavailable(response);
-    const customerId = actor(request);
-    if (!customerId) return unauthorized(response);
+    const requesterId = actor(request);
+    if (!requesterId) return unauthorized(response);
+    const status = queryString(request.query.status);
+    const limit = queryNumber(request.query.limit, 100);
     try {
-      return response.json(
-        await repository.listOrders(
-          customerId,
-          typeof request.query.status === "string" ? request.query.status : undefined,
-        ),
-      );
+      // The staff portal reviews every shopper's order, optionally narrowed to one site or payment state.
+      if (readsEveryOrder(request)) {
+        return response.json(
+          await repository.listOrders({
+            status,
+            limit,
+            paymentStatus: queryString(request.query.paymentStatus),
+            selectedStoreId: queryString(request.query.siteId),
+          }),
+        );
+      }
+      return response.json(await repository.listOrders({ customerId: requesterId, status, limit }));
     } catch (error) {
       return next(error);
     }
@@ -485,12 +499,12 @@ const queryNumber = (value: unknown, fallback: number): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
-const setGuestCookie = (response: import("express").Response, token: string): void => {
+const setGuestCookie = (response: Response, token: string): void => {
   response.setHeader("Set-Cookie", `pharmacy_guest_cart=${token}; SameSite=Lax; Path=/; Max-Age=2592000`);
 };
-const unavailable = (response: import("express").Response) =>
+const unavailable = (response: Response) =>
   response.status(503).json({ title: "Sales database is not configured", status: 503 });
-const unauthorized = (response: import("express").Response) =>
+const unauthorized = (response: Response) =>
   response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
-const invalid = (response: import("express").Response) =>
+const invalid = (response: Response) =>
   response.status(400).json({ title: "Invalid sales request", status: 400, code: "invalid_request" });

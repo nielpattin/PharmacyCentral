@@ -18,6 +18,9 @@ import {
 import { transitionOrder, type OrderStatus } from "./orders/domain/order-status.ts";
 import { transitionPrescription, type PrescriptionStatus } from "./prescriptions/domain/prescription-status.ts";
 
+/** The invoice states the payment service publishes, mirrored onto the order. */
+type PaymentStatus = "Pending" | "Paid" | "Failed" | "Refunded";
+
 type OrderLineInput = {
   productId: string;
   productUnitId: string;
@@ -207,16 +210,25 @@ export class SalesRepository {
     });
   }
 
-  public async listOrders(customerId?: string, status?: string) {
+  public async listOrders(input: {
+    customerId?: string | undefined;
+    status?: string | undefined;
+    paymentStatus?: string | undefined;
+    selectedStoreId?: string | undefined;
+    limit?: number | undefined;
+  }) {
     const filters = [
-      customerId ? eq(orders.customerId, customerId) : undefined,
-      status ? eq(orders.status, status) : undefined,
+      input.customerId ? eq(orders.customerId, input.customerId) : undefined,
+      input.status ? eq(orders.status, input.status) : undefined,
+      input.paymentStatus ? eq(orders.paymentStatus, input.paymentStatus) : undefined,
+      input.selectedStoreId ? eq(orders.selectedStoreId, input.selectedStoreId) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
     return this.database.db
       .select()
       .from(orders)
       .where(filters.length ? and(...filters) : undefined)
-      .orderBy(desc(orders.createdAt));
+      .orderBy(desc(orders.createdAt))
+      .limit(Math.min(Math.max(input.limit ?? 100, 1), 500));
   }
 
   public async getOrder(id: string) {
@@ -249,12 +261,26 @@ export class SalesRepository {
     return order;
   }
 
-  public async setOrderPaymentStatus(id: string, status: "Pending" | "Paid" | "Failed" | "Refunded") {
+  /**
+   * Money is the payment service's authority, the order is ours. No member of staff accepts an online order by hand,
+   * so receiving the full amount is what confirms it; an order the pharmacy has already moved past Pending keeps
+   * that status.
+   */
+  public async applyPaymentStatus(id: string, status: PaymentStatus) {
+    const current = (await this.database.db.select().from(orders).where(eq(orders.id, id)).limit(1))[0];
+    if (!current) return undefined;
+    const confirming = status === "Paid" && current.status === "Pending";
     const [order] = await this.database.db
       .update(orders)
-      .set({ paymentStatus: status, updatedAt: new Date() })
+      .set({
+        paymentStatus: status,
+        ...(confirming ? { status: transitionOrder("Pending", "Confirmed") } : {}),
+        updatedAt: new Date(),
+      })
       .where(eq(orders.id, id))
       .returning();
+    if (order && confirming)
+      await this.appendEvent("sales.order.status-changed.v1", order.id, { orderId: order.id, status: order.status });
     return order;
   }
 
