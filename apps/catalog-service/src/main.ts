@@ -6,7 +6,10 @@ import { createTrustedRequestMiddleware, matchesPathPrefix } from "./middleware/
 
 import { AvailabilityProjection } from "./modules/availability/application/availability-projection.ts";
 import { RabbitMqAvailabilityConsumer } from "./modules/availability/infrastructure/rabbitmq-availability-consumer.ts";
+import { createCatalogImportRouter } from "./modules/catalog-import-routes.ts";
+import { CatalogImportService } from "./modules/catalog-import-service.ts";
 import { createCatalogRouter } from "./modules/catalog-routes.ts";
+import { ProductMediaStore } from "./modules/catalog/product-media-store.ts";
 import { DrizzleStoreRepository } from "./modules/stores/infrastructure/drizzle-store-repository.ts";
 import { createCatalogDatabase } from "./shared/infrastructure/database.ts";
 
@@ -18,6 +21,8 @@ if (!portStr) throw new Error("Missing required environment variable: PORT. Plea
 const port = Number.parseInt(portStr, 10);
 const database = createCatalogDatabase();
 const storeRepository = database ? new DrizzleStoreRepository(database) : undefined;
+const catalogImportService = database ? new CatalogImportService(database) : undefined;
+const mediaStore = ProductMediaStore.createFromEnvironment();
 const availabilityConsumer = database
   ? new RabbitMqAvailabilityConsumer(new AvailabilityProjection(database))
   : undefined;
@@ -27,6 +32,8 @@ if (availabilityConsumer)
     .catch((error: unknown) => logger.warn({ error }, "availability consumer unavailable"));
 
 app.disable("x-powered-by");
+app.use("/products", express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "5mb" }));
+app.use("/products/imports", express.json({ limit: "25mb" }));
 app.use(express.json({ limit: "1mb" }));
 // Browser routes authenticate with the signed identity context minted by identity-service
 // (/auth/context); handlers enforce the remaining session and role rules.
@@ -49,7 +56,8 @@ app.use(
 );
 app.get("/health/live", (_request, response) => response.json({ status: "ok", service: serviceName }));
 app.get("/health/ready", (_request, response) => response.json({ status: "ok", service: serviceName }));
-app.use("/", createCatalogRouter(storeRepository));
+app.use("/", createCatalogImportRouter(catalogImportService));
+app.use("/", createCatalogRouter(storeRepository, mediaStore));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   logger.error({ error }, "unhandled request error");

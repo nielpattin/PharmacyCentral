@@ -36,6 +36,7 @@ catalog:
   express: 5.2.1
   lucide-react: 1.44.0
   maplibre-gl: 6.4.1
+  minio: 8.0.7
   nodemailer: 9.0.5
   openid-client: 6.8.7
   oxfmt: 0.64.0

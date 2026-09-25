@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ProductMediaStore } from "./catalog/product-media-store.ts";
 import { createCatalogRouter } from "./catalog-routes.ts";
 import { DrizzleStoreRepository } from "./stores/infrastructure/drizzle-store-repository.ts";
 
@@ -13,10 +14,14 @@ const ids = {
   supplier: "00000000-0000-4000-8000-000000000004",
 };
 
-const createTestServer = async (repository: DrizzleStoreRepository): Promise<{ server: Server; url: string }> => {
+const createTestServer = async (
+  repository: DrizzleStoreRepository,
+  mediaStore?: ProductMediaStore,
+): Promise<{ server: Server; url: string }> => {
   const app = express();
+  app.use(express.raw({ type: "image/*", limit: "5mb" }));
   app.use(express.json());
-  app.use(createCatalogRouter(repository));
+  app.use(createCatalogRouter(repository, mediaStore));
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
     response.status(500).json({ error: String(error) }),
   );
@@ -39,7 +44,7 @@ describe("catalog API", () => {
     server = undefined;
   });
 
-  it("preserves catalog notes, statuses, and product unit updates", async () => {
+  it("preserves product metadata and image placeholders on create", async () => {
     const updateUnit = vi
       .fn<(id: string, input: Record<string, unknown>) => Promise<unknown>>()
       .mockResolvedValue({ id: ids.unit, unitName: "Box" });
@@ -63,6 +68,14 @@ describe("catalog API", () => {
         name: "Product",
         category: "Medicine",
         manufacturer: "Maker",
+        genericName: "Paracetamol",
+        activeIngredient: "Paracetamol 500 mg",
+        strength: "500 mg",
+        dosageForm: "Tablet",
+        packageDescription: "Box of 100 tablets",
+        registrationNumber: "VD-TEST-001",
+        prescriptionRequired: false,
+        imageUrl: null,
         notes: "Product note",
         status: "Active",
         isActive: true,
@@ -88,7 +101,19 @@ describe("catalog API", () => {
     expect(productResponse.status).toBe(201);
     expect(updateResponse.status).toBe(200);
     expect(deleteResponse.status).toBe(204);
-    expect(createProduct.mock.calls[0]?.[0].notes).toBe("Product note");
+    expect(createProduct.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        genericName: "Paracetamol",
+        activeIngredient: "Paracetamol 500 mg",
+        strength: "500 mg",
+        dosageForm: "Tablet",
+        packageDescription: "Box of 100 tablets",
+        registrationNumber: "VD-TEST-001",
+        prescriptionRequired: false,
+        imageUrl: null,
+        notes: "Product note",
+      }),
+    );
     expect(updateUnit).toHaveBeenCalledWith(ids.unit, expect.objectContaining({ unitName: "Box" }));
     expect(deleteUnit).toHaveBeenCalledWith(ids.unit);
   });
@@ -138,6 +163,7 @@ describe("catalog API", () => {
       expect.objectContaining({ status: "Active", notes: "Supplier note", isActive: true }),
     );
   });
+
   it("rejects site-specific price drafts", async () => {
     const createPrice = vi
       .fn<(input: Record<string, unknown>) => Promise<unknown>>()
@@ -161,5 +187,32 @@ describe("catalog API", () => {
 
     expect(response.status).toBe(400);
     expect(createPrice).not.toHaveBeenCalled();
+  });
+
+  it("stores an image and persists its public URL on the product", async () => {
+    const getProduct = vi.fn<(id: string) => Promise<unknown>>().mockResolvedValue({ id: ids.product });
+    const updateProduct = vi.fn<(id: string, input: Record<string, unknown>) => Promise<unknown>>().mockResolvedValue({
+      id: ids.product,
+      imageUrl: "http://localhost:9000/product-media/products/product/image.jpg",
+    });
+    const store = vi
+      .fn<(productId: string, image: Buffer) => Promise<{ imageUrl: string }>>()
+      .mockResolvedValue({ imageUrl: "http://localhost:9000/product-media/products/product/image.jpg" });
+    const mediaStore = { store } as unknown as ProductMediaStore;
+    const repository = { getProduct, updateProduct } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository, mediaStore);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/products/${ids.product}/image`, {
+      method: "PUT",
+      headers: { "content-type": "image/jpeg" },
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    });
+
+    expect(response.status).toBe(200);
+    expect(store).toHaveBeenCalledWith(ids.product, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    expect(updateProduct).toHaveBeenCalledWith(ids.product, {
+      imageUrl: "http://localhost:9000/product-media/products/product/image.jpg",
+    });
   });
 });

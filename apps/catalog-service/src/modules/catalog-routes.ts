@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { productSearchQuerySchema } from "../contracts/catalog.ts";
 
+import { ProductMediaStore } from "./catalog/product-media-store.ts";
 import type { DrizzleStoreRepository } from "./stores/infrastructure/drizzle-store-repository.ts";
 
 const idParamSchema = z.object({ id: z.string().uuid() });
@@ -22,6 +23,14 @@ const productInputSchema = z.object({
   sku: z.string().trim().min(1).max(100),
   barcode: z.string().trim().max(100).nullable().optional(),
   name: z.string().trim().min(1).max(300),
+  genericName: z.string().trim().max(300).nullable().optional(),
+  activeIngredient: z.string().trim().max(2000).nullable().optional(),
+  strength: z.string().trim().max(150).nullable().optional(),
+  dosageForm: z.string().trim().max(150).nullable().optional(),
+  packageDescription: z.string().trim().max(500).nullable().optional(),
+  registrationNumber: z.string().trim().max(100).nullable().optional(),
+  prescriptionRequired: z.boolean().optional(),
+  imageUrl: z.string().url().nullable().optional(),
   category: z.string().trim().max(150).nullable().optional(),
   manufacturer: z.string().trim().max(300).nullable().optional(),
   status: z.string().trim().max(30).optional(),
@@ -93,7 +102,10 @@ const activePriceQuerySchema = z.object({
   effectiveDate: z.string().date(),
 });
 
-export const createCatalogRouter = (repository: DrizzleStoreRepository | undefined): Router => {
+export const createCatalogRouter = (
+  repository: DrizzleStoreRepository | undefined,
+  mediaStore?: ProductMediaStore,
+): Router => {
   const router = Router();
 
   router.get("/sites", async (_request, response) => {
@@ -253,6 +265,30 @@ export const createCatalogRouter = (repository: DrizzleStoreRepository | undefin
     const product = await repository.getProduct(id.data.id);
     if (!product) return response.status(404).json({ title: "Product not found", status: 404 });
     response.json(await withProductUnits(repository, product));
+  });
+
+  router.put("/products/:id/image", async (request, response) => {
+    if (!repository) return databaseUnavailable(response);
+    if (!mediaStore)
+      return response.status(503).json({ title: "Product media storage is not configured", status: 503 });
+    const id = idParamSchema.safeParse(request.params);
+    if (!id.success) return invalidRequest(response);
+    if (!Buffer.isBuffer(request.body)) return invalidRequest(response);
+    try {
+      if (!(await repository.getProduct(id.data.id))) {
+        return response.status(404).json({ title: "Product not found", status: 404 });
+      }
+      const stored = await mediaStore.store(id.data.id, request.body);
+      const product = await repository.updateProduct(id.data.id, { imageUrl: stored.imageUrl });
+      if (!product) return response.status(404).json({ title: "Product not found", status: 404 });
+      response.json({ ...product, media: stored });
+    } catch (error) {
+      response.status(400).json({
+        title: error instanceof Error ? error.message : "Product image upload failed",
+        status: 400,
+        code: "invalid_product_image",
+      });
+    }
   });
 
   router.get("/products/:id/units", async (request, response) => {

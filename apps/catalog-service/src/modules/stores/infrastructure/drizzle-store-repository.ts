@@ -361,6 +361,14 @@ export class DrizzleStoreRepository {
     sku: string;
     barcode?: string | null | undefined;
     name: string;
+    genericName?: string | null | undefined;
+    activeIngredient?: string | null | undefined;
+    strength?: string | null | undefined;
+    dosageForm?: string | null | undefined;
+    packageDescription?: string | null | undefined;
+    registrationNumber?: string | null | undefined;
+    prescriptionRequired?: boolean | undefined;
+    imageUrl?: string | null | undefined;
     category?: string | null | undefined;
     manufacturer?: string | null | undefined;
     status?: string | undefined;
@@ -373,6 +381,14 @@ export class DrizzleStoreRepository {
         sku: input.sku.trim(),
         barcode: input.barcode?.trim() || null,
         name: input.name.trim(),
+        genericName: input.genericName?.trim() ?? null,
+        activeIngredient: input.activeIngredient?.trim() ?? null,
+        strength: input.strength?.trim() ?? null,
+        dosageForm: input.dosageForm?.trim() ?? null,
+        packageDescription: input.packageDescription?.trim() ?? null,
+        registrationNumber: input.registrationNumber?.trim() ?? null,
+        prescriptionRequired: input.prescriptionRequired ?? false,
+        imageUrl: input.imageUrl?.trim() || null,
         category: input.category?.trim() ?? null,
         manufacturer: input.manufacturer?.trim() ?? null,
         status: input.status ?? "Active",
@@ -396,6 +412,14 @@ export class DrizzleStoreRepository {
       sku?: string | undefined;
       barcode?: string | null | undefined;
       name?: string | undefined;
+      genericName?: string | null | undefined;
+      activeIngredient?: string | null | undefined;
+      strength?: string | null | undefined;
+      dosageForm?: string | null | undefined;
+      packageDescription?: string | null | undefined;
+      registrationNumber?: string | null | undefined;
+      prescriptionRequired?: boolean | undefined;
+      imageUrl?: string | null | undefined;
       category?: string | null | undefined;
       manufacturer?: string | null | undefined;
       status?: string | undefined;
@@ -407,6 +431,18 @@ export class DrizzleStoreRepository {
       ...(input.sku === undefined ? {} : { sku: input.sku.trim() }),
       ...(input.barcode === undefined ? {} : { barcode: input.barcode?.trim() || null }),
       ...(input.name === undefined ? {} : { name: input.name.trim() }),
+      ...(input.genericName === undefined ? {} : { genericName: input.genericName?.trim() ?? null }),
+      ...(input.activeIngredient === undefined ? {} : { activeIngredient: input.activeIngredient?.trim() ?? null }),
+      ...(input.strength === undefined ? {} : { strength: input.strength?.trim() ?? null }),
+      ...(input.dosageForm === undefined ? {} : { dosageForm: input.dosageForm?.trim() ?? null }),
+      ...(input.packageDescription === undefined
+        ? {}
+        : { packageDescription: input.packageDescription?.trim() ?? null }),
+      ...(input.registrationNumber === undefined
+        ? {}
+        : { registrationNumber: input.registrationNumber?.trim() ?? null }),
+      ...(input.prescriptionRequired === undefined ? {} : { prescriptionRequired: input.prescriptionRequired }),
+      ...(input.imageUrl === undefined ? {} : { imageUrl: input.imageUrl?.trim() || null }),
       ...(input.category === undefined ? {} : { category: input.category?.trim() ?? null }),
       ...(input.manufacturer === undefined ? {} : { manufacturer: input.manufacturer?.trim() ?? null }),
       ...(input.status === undefined ? {} : { status: input.status }),
