@@ -41,12 +41,30 @@ const supplierInitial = {
   isActive: "true",
 };
 
-export const MasterDataSection = ({
-  initialTab = "Sites",
-}: {
-  initialTab?: "Sites" | "Create site" | "Locations" | "Create location" | "Suppliers" | "Create supplier";
-}): React.JSX.Element => {
-  const [tab, setTab] = useState<string>(initialTab);
+// Each page owns one record type, so its tab bar only ever holds that type's list and create tabs.
+export type MasterDataPage = "sites" | "locations" | "suppliers";
+
+const pages: Record<MasterDataPage, { title: string; subtitle: string; tabs: [string, string] }> = {
+  sites: {
+    title: "Sites",
+    subtitle: "Sites the pharmacy operates from.",
+    tabs: ["Sites", "Create site"],
+  },
+  locations: {
+    title: "Storage locations",
+    subtitle: "Storage locations inside each site.",
+    tabs: ["Storage locations", "Create location"],
+  },
+  suppliers: {
+    title: "Suppliers",
+    subtitle: "Suppliers the pharmacy buys stock from.",
+    tabs: ["Suppliers", "Create supplier"],
+  },
+};
+
+export const MasterDataSection = ({ kind }: { kind: MasterDataPage }): React.JSX.Element => {
+  const page = pages[kind];
+  const [tab, setTab] = useState<string>(page.tabs[0]);
   const masterQuery = useQuery({
     queryKey: ["master-data"],
     queryFn: async () => {
@@ -214,19 +232,15 @@ export const MasterDataSection = ({
     <section className="staff-section">
       <div className="page-head">
         <div>
-          <h1>{translateText("Master data")}</h1>
-          <p className="page-subtitle">{translateText("Sites, storage locations, and supplier records.")}</p>
+          <h1>{translateText(page.title)}</h1>
+          <p className="page-subtitle">{translateText(page.subtitle)}</p>
         </div>
         <RefreshButton onClick={() => void load()} />
       </div>
       {visibleError ? <p className="notice">{translateText(visibleError)}</p> : null}
       {references.error ? <p className="notice">{translateText(references.error)}</p> : null}
       {message ? <p className="success-note">{translateText(message)}</p> : null}
-      <SubTabs
-        tabs={["Sites", "Create site", "Locations", "Create location", "Suppliers", "Create supplier"]}
-        active={tab}
-        onChange={setTab}
-      />
+      <SubTabs tabs={page.tabs} active={tab} onChange={setTab} />
       {tab === "Sites" ? (
         <DataTable
           loading={masterQuery.isPending && !masterQuery.data}
@@ -279,7 +293,7 @@ export const MasterDataSection = ({
           <Field label="Longitude" type="number" value={site.longitude} onChange={setValue(setSite, "longitude")} />
         </FormCard>
       ) : null}
-      {tab === "Locations" ? (
+      {tab === "Storage locations" ? (
         <DataTable
           loading={masterQuery.isPending && !masterQuery.data}
           rows={locations}

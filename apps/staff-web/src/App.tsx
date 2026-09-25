@@ -1,6 +1,7 @@
 import { Link as RouterLink, Navigate, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
+  BadgeDollarSign,
   BarChart3,
   Building2,
   ClipboardList,
@@ -8,12 +9,15 @@ import {
   FileText,
   LayoutDashboard,
   LogOut,
+  MapPin,
   Menu,
   Package,
+  Ruler,
   Settings,
   ShieldCheck,
   ShoppingBag,
   Tags,
+  Upload,
   X,
 } from "lucide-react";
 
@@ -23,10 +27,12 @@ import { setSessionSnapshot, useSession } from "./auth.ts";
 import { useMountEffect } from "./hooks/useMountEffect.ts";
 import { StaffNotFoundPage } from "./pages/NotFoundPage.tsx";
 import { toggleLanguage, translateText, useLanguage } from "./i18n.ts";
+import { datasets } from "./import-datasets.ts";
 import { CatalogSection } from "./sections/catalog-section.tsx";
 import { DashboardSection } from "./sections/dashboard-section.tsx";
 import { FinanceSection } from "./sections/finance-section.tsx";
 import { GovernanceSection } from "./sections/governance-section.tsx";
+import { ImportSection } from "./sections/import-section.tsx";
 import { InventorySection } from "./sections/inventory-section.tsx";
 import { MasterDataSection } from "./sections/master-data-section.tsx";
 import { PrescriptionsSection } from "./sections/prescriptions-section.tsx";
@@ -45,8 +51,16 @@ const sectionRoles: Record<Section, readonly string[]> = {
   transfers: ["Warehouse Staff"],
   replenishment: ["Pharmacist", "Warehouse Staff"],
   sites: ["Platform Admin", "Pharmacy Manager"],
+  storageLocations: ["Platform Admin", "Pharmacy Manager"],
   catalog: ["Platform Admin", "Pharmacy Manager"],
+  units: ["Platform Admin", "Pharmacy Manager"],
+  pricing: ["Platform Admin", "Pharmacy Manager"],
   supplier: ["Platform Admin", "Pharmacy Manager"],
+  importProducts: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
+  importSites: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
+  importLocations: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
+  importSuppliers: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
+  importStock: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
   receiving: ["Warehouse Staff"],
   procurement: ["Platform Admin", "Pharmacy Manager"],
   stocktake: ["Warehouse Staff"],
@@ -83,8 +97,26 @@ const navGroups: NavGroup[] = [
     label: "Master data",
     items: [
       { key: "sites", label: "Sites", icon: <Building2 size={16} strokeWidth={2} /> },
+      { key: "storageLocations", label: "Storage locations", icon: <MapPin size={16} strokeWidth={2} /> },
       { key: "catalog", label: "Catalog", icon: <Tags size={16} strokeWidth={2} /> },
+      { key: "units", label: "Units", icon: <Ruler size={16} strokeWidth={2} /> },
+      { key: "pricing", label: "Pricing", icon: <BadgeDollarSign size={16} strokeWidth={2} /> },
       { key: "supplier", label: "Suppliers", icon: <Building2 size={16} strokeWidth={2} /> },
+    ],
+  },
+  {
+    id: "data-import",
+    label: "Data import",
+    items: [
+      { key: "importProducts", label: datasets.catalog.label, icon: <Upload size={16} strokeWidth={2} /> },
+      { key: "importSites", label: datasets.sites.label, icon: <Upload size={16} strokeWidth={2} /> },
+      {
+        key: "importLocations",
+        label: datasets.storageLocations.label,
+        icon: <Upload size={16} strokeWidth={2} />,
+      },
+      { key: "importSuppliers", label: datasets.suppliers.label, icon: <Upload size={16} strokeWidth={2} /> },
+      { key: "importStock", label: datasets.openingBalances.label, icon: <Upload size={16} strokeWidth={2} /> },
     ],
   },
   {
@@ -238,11 +270,27 @@ export const App = (): React.JSX.Element => {
       case "replenishment":
         return <InventorySection key={activeSection} initialTab="Replenishment" />;
       case "sites":
-        return <MasterDataSection key={activeSection} initialTab="Sites" />;
+        return <MasterDataSection key={activeSection} kind="sites" />;
+      case "storageLocations":
+        return <MasterDataSection key={activeSection} kind="locations" />;
       case "catalog":
-        return <CatalogSection key={activeSection} initialTab="Products" />;
+        return <CatalogSection key={activeSection} kind="products" />;
+      case "units":
+        return <CatalogSection key={activeSection} kind="units" />;
+      case "pricing":
+        return <CatalogSection key={activeSection} kind="pricing" />;
       case "supplier":
-        return <MasterDataSection key={activeSection} initialTab="Suppliers" />;
+        return <MasterDataSection key={activeSection} kind="suppliers" />;
+      case "importProducts":
+        return <ImportSection key={activeSection} dataset={datasets.catalog} />;
+      case "importSites":
+        return <ImportSection key={activeSection} dataset={datasets.sites} />;
+      case "importLocations":
+        return <ImportSection key={activeSection} dataset={datasets.storageLocations} />;
+      case "importSuppliers":
+        return <ImportSection key={activeSection} dataset={datasets.suppliers} />;
+      case "importStock":
+        return <ImportSection key={activeSection} dataset={datasets.openingBalances} />;
       case "receiving":
         return <ProcurementSection key={activeSection} initialTab="Goods receipts" />;
       case "procurement":

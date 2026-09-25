@@ -1264,7 +1264,7 @@ const translations: Record<Language, Record<string, string>> = {
     "language.en": "EN",
 
     "nav.operations": "Vận hành",
-    "nav.masterData": "Dữ liệu nền",
+    "nav.masterData": "Danh mục",
     "nav.governance": "Kiểm soát",
     "nav.dashboard": "Bảng điều khiển",
     "nav.pharmacistOverview": "Tổng quan quầy",
@@ -1306,7 +1306,7 @@ const translations: Record<Language, Record<string, string>> = {
     "common.backToDashboard": "Quay lại bảng điều khiển",
     "common.backToSites": "Quay lại cơ sở",
     "common.manageSites": "Quản lý cơ sở",
-    "common.openMasterData": "Mở dữ liệu nền",
+    "common.openMasterData": "Mở danh mục",
     "common.newSite": "Tạo cơ sở mới",
     "common.newLocation": "Tạo vị trí mới",
     "common.create": "Tạo",
@@ -1356,7 +1356,7 @@ const translations: Record<Language, Record<string, string>> = {
     "dashboard.title": "Bảng điều khiển",
     "dashboard.description": "Trung tâm vận hành hằng ngày cho đội nhà thuốc, tồn kho và cảnh báo.",
     "dashboard.manageSites": "Quản lý cơ sở",
-    "dashboard.openMasterData": "Mở dữ liệu nền",
+    "dashboard.openMasterData": "Mở danh mục",
     "dashboard.totalSites": "Tổng cơ sở",
     "dashboard.activeSites": "Cơ sở đang hoạt động",
     "dashboard.storageLocations": "Vị trí lưu trữ",
@@ -1368,7 +1368,7 @@ const translations: Record<Language, Record<string, string>> = {
     "dashboard.prescriptionDesc": "Luồng nhận, kiểm tra và xuất thuốc cho công việc dược.",
     "dashboard.transfer": "Điều chuyển",
     "dashboard.transferDesc": "Di chuyển tồn kho giữa các cơ sở và vị trí lưu trữ.",
-    "dashboard.masterData": "Dữ liệu nền",
+    "dashboard.masterData": "Danh mục",
     "dashboard.structure": "Cấu trúc",
     "dashboard.structureDesc": "Cơ sở là cấp gốc. Vị trí lưu trữ nằm bên dưới từng cơ sở.",
     "dashboard.sites": "Cơ sở",
@@ -2540,7 +2540,7 @@ const literalTranslations: Record<string, string> = {
   Procurement: "Đặt hàng",
   Reporting: "Báo cáo",
   Finance: "Tài chính",
-  "Master data": "Dữ liệu nền",
+  "Master data": "Danh mục",
   Sites: "Cơ sở",
   Catalog: "Danh mục",
   Suppliers: "Nhà cung cấp",
@@ -2568,7 +2568,6 @@ const literalTranslations: Record<string, string> = {
   "Create batch": "Tạo lô",
   "Create transfer": "Tạo điều chuyển",
   "Count line": "Ghi nhận số đếm",
-  "Catalog and pricing": "Danh mục và giá bán",
   "Create product": "Tạo sản phẩm",
   "Add product unit": "Thêm đơn vị sản phẩm",
   "Create price draft": "Tạo bản nháp giá",
@@ -2603,6 +2602,7 @@ const literalTranslations: Record<string, string> = {
   Previous: "Trước",
   Next: "Sau",
   Product: "Sản phẩm",
+  Products: "Sản phẩm",
   "Product batch": "Lô sản phẩm",
   Site: "Cơ sở",
   Action: "Thao tác",
@@ -2611,6 +2611,7 @@ const literalTranslations: Record<string, string> = {
   Occurred: "Thời điểm",
   Details: "Chi tiết",
   "Storage location": "Vị trí lưu trữ",
+  "Storage locations": "Vị trí lưu trữ",
   Quantity: "Số lượng",
   Reason: "Lý do",
   Status: "Trạng thái",
@@ -2649,7 +2650,6 @@ const literalTranslations: Record<string, string> = {
   Create: "Tạo",
   Dispense: "Xuất thuốc",
   Summary: "Tổng quan",
-  Locations: "Vị trí",
   Lines: "Số dòng",
   "Line notes": "Ghi chú dòng",
   "Batch number": "Số lô",
@@ -2724,14 +2724,17 @@ const literalTranslations: Record<string, string> = {
   "Unable to load catalog": "Không thể tải dữ liệu danh mục",
   "Unable to load finance": "Không thể tải dữ liệu tài chính",
   "Unable to load governance data": "Không thể tải dữ liệu kiểm soát",
-  "Unable to load master data": "Không thể tải dữ liệu nền",
+  "Unable to load master data": "Không thể tải danh mục",
   "Staff login failed": "Đăng nhập nhân viên thất bại",
   "Operational overview and recent activity.": "Tổng quan vận hành và hoạt động gần đây.",
-  "Manage products, units, prices, and lifecycle actions.":
-    "Quản lý sản phẩm, đơn vị, giá bán và các thao tác vòng đời.",
+  "Product records, images, and lifecycle status.": "Hồ sơ sản phẩm, hình ảnh và trạng thái vòng đời.",
+  "Units and conversion factors for each product.": "Đơn vị và hệ số quy đổi của từng sản phẩm.",
+  "Price drafts, publishing, and archiving.": "Bản nháp giá, phát hành và lưu trữ.",
   "Payment status, reconciliation, and operational reports.": "Trạng thái thanh toán, đối soát và báo cáo vận hành.",
   "Audit activity and employee access controls.": "Hoạt động kiểm toán và quyền truy cập nhân viên.",
-  "Sites, storage locations, and supplier records.": "Cơ sở, vị trí lưu trữ và hồ sơ nhà cung cấp.",
+  "Sites the pharmacy operates from.": "Các cơ sở nhà thuốc đang vận hành.",
+  "Storage locations inside each site.": "Vị trí lưu trữ bên trong từng cơ sở.",
+  "Suppliers the pharmacy buys stock from.": "Nhà cung cấp mà nhà thuốc nhập hàng.",
   "Create, reserve, dispense, and cancel prescriptions.": "Tạo, giữ tồn, xuất và hủy đơn thuốc.",
   "Manage purchase orders and receive supplier stock.": "Quản lý đơn đặt hàng và tiếp nhận hàng từ nhà cung cấp.",
   "Stock, quality, movements, transfers, stocktakes, returns, and replenishment.":
@@ -2763,6 +2766,48 @@ const literalTranslations: Record<string, string> = {
   Received: "Đã nhận",
   Released: "Đã đạt",
   PendingQc: "Chờ kiểm tra",
+  "Data import": "Nhập dữ liệu",
+  "Load master data and stock from CSV.": "Nạp danh mục và tồn kho từ CSV.",
+  "Products and prices": "Sản phẩm và giá bán",
+  Stock: "Tồn kho",
+  "Download the CSV template, fill it with your own data, then import the file. Sites before storage locations, products before stock.":
+    "Tải mẫu CSV, điền dữ liệu của bạn rồi nhập file. Cơ sở trước vị trí lưu trữ, sản phẩm trước tồn kho.",
+  "Download CSV template": "Tải mẫu CSV",
+  "Only CSV import files are supported": "Chỉ hỗ trợ file CSV",
+  "Ready to import": "Sẵn sàng nhập",
+  "Importing...": "Đang nhập...",
+  "Import now": "Nhập ngay",
+  "Import failed": "Nhập thất bại",
+  "Unable to read the import file": "Không đọc được file nhập",
+  "Import completed": "Nhập thành công",
+  // Problem titles raised by the import services.
+  "Invalid import payload": "Dữ liệu nhập không hợp lệ",
+  "Catalog database is not configured": "Dịch vụ danh mục chưa kết nối cơ sở dữ liệu",
+  "Inventory database is not configured": "Dịch vụ kho chưa kết nối cơ sở dữ liệu",
+  Row: "Dòng",
+  "Product units": "Đơn vị tính",
+  Prices: "Giá bán",
+  Pricing: "Giá bán",
+  "Balances created": "Số dư đã tạo",
+  "Balances unchanged": "Số dư không đổi",
+  "Batches created": "Lô đã tạo",
+  "Loading imported records...": "Đang đọc lại dữ liệu đã nhập...",
+  "Unable to read the imported records": "Không đọc lại được dữ liệu đã nhập",
+  "Rows not found in the system": "Không tìm thấy trong hệ thống",
+  "No stored records matched this file": "Không có bản ghi nào trong hệ thống khớp với file này",
+  Batch: "Lô",
+  Category: "Nhóm hàng",
+  Manufacturer: "Nhà sản xuất",
+  Expiry: "Hết hạn",
+  Location: "Vị trí",
+  // Custom messages raised by the import contracts.
+  "Import payload must include at least one site, storage location, supplier, or product":
+    "Dữ liệu nhập phải có ít nhất một cơ sở, vị trí lưu trữ, nhà cung cấp hoặc sản phẩm",
+  "Provide exactly one of productId or productSku": "Chỉ được nhập một trong hai: productId hoặc productSku",
+  "Provide exactly one of siteId or siteCode": "Chỉ được nhập một trong hai: siteId hoặc siteCode",
+  "Provide exactly one of storageLocationId or storageLocationCode":
+    "Chỉ được nhập một trong hai: storageLocationId hoặc storageLocationCode",
+  "Provide only one of supplierId or supplierCode": "Chỉ được nhập một trong hai: supplierId hoặc supplierCode",
 };
 
 export function translateText(value: string): string {
@@ -2770,6 +2815,99 @@ export function translateText(value: string): string {
   if (literalTranslations[value]) return literalTranslations[value];
   const key = Object.keys(translations.en).find((candidate) => translations.en[candidate] === value);
   return key ? (translations.vi[key] ?? value) : value;
+}
+
+const validationTypeNames: Record<string, string> = {
+  string: "chuỗi",
+  number: "số",
+  integer: "số nguyên",
+  bigint: "số nguyên lớn",
+  boolean: "true/false",
+  array: "mảng",
+  object: "đối tượng",
+};
+
+const validationSizingUnits: Record<string, string> = {
+  characters: "ký tự",
+  items: "phần tử",
+  entries: "mục",
+  bytes: "byte",
+};
+
+// Whole sentences: zod's format names do not survive word-for-word Vietnamese.
+const validationFormatMessages: Record<string, string> = {
+  UUID: "Không phải UUID hợp lệ",
+  "ISO date": "Ngày không hợp lệ, cần dạng YYYY-MM-DD",
+  "ISO datetime": "Thời điểm không hợp lệ, cần dạng ISO",
+  "email address": "Email không hợp lệ",
+  URL: "URL không hợp lệ",
+  "base64-encoded string": "Chuỗi base64 không hợp lệ",
+};
+
+const validationType = (name: string | undefined): string =>
+  name === undefined ? "?" : (validationTypeNames[name] ?? name);
+
+const validationSize = (unit: string | undefined): string => validationSizingUnits[unit ?? ""] ?? unit ?? "phần tử";
+
+// The import services validate with zod and report its English wording, e.g.
+// "Too small: expected string to have >=1 characters". These rules cover the templates the import
+// payloads can produce; anything unrecognised keeps the server wording instead of a guess.
+const validationRules: ReadonlyArray<readonly [RegExp, (match: RegExpMatchArray) => string | undefined]> = [
+  [
+    /^Invalid input: expected (\w+), received (\w+)$/,
+    ([, expected, received]) => {
+      if (received === "undefined" || received === "null") return "Thiếu giá trị bắt buộc";
+      if (received === "NaN") return "Giá trị không phải là số";
+      return `Sai kiểu dữ liệu: cần ${validationType(expected)}, nhận ${validationType(received)}`;
+    },
+  ],
+  [
+    /^Invalid option: expected one of (.+)$/,
+    ([, options]) => (options ? `Chỉ nhận một trong: ${options.split("|").join(", ")}` : undefined),
+  ],
+  [/^Invalid input: expected (.+)$/, ([, expected]) => (expected ? `Chỉ nhận giá trị ${expected}` : undefined)],
+  [
+    /^Too small: expected (\w+) to have ([<>]=?)(\d+) (\w+)$/,
+    ([, origin, operator, minimum, unit]) => {
+      if (origin === "string" && operator === ">=" && minimum === "1") return "Không được để trống";
+      const size = validationSize(unit);
+      return operator === ">=" ? `Cần ít nhất ${minimum} ${size}` : `Phải có hơn ${minimum} ${size}`;
+    },
+  ],
+  [
+    /^Too small: expected (\w+) to be ([<>]=?)(-?\d+(?:\.\d+)?)$/,
+    ([, , operator, minimum]) => {
+      if (operator === ">=" && minimum === "0") return "Giá trị không được âm";
+      return `Giá trị quá nhỏ: tối thiểu ${minimum}`;
+    },
+  ],
+  [
+    /^Too big: expected (\w+) to have ([<>]=?)(\d+) (\w+)$/,
+    ([, , operator, maximum, unit]) =>
+      operator === "<=" ? `Tối đa ${maximum} ${validationSize(unit)}` : `Dưới ${maximum} ${validationSize(unit)}`,
+  ],
+  [
+    /^Too big: expected (\w+) to be ([<>]=?)(-?\d+(?:\.\d+)?)$/,
+    ([, , operator, maximum]) =>
+      operator === "<=" ? `Giá trị quá lớn: tối đa ${maximum}` : `Giá trị quá lớn: phải nhỏ hơn ${maximum}`,
+  ],
+  // Raised in the browser while reading a CSV cell, not by the service.
+  [
+    /^Expected a number but received (.+)$/,
+    ([, value]) => (value ? `Giá trị không phải là số: nhận ${value}` : undefined),
+  ],
+  [/^Invalid (.+)$/, ([, format]) => (format ? validationFormatMessages[format] : undefined)],
+];
+
+export function translateValidationMessage(message: string): string {
+  if (currentLanguage === "en") return message;
+  for (const [pattern, render] of validationRules) {
+    const match = pattern.exec(message);
+    if (!match) continue;
+    const rendered = render(match);
+    if (rendered) return rendered;
+  }
+  return translateText(message);
 }
 
 export function statusLabel(status: string) {

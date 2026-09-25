@@ -5,6 +5,27 @@ export type ApiRequestOptions = RequestInit & {
   idempotencyKey?: string;
 };
 
+export type ApiProblemIssue = { path: string; message: string };
+
+// Problem details returned by the services (title, code, and per-field issues).
+export type ApiProblem = {
+  title?: string;
+  detail?: string;
+  status?: number;
+  code?: string;
+  errors?: ApiProblemIssue[];
+};
+
+export class ApiProblemError extends Error {
+  public constructor(
+    message: string,
+    public readonly problem: ApiProblem,
+  ) {
+    super(message);
+    this.name = "ApiProblemError";
+  }
+}
+
 let identityContextsEnabled = false;
 
 const identityContextCache = createIdentityContextCache(async () => {
@@ -42,13 +63,15 @@ export const request = async <T>(url: string, options: ApiRequestOptions = {}): 
     }
     if (!response.ok) {
       let detail = `API request failed with status ${response.status}`;
+      let problem: ApiProblem = { status: response.status };
       try {
-        const problem = (await response.json()) as { title?: string; detail?: string };
-        detail = problem.detail ?? problem.title ?? detail;
+        const body = (await response.json()) as ApiProblem;
+        problem = { ...body, status: response.status };
+        detail = body.detail ?? body.title ?? detail;
       } catch {
         // Keep the status error when the upstream response is not JSON.
       }
-      throw new Error(detail);
+      throw new ApiProblemError(detail, problem);
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
