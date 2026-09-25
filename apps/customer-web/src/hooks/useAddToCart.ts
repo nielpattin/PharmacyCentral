@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
 import { addCartLine } from "../customer-api.ts";
+import { writeCart } from "../storefront/cart-cache.ts";
 
 type AddToCartInput = {
   productId: string;
@@ -44,7 +45,7 @@ export const useAddToCart = (): AddToCart => {
     mutationFn: ({ productId, productUnitId, quantity }: AddToCartInput) =>
       addCartLine(productId, productUnitId, quantity),
     onSuccess: (cart) => {
-      queryClient.setQueryData(["cart"], cart);
+      writeCart(queryClient, cart);
     },
   });
 
