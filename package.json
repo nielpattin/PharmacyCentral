@@ -10,7 +10,7 @@
     "graph": "nx graph",
     "infra:down": "docker compose down",
     "infra:up": "docker compose up -d postgres rabbitmq valkey mailpit otel-collector minio minio-init",
-    "seed:demo": "node --env-file=.env tools/demo-seed.mjs",
+    "seed:accounts": "pnpm --dir apps/identity-service seed",
     "images:import": "pnpm --dir apps/catalog-service images:import",
     "images:pack": "tar -czf data/product-images/images.tar.gz -C data/product-images images",
     "images:unpack": "tar -xzf data/product-images/images.tar.gz -C data/product-images",
