@@ -149,6 +149,7 @@ export const DeliveryPointPanel = ({
             {addresses.length > 0 ? (
               <div className="grid gap-2">
                 <p className="text-sm font-medium text-ink">Địa chỉ đã lưu</p>
+                <p className="text-sm text-muted">Địa chỉ có dấu ★ là địa chỉ mặc định trong tài khoản của bạn.</p>
                 <div className="flex flex-wrap gap-2">
                   {addresses.map((address) => {
                     const active =
@@ -164,6 +165,7 @@ export const DeliveryPointPanel = ({
                       >
                         <IconPin className="size-3.5" />
                         {address.label}
+                        {address.isDefault ? " ★" : ""}
                       </Button>
                     );
                   })}

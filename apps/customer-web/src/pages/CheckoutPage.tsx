@@ -1,9 +1,8 @@
-import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 
-import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input } from "@pharmacy/ui";
+import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@pharmacy/ui";
 
 import {
   addCartLine,
@@ -18,22 +17,18 @@ import {
   listProducts,
   listPublishedPrices,
   listStores,
-  loginCustomer,
   mergeGuestCart,
-  registerCustomer,
   resolveCustomerSession,
   searchAddress,
-  setIdentityContextsEnabled,
   updateCartLine,
   type CatalogProduct,
   type CatalogUnit,
-  type Customer,
   type CustomerOrderDetail,
   type DeliveryAddress,
   type DeliveryCalculation,
   type PaymentInvoice,
 } from "../customer-api.ts";
-import { setSessionSnapshot, useSession } from "../auth.ts";
+import { useSession } from "../auth.ts";
 import { CartItems } from "../components/checkout/CartItems.tsx";
 import { CheckoutSteps, type CheckoutStep } from "../components/checkout/CheckoutSteps.tsx";
 import { DeliveryPointPanel, type AddressResult, type Point } from "../components/checkout/DeliveryPointPanel.tsx";
@@ -45,11 +40,11 @@ import { CartFeedback } from "../components/storefront/CartFeedback.tsx";
 import { Link } from "../components/storefront/Link.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
-import { IconChevronRight, IconUser } from "../components/storefront/icons.tsx";
+import { IconChevronRight } from "../components/storefront/icons.tsx";
 import { checkoutQueryKey, writeCart } from "../storefront/cart-cache.ts";
 import { buildPriceIndex, buildStockIndex, uniqueCategories } from "../storefront/catalog.ts";
 import { buildCheckoutLines, checkoutTotals, type CheckoutLine } from "../storefront/checkout.ts";
-import { formatMoney, initials } from "../storefront/format.ts";
+import { formatMoney } from "../storefront/format.ts";
 import { invoicePending } from "../storefront/order-status.ts";
 import { scrollToSection } from "../storefront/scroll.ts";
 
@@ -92,7 +87,6 @@ export const CheckoutPage = (): React.JSX.Element => {
   const [delivery, setDelivery] = useState<DeliveryCalculation>();
   const [submittedSearch, setSubmittedSearch] = useState<string>();
   const [addressResults, setAddressResults] = useState<AddressResult[]>([]);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
   const [pendingLineId, setPendingLineId] = useState<string>();
@@ -132,7 +126,6 @@ export const CheckoutPage = (): React.JSX.Element => {
         stores,
         cart,
         addresses,
-        profile: customer ? { displayName: customer.displayName, email: customer.email } : undefined,
       };
     },
   });
@@ -158,53 +151,11 @@ export const CheckoutPage = (): React.JSX.Element => {
   const stores = checkoutQuery.data?.stores ?? [];
   const cart = checkoutQuery.data?.cart;
   const addresses = checkoutQuery.data?.addresses ?? [];
-  const profile = checkoutQuery.data?.profile;
   const queryError = checkoutQuery.error ?? productsQuery.error;
   const loadError = queryError instanceof Error ? queryError.message : undefined;
   const visibleError = error ?? loadError;
   /** The invoice the shopper pays against: the live one once it is read, the create response before that. */
   const placedInvoice = placedInvoiceQuery.data ?? placed?.invoice;
-
-  const authForm = useForm({
-    defaultValues: { email: "", password: "", displayName: "" },
-    onSubmit: async ({ value }) => {
-      setBusy(true);
-      setError(undefined);
-      try {
-        if (authMode === "register") {
-          await registerCustomer(value.email, value.password, value.displayName);
-          showFeedback({
-            kind: "notice",
-            message: "Đã tạo tài khoản. Kiểm tra email để xác thực rồi đăng nhập để đặt hàng.",
-          });
-        } else {
-          const customer = (await loginCustomer(value.email, value.password)) as Customer;
-          setSessionSnapshot({ authenticated: true, resolved: true, userId: customer.id });
-          setIdentityContextsEnabled(true);
-          const [nextCart, nextAddresses] = await Promise.all([mergeGuestCart(), listDeliveryAddresses()]);
-          writeCart(queryClient, nextCart);
-          queryClient.setQueryData(checkoutQueryKey, (current) =>
-            current && typeof current === "object"
-              ? {
-                  ...current,
-                  addresses: nextAddresses,
-                  profile: { displayName: customer.displayName, email: customer.email },
-                }
-              : current,
-          );
-          void queryClient.invalidateQueries({ queryKey: ["customer-orders"] });
-          showFeedback({
-            kind: "notice",
-            message: `Xin chào ${customer.displayName}, giỏ thuốc của bạn đã được đồng bộ.`,
-          });
-        }
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Đăng nhập thất bại");
-      } finally {
-        setBusy(false);
-      }
-    },
-  });
 
   const priceIndex = useMemo(
     () => buildPriceIndex(pricesQuery.data ?? [], new Date().toISOString().slice(0, 10)),
@@ -235,6 +186,8 @@ export const CheckoutPage = (): React.JSX.Element => {
   const canSubmit = Boolean(
     cartLines.length && session.authenticated && (fulfillmentType === "pickup" || selectedStore),
   );
+  // Ordering is tied to the account, and the sign-in form now lives on the account page, so the reason names where
+  // to go rather than describing a form that is not on this page.
   const blockedReason = !session.authenticated
     ? "Đăng nhập tài khoản khách hàng để đặt hàng."
     : cartLines.length === 0
@@ -429,110 +382,6 @@ export const CheckoutPage = (): React.JSX.Element => {
 
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid gap-5">
-            <Card id="tai-khoan" className="scroll-mt-24">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <IconUser className="size-4 text-primary" />
-                  Tài khoản khách hàng
-                </CardTitle>
-                <CardDescription>
-                  Đơn thuốc gắn với tài khoản của bạn để theo dõi trạng thái và nhận thông báo từ nhà thuốc.
-                </CardDescription>
-              </CardHeader>
-              {session.authenticated ? (
-                <CardContent className="flex items-center gap-3">
-                  <span
-                    aria-hidden="true"
-                    className="grid size-11 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-semibold text-primary-dark"
-                  >
-                    {initials(profile?.displayName ?? "Khách hàng")}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-ink">{profile?.displayName ?? "Khách hàng"}</p>
-                    {profile?.email ? <p className="truncate text-xs text-muted">{profile.email}</p> : null}
-                  </div>
-                </CardContent>
-              ) : session.resolved ? (
-                <CardContent>
-                  <form
-                    className="grid max-w-md gap-3"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void authForm.handleSubmit();
-                    }}
-                  >
-                    {authMode === "register" ? (
-                      <authForm.Field name="displayName">
-                        {(field) => (
-                          <Field label="Tên hiển thị">
-                            <Input
-                              value={field.state.value}
-                              onChange={(event) => field.handleChange(event.target.value)}
-                              placeholder="Nguyễn Văn A"
-                              required
-                            />
-                          </Field>
-                        )}
-                      </authForm.Field>
-                    ) : null}
-                    <authForm.Field name="email">
-                      {(field) => (
-                        <Field label="Email">
-                          <Input
-                            type="email"
-                            value={field.state.value}
-                            onChange={(event) => field.handleChange(event.target.value)}
-                            placeholder="ban@email.com"
-                            required
-                          />
-                        </Field>
-                      )}
-                    </authForm.Field>
-                    <authForm.Field name="password">
-                      {(field) => (
-                        <Field
-                          label="Mật khẩu"
-                          hint={
-                            authMode === "register"
-                              ? "Tối thiểu 8 ký tự, nên có chữ và số."
-                              : "Mật khẩu của tài khoản khách hàng."
-                          }
-                        >
-                          <Input
-                            type="password"
-                            value={field.state.value}
-                            onChange={(event) => field.handleChange(event.target.value)}
-                            placeholder="••••••••"
-                            required
-                          />
-                        </Field>
-                      )}
-                    </authForm.Field>
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="submit" disabled={busy}>
-                        {authMode === "register" ? "Tạo tài khoản" : "Đăng nhập"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}
-                      >
-                        {authMode === "login" ? "Tạo tài khoản mới" : "Dùng tài khoản có sẵn"}
-                      </Button>
-                    </div>
-                  </form>
-                </CardContent>
-              ) : (
-                // Neither the account nor the sign-in form is knowable yet: a returning shopper must not be shown a
-                // login screen they are about to lose.
-                <CardContent>
-                  <p role="status" className="text-sm text-muted">
-                    Đang kiểm tra đăng nhập…
-                  </p>
-                </CardContent>
-              )}
-            </Card>
-
             <Card>
               <CardHeader className="flex items-center justify-between gap-2">
                 <CardTitle>Giỏ thuốc</CardTitle>
@@ -612,6 +461,7 @@ export const CheckoutPage = (): React.JSX.Element => {
               busy={busy}
               canSubmit={canSubmit}
               blockedReason={blockedReason}
+              needsAccount={!session.authenticated}
               onSubmit={() => void placeOrder()}
               onGoToCart={() => scrollToSection(PRODUCTS_SECTION_ID)}
             />

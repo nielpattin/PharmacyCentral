@@ -22,8 +22,8 @@ import { IconChevronRight } from "../components/storefront/icons.tsx";
  */
 const REFRESH_INTERVAL_MS = 10_000;
 
-/** Where a signed-out visitor has to go: the customer sign-in form lives on the checkout page. */
-const ACCOUNT_LOCATION = { to: "/don-hang", hash: "tai-khoan" } as const;
+/** Where a signed-out visitor has to go: the customer sign-in form lives on the account page. */
+const ACCOUNT_LOCATION = { to: "/tai-khoan", search: { section: "tong-quan" } } as const;
 
 /** Both states the page shows before it can answer: an empty list must never stand in for either of them. */
 const NoticeCard = ({ children }: { children: React.ReactNode }): React.JSX.Element => (

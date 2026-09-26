@@ -98,17 +98,10 @@ export const SiteHeader = ({
         <div className="flex shrink-0 items-center gap-2">
           <Link
             className="flex items-center gap-1.5 rounded-md border border-line bg-surface-soft px-3 py-2 text-sm font-medium text-ink hover:border-primary hover:text-primary"
-            href="/don-hang-cua-toi"
+            href="/tai-khoan"
           >
-            <IconReceipt className="size-4 text-primary" />
-            <span className="hidden sm:inline">Đơn của tôi</span>
-          </Link>
-          <Link
-            className="hidden items-center gap-2 rounded-md px-3 py-2 text-sm text-ink hover:bg-surface-soft md:flex"
-            href="/don-hang#tai-khoan"
-          >
-            <IconUser />
-            <span>Tài khoản</span>
+            <IconUser className="size-4 text-primary" />
+            <span className="hidden sm:inline">Tài khoản</span>
           </Link>
           <Link
             className="relative flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-ink hover:bg-surface-soft"

@@ -2,6 +2,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle } from "@pharmacy/ui";
 
 import type { CheckoutLine, CheckoutTotals } from "../../storefront/checkout.ts";
 import { formatMoney, formatQuantity } from "../../storefront/format.ts";
+import { Link } from "../storefront/Link.tsx";
 import { IconQr, IconShield, IconTruck } from "../storefront/icons.tsx";
 
 const AmountRow = ({ label, value, strong }: { label: string; value: string; strong?: boolean }): React.JSX.Element => (
@@ -27,10 +28,11 @@ type OrderSummaryProps = {
   busy: boolean;
   canSubmit: boolean;
   blockedReason: string | undefined;
+  /** True when the only thing standing between the shopper and an order is signing in. */
+  needsAccount: boolean;
   onSubmit: () => void;
   onGoToCart: () => void;
 };
-
 export const OrderSummary = ({
   lines,
   totals,
@@ -41,6 +43,7 @@ export const OrderSummary = ({
   busy,
   canSubmit,
   blockedReason,
+  needsAccount,
   onSubmit,
   onGoToCart,
 }: OrderSummaryProps): React.JSX.Element => {
@@ -115,7 +118,18 @@ export const OrderSummary = ({
               {busy ? "Đang xử lý…" : "Đặt hàng"}
             </Button>
 
-            {blockedReason ? <p className="-mt-2 text-center text-xs text-muted">{blockedReason}</p> : null}
+            {blockedReason ? (
+              needsAccount ? (
+                <p className="-mt-2 text-center text-xs text-muted">
+                  {blockedReason}{" "}
+                  <Link className="font-medium text-primary hover:underline" href="/tai-khoan">
+                    Đăng nhập
+                  </Link>
+                </p>
+              ) : (
+                <p className="-mt-2 text-center text-xs text-muted">{blockedReason}</p>
+              )
+            ) : null}
           </>
         )}
 
