@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ne } from "drizzle-orm";
 
 import type { SalesDatabase } from "../shared/infrastructure/database.ts";
 import {
@@ -298,18 +298,30 @@ export class SalesRepository {
     latitude: number;
     longitude: number;
     providerResolvedAddress: string;
-    addressNote?: string | null;
+    addressNote?: string | null | undefined;
+    isDefault?: boolean | undefined;
   }) {
-    const [address] = await this.database.db
-      .insert(deliveryAddresses)
-      .values({
-        ...input,
-        latitude: String(input.latitude),
-        longitude: String(input.longitude),
-        addressNote: input.addressNote ?? null,
-      })
-      .returning();
-    return address;
+    const isDefault = input.isDefault === true;
+    return this.database.db.transaction(async (transaction) => {
+      // Only one default may exist per shopper, so a newly created default displaces the old one in one transaction.
+      if (isDefault) {
+        await transaction
+          .update(deliveryAddresses)
+          .set({ isDefault: false })
+          .where(and(eq(deliveryAddresses.customerId, input.customerId), eq(deliveryAddresses.isDefault, true)));
+      }
+      const [address] = await transaction
+        .insert(deliveryAddresses)
+        .values({
+          ...input,
+          latitude: String(input.latitude),
+          longitude: String(input.longitude),
+          addressNote: input.addressNote ?? null,
+          isDefault,
+        })
+        .returning();
+      return address;
+    });
   }
 
   public async deleteDeliveryAddress(customerId: string, id: string) {
@@ -320,6 +332,66 @@ export class SalesRepository {
     return address;
   }
 
+  /**
+   * Applies a partial edit to one of the shopper's own addresses. Promoting a row to default clears the previous one
+   * in the same transaction, so the partial unique index never sees two defaults for a customer. Demoting the last
+   * default would leave the shopper with none, so the flag moves to the most recently updated survivor.
+   */
+  public async updateDeliveryAddress(
+    customerId: string,
+    id: string,
+    input: {
+      label?: string | undefined;
+      latitude?: number | undefined;
+      longitude?: number | undefined;
+      providerResolvedAddress?: string | undefined;
+      addressNote?: string | null | undefined;
+      isDefault?: boolean | undefined;
+    },
+  ) {
+    return this.database.db.transaction(async (transaction) => {
+      if (input.isDefault === true) {
+        await transaction
+          .update(deliveryAddresses)
+          .set({ isDefault: false })
+          .where(and(eq(deliveryAddresses.customerId, customerId), ne(deliveryAddresses.id, id)));
+      }
+
+      const [address] = await transaction
+        .update(deliveryAddresses)
+        .set({
+          ...(input.label !== undefined ? { label: input.label } : {}),
+          ...(input.latitude !== undefined ? { latitude: String(input.latitude) } : {}),
+          ...(input.longitude !== undefined ? { longitude: String(input.longitude) } : {}),
+          ...(input.providerResolvedAddress !== undefined
+            ? { providerResolvedAddress: input.providerResolvedAddress }
+            : {}),
+          ...(input.addressNote !== undefined ? { addressNote: input.addressNote } : {}),
+          ...(input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(deliveryAddresses.id, id), eq(deliveryAddresses.customerId, customerId)))
+        .returning();
+      if (!address) return undefined;
+
+      if (input.isDefault === false) {
+        const [survivor] = await transaction
+          .select({ id: deliveryAddresses.id })
+          .from(deliveryAddresses)
+          .where(and(eq(deliveryAddresses.customerId, customerId), ne(deliveryAddresses.id, id)))
+          .orderBy(desc(deliveryAddresses.updatedAt))
+          .limit(1);
+        if (survivor) {
+          await transaction
+            .update(deliveryAddresses)
+            .set({ isDefault: true })
+            .where(eq(deliveryAddresses.id, survivor.id));
+        }
+      }
+      return address;
+    });
+  }
+
   public async createPrescription(input: {
     siteId: string;
     storageLocationId: string;
@@ -328,6 +400,7 @@ export class SalesRepository {
     doctorName?: string | null;
     doctorLicense?: string | null;
     notes?: string | null;
+    customerId?: string | null;
     createdBy: string;
     lines: Array<{
       productId: string;
@@ -373,6 +446,7 @@ export class SalesRepository {
           doctorName: input.doctorName ?? null,
           doctorLicense: input.doctorLicense ?? null,
           notes: input.notes ?? null,
+          customerId: input.customerId ?? null,
           status: "Pending",
           createdBy: input.createdBy,
         })
@@ -434,10 +508,16 @@ export class SalesRepository {
     };
   }
 
-  public async listPrescriptions(input: { siteId?: string; status?: string; limit: number }) {
+  public async listPrescriptions(input: {
+    siteId?: string | undefined;
+    status?: string | undefined;
+    customerId?: string | undefined;
+    limit: number;
+  }) {
     const filters = [
       input.siteId ? eq(prescriptions.siteId, input.siteId) : undefined,
       input.status ? eq(prescriptions.status, input.status) : undefined,
+      input.customerId ? eq(prescriptions.customerId, input.customerId) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
     const rows = await this.database.db
       .select()

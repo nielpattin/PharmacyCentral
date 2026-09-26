@@ -1,4 +1,16 @@
-import { index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 export const carts = pgTable(
   "carts",
@@ -70,10 +82,17 @@ export const deliveryAddresses = pgTable(
     longitude: numeric("longitude", { precision: 10, scale: 7 }).notNull(),
     providerResolvedAddress: text("provider_resolved_address").notNull(),
     addressNote: text("address_note"),
+    isDefault: boolean("is_default").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("delivery_addresses_customer_idx").on(table.customerId, table.updatedAt)],
+  (table) => [
+    index("delivery_addresses_customer_idx").on(table.customerId, table.updatedAt),
+    // At most one default per shopper, so a partial unique index can carry the rule.
+    uniqueIndex("delivery_addresses_customer_default_unique")
+      .on(table.customerId)
+      .where(sql`${table.isDefault}`),
+  ],
 );
 
 export const orderDeliverySnapshots = pgTable("order_delivery_snapshots", {
@@ -100,6 +119,8 @@ export const prescriptions = pgTable(
     storageLocationId: uuid("storage_location_id").notNull(),
     patientName: varchar("patient_name", { length: 200 }).notNull(),
     patientPhone: varchar("patient_phone", { length: 50 }),
+    // Walk-in patients have no account, so ownership stays optional; a linked record is the customer's to see.
+    customerId: uuid("customer_id"),
     doctorName: varchar("doctor_name", { length: 200 }),
     doctorLicense: varchar("doctor_license", { length: 100 }),
     notes: text("notes"),
@@ -115,6 +136,7 @@ export const prescriptions = pgTable(
   (table) => [
     uniqueIndex("prescriptions_number_unique").on(table.prescriptionNumber),
     index("prescriptions_site_status_idx").on(table.siteId, table.status, table.createdAt),
+    index("prescriptions_customer_created_idx").on(table.customerId, table.createdAt),
   ],
 );
 

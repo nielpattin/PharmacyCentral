@@ -201,3 +201,198 @@ describe("sales order listing API", () => {
     expect(listOrders).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("sales prescription ownership API", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) await closeServer(server);
+    server = undefined;
+    vi.unstubAllGlobals();
+  });
+
+  it("scopes a shopper's prescription list to their own records and leaves staff unfiltered", async () => {
+    const listPrescriptions = vi
+      .fn<(input: Parameters<SalesRepository["listPrescriptions"]>[0]) => Promise<unknown>>()
+      .mockResolvedValue([]);
+    const repository = { listPrescriptions } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const shopperResponse = await httpFetch(`${testServer.url}/prescriptions?status=Pending&siteId=${ids.site}`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "customer" },
+    });
+    const shopperFilter = listPrescriptions.mock.calls[0]?.[0];
+    expect(shopperResponse.status).toBe(200);
+    // The owner filter is what stops a shopper reading every patient's record in the pharmacy.
+    expect(shopperFilter?.customerId).toBe(ids.actor);
+    expect(shopperFilter?.status).toBe("Pending");
+    // A shopper must not be able to widen the read to another site by passing siteId.
+    expect(shopperFilter?.siteId).toBeUndefined();
+
+    const staffResponse = await httpFetch(`${testServer.url}/prescriptions?status=Pending&siteId=${ids.site}`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+    });
+    const staffFilter = listPrescriptions.mock.calls[1]?.[0];
+    expect(staffResponse.status).toBe(200);
+    expect(staffFilter?.customerId).toBeUndefined();
+    expect(staffFilter?.siteId).toBe(ids.site);
+
+    const anonymousResponse = await httpFetch(`${testServer.url}/prescriptions`);
+    expect(anonymousResponse.status).toBe(401);
+    expect(listPrescriptions).toHaveBeenCalledTimes(2);
+  });
+
+  it("hides another shopper's prescription behind a 404", async () => {
+    const getPrescription = vi
+      .fn<(id: string) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.prescription, customerId: "somebody-else", patientName: "Bệnh nhân khác" });
+    const repository = { getPrescription } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/prescriptions/${ids.prescription}`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "customer" },
+    });
+    // A 403 would confirm the record exists; 404 keeps another patient's prescription indistinguishable from a miss.
+    expect(response.status).toBe(404);
+  });
+
+  it("returns a prescription linked to the calling shopper", async () => {
+    const getPrescription = vi
+      .fn<(id: string) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.prescription, customerId: ids.actor, patientName: "Chính tôi", lines: [] });
+    const repository = { getPrescription } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/prescriptions/${ids.prescription}`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "customer" },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { patientName: string };
+    expect(body.patientName).toBe("Chính tôi");
+  });
+
+  it("links a prescription to the shopper's account when staff record one", async () => {
+    const createPrescription = vi
+      .fn<(input: Parameters<SalesRepository["createPrescription"]>[0]) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.prescription, status: "Pending" });
+    const setPrescriptionReservation = vi.fn().mockResolvedValue(undefined);
+    const getPrescription = vi
+      .fn<(id: string) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.prescription, status: "Pending", lines: [] });
+    const repository = {
+      createPrescription,
+      setPrescriptionReservation,
+      getPrescription,
+    } as unknown as SalesRepository;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 201 })));
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/prescriptions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      body: JSON.stringify({
+        siteId: ids.site,
+        storageLocationId: ids.location,
+        patientName: "Khách quen",
+        customerId: ids.actor,
+        lines: [{ productId: ids.productA, productUnitId: ids.unitA, prescribedQuantity: 1 }],
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(createPrescription.mock.calls[0]?.[0].customerId).toBe(ids.actor);
+  });
+
+  it("keeps a walk-in prescription unlinked rather than guessing an owner", async () => {
+    const createPrescription = vi
+      .fn<(input: Parameters<SalesRepository["createPrescription"]>[0]) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.prescription, status: "Pending" });
+    const setPrescriptionReservation = vi.fn().mockResolvedValue(undefined);
+    const getPrescription = vi
+      .fn<(id: string) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.prescription, status: "Pending", lines: [] });
+    const repository = {
+      createPrescription,
+      setPrescriptionReservation,
+      getPrescription,
+    } as unknown as SalesRepository;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 201 })));
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/prescriptions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      body: JSON.stringify({
+        siteId: ids.site,
+        storageLocationId: ids.location,
+        patientName: "Khách vãng lai",
+        lines: [{ productId: ids.productA, productUnitId: ids.unitA, prescribedQuantity: 1 }],
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(createPrescription.mock.calls[0]?.[0].customerId).toBeNull();
+  });
+});
+
+describe("sales delivery address API", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) await closeServer(server);
+    server = undefined;
+    vi.unstubAllGlobals();
+  });
+
+  it("updates only the caller's own address and 404s someone else's", async () => {
+    const updateDeliveryAddress = vi
+      .fn<(customerId: string, id: string, input: unknown) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.prescription, label: "Nhà mới" });
+    const repository = { updateDeliveryAddress } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/delivery/addresses/${ids.prescription}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "X-Actor-Type": "customer" },
+      body: JSON.stringify({ label: "Nhà mới" }),
+    });
+    expect(response.status).toBe(200);
+    // Ownership is passed to the repository, never taken from the request body, so one shopper cannot retarget another's row.
+    expect(updateDeliveryAddress.mock.calls[0]?.[0]).toBe(ids.actor);
+    expect(updateDeliveryAddress.mock.calls[0]?.[1]).toBe(ids.prescription);
+
+    updateDeliveryAddress.mockResolvedValueOnce(undefined);
+    const missing = await httpFetch(`${testServer.url}/delivery/addresses/${ids.prescription}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", "X-Actor-Id": "another-shopper", "X-Actor-Type": "customer" },
+      body: JSON.stringify({ label: "Của người khác" }),
+    });
+    expect(missing.status).toBe(404);
+  });
+
+  it("refuses an anonymous address edit and an out-of-range coordinate", async () => {
+    const updateDeliveryAddress = vi.fn();
+    const repository = { updateDeliveryAddress } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const anonymous = await httpFetch(`${testServer.url}/delivery/addresses/${ids.prescription}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "Không phiên" }),
+    });
+    expect(anonymous.status).toBe(401);
+
+    const outOfRange = await httpFetch(`${testServer.url}/delivery/addresses/${ids.prescription}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      body: JSON.stringify({ latitude: 999 }),
+    });
+    expect(outOfRange.status).toBe(400);
+    expect(updateDeliveryAddress).not.toHaveBeenCalled();
+  });
+});

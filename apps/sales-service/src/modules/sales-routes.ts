@@ -127,6 +127,7 @@ export const createSalesRouter = (
         longitude: z.number().min(-180).max(180),
         providerResolvedAddress: z.string().trim().min(1).max(2_000),
         addressNote: z.string().trim().max(500).nullable().optional(),
+        isDefault: z.boolean().optional(),
       })
       .safeParse(request.body);
     if (!parsed.success) return invalid(response);
@@ -138,6 +139,33 @@ export const createSalesRouter = (
           addressNote: parsed.data.addressNote ?? null,
         }),
       );
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.patch("/delivery/addresses/:id", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    const customerId = actor(request);
+    const id = idSchema.safeParse(request.params);
+    if (!customerId) return unauthorized(response);
+    if (!id.success) return invalid(response);
+    const parsed = z
+      .object({
+        label: z.string().trim().min(1).max(100).optional(),
+        latitude: z.number().min(-90).max(90).optional(),
+        longitude: z.number().min(-180).max(180).optional(),
+        providerResolvedAddress: z.string().trim().min(1).max(2_000).optional(),
+        addressNote: z.string().trim().max(500).nullable().optional(),
+        isDefault: z.boolean().optional(),
+      })
+      .safeParse(request.body);
+    if (!parsed.success) return invalid(response);
+    try {
+      const address = await repository.updateDeliveryAddress(customerId, id.data.id, parsed.data);
+      return address
+        ? response.json(address)
+        : response.status(404).json({ title: "Delivery address not found", status: 404 });
     } catch (error) {
       return next(error);
     }
@@ -258,16 +286,18 @@ export const createSalesRouter = (
 
   router.get("/prescriptions", async (request, response, next) => {
     if (!repository) return unavailable(response);
-    if (!actor(request)) return unauthorized(response);
+    const requesterId = actor(request);
+    if (!requesterId) return unauthorized(response);
     try {
       const siteId = queryString(request.query.siteId);
       const status = queryString(request.query.status);
-      const filter: { limit: number; siteId?: string; status?: string } = {
-        limit: queryNumber(request.query.limit, 100),
-      };
-      if (siteId) filter.siteId = siteId;
-      if (status) filter.status = status;
-      return response.json(await repository.listPrescriptions(filter));
+      const limit = queryNumber(request.query.limit, 100);
+      // The staff portal reviews every prescription, optionally narrowed to one site or state. A shopper only ever
+      // sees the records linked to their own account, so the owner filter is never optional on their side.
+      if (readsEveryOrder(request)) {
+        return response.json(await repository.listPrescriptions({ siteId, status, limit }));
+      }
+      return response.json(await repository.listPrescriptions({ customerId: requesterId, status, limit }));
     } catch (error) {
       return next(error);
     }
@@ -276,12 +306,17 @@ export const createSalesRouter = (
   router.get("/prescriptions/:id", async (request, response, next) => {
     if (!repository) return unavailable(response);
     const id = idSchema.safeParse(request.params);
-    if (!id.success || !actor(request)) return invalid(response);
+    const requesterId = actor(request);
+    if (!id.success) return invalid(response);
+    if (!requesterId) return unauthorized(response);
     try {
       const prescription = await repository.getPrescription(id.data.id);
-      return prescription
-        ? response.json(prescription)
-        : response.status(404).json({ title: "Prescription not found", status: 404 });
+      // A prescription carries the patient's name, phone, doctor and medicines, so a shopper asking for someone
+      // else's record gets the same 404 as a missing one rather than a hint that it exists.
+      if (!prescription || (prescription.customerId ?? requesterId) !== requesterId) {
+        return response.status(404).json({ title: "Prescription not found", status: 404 });
+      }
+      return response.json(prescription);
     } catch (error) {
       return next(error);
     }
@@ -303,6 +338,7 @@ export const createSalesRouter = (
         doctorName: parsed.data.doctorName ?? null,
         doctorLicense: parsed.data.doctorLicense ?? null,
         notes: parsed.data.notes ?? null,
+        customerId: parsed.data.customerId ?? null,
         createdBy,
         lines: parsed.data.lines.map((line) => ({
           productId: line.productId,

@@ -104,6 +104,8 @@ export const createPrescriptionRequestSchema = z.object({
   doctorName: z.string().trim().max(200).nullable().optional(),
   doctorLicense: z.string().trim().max(100).nullable().optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
+  // Staff link a prescription to the shopper's account so the customer can read it; walk-in patients stay unlinked.
+  customerId: z.string().uuid().nullable().optional(),
   lines: z.array(prescriptionLineSchema).min(1),
 });
 
