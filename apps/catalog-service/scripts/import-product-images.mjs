@@ -20,8 +20,8 @@ const ARCHIVE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "../../../
 
 const createStorage = () => {
   const endpoint = requiredEnvironmentVariable("MINIO_ENDPOINT");
-  const accessKey = requiredEnvironmentSecret("MINIO_ACCESS_KEY");
-  const secretKey = requiredEnvironmentSecret("MINIO_SECRET_KEY");
+  const accessKey = requiredEnvironmentSecret("MINIO_ROOT_USER");
+  const secretKey = requiredEnvironmentSecret("MINIO_ROOT_PASSWORD");
   const separator = endpoint.lastIndexOf(":");
   const host = endpoint.slice(0, separator);
   const port = Number.parseInt(endpoint.slice(separator + 1), 10);

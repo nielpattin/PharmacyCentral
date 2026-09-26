@@ -17,8 +17,10 @@ export type StoredProductImage = {
 export class ProductMediaStore {
   public static createFromEnvironment(): ProductMediaStore {
     const endpoint = requiredEnvironmentVariable("MINIO_ENDPOINT");
-    const accessKey = requiredEnvironmentSecret("MINIO_ACCESS_KEY");
-    const secretKey = requiredEnvironmentSecret("MINIO_SECRET_KEY");
+    // One credential pair for the whole repo: the same account MinIO itself boots with, so the value can never
+    // drift out of sync the way a separately-named copy did.
+    const accessKey = requiredEnvironmentSecret("MINIO_ROOT_USER");
+    const secretKey = requiredEnvironmentSecret("MINIO_ROOT_PASSWORD");
     const bucket = requiredEnvironmentVariable("MINIO_MEDIA_BUCKET");
     const publicBaseUrl = requiredEnvironmentVariable("MINIO_PUBLIC_MEDIA_URL");
     const separator = endpoint.lastIndexOf(":");
