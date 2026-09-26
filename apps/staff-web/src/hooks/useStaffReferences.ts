@@ -8,6 +8,7 @@ export type StaffReferences = {
   suppliers: JsonRecord[];
   products: JsonRecord[];
   batches: JsonRecord[];
+  customers: JsonRecord[];
   loading: boolean;
   error?: string | undefined;
   reload: () => Promise<void>;
@@ -18,14 +19,15 @@ type StaffReferenceData = Omit<StaffReferences, "loading" | "error" | "reload">;
 const referenceQueryKey = ["staff-references"] as const;
 
 const loadReferences = async (): Promise<StaffReferenceData> => {
-  const [sites, locations, suppliers, products, batches] = await Promise.all([
+  const [sites, locations, suppliers, products, batches, customers] = await Promise.all([
     readRows("/api/sites"),
     readRows("/api/storage-locations"),
     readRows("/api/suppliers"),
     readRows("/api/products?limit=100"),
     readRows("/api/inventory/batches"),
+    readRows("/api/admin/users"),
   ]);
-  return { sites, locations, suppliers, products, batches };
+  return { sites, locations, suppliers, products, batches, customers };
 };
 
 export const useStaffReferences = (): StaffReferences => {
@@ -40,6 +42,7 @@ export const useStaffReferences = (): StaffReferences => {
     suppliers: query.data?.suppliers ?? [],
     products: query.data?.products ?? [],
     batches: query.data?.batches ?? [],
+    customers: query.data?.customers ?? [],
     loading: query.isPending,
     error:
       query.error instanceof Error

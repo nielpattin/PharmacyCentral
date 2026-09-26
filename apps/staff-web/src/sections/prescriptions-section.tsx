@@ -25,6 +25,7 @@ const initial = {
   storageLocationId: "",
   patientName: "",
   patientPhone: "",
+  customerId: "",
   doctorName: "",
   doctorLicense: "",
   notes: "",
@@ -103,6 +104,7 @@ export const PrescriptionsSection = ({
             doctorName: value.doctorName || null,
             doctorLicense: value.doctorLicense || null,
             notes: value.notes || null,
+            customerId: value.customerId || null,
             lines: prescriptionLines.map((line) => ({
               productId: line.productId,
               productUnitId: line.productUnitId,
@@ -342,6 +344,32 @@ export const PrescriptionsSection = ({
           </prescriptionForm.Field>
           <prescriptionForm.Field name="patientPhone">
             {(field) => <Field label="Patient phone" value={field.state.value} onChange={field.handleChange} />}
+          </prescriptionForm.Field>
+          <prescriptionForm.Field name="customerId">
+            {(field) => (
+              <SelectField
+                label="Customer account"
+                value={field.state.value}
+                onChange={(value) => {
+                  field.handleChange(value);
+                  // Picking the account fills the patient details, so staff never retypes what the account already knows.
+                  const customer = references.customers.find((row) => row.id === value);
+                  if (customer) {
+                    const name = customer.displayName;
+                    if (typeof name === "string" && name) prescriptionForm.setFieldValue("patientName", name);
+                    const phone = customer.phoneNumber;
+                    if (typeof phone === "string" && phone) prescriptionForm.setFieldValue("patientPhone", phone);
+                  }
+                }}
+                options={[
+                  { value: "", label: "Không liên kết (khách vãng lai)" },
+                  ...referenceOptions(
+                    references.customers.filter((row) => row.actorType === "customer"),
+                    ["displayName", "email"],
+                  ),
+                ]}
+              />
+            )}
           </prescriptionForm.Field>
           <prescriptionForm.Field name="doctorName">
             {(field) => <Field label="Doctor name" value={field.state.value} onChange={field.handleChange} />}
