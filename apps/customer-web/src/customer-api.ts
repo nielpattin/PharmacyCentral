@@ -131,7 +131,7 @@ export type OrderLine = {
   quantity: string;
 };
 
-export type Customer = { id: string; displayName: string; email: string };
+export type Customer = { id: string; displayName: string; email: string; phoneNumber: string | null };
 /** A row of `GET /orders`: the sales service lists orders without their lines or delivery snapshot. */
 export type CustomerOrder = {
   id: string;
@@ -162,7 +162,25 @@ export type DeliveryAddress = {
   latitude: string;
   longitude: string;
   providerResolvedAddress: string;
+  isDefault: boolean;
   addressNote: string | null;
+};
+
+/** A prescription the sales service links to the signed-in shopper's account. */
+export type CustomerPrescription = {
+  id: string;
+  prescriptionNumber: string;
+  patientName: string;
+  doctorName: string | null;
+  status: string;
+  dispensedAt: string | null;
+  createdAt: string;
+  lines: Array<{
+    id: string;
+    dosage: string | null;
+    frequency: string | null;
+    duration: string | null;
+  }>;
 };
 export type PaymentInvoice = {
   id: string;
@@ -253,10 +271,47 @@ export const saveDeliveryAddress = (input: {
   providerResolvedAddress: string;
   addressNote?: string;
 }): Promise<DeliveryAddress> => request("/api/delivery/addresses", { method: "POST", body: JSON.stringify(input) });
+export const deleteDeliveryAddress = (id: string): Promise<void> =>
+  request(`/api/delivery/addresses/${id}`, { method: "DELETE" });
+export const updateDeliveryAddress = (
+  id: string,
+  input: {
+    label?: string;
+    latitude?: number;
+    longitude?: number;
+    providerResolvedAddress?: string;
+    addressNote?: string | null;
+    isDefault?: boolean;
+  },
+): Promise<DeliveryAddress> =>
+  request(`/api/delivery/addresses/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+export const listPrescriptions = (): Promise<CustomerPrescription[]> => request("/api/prescriptions?limit=50");
+export const updateProfile = (input: { displayName?: string; phoneNumber?: string | null }): Promise<Customer> =>
+  request("/api/auth/me", { method: "PATCH", body: JSON.stringify(input) });
 export const registerCustomer = (email: string, password: string, displayName: string) =>
   request("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password, displayName }) });
 export const loginCustomer = (email: string, password: string) =>
   request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+
+/** Signing out also drops the signed internal-context cache, so a later guest call cannot replay the old identity. */
+export const logoutCustomer = async (): Promise<void> => {
+  await request("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
+  setSessionSnapshot({ authenticated: false, resolved: true });
+  setIdentityContextsEnabled(false);
+};
+
+/**
+ * The identity service clears the session cookie on a password change, so the caller has to sign in again with the
+ * password it just set. The snapshot is dropped for the same reason: the browser is signed out whether or not it says so.
+ */
+export const changePassword = async (currentPassword: string, nextPassword: string): Promise<void> => {
+  await request("/api/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, nextPassword }),
+  });
+  setSessionSnapshot({ authenticated: false, resolved: true });
+  setIdentityContextsEnabled(false);
+};
 
 export const currentUser = (): Promise<Customer | undefined> => request("/api/auth/me");
 

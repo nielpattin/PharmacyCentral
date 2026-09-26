@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 
+import { AccountPage } from "./pages/AccountPage.tsx";
 import { CategoryPage } from "./pages/CategoryPage.tsx";
 import { CheckoutPage } from "./pages/CheckoutPage.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
@@ -27,6 +28,14 @@ const validateHomeSearch = (search: Record<string, unknown>): HomeSearch => {
   };
 };
 
+const ACCOUNT_SECTIONS = ["tong-quan", "don-hang", "don-thuoc", "dia-chi", "ho-so", "mat-khau"] as const;
+export type AccountSection = (typeof ACCOUNT_SECTIONS)[number];
+
+const validateAccountSearch = (search: Record<string, unknown>): { section: AccountSection } => {
+  const section = search["section"];
+  return { section: ACCOUNT_SECTIONS.includes(section as AccountSection) ? (section as AccountSection) : "tong-quan" };
+};
+
 const rootRoute = createRootRoute({ notFoundComponent: NotFoundPage });
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -44,6 +53,12 @@ const ordersRoute = createRoute({
   path: "/don-hang-cua-toi",
   component: OrdersPage,
 });
+const accountRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tai-khoan",
+  validateSearch: validateAccountSearch,
+  component: AccountPage,
+});
 const categoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/danh-muc/$slug",
@@ -55,7 +70,14 @@ const productRoute = createRoute({
   component: ProductDetailPage,
 });
 
-const routeTree = rootRoute.addChildren([homeRoute, categoryRoute, productRoute, checkoutRoute, ordersRoute]);
+const routeTree = rootRoute.addChildren([
+  homeRoute,
+  categoryRoute,
+  productRoute,
+  checkoutRoute,
+  ordersRoute,
+  accountRoute,
+]);
 
 export const router = createRouter({
   routeTree,
