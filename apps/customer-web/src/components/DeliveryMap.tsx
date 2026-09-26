@@ -1,9 +1,18 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import * as maplibregl from "maplibre-gl";
+// MapLibre resolves its worker at runtime from a computed sibling URL, which no bundler can
+// follow: Vite pre-bundles the library into `node_modules/.vite/deps/` and never emits
+// `maplibre-gl-worker.mjs` next to it, so the map painted its style background but received no
+// tiles or glyphs. `?worker&url` hands Vite the worker as an explicit entry, emitting a real
+// asset in dev and in the production build.
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useRef } from "react";
 
 import { useMountEffect } from "../hooks/useMountEffect.ts";
+import { deliveryView } from "./delivery-view.ts";
+
+maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
 type Point = { latitude: number; longitude: number };
 
@@ -44,10 +53,6 @@ export const DeliveryMap = ({
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.on("load", () => {
       if (!destination) return;
-      const bounds = new maplibregl.LngLatBounds(
-        [store.longitude, store.latitude],
-        [destination.longitude, destination.latitude],
-      );
       if (route && route.length >= 2) {
         map.addSource("delivery-route", {
           type: "geojson",
@@ -59,9 +64,8 @@ export const DeliveryMap = ({
           source: "delivery-route",
           paint: { "line-color": "#1769aa", "line-width": 4 },
         });
-        for (const coordinate of route) bounds.extend(coordinate);
       }
-      map.fitBounds(bounds, { padding: 48, maxZoom: 14 });
+      map.fitBounds(deliveryView(store, destination, route), { padding: 48, maxZoom: 14 });
     });
     return () => {
       storeMarker.remove();
