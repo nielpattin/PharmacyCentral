@@ -2,7 +2,11 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 
-import { loginRequestSchema, registerRequestSchema } from "../../../../contracts/identity.ts";
+import {
+  loginRequestSchema,
+  registerRequestSchema,
+  updateProfileRequestSchema,
+} from "../../../../contracts/identity.ts";
 
 import type { Account } from "../../domain/account.ts";
 import type { AccountService } from "../../application/account-service.ts";
@@ -221,6 +225,27 @@ export const createAccountRouter = (service: AccountService, googleClient?: Goog
     response.json(toPublicAccount(current.account));
   });
 
+  router.patch("/me", async (request, response) => {
+    const token = getSessionToken(request);
+    const current = token ? await service.currentSession(token) : undefined;
+    if (!current) {
+      response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
+      return;
+    }
+
+    const parsed = updateProfileRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    try {
+      response.json(toPublicAccount(await service.updateProfile(current.account.id, parsed.data)));
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
   router.post("/request-password-reset", async (request, response) => {
     const parsed = passwordResetRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -364,6 +389,7 @@ const toPublicAccount = (account: Account) => ({
   actorType: account.actorType,
   email: account.email,
   displayName: account.displayName,
+  phoneNumber: account.phoneNumber ?? null,
   emailVerified: account.emailVerifiedAt !== undefined,
   roles: account.roles,
   siteIds: account.siteIds,

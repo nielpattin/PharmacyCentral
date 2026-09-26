@@ -16,6 +16,7 @@ export class DrizzleAccountRepository {
           email: input.email,
           displayName: input.displayName,
           passwordHash: input.passwordHash,
+          phoneNumber: input.phoneNumber ?? null,
           emailVerifiedAt: input.emailVerifiedAt ?? null,
         })
         .returning();
@@ -47,6 +48,7 @@ export class DrizzleAccountRepository {
         .set({
           email: account.email,
           displayName: account.displayName,
+          phoneNumber: account.phoneNumber ?? null,
           passwordHash: account.passwordHash,
           emailVerifiedAt: account.emailVerifiedAt ?? null,
           isActive: true,
@@ -68,6 +70,7 @@ export class DrizzleAccountRepository {
       actorType: user.actorType as Account["actorType"],
       email: user.email,
       displayName: user.displayName,
+      ...(user.phoneNumber ? { phoneNumber: user.phoneNumber } : {}),
       passwordHash: user.passwordHash,
       ...(user.emailVerifiedAt ? { emailVerifiedAt: user.emailVerifiedAt } : {}),
       roles: roles.map((role) => role.roleName),

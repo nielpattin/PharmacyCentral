@@ -7,6 +7,7 @@ export const users = pgTable(
     actorType: varchar("actor_type", { length: 20 }).notNull(),
     email: varchar("email", { length: 320 }).notNull(),
     displayName: varchar("display_name", { length: 200 }).notNull(),
+    phoneNumber: varchar("phone_number", { length: 50 }),
     passwordHash: text("password_hash"),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     isActive: boolean("is_active").notNull().default(true),

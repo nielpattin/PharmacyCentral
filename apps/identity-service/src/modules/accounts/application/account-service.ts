@@ -183,6 +183,24 @@ export class AccountService {
     await this.sessions.revokeAll(account.id);
   }
 
+  /**
+   * Updates the contact details the account holder keeps in their own profile. Email is deliberately not editable
+   * here: it is the login key, so changing it needs the separate verification flow.
+   */
+  public async updateProfile(
+    accountId: string,
+    input: { displayName?: string | undefined; phoneNumber?: string | null | undefined },
+  ): Promise<Account> {
+    const account = await this.requireAccount(accountId);
+    if (input.displayName !== undefined) account.displayName = input.displayName;
+    if (input.phoneNumber !== undefined) {
+      const phoneNumber = input.phoneNumber?.trim() ?? "";
+      account.phoneNumber = phoneNumber.length > 0 ? phoneNumber : undefined;
+    }
+    await this.accounts.save(account);
+    return account;
+  }
+
   public async listRoles(): Promise<readonly string[]> {
     return employeeRoles;
   }

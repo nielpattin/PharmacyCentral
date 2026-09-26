@@ -19,6 +19,16 @@ export const loginRequestSchema = z.object({
   password: z.string().min(1).max(200),
 });
 
+export const updateProfileRequestSchema = z.object({
+  displayName: z.string().trim().min(1).max(200).optional(),
+  phoneNumber: z
+    .string()
+    .trim()
+    .regex(/^[0-9+()\s-]{8,20}$/, "Số điện thoại chỉ gồm chữ số và các ký tự + ( ) -")
+    .nullable()
+    .optional(),
+});
+
 export const sessionUserSchema = z.object({
   id: z.string().uuid(),
   actorType: z.enum(["customer", "employee"]),
@@ -31,4 +41,5 @@ export const sessionUserSchema = z.object({
 export type AccountCreatedEvent = z.infer<typeof accountCreatedEventSchema>;
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
+export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>;
 export type SessionUser = z.infer<typeof sessionUserSchema>;
