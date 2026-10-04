@@ -42,8 +42,10 @@ export const OrdersPage = (): React.JSX.Element => {
   const session = useSession();
   const navigate = useNavigate();
   const ordersQuery = useQuery({
-    // This page is the only owner of the shopper's order list: the checkout page invalidates this key after an order.
-    queryKey: ["customer-orders"],
+    // The account page caches a bare order array under `["customer-orders"]`, so this page's `{ orders, stores }`
+    // payload needs its own key under that prefix: sharing one key made this page read `.orders` off the array
+    // and show an empty list. The prefix keeps the checkout invalidation and the sign-out purge reaching both.
+    queryKey: ["customer-orders", "history"],
     queryFn: async () => {
       const customer = await resolveCustomerSession();
       if (!customer) return { orders: [] as CustomerOrder[], stores: [] as CatalogStore[] };
