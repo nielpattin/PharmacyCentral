@@ -2,6 +2,10 @@ FROM node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba
 
 ARG APP_NAME
 ARG APP_DIR
+# Vite inlines `import.meta.env.VITE_*` into the bundle at build time, and `.dockerignore` keeps `.env` out of
+# the build context, so the map key has to arrive as a build argument rather than as a file this stage could read.
+ARG VITE_VIETMAP_TILEMAP_KEY
+ENV VITE_VIETMAP_TILEMAP_KEY=${VITE_VIETMAP_TILEMAP_KEY}
 WORKDIR /workspace
 
 RUN npm install --global pnpm@12.3.4

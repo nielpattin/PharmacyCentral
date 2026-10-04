@@ -14,6 +14,12 @@ const apiProxy = apiBaseUrl
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  /**
+   * Vite exposes only what it loads from `envDir`, and that directory defaults to the app folder. The repository
+   * keeps one `.env` at its root, so pointing at it is what lets `import.meta.env.VITE_*` in this app see the
+   * same file every service reads. Vite still exposes only the `VITE_` prefixed names to the bundle.
+   */
+  envDir: "../..",
   server: {
     port: 5173,
     ...(apiProxy ? { proxy: apiProxy } : {}),

@@ -1,18 +1,11 @@
-import "maplibre-gl/dist/maplibre-gl.css";
+import "@vietmap/vietmap-gl-js/dist/vietmap-gl.css";
 
-import * as maplibregl from "maplibre-gl";
-// MapLibre resolves its worker at runtime from a computed sibling URL, which no bundler can
-// follow: Vite pre-bundles the library into `node_modules/.vite/deps/` and never emits
-// `maplibre-gl-worker.mjs` next to it, so the map painted its style background but received no
-// tiles or glyphs. `?worker&url` hands Vite the worker as an explicit entry, emitting a real
-// asset in dev and in the production build.
-import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+import * as vietmapgl from "@vietmap/vietmap-gl-js/dist/vietmap-gl.js";
 import { useRef } from "react";
 
 import { useMountEffect } from "../hooks/useMountEffect.ts";
 import { deliveryView } from "./delivery-view.ts";
-
-maplibregl.setWorkerUrl(maplibreWorkerUrl);
+import { VIETMAP_STYLE_URL } from "./vietmap-style.ts";
 
 type Point = { latitude: number; longitude: number };
 
@@ -32,17 +25,17 @@ export const DeliveryMap = ({
   const containerRef = useRef<HTMLDivElement>(null);
   useMountEffect(() => {
     if (!containerRef.current) return;
-    const map = new maplibregl.Map({
+    const map = new vietmapgl.Map({
       container: containerRef.current,
-      style: "https://tiles.openfreemap.org/styles/liberty",
+      style: VIETMAP_STYLE_URL,
       center: [store.longitude, store.latitude],
       zoom: 11,
     });
-    const storeMarker = new maplibregl.Marker({ color: "#1769aa" })
+    const storeMarker = new vietmapgl.Marker({ color: "#1769aa" })
       .setLngLat([store.longitude, store.latitude])
       .addTo(map);
     const destinationMarker = destination
-      ? new maplibregl.Marker({ color: "#c62828", draggable: true })
+      ? new vietmapgl.Marker({ color: "#c62828", draggable: true })
           .setLngLat([destination.longitude, destination.latitude])
           .addTo(map)
       : undefined;
@@ -50,7 +43,7 @@ export const DeliveryMap = ({
       const position = destinationMarker.getLngLat();
       onDestinationChange?.({ latitude: position.lat, longitude: position.lng });
     });
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    map.addControl(new vietmapgl.NavigationControl(), "top-right");
     map.on("load", () => {
       if (!destination) return;
       if (route && route.length >= 2) {

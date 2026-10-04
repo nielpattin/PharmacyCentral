@@ -302,6 +302,8 @@ services:
       args:
         APP_NAME: "@pharmacy/customer-web"
         APP_DIR: apps/customer-web
+        # Vite inlines this at build time, so the image is the only place it can come from.
+        VITE_VIETMAP_TILEMAP_KEY: ${VITE_VIETMAP_TILEMAP_KEY}
     restart: unless-stopped
     environment:
       API_BASE_URL: http://gateway:8080

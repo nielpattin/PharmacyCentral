@@ -1,4 +1,4 @@
-import * as maplibregl from "maplibre-gl";
+import * as vietmapgl from "@vietmap/vietmap-gl-js/dist/vietmap-gl.js";
 
 type Point = { latitude: number; longitude: number };
 type RoutePath = Array<[number, number]>;
@@ -10,8 +10,8 @@ type RoutePath = Array<[number, number]>;
  * `(store, destination)` wraps the box the long way around the globe whenever the store sits east
  * of the destination. Folding both points in with `extend` orders each axis instead.
  */
-export const deliveryView = (store: Point, destination: Point, route?: RoutePath): maplibregl.LngLatBounds => {
-  const bounds = new maplibregl.LngLatBounds(
+export const deliveryView = (store: Point, destination: Point, route?: RoutePath): vietmapgl.LngLatBounds => {
+  const bounds = new vietmapgl.LngLatBounds(
     [store.longitude, store.latitude],
     [store.longitude, store.latitude],
   ).extend([destination.longitude, destination.latitude]);

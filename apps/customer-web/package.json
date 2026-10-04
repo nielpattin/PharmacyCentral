@@ -19,7 +19,7 @@
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-query-devtools": "catalog:",
     "@tanstack/react-router": "catalog:",
-    "maplibre-gl": "catalog:",
+    "@vietmap/vietmap-gl-js": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "tailwindcss": "catalog:"

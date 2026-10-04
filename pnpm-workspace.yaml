@@ -30,6 +30,7 @@ catalog:
   "@types/react": 19.2.18
   "@types/react-dom": 19.2.4
   "@valkey/valkey-glide": 2.5.1
+  "@vietmap/vietmap-gl-js": 6.0.1
   amqplib: 2.0.1
   class-variance-authority: 0.7.1
   clsx: 2.1.1
@@ -37,7 +38,6 @@ catalog:
   drizzle-orm: 0.45.2
   express: 5.2.1
   lucide-react: 1.44.0
-  maplibre-gl: 6.4.1
   nodemailer: 9.0.5
   openid-client: 6.8.7
   oxfmt: 0.64.0

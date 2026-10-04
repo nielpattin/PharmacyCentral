@@ -38,7 +38,7 @@ All versions below were queried from the npm registry with pnpm. Application pac
 | `vitest`               | `4.1.11`         | Requires Node `^20.0.0 \| ^22.0.0 \| >=24.0.0`; Node 24 satisfies it.                                                          |
 | `@types/node`          | `24.13.3`        | Keep Node declarations on the 24 line. Do not use the registry latest 26.x package in this Node 24-only project.               |
 | `@vitejs/plugin-react` | `6.1.0`          | React/Vite integration.                                                                                                        |
-| `maplibre-gl`          | `6.4.1`          | Browser map renderer.                                                                                                          |
+| `@vietmap/vietmap-gl-js` | `6.0.1`        | Browser map renderer. Vietmap tiles are not standard MVT, so stock `maplibre-gl` cannot parse them. Registry `latest` is a 7.x pre-release; stay on 6.0.1. |
 | `oxlint`               | `1.79.0`         | Local project linter.                                                                                                          |
 | `oxlint-tsgolint`      | `7.0.2001`       | Type-aware Oxlint integration.                                                                                                 |
 | `oxfmt`                | `0.64.0`         | Formatter across workspace and projects.                                                                                       |
