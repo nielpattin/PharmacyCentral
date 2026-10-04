@@ -1,12 +1,12 @@
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Select } from "@pharmacy/ui";
 
-import type { CatalogStore, DeliveryAddress, DeliveryCalculation } from "../../customer-api.ts";
+import type { AddressSearchResult, CatalogStore, DeliveryAddress, DeliveryCalculation } from "../../customer-api.ts";
 import { formatDistance, formatMoney } from "../../storefront/format.ts";
 import { DeliveryMap } from "../DeliveryMap.tsx";
 import { IconCrosshair, IconPin, IconSearch, IconStore, IconTruck } from "../storefront/icons.tsx";
 
 export type Point = { latitude: number; longitude: number };
-export type AddressResult = { displayName: string; latitude: number; longitude: number };
+export type AddressResult = AddressSearchResult;
 
 type DeliveryPointPanelProps = {
   stores: CatalogStore[];
@@ -14,6 +14,12 @@ type DeliveryPointPanelProps = {
   selectedStoreId: string;
   fulfillmentType: "pickup" | "delivery";
   addresses: DeliveryAddress[];
+  /** The saved row the current point came from, if any, so the panel knows the point is already kept. */
+  activeAddressId: string | undefined;
+  /** A signed-in shopper standing on a point their account does not have is offered to keep it. */
+  canSaveDestination: boolean;
+  savingDestination: boolean;
+  onSaveDestination: () => void;
   destination: Point;
   delivery: DeliveryCalculation | undefined;
   addressNote: string;
@@ -40,6 +46,10 @@ export const DeliveryPointPanel = ({
   selectedStoreId,
   fulfillmentType,
   addresses,
+  activeAddressId,
+  canSaveDestination,
+  savingDestination,
+  onSaveDestination,
   destination,
   delivery,
   addressNote,
@@ -131,7 +141,7 @@ export const DeliveryPointPanel = ({
               {results.length > 0 ? (
                 <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
                   {results.map((result) => (
-                    <li key={`${result.latitude}:${result.longitude}`}>
+                    <li key={result.refId}>
                       <button
                         type="button"
                         className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-ink transition-colors hover:bg-surface-soft"
@@ -152,15 +162,14 @@ export const DeliveryPointPanel = ({
                 <p className="text-sm text-muted">Địa chỉ có dấu ★ là địa chỉ mặc định trong tài khoản của bạn.</p>
                 <div className="flex flex-wrap gap-2">
                   {addresses.map((address) => {
-                    const active =
-                      Number(address.latitude) === destination.latitude &&
-                      Number(address.longitude) === destination.longitude;
+                    const active = address.id === activeAddressId;
                     return (
                       <Button
                         key={address.id}
                         type="button"
                         size="sm"
                         variant={active ? "primary" : "outline"}
+                        aria-pressed={active}
                         onClick={() => onPickSavedAddress(address)}
                       >
                         <IconPin className="size-3.5" />
@@ -194,6 +203,21 @@ export const DeliveryPointPanel = ({
                 Tính phí giao hàng
               </Button>
             </div>
+
+            {canSaveDestination ? (
+              <div className="rounded-lg border border-dashed border-line bg-surface-soft/60 px-3.5 py-3">
+                <p className="text-sm font-medium text-ink">Lưu điểm giao này vào tài khoản</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Lần sau bạn chỉ cần bấm vào tên ở bước thanh toán, không phải tìm lại từ đầu.
+                </p>
+                <div className="mt-2">
+                  <Button type="button" size="sm" onClick={onSaveDestination} disabled={savingDestination}>
+                    <IconPin className="size-3.5" />
+                    {savingDestination ? "Đang lưu…" : "Lưu điểm giao này"}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             {storePoint ? (
               <DeliveryMap

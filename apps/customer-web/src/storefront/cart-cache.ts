@@ -37,15 +37,6 @@ export const writeDeliveryAddresses = (queryClient: QueryClient, addresses: Deli
   writeCheckoutBootstrap(queryClient, { addresses });
 };
 
-/** Drops one saved address from the checkout page, so a delete never leaves a stale destination behind on it. */
-export const forgetDeliveryAddress = (queryClient: QueryClient, id: string): void => {
-  queryClient.setQueryData(checkoutQueryKey, (current) => {
-    if (!current || typeof current !== "object") return current;
-    const bootstrap = current as CheckoutBootstrap;
-    return { ...bootstrap, addresses: (bootstrap.addresses ?? []).filter((address) => address.id !== id) };
-  });
-};
-
 /**
  * A shopper who signs in may have filled a guest cart first: the merged cart and the addresses behind that identity
  * have to reach the checkout cache, or its delivery panel offers the previous visitor's saved points.

@@ -1,75 +1,85 @@
-import { useForm } from "@tanstack/react-form";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input } from "@pharmacy/ui";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@pharmacy/ui";
 import { useState } from "react";
 
 import type { DeliveryAddress } from "../../customer-api.ts";
-import { IconCheck, IconPin, IconTrash } from "../storefront/icons.tsx";
+import { AddressFormDialog, type AddressDraft } from "../AddressFormDialog.tsx";
+import { Link } from "../storefront/Link.tsx";
+import { IconCheck, IconPin, IconPlus, IconTrash } from "../storefront/icons.tsx";
 
 type SavedAddressesCardProps = {
   addresses: DeliveryAddress[];
   /** Set while a mutation is in flight so a second click cannot send the same request twice. */
   pendingId: string | undefined;
+  busy: boolean;
   onDelete: (address: DeliveryAddress) => void;
-  onUpdate: (
-    address: DeliveryAddress,
-    input: { label: string; addressNote: string | null; isDefault: boolean },
-  ) => void;
+  onCreate: (draft: AddressDraft) => void;
+  onUpdate: (address: DeliveryAddress, draft: AddressDraft) => void;
 };
 
-const emptyDraft = { label: "", addressNote: "" };
+const toDraft = (address: DeliveryAddress): AddressDraft => ({
+  label: address.label,
+  providerResolvedAddress: address.providerResolvedAddress,
+  addressNote: address.addressNote ?? "",
+  point: { latitude: Number(address.latitude), longitude: Number(address.longitude) },
+  isDefault: address.isDefault,
+});
 
 export const SavedAddressesCard = ({
   addresses,
   pendingId,
+  busy,
   onDelete,
+  onCreate,
   onUpdate,
 }: SavedAddressesCardProps): React.JSX.Element => {
+  /** undefined closes the dialog; an address id edits that row; the empty string creates a new one. */
   const [editingId, setEditingId] = useState<string>();
-  const [error, setError] = useState<string>();
-
-  const form = useForm({
-    defaultValues: emptyDraft,
-    onSubmit: async ({ value }) => {
-      const target = addresses.find((address) => address.id === editingId);
-      if (!target) return;
-      const label = value.label.trim();
-      if (!label) {
-        setError("Tên địa chỉ không được để trống.");
-        return;
-      }
-      setError(undefined);
-      // Editing a name must not silently move the shopper's default onto this row.
-      onUpdate(target, { label, addressNote: value.addressNote.trim() || null, isDefault: target.isDefault });
-      setEditingId(undefined);
-      form.reset(emptyDraft);
-    },
-  });
+  const editing = editingId === undefined ? undefined : addresses.find((row) => row.id === editingId);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Địa chỉ giao hàng</CardTitle>
-        <CardDescription>
-          Những điểm giao bạn đã lưu. Địa chỉ mặc định được chọn trước ở bước thanh toán, và phí giao được tính theo
-          đúng vị trí đó.
-        </CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>Địa chỉ giao hàng</CardTitle>
+            <CardDescription>
+              Địa chỉ mặc định được chọn trước ở bước thanh toán, và phí giao được tính theo đúng vị trí đó.
+            </CardDescription>
+          </div>
+          <Button onClick={() => setEditingId("")}>
+            <IconPlus className="size-4" />
+            Thêm địa chỉ
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {addresses.length === 0 ? (
-          <div className="grid place-items-center gap-2 rounded-lg border border-dashed border-line bg-surface-soft/60 px-6 py-8 text-center">
+          <div className="grid place-items-center gap-3 rounded-lg border border-dashed border-line bg-surface-soft/60 px-6 py-8 text-center">
             <span className="grid size-11 place-items-center rounded-full bg-surface text-muted-soft">
               <IconPin className="size-5" />
             </span>
             <p className="text-sm font-medium text-ink">Bạn chưa lưu địa chỉ nào</p>
             <p className="max-w-sm text-sm text-muted">
-              Khi chọn điểm giao ở trang đặt hàng, hãy lưu lại địa chỉ để lần sau không phải tìm lại từ đầu.
+              Thêm điểm giao bạn hay dùng. Chọn địa chỉ trên bản đồ, kéo điểm đỏ về đúng cổng, và lần sau bạn chỉ cần
+              bấm vào tên là xong.
             </p>
+            <div className="mt-1 flex flex-wrap justify-center gap-2">
+              <Button onClick={() => setEditingId("")}>
+                <IconPlus className="size-4" />
+                Thêm địa chỉ giao hàng
+              </Button>
+              <Link
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-line bg-surface px-4 text-sm font-medium text-ink transition-colors hover:bg-surface-soft"
+                href="/don-hang"
+              >
+                Hoặc đặt hàng ngay
+              </Link>
+            </div>
           </div>
         ) : (
           <ul className="grid gap-3">
             {addresses.map((address) => {
-              const editing = editingId === address.id;
-              const busy = pendingId === address.id;
+              const rowBusy = pendingId === address.id;
               return (
                 <li key={address.id} className="rounded-lg border border-line p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -83,101 +93,52 @@ export const SavedAddressesCard = ({
                       {address.addressNote ? (
                         <p className="mt-1 text-xs text-muted">Ghi chú: {address.addressNote}</p>
                       ) : null}
-                      <p className="mt-1.5 text-xs text-muted-soft">
-                        {Number(address.latitude).toFixed(5)}, {Number(address.longitude).toFixed(5)}
-                      </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {!address.isDefault ? (
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={busy}
-                          onClick={() =>
-                            onUpdate(address, {
-                              label: address.label,
-                              addressNote: address.addressNote,
-                              isDefault: true,
-                            })
-                          }
+                          disabled={rowBusy || busy}
+                          onClick={() => onUpdate(address, { ...toDraft(address), isDefault: true })}
                         >
                           <IconCheck className="size-3.5" />
-                          {busy ? "Đang đặt…" : "Đặt mặc định"}
+                          {rowBusy ? "Đang đặt…" : "Đặt mặc định"}
                         </Button>
                       ) : null}
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={busy}
-                        onClick={() => {
-                          setEditingId(editing ? undefined : address.id);
-                          setError(undefined);
-                          if (!editing) form.reset({ label: address.label, addressNote: address.addressNote ?? "" });
-                        }}
+                        disabled={rowBusy || busy}
+                        onClick={() => setEditingId(address.id)}
                       >
-                        {editing ? "Đóng" : "Sửa"}
+                        Sửa
                       </Button>
-                      <Button size="sm" variant="outline" disabled={busy} onClick={() => onDelete(address)}>
+                      <Button size="sm" variant="outline" disabled={rowBusy || busy} onClick={() => onDelete(address)}>
                         <IconTrash className="size-3.5" />
-                        {busy ? "Đang xoá…" : "Xoá"}
+                        {rowBusy ? "Đang xoá…" : "Xoá"}
                       </Button>
                     </div>
                   </div>
-
-                  {editing ? (
-                    <form
-                      className="mt-4 grid gap-3 border-t border-line pt-4"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void form.handleSubmit();
-                      }}
-                    >
-                      <form.Field name="label">
-                        {(field) => (
-                          <Field label="Tên địa chỉ" hint="Ví dụ: Nhà, Văn phòng." className="max-w-md">
-                            <Input
-                              value={field.state.value}
-                              onChange={(event) => field.handleChange(event.target.value)}
-                              onBlur={field.handleBlur}
-                              required
-                            />
-                          </Field>
-                        )}
-                      </form.Field>
-                      <form.Field name="addressNote">
-                        {(field) => (
-                          <Field
-                            label="Ghi chú"
-                            hint="Số nhà, hướng cổng, thông tin giúp shipper tìm đúng điểm giao."
-                            className="max-w-md"
-                          >
-                            <Input
-                              value={field.state.value}
-                              onChange={(event) => field.handleChange(event.target.value)}
-                              onBlur={field.handleBlur}
-                            />
-                          </Field>
-                        )}
-                      </form.Field>
-                      {error ? (
-                        <p className="text-sm text-danger" role="alert">
-                          {error}
-                        </p>
-                      ) : null}
-                      <div>
-                        <Button type="submit">Lưu địa chỉ</Button>
-                      </div>
-                    </form>
-                  ) : null}
                 </li>
               );
             })}
           </ul>
         )}
-        {error && addresses.length === 0 ? (
-          <p className="mt-3 text-sm text-danger" role="alert">
-            {error}
-          </p>
+        {editingId !== undefined ? (
+          <AddressFormDialog
+            // A fresh key per open restarts the form, so a previous draft never leaks into the next one.
+            key={editingId}
+            address={editing && toDraft(editing)}
+            existingCount={addresses.length}
+            busy={busy}
+            onClose={() => setEditingId(undefined)}
+            onSubmit={(draft) => {
+              if (editing) onUpdate(editing, draft);
+              else onCreate(draft);
+              setEditingId(undefined);
+            }}
+          />
         ) : null}
       </CardContent>
     </Card>

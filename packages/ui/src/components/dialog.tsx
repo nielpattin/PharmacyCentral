@@ -25,9 +25,12 @@ export const Dialog = ({
         aria-modal="true"
         aria-label={title}
         onClick={(event) => event.stopPropagation()}
-        className={cn("w-full max-w-lg rounded-lg border border-line bg-surface p-5 shadow-lg", className)}
+        className={cn(
+          "flex max-h-[90vh] w-full max-w-lg flex-col rounded-lg border border-line bg-surface p-5 shadow-lg",
+          className,
+        )}
       >
-        <h3 className="mb-3 text-base font-semibold text-ink">{title}</h3>
+        <h3 className="mb-3 shrink-0 text-base font-semibold text-ink">{title}</h3>
         {children}
       </div>
     </div>

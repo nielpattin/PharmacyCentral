@@ -9,6 +9,7 @@ import {
   listPrescriptions,
   logoutCustomer,
   resolveCustomerSession,
+  saveDeliveryAddress,
   updateDeliveryAddress,
   type Customer,
   type DeliveryAddress,
@@ -19,17 +20,13 @@ import { CustomerAuthForm } from "../components/account/CustomerAuthForm.tsx";
 import { PrescriptionsCard } from "../components/account/PrescriptionsCard.tsx";
 import { ProfileFormCard } from "../components/account/ProfileFormCard.tsx";
 import { SavedAddressesCard } from "../components/account/SavedAddressesCard.tsx";
+import type { AddressDraft } from "../components/AddressFormDialog.tsx";
 import { Link } from "../components/storefront/Link.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
 import { IconChevronRight, IconPin, IconReceipt, IconShield, IconUser } from "../components/storefront/icons.tsx";
 import type { AccountSection } from "../router.ts";
-import {
-  accountQueryKey,
-  checkoutQueryKey,
-  forgetDeliveryAddress,
-  writeDeliveryAddresses,
-} from "../storefront/cart-cache.ts";
+import { accountQueryKey, checkoutQueryKey, writeDeliveryAddresses } from "../storefront/cart-cache.ts";
 import { formatDateTime, formatMoney, initials } from "../storefront/format.ts";
 
 /** Both states the page shows before it can answer: an empty list must never stand in for either of them. */
@@ -43,7 +40,8 @@ const NoticeCard = ({ children }: { children: React.ReactNode }): React.JSX.Elem
 
 type AccountNotice = { kind: "notice" | "error"; message: string };
 
-type AddressUpdate = { label: string; addressNote: string | null; isDefault: boolean };
+/** The address form always submits the whole point, so an edit can move a delivery as well as rename it. */
+type AddressSave = AddressDraft & { id?: string };
 
 /** Recent orders on the overview are a preview; the full list lives on its own page. */
 const RECENT_ORDER_COUNT = 3;
@@ -78,6 +76,8 @@ export const AccountPage = (): React.JSX.Element => {
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState<AccountNotice>();
   const [pendingAddressId, setPendingAddressId] = useState<string>();
+  /** A create has no row to mark, so the form's own submit state is what shows a request is in flight. */
+  const [savingAddress, setSavingAddress] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   const accountQuery = useQuery({
@@ -149,9 +149,9 @@ export const AccountPage = (): React.JSX.Element => {
     setNotice(undefined);
     try {
       await deleteDeliveryAddress(address.id);
-      const remaining = addresses.filter((row) => row.id !== address.id);
-      replaceAddresses(remaining);
-      forgetDeliveryAddress(queryClient, address.id);
+      // Deleting the default promotes a survivor, so which row carries the flag is the service's answer,
+      // not something this page can work out by removing one row from the list it already had.
+      replaceAddresses(await listDeliveryAddresses());
       announce({
         kind: "notice",
         message: address.isDefault
@@ -168,20 +168,34 @@ export const AccountPage = (): React.JSX.Element => {
     }
   };
 
-  const saveAddress = async (address: DeliveryAddress, input: AddressUpdate): Promise<void> => {
-    setPendingAddressId(address.id);
+  const saveAddress = async (input: AddressSave): Promise<void> => {
+    setSavingAddress(true);
+    setPendingAddressId(input.id);
     setNotice(undefined);
     try {
-      await updateDeliveryAddress(address.id, input);
-      // The service clears the previous default server-side, so the list is re-read rather than patched locally.
+      const body = {
+        label: input.label,
+        latitude: input.point.latitude,
+        longitude: input.point.longitude,
+        providerResolvedAddress: input.providerResolvedAddress,
+        addressNote: input.addressNote,
+        isDefault: input.isDefault,
+      };
+      if (input.id) await updateDeliveryAddress(input.id, body);
+      else await saveDeliveryAddress(body);
+      // The service moves the default flag across rows in one transaction, so the list is re-read, not patched.
       replaceAddresses(await listDeliveryAddresses());
-      announce({ kind: "notice", message: `Đã cập nhật địa chỉ “${input.label}”.` });
+      announce({
+        kind: "notice",
+        message: input.id ? `Đã cập nhật địa chỉ “${input.label}”.` : `Đã thêm địa chỉ “${input.label}”.`,
+      });
     } catch (reason) {
       announce({
         kind: "error",
         message: reason instanceof Error ? reason.message : "Không lưu được địa chỉ giao hàng.",
       });
     } finally {
+      setSavingAddress(false);
       setPendingAddressId(undefined);
     }
   };
@@ -262,8 +276,10 @@ export const AccountPage = (): React.JSX.Element => {
         <SavedAddressesCard
           addresses={addresses}
           pendingId={pendingAddressId}
+          busy={savingAddress}
           onDelete={(address) => void removeAddress(address)}
-          onUpdate={(address, input) => void saveAddress(address, input)}
+          onCreate={(draft) => void saveAddress(draft)}
+          onUpdate={(address, draft) => void saveAddress({ ...draft, id: address.id })}
         />
       );
     }

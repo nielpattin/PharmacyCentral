@@ -166,6 +166,15 @@ export type DeliveryAddress = {
   addressNote: string | null;
 };
 
+/**
+ * One suggestion from the address search, before the shopper has picked one.
+ *
+ * A suggestion carries no coordinates: Vietmap hands back a label and an opaque handle, and the handle is
+ * resolved into a point only once the shopper chooses. This is why the search list is cheap and a selection is
+ * the single call that costs something.
+ */
+export type AddressSearchResult = { displayName: string; refId: string };
+
 /** A prescription the sales service links to the signed-in shopper's account. */
 export type CustomerPrescription = {
   id: string;
@@ -238,6 +247,17 @@ export const calculateDelivery = (
     method: "POST",
     body: JSON.stringify({ selectedStoreId, destination, addressNote }),
   });
+
+/**
+ * Names a point the pin was dragged to. A dragged pin has no text of its own, so the label under the map can
+ * only stay truthful by asking a geocoder where the pin actually is.
+ */
+export const reverseGeocode = (destination: {
+  latitude: number;
+  longitude: number;
+}): Promise<{ providerResolvedAddress: string }> =>
+  request("/api/delivery/reverse-geocode", { method: "POST", body: JSON.stringify({ destination }) });
+
 export const createOrder = (input: {
   selectedStoreId: string;
   fulfillmentType: "pickup" | "delivery";
@@ -270,6 +290,7 @@ export const saveDeliveryAddress = (input: {
   longitude: number;
   providerResolvedAddress: string;
   addressNote?: string;
+  isDefault?: boolean;
 }): Promise<DeliveryAddress> => request("/api/delivery/addresses", { method: "POST", body: JSON.stringify(input) });
 export const deleteDeliveryAddress = (id: string): Promise<void> =>
   request(`/api/delivery/addresses/${id}`, { method: "DELETE" });
@@ -330,14 +351,32 @@ export const resolveCustomerSession = async (): Promise<Customer | undefined> =>
   setIdentityContextsEnabled(true);
   return customer;
 };
-export const searchAddress = async (
-  query: string,
-): Promise<{ displayName: string; latitude: number; longitude: number }[]> => {
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(query)}`,
-    { headers: { accept: "application/json" } },
+
+/** The service rejects a shorter prefix, and one letter matches most Vietnamese street names. */
+export const ADDRESS_SEARCH_MIN_LENGTH = 2;
+
+/**
+ * Suggests addresses for what the shopper typed.
+ *
+ * The browser never holds the Vietmap key. That key is metered, so shipping it in a Vite bundle would let any
+ * visitor spend the account's monthly allowance; the sales service holds it and this call goes through it.
+ */
+export const searchAddress = async (query: string): Promise<AddressSearchResult[]> => {
+  const trimmed = query.trim();
+  if (trimmed.length < ADDRESS_SEARCH_MIN_LENGTH) return [];
+  const payload = await request<{ results: AddressSearchResult[] }>(
+    `/api/delivery/addresses/search?q=${encodeURIComponent(trimmed)}`,
   );
-  if (!response.ok) throw new Error("Address search failed");
-  const rows = (await response.json()) as Array<{ display_name: string; lat: string; lon: string }>;
-  return rows.map((row) => ({ displayName: row.display_name, latitude: Number(row.lat), longitude: Number(row.lon) }));
+  return payload.results;
 };
+
+/**
+ * Turns the suggestion the shopper picked into the point the rider has to reach.
+ *
+ * Autocomplete answers with a label and an opaque handle, and the handle is what carries the coordinates, so
+ * choosing a suggestion costs a second call. It is the one call a shopper makes per address, not per keystroke.
+ */
+export const resolveAddressSuggestion = (
+  refId: string,
+): Promise<{ displayName: string; destination: { latitude: number; longitude: number } }> =>
+  request("/api/delivery/addresses/resolve", { method: "POST", body: JSON.stringify({ refId }) });

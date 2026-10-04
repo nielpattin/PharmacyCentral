@@ -18,8 +18,9 @@ import {
   listPublishedPrices,
   listStores,
   mergeGuestCart,
+  resolveAddressSuggestion,
   resolveCustomerSession,
-  searchAddress,
+  saveDeliveryAddress,
   updateCartLine,
   type CatalogProduct,
   type CatalogUnit,
@@ -29,6 +30,7 @@ import {
   type PaymentInvoice,
 } from "../customer-api.ts";
 import { useSession } from "../auth.ts";
+import { useAddressSearch } from "../hooks/useAddressSearch.ts";
 import { CartItems } from "../components/checkout/CartItems.tsx";
 import { CheckoutSteps, type CheckoutStep } from "../components/checkout/CheckoutSteps.tsx";
 import { DeliveryPointPanel, type AddressResult, type Point } from "../components/checkout/DeliveryPointPanel.tsx";
@@ -41,7 +43,7 @@ import { Link } from "../components/storefront/Link.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
 import { IconChevronRight } from "../components/storefront/icons.tsx";
-import { checkoutQueryKey, writeCart } from "../storefront/cart-cache.ts";
+import { checkoutQueryKey, writeCart, writeDeliveryAddresses } from "../storefront/cart-cache.ts";
 import { buildPriceIndex, buildStockIndex, uniqueCategories } from "../storefront/catalog.ts";
 import { buildCheckoutLines, checkoutTotals, type CheckoutLine } from "../storefront/checkout.ts";
 import { formatMoney } from "../storefront/format.ts";
@@ -83,14 +85,19 @@ export const CheckoutPage = (): React.JSX.Element => {
   const [addressNote, setAddressNote] = useState("");
   const [addressQuery, setAddressQuery] = useState("");
   const [productSearch, setProductSearch] = useState("");
-  const [destination, setDestination] = useState(defaultDestination);
+  /**
+   * Only an explicit choice by the shopper lives in state. Until then the delivery point is the account's default
+   * address, which arrives with the same query that loads the rest of the checkout, so deriving it here means
+   * the fee and the map start on the address the account page says is the default.
+   */
+  const [chosenDestination, setDestination] = useState<Point>();
   const [delivery, setDelivery] = useState<DeliveryCalculation>();
   const [submittedSearch, setSubmittedSearch] = useState<string>();
-  const [addressResults, setAddressResults] = useState<AddressResult[]>([]);
+  const addressSearch = useAddressSearch();
   const [busy, setBusy] = useState(false);
-  const [searching, setSearching] = useState(false);
   const [pendingLineId, setPendingLineId] = useState<string>();
   const [addingProductId, setAddingProductId] = useState<string>();
+  const [savingDestination, setSavingDestination] = useState(false);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<Feedback>();
   const [placed, setPlaced] = useState<PlacedOrder>();
@@ -151,9 +158,20 @@ export const CheckoutPage = (): React.JSX.Element => {
   const stores = checkoutQuery.data?.stores ?? [];
   const cart = checkoutQuery.data?.cart;
   const addresses = checkoutQuery.data?.addresses ?? [];
+  const defaultAddress = addresses.find((address) => address.isDefault);
+  const destination: Point =
+    chosenDestination ??
+    (defaultAddress
+      ? { latitude: Number(defaultAddress.latitude), longitude: Number(defaultAddress.longitude) }
+      : defaultDestination);
+  /** The address the current point came from, so the panel can offer to save a point the account does not have. */
+  const activeAddress = addresses.find(
+    (address) =>
+      Number(address.latitude) === destination.latitude && Number(address.longitude) === destination.longitude,
+  );
   const queryError = checkoutQuery.error ?? productsQuery.error;
   const loadError = queryError instanceof Error ? queryError.message : undefined;
-  const visibleError = error ?? loadError;
+  const visibleError = error ?? addressSearch.error ?? loadError;
   /** The invoice the shopper pays against: the live one once it is read, the create response before that. */
   const placedInvoice = placedInvoiceQuery.data ?? placed?.invoice;
 
@@ -252,15 +270,60 @@ export const CheckoutPage = (): React.JSX.Element => {
     }
   };
 
-  const submitAddressSearch = async (): Promise<void> => {
-    setSearching(true);
+  /**
+   * Shoppers rarely add an address from the account page; they add it from the checkout they are already in,
+   * so the point they just pinned is offered to be saved right here.
+   *
+   * A point dragged on the map or read from the browser's geolocation has no address text of its own, and the
+   * service refuses a blank one. The route calculation reverse-geocodes whatever point it is given, so saving
+   * asks for it first: the stored row then carries the same wording the fee summary and the receipt show.
+   */
+  const saveDestination = async (): Promise<void> => {
+    if (!selectedStore) return;
+    setSavingDestination(true);
     setError(undefined);
     try {
-      setAddressResults(await searchAddress(addressQuery));
+      const calculation = await calculateDelivery(selectedStore.id, destination, addressNote);
+      setDelivery(calculation);
+      await saveDeliveryAddress({
+        label: calculation.providerResolvedAddress.split(",")[0]?.trim() || "Điểm giao",
+        latitude: destination.latitude,
+        longitude: destination.longitude,
+        providerResolvedAddress: calculation.providerResolvedAddress,
+        ...(addressNote.trim() ? { addressNote: addressNote.trim() } : {}),
+        // The first address a shopper saves is the one they will want next time, and the service would
+        // promote it server-side anyway; sending it keeps the two paths agreeing.
+        isDefault: addresses.length === 0,
+      });
+      // The service owns which row is the default, so the list is re-read rather than patched here.
+      writeDeliveryAddresses(queryClient, await listDeliveryAddresses());
+      showFeedback({
+        kind: "notice",
+        message: "Đã lưu điểm giao này. Bạn có thể đổi tên trong Tài khoản › Địa chỉ giao hàng.",
+      });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Tìm địa chỉ thất bại");
+      setError(reason instanceof Error ? reason.message : "Không lưu được điểm giao này.");
     } finally {
-      setSearching(false);
+      setSavingDestination(false);
+    }
+  };
+
+  const submitAddressSearch = (): void => {
+    setError(undefined);
+    addressSearch.search(addressQuery);
+  };
+
+  /**
+   * A suggestion carries a label and an opaque handle, not a point, so picking one has to resolve it first.
+   * The shopper waits on one call per address here, and the fee is recalculated from the resolved point.
+   */
+  const pickAddressResult = async (result: AddressResult): Promise<void> => {
+    setError(undefined);
+    try {
+      const resolved = await resolveAddressSuggestion(result.refId);
+      chooseDestination(resolved.destination);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Không lấy được vị trí của địa chỉ đã chọn.");
     }
   };
 
@@ -284,7 +347,7 @@ export const CheckoutPage = (): React.JSX.Element => {
       (position) => {
         setDestination({ latitude: position.coords.latitude, longitude: position.coords.longitude });
         setDelivery(undefined);
-        setAddressResults([]);
+        addressSearch.clear();
       },
       () => setError("Bạn chưa cho phép truy cập vị trí"),
     );
@@ -293,7 +356,7 @@ export const CheckoutPage = (): React.JSX.Element => {
   const chooseDestination = (point: Point): void => {
     setDestination(point);
     setDelivery(undefined);
-    setAddressResults([]);
+    addressSearch.clear();
     setPlaced(undefined);
   };
 
@@ -428,20 +491,24 @@ export const CheckoutPage = (): React.JSX.Element => {
               selectedStoreId={selectedStore?.id ?? ""}
               fulfillmentType={fulfillmentType}
               addresses={addresses}
+              activeAddressId={activeAddress?.id}
+              canSaveDestination={session.authenticated && activeAddress === undefined}
+              savingDestination={savingDestination}
+              onSaveDestination={() => void saveDestination()}
               destination={destination}
               delivery={delivery}
               addressNote={addressNote}
               query={addressQuery}
-              results={addressResults}
+              results={addressSearch.results}
               mapKey={`${selectedStore?.id ?? "none"}:${destination.latitude}:${destination.longitude}:${delivery?.route.coordinates.length ?? 0}`}
               busy={busy}
-              searching={searching}
+              searching={addressSearch.searching}
               onSelectStore={chooseStore}
               onDestinationChange={chooseDestination}
               onAddressNoteChange={setAddressNote}
               onQueryChange={setAddressQuery}
-              onSearchSubmit={() => void submitAddressSearch()}
-              onPickResult={(result) => chooseDestination({ latitude: result.latitude, longitude: result.longitude })}
+              onSearchSubmit={submitAddressSearch}
+              onPickResult={(result) => void pickAddressResult(result)}
               onPickSavedAddress={(address) =>
                 chooseDestination({ latitude: Number(address.latitude), longitude: Number(address.longitude) })
               }
