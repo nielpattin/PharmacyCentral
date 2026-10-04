@@ -292,6 +292,11 @@ export class SalesRepository {
       .orderBy(desc(deliveryAddresses.updatedAt));
   }
 
+  /**
+   * Stores one of the shopper's delivery points. A shopper's very first address becomes their default
+   * without being asked: there is nothing to compare it against yet, and a shopper with a saved address
+   * but no default is a state the UI and the checkout preselection both have to special-case.
+   */
   public async createDeliveryAddress(input: {
     customerId: string;
     label: string;
@@ -301,15 +306,20 @@ export class SalesRepository {
     addressNote?: string | null | undefined;
     isDefault?: boolean | undefined;
   }) {
-    const isDefault = input.isDefault === true;
     return this.database.db.transaction(async (transaction) => {
       // Only one default may exist per shopper, so a newly created default displaces the old one in one transaction.
-      if (isDefault) {
+      if (input.isDefault === true) {
         await transaction
           .update(deliveryAddresses)
           .set({ isDefault: false })
           .where(and(eq(deliveryAddresses.customerId, input.customerId), eq(deliveryAddresses.isDefault, true)));
       }
+      const [existing] = await transaction
+        .select({ id: deliveryAddresses.id })
+        .from(deliveryAddresses)
+        .where(eq(deliveryAddresses.customerId, input.customerId))
+        .limit(1);
+      const isDefault = input.isDefault === true || existing === undefined;
       const [address] = await transaction
         .insert(deliveryAddresses)
         .values({
@@ -324,12 +334,34 @@ export class SalesRepository {
     });
   }
 
+  /**
+   * Removes one of the shopper's own addresses. Deleting the default would otherwise leave them with no
+   * default at all, which is a state the account page and the checkout preselection both cannot render
+   * sensibly, so the most recently updated survivor takes over in the same transaction.
+   */
   public async deleteDeliveryAddress(customerId: string, id: string) {
-    const [address] = await this.database.db
-      .delete(deliveryAddresses)
-      .where(and(eq(deliveryAddresses.id, id), eq(deliveryAddresses.customerId, customerId)))
-      .returning();
-    return address;
+    return this.database.db.transaction(async (transaction) => {
+      const [address] = await transaction
+        .delete(deliveryAddresses)
+        .where(and(eq(deliveryAddresses.id, id), eq(deliveryAddresses.customerId, customerId)))
+        .returning();
+      if (!address) return undefined;
+      if (address.isDefault) {
+        const [survivor] = await transaction
+          .select({ id: deliveryAddresses.id })
+          .from(deliveryAddresses)
+          .where(eq(deliveryAddresses.customerId, customerId))
+          .orderBy(desc(deliveryAddresses.updatedAt))
+          .limit(1);
+        if (survivor) {
+          await transaction
+            .update(deliveryAddresses)
+            .set({ isDefault: true })
+            .where(eq(deliveryAddresses.id, survivor.id));
+        }
+      }
+      return address;
+    });
   }
 
   /**
