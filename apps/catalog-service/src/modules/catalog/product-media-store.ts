@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Client } from "minio";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 import { requiredEnvironmentSecret, requiredEnvironmentVariable } from "../../shared/infrastructure/environment.ts";
 
@@ -16,22 +16,21 @@ export type StoredProductImage = {
 
 export class ProductMediaStore {
   public static createFromEnvironment(): ProductMediaStore {
-    const endpoint = requiredEnvironmentVariable("MINIO_ENDPOINT");
-    // One credential pair for the whole repo: the same account MinIO itself boots with, so the value can never
-    // drift out of sync the way a separately-named copy did.
-    const accessKey = requiredEnvironmentSecret("MINIO_ROOT_USER");
-    const secretKey = requiredEnvironmentSecret("MINIO_ROOT_PASSWORD");
-    const bucket = requiredEnvironmentVariable("MINIO_MEDIA_BUCKET");
-    const publicBaseUrl = requiredEnvironmentVariable("MINIO_PUBLIC_MEDIA_URL");
-    const separator = endpoint.lastIndexOf(":");
-    const host = endpoint.slice(0, separator);
-    const port = Number.parseInt(endpoint.slice(separator + 1), 10);
-    if (!separator || !host || !Number.isInteger(port) || port < 1 || port > 65_535) {
-      throw new Error("MINIO_ENDPOINT must use host:port format");
-    }
+    const endpoint = requiredEnvironmentVariable("SEAWEEDFS_ENDPOINT");
+    // One credential pair for the whole repo: the same account the SeaweedFS S3 gateway boots with, so the value
+    // can never drift out of sync the way a separately-named copy did.
+    const accessKeyId = requiredEnvironmentSecret("SEAWEEDFS_ACCESS_KEY");
+    const secretAccessKey = requiredEnvironmentSecret("SEAWEEDFS_SECRET_KEY");
+    const bucket = requiredEnvironmentVariable("SEAWEEDFS_MEDIA_BUCKET");
+    const publicBaseUrl = requiredEnvironmentVariable("SEAWEEDFS_PUBLIC_MEDIA_URL");
 
     return new ProductMediaStore(
-      new Client({ endPoint: host, port, useSSL: false, accessKey, secretKey }),
+      new S3Client({
+        endpoint,
+        region: "us-east-1",
+        forcePathStyle: true,
+        credentials: { accessKeyId, secretAccessKey },
+      }),
       bucket,
       publicBaseUrl,
     );
@@ -40,7 +39,7 @@ export class ProductMediaStore {
   private readonly publicBaseUrl: string;
 
   public constructor(
-    private readonly client: Client,
+    private readonly client: Pick<S3Client, "send">,
     private readonly bucket: string,
     publicBaseUrl: string,
   ) {
@@ -51,11 +50,16 @@ export class ProductMediaStore {
     const signature = detectProductImage(image);
     const sha256 = productImageChecksum(image);
     const objectKey = `products/${productId}/${randomUUID()}.${signature.extension}`;
-    await this.client.putObject(this.bucket, objectKey, image, image.length, {
-      "Content-Type": signature.mimeType,
-      "Cache-Control": "public, max-age=31536000, immutable",
-      "X-Content-Type-Options": "nosniff",
-    });
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+        Body: image,
+        ContentLength: image.length,
+        ContentType: signature.mimeType,
+        CacheControl: "public, max-age=31536000, immutable",
+      }),
+    );
 
     return {
       imageUrl: `${this.publicBaseUrl}/${objectKey}`,

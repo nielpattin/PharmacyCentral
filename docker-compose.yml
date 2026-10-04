@@ -107,41 +107,49 @@ services:
       - "4317:4317"
       - "4318:4318"
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY}
+      SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY}
+      SEAWEEDFS_MEDIA_BUCKET: ${SEAWEEDFS_MEDIA_BUCKET}
+    # Writes need the key pair; anonymous visitors may only read the media bucket (public product images).
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        cat > /tmp/s3.json <<EOF
+        {"identities":[{"name":"media-admin","credentials":[{"accessKey":"$$SEAWEEDFS_ACCESS_KEY","secretKey":"$$SEAWEEDFS_SECRET_KEY"}],"actions":["Admin","Read","Write","List","Tagging"]},{"name":"anonymous","actions":["Read:$$SEAWEEDFS_MEDIA_BUCKET"]}]}
+        EOF
+        exec weed server -dir=/data -master.volumeSizeLimitMB=512 -volume.max=0 -s3 -s3.port=9000 -s3.config=/tmp/s3.json
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/healthz >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 10s
     volumes:
-      - pharmacy-central-minio-data:/data
+      - pharmacy-central-seaweedfs-data:/data
     ports:
-      - "${MINIO_API_PORT}:9000"
-      - "${MINIO_CONSOLE_PORT}:9001"
+      - "${SEAWEEDFS_S3_PORT}:9000"
 
-  minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_MEDIA_BUCKET: ${MINIO_MEDIA_BUCKET}
+      SEAWEEDFS_MEDIA_BUCKET: ${SEAWEEDFS_MEDIA_BUCKET}
     entrypoint:
       - /bin/sh
       - -ec
       - |
-        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
-        mc mb --ignore-existing "local/$$MINIO_MEDIA_BUCKET"
-        mc anonymous set download "local/$$MINIO_MEDIA_BUCKET"
+        if echo s3.bucket.list | weed shell -master=seaweedfs:9333 | grep -q "^[[:space:]]*$$SEAWEEDFS_MEDIA_BUCKET[[:space:]]"; then
+          echo "bucket $$SEAWEEDFS_MEDIA_BUCKET already exists"
+        else
+          echo "s3.bucket.create -name $$SEAWEEDFS_MEDIA_BUCKET" | weed shell -master=seaweedfs:9333
+        fi
     restart: "no"
 
   gateway:
@@ -196,17 +204,17 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_healthy
-      minio-init:
+      seaweedfs-init:
         condition: service_completed_successfully
     environment:
       <<: *backend-environment
       PORT: 3002
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/catalog_service
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_MEDIA_BUCKET: ${MINIO_MEDIA_BUCKET}
-      MINIO_PUBLIC_MEDIA_URL: ${MINIO_PUBLIC_MEDIA_URL}
+      SEAWEEDFS_ENDPOINT: http://seaweedfs:9000
+      SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY}
+      SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY}
+      SEAWEEDFS_MEDIA_BUCKET: ${SEAWEEDFS_MEDIA_BUCKET}
+      SEAWEEDFS_PUBLIC_MEDIA_URL: ${SEAWEEDFS_PUBLIC_MEDIA_URL}
     ports:
       - "${CATALOG_PORT}:3002"
 
@@ -334,4 +342,4 @@ services:
 volumes:
   pharmacy-central-postgres-data:
   pharmacy-central-valkey-data:
-  pharmacy-central-minio-data:
+  pharmacy-central-seaweedfs-data:

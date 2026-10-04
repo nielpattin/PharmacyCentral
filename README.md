@@ -79,7 +79,7 @@ pnpm run images:import
 Staff users import CSV files from the Data import screen in `staff-web`, which generates a header-only CSV
 template in the browser, previews the parsed rows, and reads the imported records back from the owning
 service. Master data belongs to the service that owns it (catalog and inventory databases, images in
-MinIO/S3). See `data/README.md` for what is committed and what stays local.
+SeaweedFS/S3). See `data/README.md` for what is committed and what stays local.
 
 ## Verification
 

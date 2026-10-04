@@ -8,10 +8,10 @@ All local work runs on Docker Compose. Start here once:
 pnpm install --frozen-lockfile
 cp .env.example .env   # then fill in secrets
 pnpm run infra:up
-docker compose ps   # postgres, rabbitmq, valkey, mailpit, otel-collector, minio healthy
+docker compose ps   # postgres, rabbitmq, valkey, mailpit, otel-collector, seaweedfs healthy
 ```
 
-MinIO is local product-image object storage. `minio-init` creates the `product-media` bucket and grants local public-download access. The MinIO API is at `http://localhost:9000` and its console is at `http://localhost:9001`; set the ports and credentials in `.env` before starting Compose. Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies (the other groups keep Nginx's 1 MB default). `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; other JSON routes keep the 1 MB service default.
+SeaweedFS is local product-image object storage. `seaweedfs-init` creates the `product-media` bucket, and the S3 gateway allows anonymous reads on that bucket only. The S3 API is at `http://localhost:9000`; set the port and credentials (`SEAWEEDFS_*`) in `.env` before starting Compose. Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies (the other groups keep Nginx's 1 MB default). `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; other JSON routes keep the 1 MB service default.
 
 Create the databases and seed the local accounts. The seed reads `.env` on its own:
 
@@ -213,10 +213,10 @@ suppliers, then products, then opening balances.
 Source files stay outside the application image. The committed fixture set lives in `data/`: the sample CSVs in
 `data/import-samples/` and the coursework image set as `data/product-images/images.tar.gz`, so a fresh checkout can
 exercise both flows. Any other file comes from the operator machine (`~/Downloads/...`), and the API never reads a
-server-side path. Import in dependency order: images (`images:import`, since `products.csv` carries MinIO URLs whose
+server-side path. Import in dependency order: images (`images:import`, since `products.csv` carries SeaweedFS URLs whose
 object keys are content hashes), then sites, storage locations, suppliers, products, and finally opening balances. After
 an import the truth lives in the owning service database: catalog data in `catalog-service`, stock in
-`inventory-service`, images in MinIO. Extracted images, original downloads, source-verification records
+`inventory-service`, images in SeaweedFS. Extracted images, original downloads, source-verification records
 (`provenance/`), and research dumps (`research/`) stay local.
 
 Imports are idempotent on natural keys (`code`, `sku`, `batchNumber`). An opening balance row is accepted only while the batch and storage location have no stock balance or ledger history. Reimporting the same quantity is a no-op; changing an existing balance requires a stock adjustment so the ledger keeps an audit trail.
@@ -229,12 +229,12 @@ Then open `http://127.0.0.1:5174/imports` from the staff web app.
 
 ### Import local product images
 
-The image command uploads the committed image archive to the local MinIO bucket and prints the public URL
+The image command uploads the committed image archive to the local SeaweedFS bucket and prints the public URL
 of each image. It does not touch the database.
 
 ```bash
 pnpm run infra:up
-pnpm run images:import        # data/product-images/images.tar.gz -> MinIO, prints sku,imageUrl
+pnpm run images:import        # data/product-images/images.tar.gz -> SeaweedFS, prints sku,imageUrl
 ```
 
 The committed image set is one gzip archive (`data/product-images/images.tar.gz`) and every member is named
@@ -248,7 +248,7 @@ down by re-encoding only: indexed-colour PNG (≤256 colours) and JPEG quality 9
 local in the ignored `data/product-images/originals/`. `images:pack` regenerates the archive after the set
 changes; `images:unpack` extracts it with `tar` for inspection (the import does not need it).
 
-`data/` is excluded from container builds via `.dockerignore`, so the images only reach MinIO through that
+`data/` is excluded from container builds via `.dockerignore`, so the images only reach SeaweedFS through that
 command. Source-verification records (source URLs, byte counts, SHA-256, download summary, review sheet) stay
 local in `data/product-images/provenance/`.
 

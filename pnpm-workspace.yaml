@@ -13,6 +13,7 @@ allowBuilds:
   protobufjs: true
 
 catalog:
+  "@aws-sdk/client-s3": 3.1146.0
   "@nx/js": 23.1.1
   "@tailwindcss/vite": 4.3.3
   "@tanstack/react-query": 5.102.5
@@ -36,7 +37,6 @@ catalog:
   express: 5.2.1
   lucide-react: 1.44.0
   maplibre-gl: 6.4.1
-  minio: 8.0.7
   nodemailer: 9.0.5
   openid-client: 6.8.7
   oxfmt: 0.64.0

@@ -30,13 +30,13 @@ fabricated sample values (`@example.com`). This is coursework data, not a real c
 ## One command from a fresh checkout
 
 ```bash
-pnpm run infra:up                     # PostgreSQL, RabbitMQ, Valkey, MinIO
-pnpm run images:import                # images.tar.gz -> MinIO, prints sku,imageUrl
+pnpm run infra:up                     # PostgreSQL, RabbitMQ, Valkey, SeaweedFS
+pnpm run images:import                # images.tar.gz -> SeaweedFS, prints sku,imageUrl
 ```
 
 `images:import` reads `data/product-images/images.tar.gz` directly (the file name inside the archive
 **is** the SKU, so there is no manifest and nothing to extract), validates every image before uploading
-anything, uploads the 50 objects to MinIO under `product-images/<SKU>/<sha256>.<ext>`, and prints one
+anything, uploads the 50 objects to SeaweedFS under `product-images/<SKU>/<sha256>.<ext>`, and prints one
 `sku,imageUrl` line per image. Then import `products.csv` (and the other four) on the staff web **Data
 import** screen: `http://127.0.0.1:5174/imports`.
 
@@ -86,7 +86,7 @@ pnpm run images:pack
 Verification performed: all 50 output files keep their exact source dimensions (729×729 to
 3000×3000), every PNG reports `opaque=True` before conversion (so indexed colour loses no
 transparency), the archive round-trips through `images:pack`/`images:unpack` with identical SHA-256s,
-the import command uploaded all 50 files to MinIO (16,769,017 B total, `image/png` + `image/jpeg`),
+the import command uploaded all 50 files to SeaweedFS (16,769,017 B total, `image/png` + `image/jpeg`),
 each uploaded object answers HTTP 200, and both formats render on the customer storefront. PSNR per
 file is 40–46 dB, i.e. no visible banding in the product photos (a 2000×2000 sample re-quantised to
 256 colours was inspected side by side with the original).
@@ -117,7 +117,7 @@ data/
   HTTP payload the service validates; the JSON files under `provenance/` and `research/` are research
   artifacts, not app inputs.
 - Files here are inputs only. After an import the truth lives in PostgreSQL (`catalog-service`,
-  `inventory-service`) and in MinIO/S3 for images.
+  `inventory-service`) and in SeaweedFS/S3 for images.
 - Never serve these files from a web app and never copy them into an app's `public/` directory.
 - Images never ship inside a container image: `.dockerignore` excludes `data/`, they are uploaded to
-  MinIO by the command above.
+  SeaweedFS by the command above.

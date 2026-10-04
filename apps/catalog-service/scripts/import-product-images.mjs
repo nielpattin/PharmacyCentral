@@ -11,28 +11,26 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 
-import { Client as MinioClient } from "minio";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 import { requiredEnvironmentSecret, requiredEnvironmentVariable } from "../src/shared/infrastructure/environment.ts";
 import { detectProductImage, productImageChecksum } from "../src/modules/catalog/product-image.ts";
 
 const ARCHIVE_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "../../../data/product-images/images.tar.gz");
 
-const createStorage = () => {
-  const endpoint = requiredEnvironmentVariable("MINIO_ENDPOINT");
-  const accessKey = requiredEnvironmentSecret("MINIO_ROOT_USER");
-  const secretKey = requiredEnvironmentSecret("MINIO_ROOT_PASSWORD");
-  const separator = endpoint.lastIndexOf(":");
-  const host = endpoint.slice(0, separator);
-  const port = Number.parseInt(endpoint.slice(separator + 1), 10);
-  if (!separator || !host || !Number.isInteger(port) || port < 1 || port > 65_535)
-    throw new Error("MINIO_ENDPOINT must use host:port format");
-  return {
-    bucket: requiredEnvironmentVariable("MINIO_MEDIA_BUCKET"),
-    publicBaseUrl: requiredEnvironmentVariable("MINIO_PUBLIC_MEDIA_URL").trim().replace(/\/+$/, ""),
-    client: new MinioClient({ endPoint: host, port, useSSL: false, accessKey, secretKey }),
-  };
-};
+const createStorage = () => ({
+  bucket: requiredEnvironmentVariable("SEAWEEDFS_MEDIA_BUCKET"),
+  publicBaseUrl: requiredEnvironmentVariable("SEAWEEDFS_PUBLIC_MEDIA_URL").trim().replace(/\/+$/, ""),
+  client: new S3Client({
+    endpoint: requiredEnvironmentVariable("SEAWEEDFS_ENDPOINT"),
+    region: "us-east-1",
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: requiredEnvironmentSecret("SEAWEEDFS_ACCESS_KEY"),
+      secretAccessKey: requiredEnvironmentSecret("SEAWEEDFS_SECRET_KEY"),
+    },
+  }),
+});
 
 const readTarMembers = (archive) => {
   const members = [];
@@ -68,11 +66,16 @@ const images = readTarMembers(gunzipSync(await readFile(ARCHIVE_PATH))).map(({ p
 });
 
 for (const { objectKey, mimeType, content } of images) {
-  await storage.client.putObject(storage.bucket, objectKey, content, content.length, {
-    "Content-Type": mimeType,
-    "Cache-Control": "public, max-age=31536000, immutable",
-    "X-Content-Type-Options": "nosniff",
-  });
+  await storage.client.send(
+    new PutObjectCommand({
+      Bucket: storage.bucket,
+      Key: objectKey,
+      Body: content,
+      ContentLength: content.length,
+      ContentType: mimeType,
+      CacheControl: "public, max-age=31536000, immutable",
+    }),
+  );
 }
 
 process.stdout.write(images.map(({ sku, imageUrl }) => `${sku},${imageUrl}\n`).join(""));

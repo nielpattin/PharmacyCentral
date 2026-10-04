@@ -17,10 +17,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
     "amqplib": "catalog:",
     "drizzle-orm": "catalog:",
     "express": "catalog:",
-    "minio": "catalog:",
     "pg": "catalog:",
     "pino": "catalog:",
     "zod": "catalog:"
