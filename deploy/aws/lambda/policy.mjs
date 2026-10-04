@@ -11,6 +11,9 @@ export const publicPrefixes = [
   "/api/availability",
   "/api/carts",
   "/api/delivery/calculate",
+  "/api/delivery/reverse-geocode",
+  "/api/delivery/addresses/search",
+  "/api/delivery/addresses/resolve",
   "/api/payments/sepay/webhook",
 ];
 

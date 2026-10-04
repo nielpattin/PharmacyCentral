@@ -10,6 +10,7 @@ import { createTrustedRequestMiddleware, matchesPathPrefix } from "./middleware/
 import { DeliveryCalculator } from "./modules/delivery/domain/delivery-calculator.ts";
 import { InMemoryDeliveryCache } from "./modules/delivery/infrastructure/in-memory-delivery-cache.ts";
 import { OpenRouteServiceClient } from "./modules/delivery/infrastructure/open-route-service-client.ts";
+import { VietmapGeocoder } from "./modules/delivery/infrastructure/vietmap-geocoder.ts";
 import { createDeliveryRouter } from "./modules/delivery/presentation/delivery-routes.ts";
 import { SalesOutboxPublisher } from "./modules/outbox-publisher.ts";
 import { SalesPaymentEventConsumer } from "./modules/payment-event-consumer.ts";
@@ -41,17 +42,27 @@ if (paymentEventConsumer)
     .catch((error: unknown) => logger.warn({ error }, "sales payment consumer unavailable"));
 const valkeyClient = await createValkeyClient();
 const deliveryCache = valkeyClient ? await createValkeyDeliveryCache(valkeyClient) : new InMemoryDeliveryCache();
-const deliveryCalculator = openRouteServiceKey
-  ? new DeliveryCalculator(
-      new OpenRouteServiceClient({ apiKey: openRouteServiceKey, baseUrl: process.env.OPENROUTESERVICE_BASE_URL }),
-      deliveryCache,
-      {
-        perKilometer: Number.parseInt(requireEnv("DELIVERY_FEE_PER_KILOMETER"), 10),
-        minimumFee: Number.parseInt(requireEnv("DELIVERY_FEE_MINIMUM"), 10),
-        maximumFee: Number.parseInt(requireEnv("DELIVERY_FEE_MAXIMUM"), 10),
-        cacheTtlSeconds: 300,
-      },
-    )
+/**
+ * Two providers with two jobs. OpenRouteService prices the route and can only answer in the language its own
+ * data happens to hold; Vietmap names the point, and is the one Vietnamese address source that keeps house
+ * numbers. OpenStreetMap cannot do this job: `addr:housenumber` is optional there, nobody in Vietnam enters it,
+ * and "268 Tôn Đản, Quận 4" returns nothing at all. A rider needs "268 Tôn Đản" to find the door, not just the
+ * street it stands on.
+ */
+const addressGeocoder = new VietmapGeocoder({
+  baseUrl: requireEnv("VIETMAP_BASE_URL"),
+  apiKey: requireEnv("VIETMAP_API_KEY"),
+});
+const routeProvider = openRouteServiceKey
+  ? new OpenRouteServiceClient({ apiKey: openRouteServiceKey, baseUrl: process.env.OPENROUTESERVICE_BASE_URL })
+  : undefined;
+const deliveryCalculator = routeProvider
+  ? new DeliveryCalculator(routeProvider, addressGeocoder, deliveryCache, {
+      perKilometer: Number.parseInt(requireEnv("DELIVERY_FEE_PER_KILOMETER"), 10),
+      minimumFee: Number.parseInt(requireEnv("DELIVERY_FEE_MINIMUM"), 10),
+      maximumFee: Number.parseInt(requireEnv("DELIVERY_FEE_MAXIMUM"), 10),
+      cacheTtlSeconds: 300,
+    })
   : undefined;
 const storeCoordinates = new Map<string, { id: string; latitude: number; longitude: number }>();
 try {
@@ -72,7 +83,10 @@ app.use(
     expectedAudience: serviceName,
     isPublic: (request) =>
       (matchesPathPrefix(request.path, "/carts") && !matchesPathPrefix(request.path, "/carts/merge")) ||
-      matchesPathPrefix(request.path, "/delivery/calculate"),
+      matchesPathPrefix(request.path, "/delivery/calculate") ||
+      matchesPathPrefix(request.path, "/delivery/reverse-geocode") ||
+      matchesPathPrefix(request.path, "/delivery/addresses/search") ||
+      matchesPathPrefix(request.path, "/delivery/addresses/resolve"),
   }),
 );
 app.get("/health/live", (_request, response) => response.json({ status: "ok", service: serviceName }));
@@ -108,7 +122,7 @@ app.use(
     lookupStore,
   }),
 );
-app.use(createDeliveryRouter(deliveryCalculator, lookupStore));
+app.use(createDeliveryRouter(deliveryCalculator, lookupStore, addressGeocoder));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   logger.error({ error }, "unhandled request error");

@@ -341,7 +341,7 @@ Local development uses a single RabbitMQ node.
 Valkey stores rate-limit counters and delivery route calculations.
 
 - PostgreSQL remains the authoritative source of truth.
-- Delivery cache misses call OpenRouteService directly.
+- Delivery cache misses call Vietmap for the address label and OpenRouteService for the route. Cache keys carry a version, so a change in what a cached calculation contains bumps it.
 - Cache outages never alter order fees or transition business states.
 
 ## Rollback and deployment

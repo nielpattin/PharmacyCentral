@@ -1,22 +1,9 @@
-import type { DeliveryPoint, DeliveryProvider, RouteResult, StoreOrigin } from "../domain/delivery-calculator.ts";
+import type { DeliveryPoint, RouteProvider, RouteResult, StoreOrigin } from "../domain/delivery-calculator.ts";
 
-export class OpenRouteServiceClient implements DeliveryProvider {
+export class OpenRouteServiceClient implements RouteProvider {
   public constructor(
     private readonly options: { apiKey: string; baseUrl?: string | undefined; timeoutMs?: number | undefined },
   ) {}
-
-  public async resolveAddress(point: DeliveryPoint): Promise<string> {
-    const url = new URL("/geocode/reverse", this.options.baseUrl ?? "https://api.openrouteservice.org");
-    url.searchParams.set("point.lon", String(point.longitude));
-    url.searchParams.set("point.lat", String(point.latitude));
-    url.searchParams.set("size", "1");
-    const payload = await this.request<{ features?: Array<{ properties?: { label?: string } }> }>(url, {
-      method: "GET",
-    });
-    const label = payload.features?.[0]?.properties?.label;
-    if (!label) throw new Error("OpenRouteService did not resolve the destination address");
-    return label;
-  }
 
   public async route(origin: StoreOrigin, destination: DeliveryPoint): Promise<RouteResult> {
     const directionsUrl = new URL(

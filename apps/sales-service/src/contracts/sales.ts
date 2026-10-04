@@ -42,6 +42,48 @@ export const deliveryCalculateResponseSchema = z.object({
   route: routeGeoJsonSchema,
 });
 
+export const reverseGeocodeRequestSchema = z.object({
+  destination: deliveryPointSchema,
+});
+
+export const reverseGeocodeResponseSchema = z.object({
+  destination: deliveryPointSchema,
+  providerResolvedAddress: z.string(),
+});
+
+/**
+ * Address search is proxied rather than called from the browser because the Vietmap service key is a paid
+ * metered credential: shipping it in a Vite bundle would let any visitor spend the account's 60,000 monthly
+ * transactions. The browser sends plain text and gets back display strings plus opaque handles, never the key.
+ */
+export const addressSearchQuerySchema = z.object({
+  /** Vietmap matches on short prefixes too eagerly, so the caller only asks once this many characters exist. */
+  q: z.string().trim().min(2).max(200),
+});
+
+export const addressSearchResponseSchema = z.object({
+  results: z.array(
+    z.object({
+      refId: z.string().min(1),
+      displayName: z.string().min(1),
+    }),
+  ),
+});
+
+export const addressResolveRequestSchema = z.object({
+  refId: z.string().min(1).max(500),
+});
+
+export const addressResolveResponseSchema = z.object({
+  refId: z.string().min(1),
+  displayName: z.string().min(1),
+  destination: deliveryPointSchema,
+});
+
+export type AddressSearchQuery = z.infer<typeof addressSearchQuerySchema>;
+export type AddressSearchResponse = z.infer<typeof addressSearchResponseSchema>;
+export type AddressResolveResponse = z.infer<typeof addressResolveResponseSchema>;
+
 export const orderLineSchema = z.object({
   productId: z.string().uuid(),
   productUnitId: z.string().uuid(),

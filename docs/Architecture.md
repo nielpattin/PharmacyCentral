@@ -60,7 +60,7 @@ Shared packages contain only technical infrastructure and versioned transport co
 
 ## Delivery architecture
 
-Customers select a retail store and a destination marker. `sales-service` resolves the marker through OpenRouteService reverse geocoding, calls the `driving-car` Matrix and Directions APIs, and returns a LineString route. Valkey caches namespaced results. Cache failure does not become the source of truth, and provider timeout or quota failures produce a controlled upstream error. Pickup always has a zero delivery fee. Delivery fees use the configured per-kilometer rate with minimum and maximum bounds and no base fee.
+Customers select a retail store and a destination marker. Two providers do two jobs. `sales-service` names the marker with Vietmap reverse geocoding, because Vietmap keeps Vietnamese house numbers that OpenStreetMap-based sources drop, then calls the OpenRouteService `driving-car` Matrix and Directions APIs for the route and returns a LineString. The same service proxies Vietmap address search and place resolution (`GET /delivery/addresses/search`, `POST /delivery/addresses/resolve`, `POST /delivery/reverse-geocode`) so the metered `VIETMAP_API_KEY` never reaches the browser; only the separate `VITE_VIETMAP_TILEMAP_KEY` ships in the web bundle to draw map tiles. Valkey caches namespaced results. Cache failure does not become the source of truth, and provider timeout or quota failures produce a controlled upstream error. Pickup always has a zero delivery fee. Delivery fees use the configured per-kilometer rate with minimum and maximum bounds and no base fee.
 
 ## Deployment
 

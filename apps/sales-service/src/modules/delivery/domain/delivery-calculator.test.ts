@@ -7,7 +7,6 @@ describe("delivery calculation", () => {
   it("uses the selected store, provider route distance, address note, and per-kilometer fee", async () => {
     const calculator = new DeliveryCalculator(
       {
-        resolveAddress: async () => "Resolved address",
         route: async () => ({
           distanceMeters: 12_500,
           durationSeconds: 1_800,
@@ -20,6 +19,7 @@ describe("delivery calculation", () => {
           },
         }),
       },
+      { resolveAddress: async () => "Resolved address" },
       new InMemoryDeliveryCache(),
       { perKilometer: 5_000, minimumFee: 20_000, maximumFee: 100_000, cacheTtlSeconds: 300 },
     );
@@ -41,7 +41,6 @@ describe("delivery calculation", () => {
   it("continues when the distributed cache is unavailable", async () => {
     const calculator = new DeliveryCalculator(
       {
-        resolveAddress: async () => "Address",
         route: async () => ({
           distanceMeters: 1_000,
           durationSeconds: 60,
@@ -54,6 +53,7 @@ describe("delivery calculation", () => {
           },
         }),
       },
+      { resolveAddress: async () => "Address" },
       {
         get: async () => {
           throw new Error("Valkey unavailable");
@@ -77,10 +77,6 @@ describe("delivery calculation", () => {
     let calls = 0;
     const calculator = new DeliveryCalculator(
       {
-        resolveAddress: async () => {
-          calls += 1;
-          return "Address";
-        },
         route: async () => {
           calls += 1;
           return {
@@ -94,6 +90,12 @@ describe("delivery calculation", () => {
               ],
             },
           };
+        },
+      },
+      {
+        resolveAddress: async () => {
+          calls += 1;
+          return "Address";
         },
       },
       new InMemoryDeliveryCache(),

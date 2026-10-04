@@ -51,6 +51,12 @@ describe("policy - route classification", () => {
     assert.equal(isPublicRoute("/api/availability"), true);
     assert.equal(isPublicRoute("/api/carts"), true);
     assert.equal(isPublicRoute("/api/delivery/calculate"), true);
+    assert.equal(isPublicRoute("/api/delivery/reverse-geocode"), true);
+    assert.equal(isPublicRoute("/api/delivery/addresses/search"), true);
+    assert.equal(isPublicRoute("/api/delivery/addresses/resolve"), true);
+    // Saved addresses belong to an account, so only the two lookups under that prefix are open.
+    assert.equal(isPublicRoute("/api/delivery/addresses"), false);
+    assert.equal(isPublicRoute("/api/delivery/addresses/123"), false);
     assert.equal(isPublicRoute("/api/auth/login"), true);
     assert.equal(isPublicRoute("/api/auth/register"), true);
     assert.equal(isPublicRoute("/api/auth/verify-email"), true);
