@@ -335,6 +335,173 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
     });
   });
 
+  describe("prescription domain authorization", () => {
+    it("allows a signed-in customer to post prescription intake QR and image", async () => {
+      for (const path of ["/api/prescriptions/intake/qr", "/api/prescriptions/intake/image"]) {
+        const event = {
+          rawPath: path,
+          headers: {
+            cookie: "pharmacy_session=session-customer; pharmacy_csrf=valid-token-123",
+            "x-csrf-token": "valid-token-123",
+          },
+          requestContext: { http: { method: "POST", path } },
+        };
+
+        const result = await authorizer(event);
+        assert.equal(result.isAuthorized, true, `${path} should be authorized`);
+        assert.equal(result.context.actorType, "customer");
+        assert.equal(result.context.actorId, mockCustomer.id);
+      }
+    });
+
+    it("denies anonymous prescription intake even when the CSRF token is valid", async () => {
+      const event = {
+        rawPath: "/api/prescriptions/intake/qr",
+        headers: { cookie: "pharmacy_csrf=valid-token-123", "x-csrf-token": "valid-token-123" },
+        requestContext: { http: { method: "POST", path: "/api/prescriptions/intake/qr" } },
+      };
+
+      const result = await authorizer(event);
+      assert.equal(result.isAuthorized, false);
+    });
+
+    it("still requires CSRF for prescription intake posts", async () => {
+      const noTokenEvent = {
+        rawPath: "/api/prescriptions/intake/image",
+        headers: { cookie: "pharmacy_session=session-customer" },
+        requestContext: { http: { method: "POST", path: "/api/prescriptions/intake/image" } },
+      };
+      assert.equal((await authorizer(noTokenEvent)).isAuthorized, false);
+
+      const mismatchedTokenEvent = {
+        rawPath: "/api/prescriptions/intake/image",
+        headers: {
+          cookie: "pharmacy_session=session-customer; pharmacy_csrf=token-a",
+          "x-csrf-token": "token-b",
+        },
+        requestContext: { http: { method: "POST", path: "/api/prescriptions/intake/image" } },
+      };
+      assert.equal((await authorizer(mismatchedTokenEvent)).isAuthorized, false);
+    });
+
+    it("allows a signed-in customer to read their own prescription list", async () => {
+      const event = {
+        rawPath: "/api/prescriptions",
+        queryStringParameters: { limit: "50" },
+        headers: { cookie: "pharmacy_session=session-customer" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions" } },
+      };
+
+      const result = await authorizer(event);
+      assert.equal(result.isAuthorized, true);
+      assert.equal(result.context.actorType, "customer");
+      assert.equal(result.context.actorId, mockCustomer.id);
+
+      // Sales-service forces the owner filter for a customer, so the staff site scoping rules must not apply here.
+      const siteFilteredEvent = {
+        rawPath: "/api/prescriptions",
+        queryStringParameters: { siteId: "22222222-2222-4222-8222-222222222222" },
+        headers: { cookie: "pharmacy_session=session-customer" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions" } },
+      };
+      assert.equal((await authorizer(siteFilteredEvent)).isAuthorized, true);
+    });
+
+    it("denies an anonymous prescription list read", async () => {
+      const event = {
+        rawPath: "/api/prescriptions",
+        rawQueryString: "limit=50",
+        requestContext: { http: { method: "GET", path: "/api/prescriptions" } },
+      };
+
+      assert.equal((await authorizer(event)).isAuthorized, false);
+    });
+
+    it("keeps customers out of the other /api/prescriptions paths", async () => {
+      const detailEvent = {
+        rawPath: "/api/prescriptions/123",
+        headers: { cookie: "pharmacy_session=session-customer" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions/123" } },
+      };
+      assert.equal((await authorizer(detailEvent)).isAuthorized, false);
+
+      // The CSRF token is valid, so the denial comes from the employee rule rather than the double-submit check.
+      const createEvent = {
+        rawPath: "/api/prescriptions",
+        headers: {
+          cookie: "pharmacy_session=session-customer; pharmacy_csrf=valid-token-123",
+          "x-csrf-token": "valid-token-123",
+        },
+        requestContext: { http: { method: "POST", path: "/api/prescriptions" } },
+      };
+      assert.equal((await authorizer(createEvent)).isAuthorized, false);
+    });
+
+    it("keeps employee behaviour on the prescription domain unchanged", async () => {
+      // Staff can still use intake, and no role is demanded there.
+      const pharmacistIntakeEvent = {
+        rawPath: "/api/prescriptions/intake/qr",
+        headers: {
+          cookie: "pharmacy_session=session-pharmacist; pharmacy_csrf=valid-token-123",
+          "x-csrf-token": "valid-token-123",
+        },
+        requestContext: { http: { method: "POST", path: "/api/prescriptions/intake/qr" } },
+      };
+      const pharmacistIntakeResult = await authorizer(pharmacistIntakeEvent);
+      assert.equal(pharmacistIntakeResult.isAuthorized, true);
+      assert.equal(pharmacistIntakeResult.context.actorType, "employee");
+
+      const pharmacistListEvent = {
+        rawPath: "/api/prescriptions",
+        headers: { cookie: "pharmacy_session=session-pharmacist" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions" } },
+      };
+      assert.equal((await authorizer(pharmacistListEvent)).isAuthorized, true);
+
+      const warehouseListEvent = {
+        rawPath: "/api/prescriptions",
+        headers: { cookie: "pharmacy_session=session-warehouse" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions" } },
+      };
+      assert.equal((await authorizer(warehouseListEvent)).isAuthorized, false);
+
+      // The list read is shared with shoppers, but the Pharmacist requirement still applies to staff callers.
+      const managerListEvent = {
+        rawPath: "/api/prescriptions",
+        headers: { cookie: "pharmacy_session=session-manager" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions" } },
+      };
+      assert.equal((await authorizer(managerListEvent)).isAuthorized, false);
+
+      const pharmacistOwnSiteEvent = {
+        rawPath: "/api/prescriptions",
+        queryStringParameters: { siteId: "11111111-1111-4111-8111-111111111111" },
+        headers: { cookie: "pharmacy_session=session-pharmacist" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions" } },
+      };
+      assert.equal((await authorizer(pharmacistOwnSiteEvent)).isAuthorized, true);
+
+      const pharmacistOtherSiteEvent = {
+        rawPath: "/api/prescriptions",
+        queryStringParameters: { siteId: "22222222-2222-4222-8222-222222222222" },
+        headers: { cookie: "pharmacy_session=session-pharmacist" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions" } },
+      };
+      assert.equal((await authorizer(pharmacistOtherSiteEvent)).isAuthorized, false);
+
+      // A path that merely shares text with the intake prefix keeps the Pharmacist requirement.
+      const warehouseIntakeLegacyEvent = {
+        rawPath: "/api/prescriptions/intake-legacy",
+        headers: {
+          cookie: "pharmacy_session=session-warehouse; pharmacy_csrf=valid-token-123",
+          "x-csrf-token": "valid-token-123",
+        },
+        requestContext: { http: { method: "POST", path: "/api/prescriptions/intake-legacy" } },
+      };
+      assert.equal((await authorizer(warehouseIntakeLegacyEvent)).isAuthorized, false);
+    });
+  });
+
   describe("site scoping checks", () => {
     it("allows employee querying assigned siteId", async () => {
       const event = {

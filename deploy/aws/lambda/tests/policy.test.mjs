@@ -9,6 +9,7 @@ import {
   isAuthRoute,
   isCatalogWriteRoute,
   isCsrfExempt,
+  isCustomerPrescriptionRoute,
   isEmployeeRoleAllowed,
   isEmployeeRoute,
   isOptionalIdentityRoute,
@@ -97,12 +98,48 @@ describe("policy - route classification", () => {
     assert.equal(isEmployeeRoute("/api/finance", "GET"), true);
     assert.equal(isEmployeeRoute("/api/audit", "GET"), true);
     assert.equal(isEmployeeRoute("/api/reports", "GET"), true);
-    assert.equal(isEmployeeRoute("/api/prescriptions", "GET"), true);
+    assert.equal(isEmployeeRoute("/api/prescriptions/123", "GET"), true);
     assert.equal(isEmployeeRoute("/api/counter-transactions", "GET"), true);
     assert.equal(isEmployeeRoute("/api/admin", "GET"), true);
     // Catalog writes are employee routes
     assert.equal(isEmployeeRoute("/api/products", "POST"), true);
     assert.equal(isEmployeeRoute("/api/products", "GET"), false);
+  });
+
+  // The prescription domain is split: a shopper may read their own history and upload their own prescription, and
+  // every other request on the domain stays behind the counter.
+  it("opens the shopper's own prescription requests to any signed-in account and keeps the rest staff-only", () => {
+    assert.equal(isEmployeeRoute("/api/prescriptions/intake/qr", "POST"), false);
+    assert.equal(isEmployeeRoute("/api/prescriptions/intake/image", "POST"), false);
+    assert.equal(isEmployeeRoute("/prescriptions/intake/image", "POST"), false);
+    assert.equal(isEmployeeRoute("/api/prescriptions/intake/image?limit=1", "POST"), false);
+    // A sibling path only shares text with the prefix, not a path segment, so it stays an employee route.
+    assert.equal(isEmployeeRoute("/api/prescriptions/intake-legacy", "POST"), true);
+    assert.equal(isEmployeeRoute("/api/prescriptions/intakeX", "POST"), true);
+    // The list read is the customer-web Account page call, and sales-service forces the owner filter for it.
+    assert.equal(isEmployeeRoute("/api/prescriptions", "GET"), false);
+    assert.equal(isEmployeeRoute("/api/prescriptions?limit=50", "GET"), false);
+    // Only the exact path is shared: a record read, a create and a dispense stay employee routes.
+    assert.equal(isEmployeeRoute("/api/prescriptions/123", "GET"), true);
+    assert.equal(isEmployeeRoute("/api/prescriptions/", "GET"), true);
+    assert.equal(isEmployeeRoute("/api/prescriptions", "POST"), true);
+    assert.equal(isEmployeeRoute("/api/prescriptions/123/dispense", "POST"), true);
+    assert.equal(isEmployeeRoute("/api/prescriptions/intake/qr", "GET"), true);
+  });
+
+  it("marks exactly the prescription requests a signed-in account may make", () => {
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions", "GET"), true);
+    assert.equal(isCustomerPrescriptionRoute("/prescriptions?limit=50", "GET"), true);
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/intake/qr", "POST"), true);
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/intake/image", "POST"), true);
+
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/123", "GET"), false);
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions", "POST"), false);
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/intake/qr", "GET"), false);
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/intake-legacy", "POST"), false);
+    assert.equal(isCustomerPrescriptionRoute("/api/counter-transactions", "POST"), false);
+    // A prefix is not enough: the table entry for the list read names the whole path.
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions-archive", "GET"), false);
   });
 
   it("identifies site-scoped list routes", () => {
@@ -143,6 +180,10 @@ describe("policy - route classification", () => {
     assert.equal(isCsrfExempt("/api/orders", "POST"), false);
     assert.equal(isCsrfExempt("/api/products", "POST"), false);
     assert.equal(isCsrfExempt("/api/inventory/transfers", "POST"), false);
+    // Intake is a shopper's POST, so it stays behind the double-submit check.
+    assert.equal(isCsrfExempt("/api/prescriptions/intake/qr", "POST"), false);
+    assert.equal(isCsrfExempt("/api/prescriptions/intake/image", "POST"), false);
+    assert.equal(isCsrfExempt("/api/prescriptions/intake-legacy", "POST"), false);
   });
 });
 
@@ -162,9 +203,20 @@ describe("policy - employee roles and authorization", () => {
     ]);
 
     // Counter Sale
+    // The list read is shared with shoppers, but staff keep the Pharmacist requirement because their call returns
+    // every prescription rather than only the records of the account that asked.
     assert.deepEqual(employeeRolesForRequest("/api/prescriptions", "GET"), ["Pharmacist"]);
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions?limit=50", "GET"), ["Pharmacist"]);
     assert.deepEqual(employeeRolesForRequest("/api/counter-transactions", "POST"), ["Pharmacist"]);
     assert.deepEqual(employeeRolesForRequest("/api/payments", "POST"), ["Pharmacist"]);
+    // Prescription intake is a shopper route, like customer invoice creation, so it carries no employee role.
+    // The sibling paths that only share text with the intake paths keep the Pharmacist requirement.
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions/intake/qr", "POST"), undefined);
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions/intake/image", "POST"), undefined);
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions/intake-legacy", "POST"), ["Pharmacist"]);
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions/intakeX", "POST"), ["Pharmacist"]);
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions", "POST"), ["Pharmacist"]);
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions/123/dispense", "POST"), ["Pharmacist"]);
 
     // Warehouse
     assert.deepEqual(employeeRolesForRequest("/api/procurement/goods-receipts", "GET"), ["Warehouse Staff"]);

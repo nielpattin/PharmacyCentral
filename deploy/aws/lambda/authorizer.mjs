@@ -183,12 +183,15 @@ export const createAuthorizerHandler = (options = {}) => {
       }
 
       // 4. Employee authorization policy
-      if (needsEmployee) {
+      // A route can serve both audiences: any signed-in account may read the prescription list, but a staff caller
+      // sees every record instead of only their own, so the role that route requires still applies to staff.
+      const requiredRoles = employeeRolesForRequest(normPath, method);
+      const requiresStaffRole = identity?.actorType === "employee" && (requiredRoles?.length ?? 0) > 0;
+      if (needsEmployee || requiresStaffRole) {
         if (!identity || identity.actorType !== "employee") {
           return deny();
         }
 
-        const requiredRoles = employeeRolesForRequest(normPath, method);
         const roles = Array.isArray(identity.roles) ? identity.roles : [];
         if (!isEmployeeRoleAllowed(roles, requiredRoles)) {
           return deny();

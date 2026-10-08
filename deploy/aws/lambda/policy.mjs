@@ -80,6 +80,18 @@ export const warehousePaths = [
 
 export const replenishmentPaths = ["/api/inventory/replenishment"];
 export const counterSalePaths = ["/api/prescriptions", "/api/counter-transactions"];
+// Prescription requests that any signed-in account may make, because part of this domain belongs to the shopper:
+// intake uploads a shopper's own prescription, and the list read returns only the records linked to the caller's
+// own account once sales-service has forced the owner filter for a non-staff actor. Every path is listed in full
+// and matched either exactly or by path segment, so a path that merely shares text ("/api/prescriptions/intake-legacy"
+// for the intake prefix, "/api/prescriptions/123" for the list read) stays a staff route. keepsStaffRole records
+// whether a staff caller still has to satisfy the role counterSalePaths demands: reading the whole prescription
+// register is a Pharmacist action, while uploading one's own is not.
+export const customerPrescriptionRequests = [
+  { method: "GET", path: "/api/prescriptions", match: "exact", keepsStaffRole: true },
+  { method: "POST", path: "/api/prescriptions/intake/qr", match: "segment", keepsStaffRole: false },
+  { method: "POST", path: "/api/prescriptions/intake/image", match: "segment", keepsStaffRole: false },
+];
 export const platformAdminPaths = ["/api/admin", "/api/audit"];
 export const managementOnlyPaths = ["/api/finance"];
 
@@ -125,8 +137,30 @@ export const isCatalogWriteRoute = (path, method = "GET") => {
 const isCustomerInvoiceCreationRoute = (path, method = "GET") =>
   method.toUpperCase() === "POST" && matchesPrefix(path, "/api/payments/invoices");
 
+const matchesCustomerPrescriptionRequest = (request, path, method) => {
+  if (request.method !== method.toUpperCase()) return false;
+  const norm = normalizeApiPath(path);
+  return request.match === "exact" ? norm === request.path : matchesPrefix(norm, request.path);
+};
+
+// True when any signed-in account may make the request. That is a weaker bar than an employee route but not a
+// public one: the caller still has to present a session, because the authorizer resolves identity for every route
+// that is neither public nor an auth route.
+export const isCustomerPrescriptionRoute = (path, method = "GET") =>
+  customerPrescriptionRequests.some((request) => matchesCustomerPrescriptionRequest(request, path, method));
+
+// Requests nobody behind the counter has a role for. A shared path such as the list read keeps its staff role.
+const isCustomerOnlyPrescriptionRoute = (path, method = "GET") =>
+  customerPrescriptionRequests.some(
+    (request) => !request.keepsStaffRole && matchesCustomerPrescriptionRequest(request, path, method),
+  );
+
 export const isEmployeeRoute = (path, method = "GET") => {
   const norm = normalizeApiPath(path);
+  // These routes belong to the shopper: the route itself refuses a request without an actor, so the authorizer only
+  // has to prove that a session exists, not that the account works behind the counter. A staff caller on a path both
+  // audiences share still keeps the role that employeeRolesForRequest demands for it.
+  if (isCustomerPrescriptionRoute(norm, method)) return false;
   const paymentEmployeeRoute =
     matchesPrefix(norm, "/api/payments") &&
     !matchesPrefix(norm, "/api/payments/sepay/webhook") &&
@@ -162,7 +196,11 @@ export const employeeRolesForRequest = (path, method = "GET") => {
   if (platformAdminPaths.some((prefix) => matchesPrefix(norm, prefix))) return ["Platform Admin"];
   if (managementOnlyPaths.some((prefix) => matchesPrefix(norm, prefix))) return ["Pharmacy Manager"];
   if (replenishmentPaths.some((prefix) => matchesPrefix(norm, prefix))) return ["Pharmacist", "Warehouse Staff"];
-  if (counterSalePaths.some((prefix) => matchesPrefix(norm, prefix))) return ["Pharmacist"];
+  if (
+    counterSalePaths.some((prefix) => matchesPrefix(norm, prefix)) &&
+    !isCustomerOnlyPrescriptionRoute(norm, upperMethod)
+  )
+    return ["Pharmacist"];
   if (
     matchesPrefix(norm, "/api/payments") &&
     !matchesPrefix(norm, "/api/payments/sepay/webhook") &&
