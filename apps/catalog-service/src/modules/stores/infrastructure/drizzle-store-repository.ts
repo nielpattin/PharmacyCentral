@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 
 import {
@@ -231,11 +231,11 @@ export class DrizzleStoreRepository {
 
   public async listAvailability(
     productId?: string,
-    siteId?: string,
+    siteIds?: string[],
   ): Promise<Array<typeof availabilityProjections.$inferSelect>> {
     const filters = [
       productId ? eq(availabilityProjections.productId, productId) : undefined,
-      siteId ? eq(availabilityProjections.siteId, siteId) : undefined,
+      siteIds ? inArray(availabilityProjections.siteId, siteIds) : undefined,
     ].filter((filter): filter is NonNullable<typeof filter> => filter !== undefined);
     return this.database.db
       .select()
@@ -330,11 +330,12 @@ export class DrizzleStoreRepository {
     await this.database.db.delete(sites).where(eq(sites.id, id));
   }
 
-  public async listStorageLocations(siteId?: string): Promise<Array<typeof storageLocations.$inferSelect>> {
-    const query = this.database.db.select().from(storageLocations);
-    return siteId
-      ? query.where(eq(storageLocations.siteId, siteId)).orderBy(asc(storageLocations.code))
-      : query.orderBy(asc(storageLocations.code));
+  public async listStorageLocations(siteIds?: string[]): Promise<Array<typeof storageLocations.$inferSelect>> {
+    return this.database.db
+      .select()
+      .from(storageLocations)
+      .where(siteIds ? inArray(storageLocations.siteId, siteIds) : undefined)
+      .orderBy(asc(storageLocations.code));
   }
 
   public async getStorageLocation(id: string): Promise<typeof storageLocations.$inferSelect | undefined> {

@@ -1,7 +1,9 @@
 import { Router } from "express";
+import type { Request } from "express";
 import { z } from "zod";
 
 import { productMatchRequestSchema, productSearchQuerySchema } from "../contracts/catalog.ts";
+import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import { ProductMediaStore } from "./catalog/product-media-store.ts";
 import { rankCandidates } from "./catalog/product-matching.ts";
@@ -72,6 +74,14 @@ const supplierInputSchema = z.object({
   notes: z.string().trim().max(2000).nullable().optional(),
   isActive: z.boolean().optional(),
 });
+/**
+ * Store locations and stock levels are public reads, so a shopper's `?siteId=` still narrows them to the chosen
+ * store; a site-scoped employee gets their own scope from `listSiteIds` instead.
+ */
+const publicListSiteIds = (request: Request): string[] | undefined => {
+  const requested = typeof request.query.siteId === "string" ? request.query.siteId.trim() : "";
+  return listSiteIds(request) ?? (requested ? [requested] : undefined);
+};
 const productUnitInputSchema = z.object({
   productId: z.string().uuid(),
   unitName: z.string().trim().min(1).max(100),
@@ -158,8 +168,7 @@ export const createCatalogRouter = (
 
   router.get("/storage-locations", async (request, response) => {
     if (!repository) return databaseUnavailable(response);
-    const siteId = typeof request.query.siteId === "string" ? request.query.siteId : undefined;
-    response.json(await repository.listStorageLocations(siteId));
+    response.json(await repository.listStorageLocations(publicListSiteIds(request)));
   });
 
   router.get("/storage-locations/:id", async (request, response) => {
@@ -481,8 +490,7 @@ export const createCatalogRouter = (
   router.get("/availability", async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const productId = typeof request.query.productId === "string" ? request.query.productId : undefined;
-    const siteId = typeof request.query.siteId === "string" ? request.query.siteId : undefined;
-    response.json(await repository.listAvailability(productId, siteId));
+    response.json(await repository.listAvailability(productId, publicListSiteIds(request)));
   });
 
   router.get("/stores", async (request, response) => {

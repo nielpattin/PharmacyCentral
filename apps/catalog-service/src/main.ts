@@ -49,6 +49,8 @@ const publicCatalogPaths: readonly string[] = [
 app.use(
   createTrustedRequestMiddleware({
     expectedAudience: serviceName,
+    // A single-site employee's location list is narrowed to their site; listing every site's locations is denied.
+    siteScopedPaths: ["/storage-locations"],
     isPublic: (request) =>
       ["GET", "HEAD"].includes(request.method) &&
       publicCatalogPaths.some((prefix) => matchesPathPrefix(request.path, prefix)),
