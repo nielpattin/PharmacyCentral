@@ -1,5 +1,6 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 
+import { useSession } from "../auth.ts";
 import { readRows, type JsonRecord } from "../staff-api.ts";
 
 export type StaffReferences = {
@@ -8,48 +9,52 @@ export type StaffReferences = {
   suppliers: JsonRecord[];
   products: JsonRecord[];
   batches: JsonRecord[];
-  customers: JsonRecord[];
   loading: boolean;
   error?: string | undefined;
   reload: () => Promise<void>;
 };
 
-type StaffReferenceData = Omit<StaffReferences, "loading" | "error" | "reload">;
+type ReferenceName = Exclude<keyof StaffReferences, "loading" | "error" | "reload">;
 
 const referenceQueryKey = ["staff-references"] as const;
 
-const loadReferences = async (): Promise<StaffReferenceData> => {
-  const [sites, locations, suppliers, products, batches, customers] = await Promise.all([
-    readRows("/api/sites"),
-    readRows("/api/storage-locations"),
-    readRows("/api/suppliers"),
-    readRows("/api/products?limit=100"),
-    readRows("/api/inventory/batches"),
-    readRows("/api/admin/users"),
-  ]);
-  return { sites, locations, suppliers, products, batches, customers };
+const referencePaths: Record<ReferenceName, string> = {
+  sites: "/api/sites",
+  locations: "/api/storage-locations",
+  suppliers: "/api/suppliers",
+  products: "/api/products?limit=100",
+  batches: "/api/inventory/batches",
 };
 
+const referenceNames = Object.keys(referencePaths) as ReferenceName[];
+
+/**
+ * Each reference list loads on its own, so one list a role may not read leaves the others usable instead of
+ * blanking every site and product label on the screen. The key holds the user, so an account switch never shows
+ * the previous account's lists.
+ */
 export const useStaffReferences = (): StaffReferences => {
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: referenceQueryKey, queryFn: loadReferences });
+  const session = useSession();
+  const queries = useQueries({
+    queries: referenceNames.map((name) => ({
+      queryKey: [...referenceQueryKey, session.userId, name],
+      queryFn: () => readRows(referencePaths[name]),
+    })),
+  });
   const reload = async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: referenceQueryKey });
   };
+  const rows = (name: ReferenceName): JsonRecord[] => queries[referenceNames.indexOf(name)]?.data ?? [];
+  const failure = queries.find((query) => query.error)?.error;
   return {
-    sites: query.data?.sites ?? [],
-    locations: query.data?.locations ?? [],
-    suppliers: query.data?.suppliers ?? [],
-    products: query.data?.products ?? [],
-    batches: query.data?.batches ?? [],
-    customers: query.data?.customers ?? [],
-    loading: query.isPending,
-    error:
-      query.error instanceof Error
-        ? query.error.message
-        : query.error
-          ? "Unable to load staff reference data"
-          : undefined,
+    sites: rows("sites"),
+    locations: rows("locations"),
+    suppliers: rows("suppliers"),
+    products: rows("products"),
+    batches: rows("batches"),
+    loading: queries.some((query) => query.isLoading),
+    error: failure instanceof Error ? failure.message : failure ? "Unable to load staff reference data" : undefined,
     reload,
   };
 };

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { useSession } from "../auth.ts";
 import { DataTable } from "../components/data-table.tsx";
 import { Field, RefreshButton, SubTabs } from "../components/forms.tsx";
 import { translateText } from "../i18n.ts";
@@ -13,6 +14,10 @@ export const FinanceSection = ({
   initialTab?: "Summary" | "Reports";
 }): React.JSX.Element => {
   const [tab, setTab] = useState<string>(initialTab);
+  // Confirming cash and refunding are a licensed pharmacist's work; a Pharmacy Manager reads the same invoices
+  // without the write actions, which is what the edge policy grants that role on the payment routes.
+  const roles = useSession().roles ?? [];
+  const canOperateCounter = roles.includes("Pharmacist") || roles.includes("Platform Admin");
   const [reportType, setReportType] = useState("sales");
   const [error, setError] = useState<string>();
   const mutation = useStaffMutation();
@@ -170,7 +175,7 @@ export const FinanceSection = ({
                   >
                     {translateText("Reconciliation")}
                   </a>
-                  {text(row.status) === "Pending" ? (
+                  {canOperateCounter && text(row.status) === "Pending" ? (
                     <button
                       className="primary-button small"
                       type="button"
@@ -179,7 +184,7 @@ export const FinanceSection = ({
                       {translateText("Confirm cash")}
                     </button>
                   ) : null}
-                  {text(row.status) === "Paid" ? (
+                  {canOperateCounter && text(row.status) === "Paid" ? (
                     <button className="danger-button" type="button" onClick={() => void refund(text(row.id))}>
                       {translateText("Refund")}
                     </button>

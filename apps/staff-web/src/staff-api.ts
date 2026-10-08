@@ -132,6 +132,13 @@ export const readRows = async (path: string): Promise<JsonRecord[]> => asRows(aw
 
 export const readOne = async <T = JsonRecord>(path: string): Promise<T> => request<T>(path);
 
+/**
+ * The counter's customer picker: identity-service matches the exact phone or email the patient gives, and answers
+ * only customer accounts. Fewer than three characters is refused there, so callers trim before sending.
+ */
+export const lookupCustomers = (query: string): Promise<JsonRecord[]> =>
+  readRows(`/api/customers/lookup?q=${encodeURIComponent(query.trim())}`);
+
 export const writeJson = async <T = JsonRecord>(
   path: string,
   method: "POST" | "PUT" | "DELETE",
@@ -140,3 +147,61 @@ export const writeJson = async <T = JsonRecord>(
 
 export const action = async <T = JsonRecord>(path: string, value: string): Promise<T> =>
   writeJson<T>(path, "POST", { action: value });
+
+// Prescription consultations: a shopper hands the whole read prescription to a pharmacist when no catalog product
+// fills one of its lines as prescribed. These mirror the sales-service consultation contract.
+export type PrescriptionConsultationStatus = "Open" | "Answered";
+
+export type ConsultationLine = {
+  /** The line as printed on the prescription. */
+  rawText: string;
+  /** Prescribed name, kept only when the source stated one. */
+  name: string | null;
+  activeIngredients: string[];
+  strength: string | null;
+  dosageForm: string | null;
+  quantity: number | null;
+  unit: string | null;
+  usage: string | null;
+  /** Set by the shopper's page when no suggestion could fill the line as prescribed at the chosen store. */
+  needsHelp: boolean;
+};
+
+/** Header fields read from the prescription; each is null when the source did not state it. */
+export type ConsultationPrescription = {
+  code: string | null;
+  patientName: string | null;
+  facilityName: string | null;
+  doctorName: string | null;
+  diagnosis: string | null;
+  issuedOn: string | null;
+};
+
+export type PrescriptionConsultation = {
+  id: string;
+  customerId: string;
+  siteId: string | null;
+  source: "image" | "qr";
+  prescription: ConsultationPrescription;
+  lines: ConsultationLine[];
+  note: string | null;
+  status: PrescriptionConsultationStatus;
+  reply: string | null;
+  answeredBy: string | null;
+  answeredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const listPrescriptionConsultations = async (
+  options: { status?: PrescriptionConsultationStatus } = {},
+): Promise<PrescriptionConsultation[]> => {
+  const query = new URLSearchParams({ limit: "100" });
+  if (options.status) query.set("status", options.status);
+  return request<PrescriptionConsultation[]>(`/api/prescriptions/consultations?${query.toString()}`);
+};
+
+export const answerPrescriptionConsultation = async (id: string, reply: string): Promise<PrescriptionConsultation> =>
+  writeJson<PrescriptionConsultation>(`/api/prescriptions/consultations/${encodeURIComponent(id)}/answer`, "POST", {
+    reply,
+  });
