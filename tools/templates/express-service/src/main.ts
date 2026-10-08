@@ -2,7 +2,11 @@ import { createServer } from "node:http";
 
 import { createApp } from "./app.ts";
 
-const port = Number.parseInt(process.env.PORT ?? "3000", 10);
+const rawPort = process.env.PORT;
+if (!rawPort) {
+  throw new Error("Missing required environment variable: PORT. Please set it in your .env file.");
+}
+const port = Number.parseInt(rawPort, 10);
 const server = createServer(createApp());
 
 const shutdown = (signal: string): void => {
