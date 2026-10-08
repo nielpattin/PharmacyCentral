@@ -12,21 +12,20 @@ import {
   SmtpVerificationEmailSender,
 } from "../modules/accounts/infrastructure/email/verification-email-sender.ts";
 import { Argon2idPasswordHasher } from "../modules/accounts/infrastructure/security/argon2id-password-hasher.ts";
-import { GoogleOidcClient } from "../modules/accounts/infrastructure/security/google-oidc-client.ts";
+import { GoogleOidcClient, type GoogleSignIn } from "../modules/accounts/infrastructure/security/google-oidc-client.ts";
 import { InMemorySessionRepository } from "../modules/sessions/infrastructure/in-memory-session-repository.ts";
 
-export const createGoogleOidcClient = (): GoogleOidcClient | undefined => {
+export const createGoogleSignIn = (): GoogleSignIn | undefined => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
     return undefined;
   }
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  if (!redirectUri)
+    throw new Error("Missing required environment variable: GOOGLE_REDIRECT_URI. Please set it in your .env file.");
 
-  return new GoogleOidcClient({
-    clientId,
-    clientSecret,
-    redirectUri: process.env.GOOGLE_REDIRECT_URI ?? "http://localhost:3001/auth/google/callback",
-  });
+  return { client: new GoogleOidcClient({ clientId, clientSecret, redirectUri }), redirectUri };
 };
 
 export const createAccountService = (database?: IdentityDatabase): AccountService => {

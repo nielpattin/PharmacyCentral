@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import type { Account } from "../domain/account.ts";
+import type { Account, CustomerMatch } from "../domain/account.ts";
 import { assertEmail } from "../domain/email-address.ts";
+import { canonicalPhoneDigits } from "../domain/phone-number.ts";
 import type { InMemoryAccountRepository } from "../infrastructure/in-memory-account-repository.ts";
 import { Argon2idPasswordHasher } from "../infrastructure/security/argon2id-password-hasher.ts";
 import { VerificationTokenService } from "./verification-token-service.ts";
@@ -19,7 +20,7 @@ export type VerificationEmailSender = {
 
 export type AccountRepository = Pick<
   InMemoryAccountRepository,
-  "create" | "findByEmail" | "findById" | "list" | "save"
+  "create" | "findByEmail" | "findById" | "list" | "save" | "searchActiveCustomers" | "findActiveCustomerById"
 >;
 export type SessionRepository = Pick<InMemorySessionRepository, "create" | "findActive" | "revoke" | "revokeAll">;
 
@@ -29,6 +30,9 @@ export type LoginResult = {
 };
 
 export const employeeRoles = ["Platform Admin", "Pharmacy Manager", "Pharmacist", "Warehouse Staff"] as const;
+
+/** A counter picker only has to tell one patient from another, so a search never returns the whole customer base. */
+const customerLookupLimit = 5;
 
 export class AccountService {
   public constructor(
@@ -56,6 +60,7 @@ export class AccountService {
     if (!account) {
       account = await this.accounts.create({
         actorType: "customer",
+        isActive: true,
         email: assertEmail(profile.email),
         displayName: profile.displayName.trim(),
         passwordHash: await this.passwordHasher.hash(randomUUID()),
@@ -84,6 +89,7 @@ export class AccountService {
 
     const account = await this.accounts.create({
       actorType: "customer",
+      isActive: true,
       email,
       displayName: input.displayName.trim(),
       passwordHash: await this.passwordHasher.hash(input.password),
@@ -209,6 +215,24 @@ export class AccountService {
     return this.accounts.list();
   }
 
+  /**
+   * The counter links a prescription to a customer account, so staff look one up by the exact phone or email the
+   * patient gives them. Only customer accounts match: an employee's email must never surface in this picker.
+   */
+  public async searchCustomers(query: string): Promise<CustomerMatch[]> {
+    const trimmed = query.trim();
+    return this.accounts.searchActiveCustomers({
+      email: trimmed.toLowerCase(),
+      phoneDigits: canonicalPhoneDigits(trimmed),
+      limit: customerLookupLimit,
+    });
+  }
+
+  public async findActiveCustomer(customerId: string): Promise<{ id: string; displayName: string } | undefined> {
+    const customer = await this.accounts.findActiveCustomerById(customerId);
+    return customer ? { id: customer.id, displayName: customer.displayName } : undefined;
+  }
+
   public async createEmployee(input: {
     email: string;
     password: string;
@@ -226,6 +250,7 @@ export class AccountService {
 
     return this.accounts.create({
       actorType: "employee",
+      isActive: true,
       email,
       displayName: input.displayName.trim(),
       passwordHash: await this.passwordHasher.hash(input.password),
@@ -275,6 +300,7 @@ export class AccountService {
 
     const account = await this.accounts.create({
       actorType: "employee",
+      isActive: true,
       email,
       displayName: input.displayName.trim(),
       passwordHash: await this.passwordHasher.hash(input.password),

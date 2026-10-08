@@ -71,6 +71,7 @@ describe("identity security primitives", () => {
 
     const account = await accountRepository.create({
       actorType: "customer",
+      isActive: true,
       email: "reset@example.com",
       displayName: "Reset",
       passwordHash: await hasher.hash("old password phrase"),
@@ -123,5 +124,180 @@ describe("identity security primitives", () => {
 
     await repository.revokeAll("account-1");
     expect(await repository.findActive(second.rawToken)).toBeUndefined();
+  });
+});
+
+describe("customer lookup", () => {
+  const createService = (accountRepository: InMemoryAccountRepository): AccountService => {
+    const sender = { sendVerificationEmail: async () => undefined };
+    return new AccountService(
+      accountRepository,
+      new InMemorySessionRepository(),
+      hasher,
+      new VerificationTokenService(),
+      sender,
+    );
+  };
+
+  const createAccount = (
+    accountRepository: InMemoryAccountRepository,
+    input: {
+      actorType: "customer" | "employee";
+      email: string;
+      displayName: string;
+      phoneNumber?: string;
+      isActive?: boolean;
+    },
+  ) => {
+    const roles = input.actorType === "employee" ? ["Pharmacist"] : [];
+    return accountRepository.create({
+      actorType: input.actorType,
+      isActive: input.isActive ?? true,
+      email: input.email,
+      displayName: input.displayName,
+      passwordHash: "hash",
+      ...(input.phoneNumber ? { phoneNumber: input.phoneNumber } : {}),
+      roles,
+      siteIds: [],
+    });
+  };
+
+  it("matches a customer by exact email or phone digits and never an employee", async () => {
+    const accountRepository = new InMemoryAccountRepository();
+    const service = createService(accountRepository);
+    const customer = await createAccount(accountRepository, {
+      actorType: "customer",
+      email: "khach@example.com",
+      displayName: "Nguyễn Thị B",
+      phoneNumber: "0901 234 567",
+    });
+    await createAccount(accountRepository, {
+      actorType: "employee",
+      email: "duocsi@example.com",
+      displayName: "Dược sĩ",
+      phoneNumber: "0901234567",
+    });
+
+    const match = {
+      id: customer.id,
+      displayName: "Nguyễn Thị B",
+      email: "khach@example.com",
+      phoneNumber: "0901 234 567",
+    };
+    await expect(service.searchCustomers("  KHACH@Example.com  ")).resolves.toEqual([match]);
+    // A spaced-out phone number is the same number as the digits it holds.
+    await expect(service.searchCustomers("0901234567")).resolves.toEqual([match]);
+    await expect(service.searchCustomers("0901 234 567")).resolves.toEqual([match]);
+    // Counter staff never see a colleague, and a partial number is not a match.
+    await expect(service.searchCustomers("duocsi@example.com")).resolves.toEqual([]);
+    await expect(service.searchCustomers("0901")).resolves.toEqual([]);
+  });
+
+  it("finds a number stored in the country-code form from the local form", async () => {
+    const accountRepository = new InMemoryAccountRepository();
+    const service = createService(accountRepository);
+    const customer = await createAccount(accountRepository, {
+      actorType: "customer",
+      email: "quoc-te@example.com",
+      displayName: "Nguyễn Văn A",
+      phoneNumber: "+84 901 234 567",
+    });
+
+    // The patient reads the number as `0901 234 567`, the account stores the same subscriber number with `+84`.
+    await expect(service.searchCustomers("0901234567")).resolves.toEqual([
+      {
+        id: customer.id,
+        displayName: "Nguyễn Văn A",
+        email: "quoc-te@example.com",
+        phoneNumber: "+84 901 234 567",
+      },
+    ]);
+  });
+
+  it("finds a number stored in the local form from the country-code form", async () => {
+    const accountRepository = new InMemoryAccountRepository();
+    const service = createService(accountRepository);
+    const customer = await createAccount(accountRepository, {
+      actorType: "customer",
+      email: "noi-dia@example.com",
+      displayName: "Trần Thị B",
+      phoneNumber: "0901-234-567",
+    });
+
+    await expect(service.searchCustomers("+84901234567")).resolves.toEqual([
+      {
+        id: customer.id,
+        displayName: "Trần Thị B",
+        email: "noi-dia@example.com",
+        phoneNumber: "0901-234-567",
+      },
+    ]);
+  });
+
+  it("caps the lookup at five accounts", async () => {
+    const accountRepository = new InMemoryAccountRepository();
+    const service = createService(accountRepository);
+    for (let index = 0; index < 6; index += 1) {
+      await createAccount(accountRepository, {
+        actorType: "customer",
+        email: `khach${index}@example.com`,
+        displayName: `Khách ${index}`,
+        phoneNumber: "0901234567",
+      });
+    }
+
+    await expect(service.searchCustomers("0901234567")).resolves.toHaveLength(5);
+  });
+
+  it("resolves only an active customer account for a service caller", async () => {
+    const accountRepository = new InMemoryAccountRepository();
+    const service = createService(accountRepository);
+    const customer = await createAccount(accountRepository, {
+      actorType: "customer",
+      email: "khach@example.com",
+      displayName: "Nguyễn Thị B",
+    });
+    const employee = await createAccount(accountRepository, {
+      actorType: "employee",
+      email: "duocsi@example.com",
+      displayName: "Dược sĩ",
+    });
+
+    await expect(service.findActiveCustomer(customer.id)).resolves.toEqual({
+      id: customer.id,
+      displayName: "Nguyễn Thị B",
+    });
+    await expect(service.findActiveCustomer(employee.id)).resolves.toBeUndefined();
+    await expect(service.findActiveCustomer("00000000-0000-4000-8000-000000000009")).resolves.toBeUndefined();
+  });
+
+  it("leaves a deactivated customer out of the lookup and the service read", async () => {
+    const accountRepository = new InMemoryAccountRepository();
+    const service = createService(accountRepository);
+    const deactivated = await createAccount(accountRepository, {
+      actorType: "customer",
+      email: "nghi@example.com",
+      displayName: "Lê Thị C",
+      phoneNumber: "0901234567",
+      isActive: false,
+    });
+    const active = await createAccount(accountRepository, {
+      actorType: "customer",
+      email: "dang-lam@example.com",
+      displayName: "Phạm Văn D",
+      phoneNumber: "0901234567",
+    });
+
+    // The active colleague holding the same number is the only match the counter picker may return.
+    await expect(service.searchCustomers("0901234567")).resolves.toEqual([
+      {
+        id: active.id,
+        displayName: "Phạm Văn D",
+        email: "dang-lam@example.com",
+        phoneNumber: "0901234567",
+      },
+    ]);
+    await expect(service.searchCustomers("nghi@example.com")).resolves.toEqual([]);
+    await expect(service.findActiveCustomer(deactivated.id)).resolves.toBeUndefined();
   });
 });

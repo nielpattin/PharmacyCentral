@@ -6,8 +6,13 @@ import { createTrustedRequestMiddleware, IDENTITY_PUBLIC_AUTH_PATHS } from "./mi
 import { createCsrfMiddleware } from "./middleware/csrf.ts";
 
 import { createIdentityDatabase } from "./shared/infrastructure/database.ts";
-import { createAccountRouter, createAdminRouter } from "./modules/accounts/presentation/http/account-routes.ts";
-import { createAccountService, createGoogleOidcClient } from "./bootstrap/dependencies.ts";
+import {
+  createAccountRouter,
+  createAdminRouter,
+  createCustomerRouter,
+  createInternalCustomerRouter,
+} from "./modules/accounts/presentation/http/account-routes.ts";
+import { createAccountService, createGoogleSignIn } from "./bootstrap/dependencies.ts";
 
 const serviceName = "identity-service";
 const logger = createLogger({ name: serviceName });
@@ -17,14 +22,14 @@ if (!portStr) throw new Error("Missing required environment variable: PORT. Plea
 const port = Number.parseInt(portStr, 10);
 const database = createIdentityDatabase();
 const accountService = createAccountService(database);
-const googleClient = createGoogleOidcClient();
+const googleSignIn = createGoogleSignIn();
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
 app.use(
   createTrustedRequestMiddleware({
     expectedAudience: serviceName,
-    publicPaths: [...IDENTITY_PUBLIC_AUTH_PATHS, "/admin"],
+    publicPaths: [...IDENTITY_PUBLIC_AUTH_PATHS, "/admin", "/customers"],
   }),
 );
 app.get("/health/live", (_request, response) => response.json({ status: "ok", service: serviceName }));
@@ -32,8 +37,10 @@ app.get("/health/ready", (_request, response) =>
   response.status(database ? 200 : 503).json({ status: database ? "ok" : "degraded", service: serviceName }),
 );
 app.use(createCsrfMiddleware());
-app.use("/auth", createAccountRouter(accountService, googleClient));
+app.use("/auth", createAccountRouter(accountService, googleSignIn));
 app.use("/admin", createAdminRouter(accountService));
+app.use("/customers", createCustomerRouter(accountService));
+app.use("/internal", createInternalCustomerRouter(accountService));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   logger.error({ error }, "unhandled request error");

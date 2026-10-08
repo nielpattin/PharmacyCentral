@@ -1,8 +1,16 @@
-import { eq } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 
 import type { IdentityDatabase } from "../../../shared/infrastructure/database.ts";
 import { userRoles, userSiteScopes, users } from "../../../shared/infrastructure/schema.ts";
-import type { Account } from "../domain/account.ts";
+import type { Account, CustomerMatch } from "../domain/account.ts";
+
+/** The customer fields a look-up may hand out; selecting them directly keeps the password hash out of the result. */
+const customerColumns = {
+  id: users.id,
+  displayName: users.displayName,
+  email: users.email,
+  phoneNumber: users.phoneNumber,
+};
 
 export class DrizzleAccountRepository {
   public constructor(private readonly database: IdentityDatabase) {}
@@ -13,6 +21,7 @@ export class DrizzleAccountRepository {
         .insert(users)
         .values({
           actorType: input.actorType,
+          isActive: input.isActive,
           email: input.email,
           displayName: input.displayName,
           passwordHash: input.passwordHash,
@@ -36,6 +45,40 @@ export class DrizzleAccountRepository {
     return user ? this.toAccount(user) : undefined;
   }
 
+  /**
+   * Counter staff search by the exact phone or email the patient gives them. The phone compares digit by digit, so
+   * a number typed with spaces still finds the account, and only active customers are ever returned.
+   */
+  public async searchActiveCustomers(input: {
+    email: string;
+    phoneDigits: string;
+    limit: number;
+  }): Promise<CustomerMatch[]> {
+    const email = sql`lower(${users.email}) = ${input.email}`;
+    // The stored number is folded onto the same canonical form the service builds from the query: digits only, and a
+    // country-code spelling written `84` plus nine digits rewritten as its `0` form.
+    const phone = sql`regexp_replace(regexp_replace(coalesce(${users.phoneNumber}, ''), '[^0-9]', '', 'g'), '^84([0-9]{9})$', '0\\1') = ${input.phoneDigits}`;
+    const matches = input.phoneDigits.length > 0 ? or(email, phone) : email;
+    const rows = await this.database.db
+      .select(customerColumns)
+      .from(users)
+      .where(and(eq(users.actorType, "customer"), eq(users.isActive, true), matches))
+      .orderBy(users.email)
+      .limit(input.limit);
+    return rows.map((row) => ({ ...row, phoneNumber: row.phoneNumber ?? null }));
+  }
+
+  public async findActiveCustomerById(id: string): Promise<CustomerMatch | undefined> {
+    const row = (
+      await this.database.db
+        .select(customerColumns)
+        .from(users)
+        .where(and(eq(users.id, id), eq(users.actorType, "customer"), eq(users.isActive, true)))
+        .limit(1)
+    )[0];
+    return row ? { ...row, phoneNumber: row.phoneNumber ?? null } : undefined;
+  }
+
   public async list(): Promise<Account[]> {
     const allUsers = await this.database.db.select().from(users).orderBy(users.email);
     return Promise.all(allUsers.map((user) => this.toAccount(user)));
@@ -51,7 +94,7 @@ export class DrizzleAccountRepository {
           phoneNumber: account.phoneNumber ?? null,
           passwordHash: account.passwordHash,
           emailVerifiedAt: account.emailVerifiedAt ?? null,
-          isActive: true,
+          isActive: account.isActive,
           updatedAt: new Date(),
         })
         .where(eq(users.id, account.id));
@@ -68,6 +111,7 @@ export class DrizzleAccountRepository {
     return {
       id: user.id,
       actorType: user.actorType as Account["actorType"],
+      isActive: user.isActive,
       email: user.email,
       displayName: user.displayName,
       ...(user.phoneNumber ? { phoneNumber: user.phoneNumber } : {}),

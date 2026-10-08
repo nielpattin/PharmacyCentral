@@ -6,6 +6,16 @@ export type GoogleProfile = {
   displayName: string;
 };
 
+/**
+ * The Google sign-in setup resolved once at bootstrap: the client plus the redirect URI that the OIDC flow hands to
+ * Google and that the callback route rebuilds its own URL against. Both come from the same configuration, so the
+ * route never reads the environment a second time.
+ */
+export type GoogleSignIn = {
+  client: GoogleOidcClient;
+  redirectUri: string;
+};
+
 type PendingAuthorization = {
   codeVerifier: string;
   nonce: string;

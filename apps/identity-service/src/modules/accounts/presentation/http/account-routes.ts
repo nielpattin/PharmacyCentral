@@ -11,7 +11,7 @@ import {
 import type { Account } from "../../domain/account.ts";
 import type { AccountService } from "../../application/account-service.ts";
 import { signInternalIdentityContext } from "../../../../middleware/trusted-request.ts";
-import type { GoogleOidcClient } from "../../infrastructure/security/google-oidc-client.ts";
+import type { GoogleSignIn } from "../../infrastructure/security/google-oidc-client.ts";
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(200),
@@ -33,10 +33,14 @@ const adminUserSchema = z.object({
 });
 const userAccessSchema = z.object({ roles: z.array(z.string()).max(8), siteIds: z.array(z.string().uuid()).max(500) });
 const userIdSchema = z.object({ id: z.string().uuid() });
+// A one-character query would return the whole customer base, so the counter has to type at least three.
+const customerLookupSchema = z.object({ q: z.string().trim().min(3).max(320) });
 const sessionCookieName = "pharmacy_session";
 const csrfCookieName = "pharmacy_csrf";
+/** The counter roles that may search the customer accounts a prescription can be linked to. */
+const customerLookupRoles = ["Pharmacist", "Platform Admin"];
 
-export const createAccountRouter = (service: AccountService, googleClient?: GoogleOidcClient): Router => {
+export const createAccountRouter = (service: AccountService, googleSignIn?: GoogleSignIn): Router => {
   const router = Router();
 
   router.get("/setup-status", async (_request, response) => {
@@ -141,7 +145,7 @@ export const createAccountRouter = (service: AccountService, googleClient?: Goog
   });
 
   router.get("/google/start", async (_request, response) => {
-    if (!googleClient) {
+    if (!googleSignIn) {
       response
         .status(503)
         .json({ title: "Google login is not configured", status: 503, code: "google_not_configured" });
@@ -149,7 +153,7 @@ export const createAccountRouter = (service: AccountService, googleClient?: Goog
     }
 
     try {
-      const authorization = await googleClient.beginAuthorization();
+      const authorization = await googleSignIn.client.beginAuthorization();
       setCookie(response, "oauth_state", authorization.state, 600);
       response.redirect(authorization.url.href);
     } catch (error) {
@@ -158,7 +162,7 @@ export const createAccountRouter = (service: AccountService, googleClient?: Goog
   });
 
   router.get("/google/callback", async (request, response) => {
-    if (!googleClient) {
+    if (!googleSignIn) {
       response
         .status(503)
         .json({ title: "Google login is not configured", status: 503, code: "google_not_configured" });
@@ -175,11 +179,8 @@ export const createAccountRouter = (service: AccountService, googleClient?: Goog
     }
 
     try {
-      const callbackUrl = new URL(
-        request.originalUrl,
-        process.env.GOOGLE_REDIRECT_URI ?? "http://localhost:3001/auth/google/callback",
-      );
-      const profile = await googleClient.completeAuthorization(callbackUrl, state);
+      const callbackUrl = new URL(request.originalUrl, googleSignIn.redirectUri);
+      const profile = await googleSignIn.client.completeAuthorization(callbackUrl, state);
       const result = await service.loginWithGoogle(profile);
       setSessionCookie(response, result.session.rawToken);
       clearCookie(response, "oauth_state");
@@ -379,6 +380,77 @@ export const createAdminRouter = (service: AccountService): Router => {
     } catch (error) {
       writeServiceError(response, error, 400);
     }
+  });
+
+  return router;
+};
+
+/**
+ * The counter's customer picker. It reads the same session cookie the `/auth` router does, because the trusted
+ * middleware exempts `/customers` from gateway checks the way it exempts `/admin`. A shopper cannot reach the
+ * customer base through it: only a counter role passes, and only customer accounts are ever returned.
+ */
+export const createCustomerRouter = (service: AccountService): Router => {
+  const router = Router();
+
+  router.use(async (request, response, next) => {
+    const token = getSessionToken(request);
+    const current = token ? await service.currentSession(token) : undefined;
+    if (!current) {
+      response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
+      return;
+    }
+    if (!current.account.roles.some((role) => customerLookupRoles.includes(role))) {
+      response.status(403).json({ title: "Pharmacist role required", status: 403, code: "forbidden" });
+      return;
+    }
+
+    next();
+  });
+
+  router.get("/lookup", async (request, response) => {
+    const parsed = customerLookupSchema.safeParse(request.query);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid customer lookup", status: 400, code: "invalid_request" });
+      return;
+    }
+
+    response.json(await service.searchCustomers(parsed.data.q));
+  });
+
+  return router;
+};
+
+/**
+ * Service-to-service customer resolution, mounted outside `publicPaths` so the trusted middleware has already
+ * proven the internal service secret. The handler then insists on the system actor the middleware stamps for a
+ * service call, so an employee's signed context cannot borrow this answer. No gateway routes this path.
+ */
+export const createInternalCustomerRouter = (service: AccountService): Router => {
+  const router = Router();
+
+  router.use((request, response, next) => {
+    if (request.header("x-actor-type") !== "system") {
+      response.status(403).json({ title: "System actor required", status: 403, code: "forbidden" });
+      return;
+    }
+
+    next();
+  });
+
+  router.get("/customers/:id", async (request, response) => {
+    const parsed = userIdSchema.safeParse(request.params);
+    if (!parsed.success) {
+      response.status(400).json({ title: "Invalid customer id", status: 400, code: "invalid_request" });
+      return;
+    }
+    const customer = await service.findActiveCustomer(parsed.data.id);
+    if (!customer) {
+      response.status(404).json({ title: "Customer account not found", status: 404 });
+      return;
+    }
+
+    response.json(customer);
   });
 
   return router;

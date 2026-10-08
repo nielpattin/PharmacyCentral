@@ -1,14 +1,16 @@
 import express from "express";
 import { createServer, type Server } from "node:http";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { InternalIdentityContext } from "../contracts/common.ts";
 
 import {
+  ACTOR_SITE_IDS_HEADER,
   IDENTITY_PUBLIC_AUTH_PATHS,
   createTrustedRequestMiddleware,
-  extractSiteIds,
+  findOutOfScopeSiteIds,
+  listSiteIds,
   matchesPathPrefix,
   normalizePath,
   signInternalIdentityContext,
@@ -17,6 +19,9 @@ import {
 
 const identitySecret = "test-identity-secret-1234567890123456";
 const serviceSecret = "test-service-secret-1234567890123456";
+const siteA = "00000000-0000-4000-8000-000000000010";
+const siteB = "00000000-0000-4000-8000-000000000011";
+const outsideSite = "00000000-0000-4000-8000-000000000099";
 
 const createTestContext = (overrides: Partial<InternalIdentityContext> = {}): InternalIdentityContext => ({
   version: "v1",
@@ -69,7 +74,7 @@ describe("service-request-enforcement", () => {
       expect(matchesPathPrefix("/inventory/other", "/inventory/balances")).toBe(false);
     });
 
-    it("extracts site IDs from complex nested objects and arrays", () => {
+    it("reports the site IDs a payload names outside the caller's scope", () => {
       const payload = {
         siteId: "site-1",
         meta: {
@@ -77,9 +82,21 @@ describe("service-request-enforcement", () => {
           items: [{ destinationSiteId: "site-3" }, { other: 123 }, { siteId: "site-1" }],
         },
       };
-      expect(extractSiteIds(payload).sort()).toEqual(["site-1", "site-2", "site-3"].sort());
-      expect(extractSiteIds(null)).toEqual([]);
-      expect(extractSiteIds("not an object")).toEqual([]);
+      expect(findOutOfScopeSiteIds(payload, ["site-1"]).sort()).toEqual(["site-2", "site-3"].sort());
+      expect(findOutOfScopeSiteIds(payload, ["site-1", "site-2", "site-3"])).toEqual([]);
+      expect(findOutOfScopeSiteIds(null, [])).toEqual([]);
+      expect(findOutOfScopeSiteIds("not an object", [])).toEqual([]);
+    });
+
+    it("treats a transfer as in scope when either of its sites is", () => {
+      const transfer = { id: "transfer-1", sourceSiteId: "site-1", destinationSiteId: "site-2" };
+
+      expect(findOutOfScopeSiteIds(transfer, ["site-1"])).toEqual([]);
+      expect(findOutOfScopeSiteIds(transfer, ["site-2"])).toEqual([]);
+      expect(findOutOfScopeSiteIds([transfer], ["site-2"])).toEqual([]);
+      expect(findOutOfScopeSiteIds(transfer, ["site-9"]).sort()).toEqual(["site-1", "site-2"]);
+      // A row that names only one site is still judged on that site alone.
+      expect(findOutOfScopeSiteIds({ destinationSiteId: "site-2" }, ["site-1"])).toEqual(["site-2"]);
     });
 
     it("signs and verifies internal identity context", () => {
@@ -375,8 +392,8 @@ describe("service-request-enforcement", () => {
       });
       expect(resAllowed.status).toBe(200);
 
-      // Invalid body with unauthorized destination
-      const resDenied = await fetch(`${url}/inventory/transfers`, {
+      // A transfer belongs to either end's scope, so a source the employee holds is enough to send it out.
+      const resCrossSite = await fetch(`${url}/inventory/transfers`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -384,6 +401,20 @@ describe("service-request-enforcement", () => {
         },
         body: JSON.stringify({
           sourceSiteId: "00000000-0000-4000-8000-000000000010",
+          destinationSiteId: "00000000-0000-4000-8000-000000000099",
+        }),
+      });
+      expect(resCrossSite.status).toBe(200);
+
+      // A transfer with neither end among the assigned sites is refused.
+      const resDenied = await fetch(`${url}/inventory/transfers`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-internal-identity-context": header,
+        },
+        body: JSON.stringify({
+          sourceSiteId: "00000000-0000-4000-8000-000000000098",
           destinationSiteId: "00000000-0000-4000-8000-000000000099",
         }),
       });
@@ -488,6 +519,240 @@ describe("service-request-enforcement", () => {
       expect(validRes.status).toBe(200);
       const validBody = (await validRes.json()) as { id: string; siteId: string };
       expect(validBody.siteId).toBe("00000000-0000-4000-8000-000000000010");
+    });
+
+    it("strips a forged actor site header from an unauthenticated public request", async () => {
+      const app = express();
+      let capturedSiteIds: string[] | undefined;
+      app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret, publicPaths: ["/products"] }));
+      app.get("/products", (request, response) => {
+        capturedSiteIds = listSiteIds(request);
+        response.json({ ok: true, actorSites: request.header(ACTOR_SITE_IDS_HEADER) ?? null });
+      });
+
+      const { server, url } = await startServer(app);
+      activeServer = server;
+
+      const response = await fetch(`${url}/products`, {
+        headers: { [ACTOR_SITE_IDS_HEADER]: outsideSite },
+      });
+
+      expect(response.status).toBe(200);
+      const publicBody = (await response.json()) as { actorSites: string | null };
+      expect(publicBody.actorSites).toBeNull();
+      expect(capturedSiteIds).toBeUndefined();
+    });
+
+    it("overwrites a forged actor site header with the sites the signed context carries", async () => {
+      const app = express();
+      let capturedSiteIds: string[] | undefined;
+      let capturedHeader: string | undefined;
+      app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+      app.get("/inventory/balances", (request, response) => {
+        capturedSiteIds = listSiteIds(request);
+        capturedHeader = request.header(ACTOR_SITE_IDS_HEADER);
+        response.json({ ok: true });
+      });
+
+      const { server, url } = await startServer(app);
+      activeServer = server;
+
+      const employeeContext = createTestContext({ siteIds: [siteA] });
+      const response = await fetch(`${url}/inventory/balances`, {
+        headers: {
+          "x-internal-identity-context": signInternalIdentityContext(employeeContext, identitySecret),
+          [ACTOR_SITE_IDS_HEADER]: outsideSite,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(capturedHeader).toBe(siteA);
+      expect(capturedSiteIds).toEqual([siteA]);
+    });
+
+    it("honours the actor site header an internal service forwards", async () => {
+      const app = express();
+      let capturedSiteIds: string[] | undefined;
+      app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+      app.get("/reports/stock", (request, response) => {
+        capturedSiteIds = listSiteIds(request);
+        response.json({ ok: true });
+      });
+
+      const { server, url } = await startServer(app);
+      activeServer = server;
+
+      const response = await fetch(`${url}/reports/stock`, {
+        headers: {
+          "x-internal-service-secret": serviceSecret,
+          "x-actor-type": "employee",
+          [ACTOR_SITE_IDS_HEADER]: `${siteA},${siteB}`,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(capturedSiteIds).toEqual([siteA, siteB]);
+    });
+
+    it("reports an empty scope for an employee with no sites on a path that is not site scoped", async () => {
+      const app = express();
+      let capturedSiteIds: string[] | undefined;
+      app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+      app.get("/prescriptions", (request, response) => {
+        capturedSiteIds = listSiteIds(request);
+        response.json([]);
+      });
+
+      const { server, url } = await startServer(app);
+      activeServer = server;
+
+      const employeeContext = createTestContext({ siteIds: [] });
+      const response = await fetch(`${url}/prescriptions`, {
+        headers: { "x-internal-identity-context": signInternalIdentityContext(employeeContext, identitySecret) },
+      });
+
+      expect(response.status).toBe(200);
+      expect(capturedSiteIds).toEqual([]);
+    });
+
+    it("refuses a requested site outside the employee's scope before the handler runs", async () => {
+      const app = express();
+      const handler = vi.fn((_request: express.Request, response: express.Response) => {
+        response.json([]);
+      });
+      app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+      app.get("/inventory/balances", handler);
+
+      const { server, url } = await startServer(app);
+      activeServer = server;
+
+      const employeeContext = createTestContext({ siteIds: [siteA] });
+      const response = await fetch(`${url}/inventory/balances?siteId=${outsideSite}`, {
+        headers: { "x-internal-identity-context": signInternalIdentityContext(employeeContext, identitySecret) },
+      });
+
+      expect(response.status).toBe(403);
+      const deniedBody = (await response.json()) as { code: string };
+      expect(deniedBody.code).toBe("site_access_denied");
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("refuses a repeated site query rather than reading it unfiltered", async () => {
+      const app = express();
+      const handler = vi.fn((_request: express.Request, response: express.Response) => {
+        response.json([]);
+      });
+      app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+      app.get("/inventory/balances", handler);
+
+      const { server, url } = await startServer(app);
+      activeServer = server;
+
+      const employeeContext = createTestContext({ siteIds: [siteA, siteB] });
+      const response = await fetch(`${url}/inventory/balances?siteId=${siteA}&siteId=${siteB}`, {
+        headers: { "x-internal-identity-context": signInternalIdentityContext(employeeContext, identitySecret) },
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ title: "Invalid request", status: 400, code: "invalid_request" });
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("keeps a shopper on their own paths and off the counter's", async () => {
+      const app = express();
+      app.use(express.json());
+      app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+      app.get("/inventory/balances", (_req, res) => res.json([]));
+      app.get("/carts", (_req, res) => res.json({ lines: [] }));
+      app.get("/prescriptions", (_req, res) => res.json([]));
+      app.post("/prescriptions", (_req, res) => res.json({ created: true }));
+
+      const { server, url } = await startServer(app);
+      activeServer = server;
+
+      const shopperContext = createTestContext({ actorType: "customer", roles: [], siteIds: [] });
+      const header = signInternalIdentityContext(shopperContext, identitySecret);
+
+      const staffPath = await fetch(`${url}/inventory/balances`, {
+        headers: { "x-internal-identity-context": header },
+      });
+      expect(staffPath.status).toBe(403);
+      expect(await staffPath.json()).toMatchObject({
+        title: "Employee access required",
+        status: 403,
+        code: "employee_required",
+      });
+
+      const counterWrite = await fetch(`${url}/prescriptions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-internal-identity-context": header },
+        body: JSON.stringify({}),
+      });
+      expect(counterWrite.status).toBe(403);
+
+      const shopperPath = await fetch(`${url}/carts`, {
+        headers: { "x-internal-identity-context": header },
+      });
+      expect(shopperPath.status).toBe(200);
+
+      const sharedRead = await fetch(`${url}/prescriptions`, {
+        headers: { "x-internal-identity-context": header },
+      });
+      expect(sharedRead.status).toBe(200);
+    });
+
+    it("ignores a shopper's site filter", async () => {
+      const app = express();
+      let capturedSiteIds: string[] | undefined;
+      app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+      app.get("/prescriptions", (request, response) => {
+        capturedSiteIds = listSiteIds(request);
+        response.json([]);
+      });
+
+      const { server, url } = await startServer(app);
+      activeServer = server;
+
+      const shopperContext = createTestContext({ actorType: "customer", roles: [], siteIds: [] });
+      const response = await fetch(`${url}/prescriptions?siteId=${outsideSite}`, {
+        headers: { "x-internal-identity-context": signInternalIdentityContext(shopperContext, identitySecret) },
+      });
+
+      expect(response.status).toBe(200);
+      expect(capturedSiteIds).toBeUndefined();
+    });
+
+    it("lets a scoped employee read a transfer that touches their site and refuses one that does not", async () => {
+      const app = express();
+      const ownTransfer = [{ id: "transfer-1", sourceSiteId: siteA, destinationSiteId: siteB }];
+      const foreignTransfer = [{ id: "transfer-2", sourceSiteId: siteB, destinationSiteId: outsideSite }];
+      app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+      app.get("/inventory/transfers", (_request, response) => {
+        response.json(ownTransfer);
+      });
+      app.get("/inventory/transfer-log", (_request, response) => {
+        response.json(foreignTransfer);
+      });
+
+      const { server, url } = await startServer(app);
+      activeServer = server;
+
+      const employeeContext = createTestContext({ siteIds: [siteA] });
+      const header = signInternalIdentityContext(employeeContext, identitySecret);
+
+      const visible = await fetch(`${url}/inventory/transfers`, {
+        headers: { "x-internal-identity-context": header },
+      });
+      expect(visible.status).toBe(200);
+      const visibleRows = (await visible.json()) as Array<{ id: string }>;
+      expect(visibleRows.map((row) => row.id)).toEqual(["transfer-1"]);
+
+      const hidden = await fetch(`${url}/inventory/transfer-log`, {
+        headers: { "x-internal-identity-context": header },
+      });
+      expect(hidden.status).toBe(403);
+      const hiddenBody = (await hidden.json()) as { code: string };
+      expect(hiddenBody.code).toBe("site_access_denied");
     });
   });
 });
