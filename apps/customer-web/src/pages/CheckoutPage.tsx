@@ -321,6 +321,11 @@ export const CheckoutPage = (): React.JSX.Element => {
     addressSearch.search(addressQuery);
   };
 
+  const clearAddressSearch = (): void => {
+    setAddressQuery("");
+    addressSearch.clear();
+  };
+
   /**
    * A suggestion carries a label and an opaque handle, not a point, so picking one has to resolve it first.
    * The shopper waits on one call per address here, and the fee is recalculated from the resolved point.
@@ -516,6 +521,7 @@ export const CheckoutPage = (): React.JSX.Element => {
               onAddressNoteChange={setAddressNote}
               onQueryChange={setAddressQuery}
               onSearchSubmit={submitAddressSearch}
+              onSearchClear={clearAddressSearch}
               onPickResult={(result) => void pickAddressResult(result)}
               onPickSavedAddress={(address) =>
                 chooseDestination({ latitude: Number(address.latitude), longitude: Number(address.longitude) })

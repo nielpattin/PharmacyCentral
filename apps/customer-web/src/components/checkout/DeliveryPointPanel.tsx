@@ -1,9 +1,11 @@
+import { useId } from "react";
+
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Select } from "@pharmacy/ui";
 
 import type { AddressSearchResult, CatalogStore, DeliveryAddress, DeliveryCalculation } from "../../customer-api.ts";
 import { formatDistance, formatMoney } from "../../storefront/format.ts";
 import { DeliveryMap } from "../DeliveryMap.tsx";
-import { IconCrosshair, IconPin, IconSearch, IconStore, IconTruck } from "../storefront/icons.tsx";
+import { IconClose, IconCrosshair, IconPin, IconSearch, IconStore, IconTruck } from "../storefront/icons.tsx";
 
 export type Point = { latitude: number; longitude: number };
 export type AddressResult = AddressSearchResult;
@@ -34,6 +36,8 @@ type DeliveryPointPanelProps = {
   onAddressNoteChange: (value: string) => void;
   onQueryChange: (value: string) => void;
   onSearchSubmit: () => void;
+  /** Empties the search box and the suggestions under it. */
+  onSearchClear: () => void;
   onPickResult: (result: AddressResult) => void;
   onPickSavedAddress: (address: DeliveryAddress) => void;
   onLocateMe: () => void;
@@ -63,6 +67,7 @@ export const DeliveryPointPanel = ({
   onAddressNoteChange,
   onQueryChange,
   onSearchSubmit,
+  onSearchClear,
   onPickResult,
   onPickSavedAddress,
   onLocateMe,
@@ -70,6 +75,7 @@ export const DeliveryPointPanel = ({
 }: DeliveryPointPanelProps): React.JSX.Element => {
   const storePoint = selectedStore?.coordinates ?? undefined;
   const pickup = fulfillmentType === "pickup";
+  const searchInputId = useId();
 
   return (
     <Card>
@@ -110,32 +116,41 @@ export const DeliveryPointPanel = ({
           <>
             <div className="grid gap-3">
               <form
-                className="flex flex-wrap items-end gap-2"
+                className="grid gap-1.5"
                 onSubmit={(event) => {
                   event.preventDefault();
                   onSearchSubmit();
                 }}
               >
-                <div className="min-w-40 flex-1">
-                  <Field
-                    label="Tìm địa chỉ giao hàng"
-                    hint="Tìm theo số nhà, đường, phường để ghim toạ độ trên bản đồ."
-                  >
-                    <div className="relative">
-                      <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-soft" />
-                      <Input
-                        className="pl-9"
-                        aria-label="Tìm địa chỉ giao hàng"
-                        value={query}
-                        onChange={(event) => onQueryChange(event.target.value)}
-                        placeholder="Ví dụ: 123 Nguyễn Trãi, Quận 1"
-                      />
-                    </div>
-                  </Field>
+                <label htmlFor={searchInputId} className="text-sm font-medium text-ink">
+                  Tìm địa chỉ giao hàng
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative min-w-40 flex-1">
+                    <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-soft" />
+                    <Input
+                      id={searchInputId}
+                      className="pl-9 pr-9"
+                      value={query}
+                      onChange={(event) => onQueryChange(event.target.value)}
+                      placeholder="Ví dụ: 123 Nguyễn Trãi, Quận 1"
+                    />
+                    {query || results.length > 0 ? (
+                      <button
+                        type="button"
+                        aria-label="Xoá địa chỉ đang tìm"
+                        className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-full text-muted-soft transition-colors hover:bg-surface-soft hover:text-ink"
+                        onClick={onSearchClear}
+                      >
+                        <IconClose className="size-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <Button type="submit" variant="outline" disabled={searching || !query.trim()}>
+                    {searching ? "Đang tìm…" : "Tìm"}
+                  </Button>
                 </div>
-                <Button type="submit" variant="outline" disabled={searching || !query.trim()}>
-                  {searching ? "Đang tìm…" : "Tìm"}
-                </Button>
+                <p className="text-xs text-muted">Tìm theo số nhà, đường, phường để ghim toạ độ trên bản đồ.</p>
               </form>
 
               {results.length > 0 ? (
