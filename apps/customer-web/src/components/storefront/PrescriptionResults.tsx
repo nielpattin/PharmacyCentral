@@ -5,6 +5,7 @@ import type {
   CatalogPrice,
   CatalogProduct,
   CatalogUnit,
+  PrescriptionConsultationLine,
   PrescriptionIntakeLine,
   PrescriptionIntakeMatch,
   PrescriptionIntakeResult,
@@ -12,6 +13,7 @@ import type {
 import { activeUnit, priceFor, productMetadataLabel } from "../../storefront/catalog.ts";
 import { formatMoney } from "../../storefront/format.ts";
 import { Link } from "./Link.tsx";
+import { PharmacistRequestCard } from "./PharmacistRequestCard.tsx";
 import { ProductTile } from "./ProductTile.tsx";
 
 type CatalogContext = {
@@ -28,6 +30,12 @@ type PrescriptionResultsProps = CatalogContext & {
   result: PrescriptionIntakeResult;
   /** Adds one unit of every pick and resolves with how many the cart accepted. */
   onAddMany: (picks: Array<{ product: CatalogProduct; unit: CatalogUnit }>) => Promise<number>;
+  /** Files the read prescription with the pharmacists; rejects when it was not filed. */
+  onAskPharmacist: (input: {
+    requestKey: string;
+    note: string | null;
+    lines: PrescriptionConsultationLine[];
+  }) => Promise<void>;
 };
 
 const SUMMARY_FIELDS = [
@@ -36,6 +44,24 @@ const SUMMARY_FIELDS = [
   ["Bác sĩ", "doctorName"],
   ["Ngày kê đơn", "issuedOn"],
 ] as const;
+
+/** Known to differ from the prescribed line in strength, dosage form or composition, so it cannot fill it as written. */
+const differsFromLine = (match: PrescriptionIntakeMatch): boolean =>
+  match.strengthMatch === false || match.dosageFormMatch === false || match.ingredientsMatch === false;
+
+/**
+ * The catalog already ranks every product that differs from the line last. Within that order a product the chosen
+ * store has run out of goes after the ones it can sell, so the first suggestion is the one the shopper can buy now.
+ * The store is chosen on this page, which is why the catalog cannot order by stock itself.
+ */
+const orderForStore = (
+  matches: PrescriptionIntakeMatch[],
+  stockIndex: Map<string, boolean>,
+): PrescriptionIntakeMatch[] => {
+  const tier = (match: PrescriptionIntakeMatch): number =>
+    differsFromLine(match) ? 2 : stockIndex.get(match.product.id) === false ? 1 : 0;
+  return [...matches].sort((left, right) => tier(left) - tier(right));
+};
 
 const SuggestionRow = ({
   match,
@@ -77,6 +103,8 @@ const SuggestionRow = ({
             </Badge>
             {match.strengthMatch === true ? <Badge variant="primary">Đúng hàm lượng</Badge> : null}
             {match.strengthMatch === false ? <Badge variant="outline">Khác hàm lượng</Badge> : null}
+            {match.dosageFormMatch === false ? <Badge variant="outline">Khác dạng bào chế</Badge> : null}
+            {match.ingredientsMatch === false ? <Badge variant="outline">Khác thành phần</Badge> : null}
             {product.prescriptionRequired ? <Badge variant="danger">Thuốc kê đơn</Badge> : null}
           </div>
           <h5 className="line-clamp-2 text-sm font-medium text-ink" title={product.name}>
@@ -167,22 +195,34 @@ const PrescribedMedicine = ({
 
 const MedicineRow = ({
   line,
+  matches,
   position,
   ...catalog
-}: CatalogContext & { line: PrescriptionIntakeLine; position: number }): React.JSX.Element => {
-  const [best, ...alternatives] = line.matches;
+}: CatalogContext & {
+  line: PrescriptionIntakeLine;
+  matches: PrescriptionIntakeMatch[];
+  position: number;
+}): React.JSX.Element => {
+  const [best, ...alternatives] = matches;
+  const exact = best !== undefined && !differsFromLine(best);
   return (
     <li
       className={cn(
         "grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-5",
-        !best && "bg-surface-soft/60",
+        !exact && "bg-surface-soft/60",
       )}
     >
       <PrescribedMedicine extracted={line.extracted} position={position} />
       <div className="min-w-0">
         {best ? (
           <>
-            <SuggestionRow match={best} highlighted {...catalog} />
+            {exact ? null : (
+              <p className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                <Badge variant="outline">Chưa có thuốc đúng đơn</Badge>
+                Các sản phẩm dưới đây khác với đơn, chỉ dùng khi dược sĩ đồng ý.
+              </p>
+            )}
+            <SuggestionRow match={best} highlighted={exact} {...catalog} />
             {alternatives.length > 0 ? (
               <Disclosure
                 className="mt-1"
@@ -208,7 +248,12 @@ const MedicineRow = ({
   );
 };
 
-export const PrescriptionResults = ({ result, onAddMany, ...catalog }: PrescriptionResultsProps): React.JSX.Element => {
+export const PrescriptionResults = ({
+  result,
+  onAddMany,
+  onAskPharmacist,
+  ...catalog
+}: PrescriptionResultsProps): React.JSX.Element => {
   const [bulkStep, setBulkStep] = useState<"closed" | "confirm" | "adding" | "done">("closed");
   const [addedCount, setAddedCount] = useState(0);
 
@@ -222,18 +267,23 @@ export const PrescriptionResults = ({ result, onAddMany, ...catalog }: Prescript
     prescription.facilityName ? `Cơ sở khám: ${prescription.facilityName}` : null,
   ].filter(Boolean);
 
-  const matchedCount = lines.filter((line) => line.matches.length > 0).length;
-  const unmatchedCount = lines.length - matchedCount;
-
-  // The best suggestion of each line, minus duplicates and anything known to be out of stock.
-  const picks: BestPick[] = [];
-  for (const line of lines) {
-    const product = line.matches[0]?.product;
-    const unit = product ? activeUnit(product) : undefined;
-    if (!product || !unit || catalog.stockIndex.get(product.id) === false) continue;
-    if (picks.some((pick) => pick.product.id === product.id)) continue;
-    picks.push({ product, unit, price: priceFor(catalog.priceIndex, product.id, unit.id) });
-  }
+  const orderedMatches = lines.map((line) => orderForStore(line.matches, catalog.stockIndex));
+  // What each line would be filled with: its first suggestion that differs from it in nothing, is not out of stock
+  // at the chosen store and has a unit to sell. A line with none is one the pharmacists are asked about.
+  const linePicks = orderedMatches.map((matches): BestPick | undefined => {
+    for (const match of matches) {
+      const unit = activeUnit(match.product);
+      if (unit && !differsFromLine(match) && catalog.stockIndex.get(match.product.id) !== false) {
+        return { product: match.product, unit, price: priceFor(catalog.priceIndex, match.product.id, unit.id) };
+      }
+    }
+    return undefined;
+  });
+  const picks = linePicks.filter(
+    (pick, index): pick is BestPick =>
+      pick !== undefined && linePicks.findIndex((other) => other?.product.id === pick.product.id) === index,
+  );
+  const helpLines = lines.filter((_line, index) => !linePicks[index]);
 
   const addAll = async (): Promise<void> => {
     setBulkStep("adding");
@@ -250,7 +300,8 @@ export const PrescriptionResults = ({ result, onAddMany, ...catalog }: Prescript
             <p className="mt-1 text-sm text-muted">
               <span className="font-medium text-ink">{lines.length} thuốc</span>
               {" · "}
-              {matchedCount} có gợi ý{unmatchedCount > 0 ? ` · ${unmatchedCount} chưa tìm thấy` : ""}
+              {lines.length - helpLines.length} có gợi ý đúng đơn
+              {helpLines.length > 0 ? ` · ${helpLines.length} cần dược sĩ hỗ trợ` : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -259,7 +310,7 @@ export const PrescriptionResults = ({ result, onAddMany, ...catalog }: Prescript
             </Badge>
             {picks.length > 0 ? (
               <Button size="sm" onClick={() => setBulkStep("confirm")}>
-                Thêm {picks.length} gợi ý tốt nhất vào giỏ
+                Thêm {picks.length} gợi ý đúng đơn vào giỏ
               </Button>
             ) : null}
           </div>
@@ -286,10 +337,29 @@ export const PrescriptionResults = ({ result, onAddMany, ...catalog }: Prescript
       <Card>
         <ol className="divide-y divide-line">
           {lines.map((line, index) => (
-            <MedicineRow key={index} line={line} position={index + 1} {...catalog} />
+            <MedicineRow
+              key={index}
+              line={line}
+              matches={orderedMatches[index] ?? []}
+              position={index + 1}
+              {...catalog}
+            />
           ))}
         </ol>
       </Card>
+
+      {helpLines.length > 0 ? (
+        <PharmacistRequestCard
+          helpNames={helpLines.map((line) => line.extracted.name ?? line.extracted.rawText)}
+          onSend={({ requestKey, note }) =>
+            onAskPharmacist({
+              requestKey,
+              note,
+              lines: lines.map((line, index) => ({ ...line.extracted, needsHelp: !linePicks[index] })),
+            })
+          }
+        />
+      ) : null}
 
       <Alert>
         Gợi ý chỉ mang tính tham khảo. Với thuốc kê đơn, dược sĩ sẽ xác nhận đơn trước khi bán. Ảnh đơn thuốc bạn tải
@@ -299,7 +369,7 @@ export const PrescriptionResults = ({ result, onAddMany, ...catalog }: Prescript
       <Dialog
         open={bulkStep !== "closed"}
         onClose={() => bulkStep !== "adding" && setBulkStep("closed")}
-        title={bulkStep === "done" ? "Đã xử lý giỏ hàng" : "Thêm các gợi ý tốt nhất vào giỏ?"}
+        title={bulkStep === "done" ? "Đã xử lý giỏ hàng" : "Thêm các gợi ý đúng đơn vào giỏ?"}
       >
         {bulkStep === "done" ? (
           <>
@@ -316,6 +386,7 @@ export const PrescriptionResults = ({ result, onAddMany, ...catalog }: Prescript
             <p className="mb-3 text-sm text-muted">
               Mỗi sản phẩm được thêm 1 đơn vị, bạn có thể chỉnh số lượng trong giỏ hàng. Dược sĩ sẽ xác nhận trước khi
               bán.
+              {helpLines.length > 0 ? ` ${helpLines.length} thuốc chưa có sản phẩm đúng đơn nên không được thêm.` : ""}
             </p>
             <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto rounded-md border border-line">
               {picks.map(({ product, unit, price }) => (

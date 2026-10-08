@@ -6,6 +6,7 @@ import {
   deleteDeliveryAddress,
   listDeliveryAddresses,
   listOrders,
+  listPrescriptionConsultations,
   listPrescriptions,
   logoutCustomer,
   resolveCustomerSession,
@@ -17,6 +18,7 @@ import {
 import { useSession } from "../auth.ts";
 import { ChangePasswordCard } from "../components/account/ChangePasswordCard.tsx";
 import { CustomerAuthForm } from "../components/account/CustomerAuthForm.tsx";
+import { PrescriptionConsultationsCard } from "../components/account/PrescriptionConsultationsCard.tsx";
 import { PrescriptionsCard } from "../components/account/PrescriptionsCard.tsx";
 import { ProfileFormCard } from "../components/account/ProfileFormCard.tsx";
 import { SavedAddressesCard } from "../components/account/SavedAddressesCard.tsx";
@@ -105,10 +107,15 @@ export const AccountPage = (): React.JSX.Element => {
     enabled: Boolean(customer) && (section === "don-thuoc" || section === "tong-quan"),
     queryFn: async () => listPrescriptions(),
   });
+  const consultationsQuery = useQuery({
+    queryKey: ["customer-prescription-consultations"],
+    enabled: Boolean(customer) && section === "don-thuoc",
+    queryFn: listPrescriptionConsultations,
+  });
 
   const orders = ordersQuery.data ?? [];
   const prescriptions = prescriptionsQuery.data ?? [];
-  const panelError = [ordersQuery.error, prescriptionsQuery.error].find(
+  const panelError = [ordersQuery.error, prescriptionsQuery.error, consultationsQuery.error].find(
     (reason): reason is Error => reason instanceof Error,
   );
   const loadError = accountQuery.error instanceof Error ? accountQuery.error.message : undefined;
@@ -125,6 +132,7 @@ export const AccountPage = (): React.JSX.Element => {
       queryClient.removeQueries({ queryKey: accountQueryKey });
       queryClient.removeQueries({ queryKey: ["customer-orders"] });
       queryClient.removeQueries({ queryKey: ["customer-prescriptions"] });
+      queryClient.removeQueries({ queryKey: ["customer-prescription-consultations"] });
       queryClient.removeQueries({ queryKey: checkoutQueryKey });
       void navigate({ to: "/" });
     } catch (reason) {
@@ -267,8 +275,15 @@ export const AccountPage = (): React.JSX.Element => {
     }
 
     if (section === "don-thuoc") {
-      if (prescriptionsQuery.isPending) return <NoticeCard>Đang tải đơn thuốc…</NoticeCard>;
-      return <PrescriptionsCard prescriptions={prescriptions} />;
+      if (prescriptionsQuery.isPending || consultationsQuery.isPending) {
+        return <NoticeCard>Đang tải đơn thuốc…</NoticeCard>;
+      }
+      return (
+        <div className="space-y-4">
+          <PrescriptionConsultationsCard consultations={consultationsQuery.data ?? []} />
+          <PrescriptionsCard prescriptions={prescriptions} />
+        </div>
+      );
     }
 
     if (section === "dia-chi") {

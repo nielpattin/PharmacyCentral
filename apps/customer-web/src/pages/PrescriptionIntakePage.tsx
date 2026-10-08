@@ -1,6 +1,6 @@
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@pharmacy/ui";
 import { useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
 import {
@@ -8,6 +8,7 @@ import {
   listAvailability,
   listPublishedPrices,
   listStores,
+  requestPrescriptionConsultation,
   resolveCustomerSession,
   submitPrescriptionImage,
   submitPrescriptionQr,
@@ -75,6 +76,7 @@ export const PrescriptionIntakePage = (): React.JSX.Element => {
     },
   });
   const { add, pendingProductId, error: addError, notice } = useAddToCart();
+  const queryClient = useQueryClient();
 
   // Leaving the page mid-intake used to leak the picked photo's blob URL, so unmount drops whatever URL is current.
   useMountEffect(() => () => {
@@ -245,7 +247,9 @@ export const PrescriptionIntakePage = (): React.JSX.Element => {
         </Card>
 
         {result ? (
+          // Keyed by submission, so a newly read prescription starts with fresh dialogs and a fresh request key.
           <PrescriptionResults
+            key={mutation.submittedAt}
             result={result}
             priceIndex={priceIndex}
             pricesPending={pricesQuery.isPending}
@@ -253,6 +257,15 @@ export const PrescriptionIntakePage = (): React.JSX.Element => {
             addingProductId={pendingProductId}
             onAdd={addToCart}
             onAddMany={addManyToCart}
+            onAskPharmacist={async (request) => {
+              await requestPrescriptionConsultation({
+                ...request,
+                source: result.source,
+                siteId: selectedStoreId ?? null,
+                prescription: result.prescription,
+              });
+              void queryClient.invalidateQueries({ queryKey: ["customer-prescription-consultations"] });
+            }}
           />
         ) : null}
       </>

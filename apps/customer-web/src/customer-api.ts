@@ -337,6 +337,8 @@ export const listPrescriptions = (): Promise<CustomerPrescription[]> => request(
 export type PrescriptionIntakeMatch = {
   matchType: "name" | "ingredient";
   strengthMatch: boolean | null;
+  dosageFormMatch: boolean | null;
+  ingredientsMatch: boolean | null;
   score: number;
   product: CatalogProduct;
 };
@@ -373,6 +375,41 @@ export const submitPrescriptionImage = (blob: Blob): Promise<PrescriptionIntakeR
   });
 export const submitPrescriptionQr = (payload: string): Promise<PrescriptionIntakeResult> =>
   request("/api/prescriptions/intake/qr", { method: "POST", body: JSON.stringify({ payload }) });
+
+/** A prescription line sent to the pharmacists, flagged when no suggestion could fill it at the chosen store. */
+export type PrescriptionConsultationLine = PrescriptionIntakeLine["extracted"] & { needsHelp: boolean };
+/** A shopper's request for a pharmacist to find what the suggestions could not, mirroring the sales service contract. */
+export type PrescriptionConsultation = {
+  id: string;
+  siteId: string | null;
+  source: PrescriptionIntakeResult["source"];
+  prescription: PrescriptionIntakeResult["prescription"];
+  lines: PrescriptionConsultationLine[];
+  note: string | null;
+  status: "Open" | "Answered";
+  reply: string | null;
+  answeredAt: string | null;
+  createdAt: string;
+};
+/** `requestKey` names one submission, so a retried send never files the same request twice. */
+export const requestPrescriptionConsultation = ({
+  requestKey,
+  ...input
+}: {
+  requestKey: string;
+  source: PrescriptionIntakeResult["source"];
+  siteId: string | null;
+  prescription: PrescriptionIntakeResult["prescription"];
+  lines: PrescriptionConsultationLine[];
+  note: string | null;
+}): Promise<PrescriptionConsultation> =>
+  request("/api/prescriptions/consultations", {
+    method: "POST",
+    body: JSON.stringify(input),
+    idempotencyKey: requestKey,
+  });
+export const listPrescriptionConsultations = (): Promise<PrescriptionConsultation[]> =>
+  request("/api/prescriptions/consultations?limit=50");
 export const updateProfile = (input: { displayName?: string; phoneNumber?: string | null }): Promise<Customer> =>
   request("/api/auth/me", { method: "PATCH", body: JSON.stringify(input) });
 export const registerCustomer = (email: string, password: string, displayName: string) =>
