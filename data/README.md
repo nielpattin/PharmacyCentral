@@ -121,3 +121,10 @@ data/
 - Never serve these files from a web app and never copy them into an app's `public/` directory.
 - Images never ship inside a container image: `.dockerignore` excludes `data/`, they are uploaded to
   SeaweedFS by the command above.
+
+## Prescription samples (local only)
+
+`pnpm run prescriptions:samples` renders fictional printed prescriptions into `data/prescription-samples/` for
+trying prescription intake: `<slug>.png` with a QR, `<slug>-no-qr.png` without one, and `<slug>.json` with the
+expected medicines. The output is generated and stays out of Git; the generator and its fonts live in
+`apps/sales-service/scripts/`. See the "Try prescription intake" runbook for how to use them.

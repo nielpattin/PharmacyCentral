@@ -11,7 +11,7 @@ pnpm run infra:up
 docker compose ps   # postgres, rabbitmq, valkey, mailpit, otel-collector, seaweedfs, gateway-dev healthy
 ```
 
-SeaweedFS is local product-image object storage. `seaweedfs-init` creates the `product-media` bucket, and the S3 gateway allows anonymous reads on that bucket only. The S3 API is at `http://localhost:9000`; set the port and credentials (`SEAWEEDFS_*`) in `.env` before starting Compose. Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies (the other groups keep Nginx's 1 MB default). `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; other JSON routes keep the 1 MB service default.
+SeaweedFS is local product-image object storage. `seaweedfs-init` creates the `product-media` bucket, and the S3 gateway allows anonymous reads on that bucket only. The S3 API is at `http://localhost:9000`; set the port and credentials (`SEAWEEDFS_*`) in `.env` before starting Compose. Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies, `/api/prescriptions/intake*` allows 10 MB, and the other groups keep Nginx's 1 MB default. `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; `sales-service` accepts prescription photos up to 8 MB; other JSON routes keep the 1 MB service default.
 
 Create the databases and seed the local accounts. The seed reads `.env` on its own:
 
@@ -246,6 +246,16 @@ changes; `images:unpack` extracts it with `tar` for inspection (the import does 
 `data/` is excluded from container builds via `.dockerignore`, so the images only reach SeaweedFS through that
 command. Source-verification records (source URLs, byte counts, SHA-256, download summary, review sheet) stay
 local in `data/product-images/provenance/`.
+
+### Try prescription intake
+
+Prescription intake needs the catalog migrations `0005_text_search_extensions` (`pg_trgm` and `unaccent`) and `0006_folded_trigram_indexes` (the `catalog_fold` function and its trigram indexes), so run `pnpm run db:migrate` after pulling. Import `products.csv` first, because suggestions come from the catalog.
+
+1. Set `GEMINI_API_KEY`, `GEMINI_BASE_URL`, and `GEMINI_MODEL` in `.env` (see `.env.example`) to read photos. With an empty `GEMINI_API_KEY` the photo path answers `503` and only QR intake works.
+2. Sign in as the customer account and open `http://localhost:5173/gui-don-thuoc`.
+3. Upload a page from `data/prescription-samples/`. `<slug>.png` carries a QR (read in the browser, no provider call); `<slug>-no-qr.png` is the same page without it and exercises Gemini. `<slug>.json` is the ground truth to compare against.
+
+`pnpm run prescriptions:samples` generates those pages. They are fictional prescriptions whose medicines mostly come from `products.csv`, and like other generated output they stay local and are not committed.
 
 ### Demo credentials
 
