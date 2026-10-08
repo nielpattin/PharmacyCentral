@@ -388,6 +388,9 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: 'catalog:'
+        version: 0.5.8
       '@types/express':
         specifier: 'catalog:'
         version: 5.0.6
@@ -425,6 +428,9 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: 'catalog:'
+        version: 0.5.8
       '@types/express':
         specifier: 'catalog:'
         version: 5.0.6
@@ -465,6 +471,9 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: 'catalog:'
+        version: 0.5.8
       '@types/express':
         specifier: 'catalog:'
         version: 5.0.6

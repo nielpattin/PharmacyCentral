@@ -28,6 +28,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "catalog:",
     "@types/express": "catalog:",
     "@types/node": "catalog:",
     "@types/nodemailer": "catalog:",
