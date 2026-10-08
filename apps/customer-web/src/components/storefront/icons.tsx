@@ -140,3 +140,9 @@ export const IconCopy = ({ className }: IconProps): React.JSX.Element => (
     <path d="M15 5.4A1.4 1.4 0 0 0 13.6 4H5.4A1.4 1.4 0 0 0 4 5.4v8.2A1.4 1.4 0 0 0 5.4 15" />
   </Svg>
 );
+
+export const IconClose = ({ className }: IconProps): React.JSX.Element => (
+  <Svg className={className}>
+    <path d="m6 6 12 12M18 6 6 18" />
+  </Svg>
+);

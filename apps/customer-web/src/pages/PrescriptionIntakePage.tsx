@@ -21,6 +21,7 @@ import { useAddToCart } from "../hooks/useAddToCart.ts";
 import { useMountEffect } from "../hooks/useMountEffect.ts";
 import { CartFeedback } from "../components/storefront/CartFeedback.tsx";
 import { Link } from "../components/storefront/Link.tsx";
+import { ImageLightbox } from "../components/storefront/ImageLightbox.tsx";
 import { PrescriptionResults } from "../components/storefront/PrescriptionResults.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
@@ -60,6 +61,7 @@ export const PrescriptionIntakePage = (): React.JSX.Element => {
   const previewUrlRef = useRef<string | undefined>(undefined);
   const [previewUrl, setPreviewUrl] = useState<string>();
   const [consented, setConsented] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const mutation = useMutation({
     mutationFn: async ({ file, consent }: { file: File; consent: boolean }): Promise<IntakeOutcome> => {
       // The QR is read on the device, so that path costs the shopper no agreement and no upload.
@@ -218,11 +220,24 @@ export const PrescriptionIntakePage = (): React.JSX.Element => {
               />
             </div>
             {previewUrl ? (
-              <img
-                src={previewUrl}
-                alt="Ảnh đơn thuốc đã chọn"
-                className="h-40 w-auto max-w-full rounded-md border border-line object-contain"
-              />
+              <button
+                type="button"
+                className="group relative w-fit max-w-full cursor-zoom-in rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                aria-label="Xem ảnh đơn thuốc toàn màn hình"
+                onClick={() => setViewerOpen(true)}
+              >
+                <img
+                  src={previewUrl}
+                  alt="Ảnh đơn thuốc đã chọn"
+                  className="h-40 w-auto max-w-full rounded-md border border-line object-contain"
+                />
+                <span className="absolute right-1.5 bottom-1.5 rounded bg-ink/70 px-1.5 py-0.5 text-xs text-white opacity-90 group-hover:opacity-100">
+                  Bấm để phóng to
+                </span>
+              </button>
+            ) : null}
+            {previewUrl && viewerOpen ? (
+              <ImageLightbox src={previewUrl} alt="Ảnh đơn thuốc đã chọn" onClose={() => setViewerOpen(false)} />
             ) : null}
             {mutation.isPending ? (
               <Alert role="status" aria-live="polite">
