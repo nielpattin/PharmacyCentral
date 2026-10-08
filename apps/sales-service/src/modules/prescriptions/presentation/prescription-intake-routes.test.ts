@@ -76,7 +76,16 @@ const startServer = async (
       catalogBodies.push(body);
       return Response.json(
         body.items.map((_item, index) => ({
-          matches: [{ matchType: "name", strengthMatch: true, score: 1 - index / 10, product }],
+          matches: [
+            {
+              matchType: "name",
+              strengthMatch: true,
+              dosageFormMatch: null,
+              ingredientsMatch: true,
+              score: 1 - index / 10,
+              product,
+            },
+          ],
         })),
       );
     }
@@ -152,8 +161,20 @@ describe("prescription intake API", () => {
     expect(started.catalogBodies).toEqual([
       {
         items: [
-          { name: "Paracetamol 500mg", activeIngredients: ["Paracetamol"], strength: "500 mg" },
-          { name: "Vitamin C 500mg", activeIngredients: ["Acid ascorbic"], strength: "500 mg" },
+          {
+            name: "Paracetamol 500mg",
+            activeIngredients: ["Paracetamol"],
+            strength: "500 mg",
+            dosageForm: null,
+            unit: "viên",
+          },
+          {
+            name: "Vitamin C 500mg",
+            activeIngredients: ["Acid ascorbic"],
+            strength: "500 mg",
+            dosageForm: null,
+            unit: "viên",
+          },
         ],
         limit: 5,
       },

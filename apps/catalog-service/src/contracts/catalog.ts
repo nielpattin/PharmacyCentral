@@ -34,7 +34,10 @@ export const productSearchQuerySchema = z.object({
   cursor: z.string().optional(),
 });
 
-/** One prescription line to look up: a prescribed name and/or its active ingredients, with the strength if stated. */
+/**
+ * One prescription line to look up: a prescribed name and/or its active ingredients, with the strength, dosage form
+ * and dispensing unit if stated.
+ */
 export const productMatchRequestSchema = z.object({
   items: z
     .array(
@@ -42,6 +45,8 @@ export const productMatchRequestSchema = z.object({
         name: z.string().trim().max(500).nullable(),
         activeIngredients: z.array(z.string().trim().min(1).max(200)).max(10),
         strength: z.string().trim().max(150).nullable(),
+        dosageForm: z.string().trim().max(150).nullable().default(null),
+        unit: z.string().trim().max(100).nullable().default(null),
       }),
     )
     .min(1)

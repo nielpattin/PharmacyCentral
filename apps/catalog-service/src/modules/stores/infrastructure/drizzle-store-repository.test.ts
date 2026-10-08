@@ -102,20 +102,20 @@ describe("DrizzleStoreRepository product matching", () => {
   });
 
   it("suggests a product for a line that only names it", async () => {
-    await expect(skusFor({ name: "Paracetamol 500mg", activeIngredients: [], strength: null })).resolves.toEqual([
-      "PARA-500",
-    ]);
+    await expect(
+      skusFor({ name: "Paracetamol 500mg", activeIngredients: [], strength: null, dosageForm: null, unit: null }),
+    ).resolves.toEqual(["PARA-500"]);
   });
 
   it("suggests a product for a line that names nothing and lists one ingredient", async () => {
-    await expect(skusFor({ name: null, activeIngredients: ["Natri clorid"], strength: null })).resolves.toEqual([
-      "ORS-245",
-    ]);
+    await expect(
+      skusFor({ name: null, activeIngredients: ["Natri clorid"], strength: null, dosageForm: null, unit: null }),
+    ).resolves.toEqual(["ORS-245"]);
   });
 
   it("treats an empty name like a missing one", async () => {
     const candidates = await repository.matchProducts(
-      { name: "", activeIngredients: ["Natri clorid"], strength: null },
+      { name: "", activeIngredients: ["Natri clorid"], strength: null, dosageForm: null, unit: null },
       5,
     );
 
@@ -125,7 +125,7 @@ describe("DrizzleStoreRepository product matching", () => {
 
   it("folds Vietnamese diacritics so a written accent still matches the unaccented product", async () => {
     const candidates = await repository.matchProducts(
-      { name: "Paracetamol Quảng Bình", activeIngredients: [], strength: null },
+      { name: "Paracetamol Quảng Bình", activeIngredients: [], strength: null, dosageForm: null, unit: null },
       5,
     );
 
@@ -134,12 +134,20 @@ describe("DrizzleStoreRepository product matching", () => {
   });
 
   it("never suggests a product that is no longer active", async () => {
-    const skus = await skusFor({ name: "Paracetamol 500mg", activeIngredients: [], strength: null });
+    const skus = await skusFor({
+      name: "Paracetamol 500mg",
+      activeIngredients: [],
+      strength: null,
+      dosageForm: null,
+      unit: null,
+    });
 
     expect(skus).not.toContain("PARA-500-RETIRED");
   });
 
   it("returns no candidate for a line nothing resembles", async () => {
-    await expect(skusFor({ name: "Zzzzqqq", activeIngredients: ["Unobtainium"], strength: null })).resolves.toEqual([]);
+    await expect(
+      skusFor({ name: "Zzzzqqq", activeIngredients: ["Unobtainium"], strength: null, dosageForm: null, unit: null }),
+    ).resolves.toEqual([]);
   });
 });

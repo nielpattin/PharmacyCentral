@@ -53,6 +53,8 @@ const matchLines = async (
         name: line.name,
         activeIngredients: line.activeIngredients,
         strength: line.strength,
+        dosageForm: line.dosageForm,
+        unit: line.unit,
       })),
       limit: MATCHES_PER_LINE,
     }),

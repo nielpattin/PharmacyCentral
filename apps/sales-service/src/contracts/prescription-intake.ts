@@ -74,6 +74,10 @@ export type IntakeMatch = {
   matchType: "name" | "ingredient";
   /** Whether the strength equals the prescribed one; `null` when either side states none. */
   strengthMatch: boolean | null;
+  /** Whether the product is taken the way the line prescribes (tablet, oral liquid...); `null` when unknown. */
+  dosageFormMatch: boolean | null;
+  /** `false` when the product holds an ingredient the line does not prescribe; `null` when unknown. */
+  ingredientsMatch: boolean | null;
   score: number;
   product: Record<string, unknown>;
 };
