@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -11,6 +12,9 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+
+import type { ConsultationLine } from "../../contracts/prescription-consultation.ts";
+import type { IntakePrescription } from "../../contracts/prescription-intake.ts";
 
 export const carts = pgTable(
   "carts",
@@ -153,6 +157,34 @@ export const prescriptionLines = pgTable("prescription_lines", {
   duration: text("duration"),
   notes: text("notes"),
 });
+
+/**
+ * A shopper's whole prescription sent to the pharmacists. It is not a `prescriptions` row: nothing in it is
+ * fillable yet, no product, unit, site or storage location is chosen and no stock is reserved. It keeps the
+ * prescription as it was read plus the shopper's own note, and the pharmacists' single written answer.
+ */
+export const prescriptionConsultations = pgTable(
+  "prescription_consultations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    customerId: uuid("customer_id").notNull(),
+    siteId: uuid("site_id"),
+    source: varchar("source", { length: 10 }).notNull(),
+    prescription: jsonb("prescription").$type<IntakePrescription>().notNull(),
+    lines: jsonb("lines").$type<ConsultationLine[]>().notNull(),
+    note: text("note"),
+    status: varchar("status", { length: 20 }).notNull().default("Open"),
+    reply: text("reply"),
+    answeredBy: uuid("answered_by"),
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("prescription_consultations_customer_created_idx").on(table.customerId, table.createdAt),
+    index("prescription_consultations_status_created_idx").on(table.status, table.createdAt),
+  ],
+);
 
 export const idempotencyRecords = pgTable(
   "sales_idempotency_records",

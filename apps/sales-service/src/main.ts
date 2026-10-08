@@ -17,7 +17,9 @@ import { SalesPaymentEventConsumer } from "./modules/payment-event-consumer.ts";
 import { createSalesRouter } from "./modules/sales-routes.ts";
 import { SalesRepository } from "./modules/sales-repository.ts";
 import { GeminiPrescriptionReader } from "./modules/prescriptions/infrastructure/gemini-prescription-reader.ts";
+import { PrescriptionConsultationRepository } from "./modules/prescriptions/infrastructure/prescription-consultation-repository.ts";
 import { ValkeyIntakeRateLimiter } from "./modules/prescriptions/infrastructure/valkey-intake-rate-limiter.ts";
+import { createPrescriptionConsultationRouter } from "./modules/prescriptions/presentation/prescription-consultation-routes.ts";
 import { createPrescriptionIntakeRouter } from "./modules/prescriptions/presentation/prescription-intake-routes.ts";
 import { createSalesDatabase } from "./shared/infrastructure/database.ts";
 import { createErrorHandler } from "./shared/presentation/error-handler.ts";
@@ -142,6 +144,7 @@ const prescriptionReader = geminiApiKey
  * and nothing else.
  */
 const prescriptionIntakeLimiter = new ValkeyIntakeRateLimiter(valkeyClient);
+const prescriptionConsultationRepository = database ? new PrescriptionConsultationRepository(database) : undefined;
 app.use(
   createPrescriptionIntakeRouter({
     reader: prescriptionReader,
@@ -149,6 +152,8 @@ app.use(
     catalogServiceUrl,
   }),
 );
+// Mounted before `createSalesRouter`: its `GET /prescriptions/:id` would swallow `/prescriptions/consultations`.
+app.use(createPrescriptionConsultationRouter(prescriptionConsultationRepository, { catalogServiceUrl }));
 app.use(
   createSalesRouter(salesRepository, {
     catalogServiceUrl,
