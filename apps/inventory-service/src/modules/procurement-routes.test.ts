@@ -18,9 +18,11 @@ const ids = {
 };
 
 const createTestServer = async (repository: ProcurementRepository): Promise<{ server: Server; url: string }> => {
+  // The catalog reference check reads the shared internal secret before it calls the catalog.
+  vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-internal-secret");
   const app = express();
   app.use(express.json());
-  app.use(createProcurementRouter(repository));
+  app.use(createProcurementRouter(repository, { catalogServiceUrl: "http://catalog.test" }));
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
     response.status(500).json({ error: String(error) }),
   );
@@ -42,6 +44,7 @@ describe("procurement API", () => {
     if (server) await closeServer(server);
     server = undefined;
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it("creates a purchase order with optional metadata", async () => {

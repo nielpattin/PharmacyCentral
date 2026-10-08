@@ -23,6 +23,9 @@ const port = Number.parseInt(portStr, 10);
 const catalogServiceUrl = process.env.CATALOG_SERVICE_URL;
 if (!catalogServiceUrl)
   throw new Error("Missing required environment variable: CATALOG_SERVICE_URL. Please set it in your .env file.");
+// Procurement calls the catalog with the shared internal service secret, so a missing one stops the service here.
+if (!process.env.INTERNAL_SERVICE_SECRET)
+  throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
 const database = createInventoryDatabase();
 const availabilityPublisher = new AvailabilityPublisher();
 await availabilityPublisher
@@ -76,7 +79,7 @@ app.get("/health/ready", (_request, response) =>
 );
 app.use(createInventoryImportRouter(inventoryImportService));
 app.use(createInventoryRouter(repository));
-app.use(createProcurementRouter(procurementRepository));
+app.use(createProcurementRouter(procurementRepository, { catalogServiceUrl }));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   logger.error({ error }, "unhandled request error");

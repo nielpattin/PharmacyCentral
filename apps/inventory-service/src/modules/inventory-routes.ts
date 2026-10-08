@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { reserveStockCommandSchema, stockMovementCommandSchema } from "../contracts/inventory.ts";
+import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import { InventoryRepository } from "./inventory-repository.ts";
 
@@ -89,7 +90,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
       return response.json(
         await repository.listBalances(
           typeof request.query.productId === "string" ? request.query.productId : undefined,
-          typeof request.query.siteId === "string" ? request.query.siteId : undefined,
+          listSiteIds(request),
           typeof request.query.storageLocationId === "string" ? request.query.storageLocationId : undefined,
           request.query.includeZeroBalances !== "false",
         ),
@@ -145,7 +146,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
     try {
       return response.json(
         await repository.listAdjustments({
-          siteId: typeof request.query.siteId === "string" ? request.query.siteId : undefined,
+          siteIds: listSiteIds(request),
           status: typeof request.query.status === "string" ? request.query.status : undefined,
           limit: queryNumber(request.query.limit, 100),
         }),
@@ -196,7 +197,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
         await repository.listMovements({
           productId: typeof request.query.productId === "string" ? request.query.productId : undefined,
           productBatchId: typeof request.query.productBatchId === "string" ? request.query.productBatchId : undefined,
-          siteId: typeof request.query.siteId === "string" ? request.query.siteId : undefined,
+          siteIds: listSiteIds(request),
           storageLocationId:
             typeof request.query.storageLocationId === "string" ? request.query.storageLocationId : undefined,
           limit: queryNumber(request.query.limit, 500),
@@ -282,7 +283,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
     try {
       return response.json(
         await repository.listTransfers(
-          typeof request.query.siteId === "string" ? request.query.siteId : undefined,
+          listSiteIds(request),
           typeof request.query.status === "string" ? request.query.status : undefined,
           queryNumber(request.query.limit, 100),
         ),
@@ -358,7 +359,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
     try {
       return response.json(
         await repository.listStocktakes(
-          typeof request.query.siteId === "string" ? request.query.siteId : undefined,
+          listSiteIds(request),
           typeof request.query.status === "string" ? request.query.status : undefined,
           queryNumber(request.query.limit, 100),
         ),
@@ -424,9 +425,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   router.get("/inventory/returns", async (request, response, next) => {
     if (!repository) return unavailable(response);
     try {
-      return response.json(
-        await repository.listReturns(typeof request.query.siteId === "string" ? request.query.siteId : undefined),
-      );
+      return response.json(await repository.listReturns(listSiteIds(request)));
     } catch (error) {
       return next(error);
     }
@@ -451,7 +450,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
     try {
       return response.json(
         await repository.listReplenishments(
-          typeof request.query.siteId === "string" ? request.query.siteId : undefined,
+          listSiteIds(request),
           typeof request.query.status === "string" ? request.query.status : undefined,
           queryNumber(request.query.limit, 100),
         ),

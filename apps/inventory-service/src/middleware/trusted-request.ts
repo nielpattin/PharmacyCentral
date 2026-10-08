@@ -70,6 +70,57 @@ export const DEFAULT_SITE_SCOPED_PREFIXES: readonly string[] = [
   "/operations/audit",
 ];
 
+/**
+ * The counter's own prefixes. `deploy/aws/lambda/policy.mjs` refuses a shopper on the same paths at the edge, but the
+ * local topology has no authorizer and hands every shopper a signed context, so the split has to hold here too.
+ */
+export const DEFAULT_EMPLOYEE_PREFIXES: readonly string[] = [
+  "/procurement",
+  "/inventory",
+  "/quality",
+  "/operations",
+  "/dashboard",
+  "/finance",
+  "/audit",
+  "/reports",
+  "/prescriptions",
+  "/counter-transactions",
+  "/admin",
+  "/customers",
+];
+
+/** Reading catalog master data is public; writing it is a staff action. */
+export const DEFAULT_EMPLOYEE_WRITE_PREFIXES: readonly string[] = [
+  "/sites",
+  "/storage-locations",
+  "/suppliers",
+  "/products",
+  "/pricing/prices",
+];
+
+export type CustomerRequestException = {
+  method: string;
+  path: string;
+  /** `exact` is the whole path, `segment` is the path and everything below it, `child` is one segment below it. */
+  match: "exact" | "segment" | "child";
+};
+
+/**
+ * Requests a shopper may keep making on a path the employee prefixes would otherwise refuse. The prescription entries
+ * mirror `customerPrescriptionRequests` and the invoice entries mirror payment's customer carve-outs in
+ * `deploy/aws/lambda/policy.mjs`; the invoice read is a shopper's own receipt, served with an owner check by
+ * payment-service, so this service-side list keeps it reachable where the edge policy is stricter.
+ */
+export const DEFAULT_CUSTOMER_REQUEST_EXCEPTIONS: readonly CustomerRequestException[] = [
+  { method: "GET", path: "/prescriptions", match: "exact" },
+  { method: "GET", path: "/prescriptions/consultations", match: "exact" },
+  { method: "POST", path: "/prescriptions/consultations", match: "exact" },
+  { method: "POST", path: "/prescriptions/intake/qr", match: "segment" },
+  { method: "POST", path: "/prescriptions/intake/image", match: "segment" },
+  { method: "POST", path: "/payments/invoices", match: "exact" },
+  { method: "GET", path: "/payments/invoices", match: "child" },
+];
+
 export const IDENTITY_PUBLIC_AUTH_PATHS: readonly string[] = [
   "/auth/login",
   "/auth/register",
@@ -99,32 +150,83 @@ export const matchesPathPrefix = (path: string, prefix: string): boolean => {
   return withoutApi === prefixWithoutApi || withoutApi.startsWith(`${prefixWithoutApi}/`);
 };
 
-export const extractSiteIds = (value: unknown): string[] => {
-  const ids = new Set<string>();
+/** The path as the service sees it: the gateway strips `/api`, whereas a direct call or a test may not. */
+const stripApiPrefix = (path: string): string => {
+  const normalized = normalizePath(path);
+  if (normalized === "/api") return "/";
+  return normalized.startsWith("/api/") ? normalized.slice(4) : normalized;
+};
+
+const matchesSingleChildPath = (path: string, prefix: string): boolean => {
+  const normalized = stripApiPrefix(path);
+  const base = stripApiPrefix(prefix);
+  if (!normalized.startsWith(`${base}/`)) return false;
+  const remainder = normalized.slice(base.length + 1);
+  return remainder.length > 0 && !remainder.includes("/");
+};
+
+const matchesCustomerException = (exception: CustomerRequestException, path: string, method: string): boolean => {
+  if (method.toUpperCase() !== exception.method.toUpperCase()) return false;
+  if (exception.match === "exact") return stripApiPrefix(path) === stripApiPrefix(exception.path);
+  if (exception.match === "child") return matchesSingleChildPath(path, exception.path);
+  return matchesPathPrefix(path, exception.path);
+};
+
+/**
+ * True when the path belongs behind the counter rather than to the shopper, the same split
+ * `deploy/aws/lambda/policy.mjs` makes with `employeePrefixes`, `catalogWritePrefixes` and its payment carve-outs.
+ * The exemptions are checked first, so a shared path such as the prescription list stays the shopper's.
+ */
+export const isEmployeePath = (path: string, method: string): boolean => {
+  if (DEFAULT_CUSTOMER_REQUEST_EXCEPTIONS.some((exception) => matchesCustomerException(exception, path, method))) {
+    return false;
+  }
+  const upperMethod = method.toUpperCase();
+  const isRead = upperMethod === "GET" || upperMethod === "HEAD" || upperMethod === "OPTIONS";
+  if (DEFAULT_EMPLOYEE_PREFIXES.some((prefix) => matchesPathPrefix(path, prefix))) return true;
+  if (!isRead && DEFAULT_EMPLOYEE_WRITE_PREFIXES.some((prefix) => matchesPathPrefix(path, prefix))) return true;
+  return matchesPathPrefix(path, "/payments") && !matchesPathPrefix(path, "/payments/sepay/webhook");
+};
+
+const SITE_ID_KEYS: Record<string, true> = { siteId: true, sourceSiteId: true, destinationSiteId: true };
+
+/**
+ * The site ids a payload names that lie outside `allowedSiteIds`. A transfer names one site at each end and belongs to
+ * either end's scope, so a source/destination pair is judged as a whole; every other site field has to match on its own.
+ */
+export const findOutOfScopeSiteIds = (value: unknown, allowedSiteIds: readonly string[]): string[] => {
+  const offenders = new Set<string>();
   const visit = (current: unknown): void => {
     if (Array.isArray(current)) {
-      for (const item of current) {
-        visit(item);
+      for (const item of current) visit(item);
+      return;
+    }
+    if (!current || typeof current !== "object") return;
+    const record = current as Record<string, unknown>;
+    const source = record.sourceSiteId;
+    const destination = record.destinationSiteId;
+    if (typeof source === "string" && typeof destination === "string") {
+      if (!allowedSiteIds.includes(source) && !allowedSiteIds.includes(destination)) {
+        offenders.add(source);
+        offenders.add(destination);
+      }
+      for (const [key, child] of Object.entries(record)) {
+        if (key === "sourceSiteId" || key === "destinationSiteId") continue;
+        visit(child);
       }
       return;
     }
-    if (!current || typeof current !== "object") {
-      return;
-    }
-    for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
-      if (
-        (key === "siteId" || key === "sourceSiteId" || key === "destinationSiteId") &&
-        typeof child === "string" &&
-        child.trim().length > 0
-      ) {
-        ids.add(child.trim());
+    for (const [key, child] of Object.entries(record)) {
+      if (SITE_ID_KEYS[key] === true && typeof child === "string" && child.trim().length > 0) {
+        const siteId = child.trim();
+        if (!allowedSiteIds.includes(siteId)) offenders.add(siteId);
       } else {
         visit(child);
       }
     }
   };
   visit(value);
-  return [...ids];
+  return [...offenders];
 };
 
 export const verifyInternalIdentityContext = (
@@ -181,21 +283,43 @@ const injectDefaultSiteQuery = (request: Request, siteId: string): void => {
   request.url = `${requestUrl.pathname}${requestUrl.search}`;
 };
 
+/** Carries a site-scoped employee's assigned sites from this middleware to the route handlers. */
+export const ACTOR_SITE_IDS_HEADER = "x-actor-site-ids";
+
+/** Actor types whose `?siteId=` is trusted: an employee narrows to one of their own sites, a service acts for one. */
+const QUERY_SITE_SCOPE_ACTORS: readonly string[] = ["employee", "system"];
+
+/** The scope the trusted layer assigned: an employee's sites, an internal service's forwarded scope, else undefined. */
+export const actorSiteIds = (request: Request): string[] | undefined => {
+  const scope = request.header(ACTOR_SITE_IDS_HEADER);
+  return scope === undefined ? undefined : scope.split(",").filter((siteId) => siteId.length > 0);
+};
+
+/**
+ * The sites a list read may return: the requested `siteId`, which the middleware already denied when it lies outside
+ * the caller's scope; otherwise every site assigned to a site-scoped employee, which is empty when none is assigned;
+ * otherwise `undefined`, meaning no site restriction (Platform Admin, internal services, shoppers). A shopper's query
+ * is never honoured, because a shopper's rows are already narrowed to their own records by the owner filter.
+ */
+export const listSiteIds = (request: Request): string[] | undefined => {
+  const actorType = request.header("x-actor-type");
+  if (actorType !== undefined && QUERY_SITE_SCOPE_ACTORS.includes(actorType)) {
+    const requested = typeof request.query.siteId === "string" ? request.query.siteId.trim() : "";
+    if (requested) return [requested];
+  }
+  return actorSiteIds(request);
+};
+
 const interceptResponseForSiteSecurity = (response: Response, allowedSiteIds: string[]): void => {
   const originalJson = response.json.bind(response);
   const originalSend = response.send.bind(response);
   let handled = false;
 
-  const isUnauthorized = (payload: unknown): boolean => {
-    const siteIds = extractSiteIds(payload);
-    return siteIds.some((id) => !allowedSiteIds.includes(id));
-  };
-
   response.json = function (body: unknown) {
     if (handled) {
       return originalJson(body);
     }
-    if (isUnauthorized(body)) {
+    if (findOutOfScopeSiteIds(body, allowedSiteIds).length > 0) {
       handled = true;
       return response.status(403).json({
         title: "Site access denied",
@@ -227,7 +351,7 @@ const interceptResponseForSiteSecurity = (response: Response, allowedSiteIds: st
       parsed = body;
     }
 
-    if (parsed !== undefined && isUnauthorized(parsed)) {
+    if (parsed !== undefined && findOutOfScopeSiteIds(parsed, allowedSiteIds).length > 0) {
       handled = true;
       return response.status(403).json({
         title: "Site access denied",
@@ -276,6 +400,17 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       return;
     }
 
+    // A repeated `siteId` parses to an array, which every site filter would silently ignore, so it is refused rather
+    // than read as "no filter" and left to widen the result set.
+    if (!isHealth && request.query.siteId !== undefined && typeof request.query.siteId !== "string") {
+      response.status(400).json({
+        title: "Invalid request",
+        status: 400,
+        code: "invalid_request",
+      });
+      return;
+    }
+
     if (verifiedContext) {
       if (verifiedContext.actorId) {
         request.headers["x-actor-id"] = verifiedContext.actorId;
@@ -291,12 +426,27 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       }
     }
 
+    // A shopper's own paths stay open; anything behind the counter stops here even though the context verifies.
+    if (verifiedContext && verifiedContext.actorType === "customer" && isEmployeePath(request.path, request.method)) {
+      response.status(403).json({
+        title: "Employee access required",
+        status: 403,
+        code: "employee_required",
+      });
+      return;
+    }
+
+    // Only this middleware states an employee's sites, so a browser can never claim a scope. An internal service
+    // calling without an identity context may forward the scope of the employee it acts for.
+    if (verifiedContext || !isServiceSecretValid) delete request.headers[ACTOR_SITE_IDS_HEADER];
+
     if (
       verifiedContext &&
       verifiedContext.actorType === "employee" &&
       !verifiedContext.roles.includes("Platform Admin")
     ) {
       const employeeSiteIds = verifiedContext.siteIds ?? [];
+      request.headers[ACTOR_SITE_IDS_HEADER] = employeeSiteIds.join(",");
 
       if (employeeSiteIds.length === 0) {
         const isSiteScoped = siteScopedPrefixes.some((prefix) => matchesPathPrefix(request.path, prefix));
@@ -317,11 +467,13 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
         injectDefaultSiteQuery(request, employeeSiteIds[0] as string);
       }
 
-      const querySiteIds = extractSiteIds(request.query);
-      const bodySiteIds = extractSiteIds(request.body);
-      const requestedSiteIds = [...new Set([...querySiteIds, ...bodySiteIds])];
+      // A transfer spans two sites and belongs to either end's scope, so the pair is judged as a whole; the route then
+      // writes or reads only rows the employee's sites take part in.
+      const queryOffenders = findOutOfScopeSiteIds(request.query, employeeSiteIds);
+      const bodyOffenders = findOutOfScopeSiteIds(request.body, employeeSiteIds);
+      const requestedSiteIds = [...new Set([...queryOffenders, ...bodyOffenders])];
 
-      if (requestedSiteIds.some((siteId) => !employeeSiteIds.includes(siteId))) {
+      if (requestedSiteIds.length > 0) {
         response.status(403).json({
           title: "Site access denied",
           status: 403,

@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import {
@@ -28,9 +28,9 @@ export class ProcurementRepository {
     private readonly receiveInventory?: InventoryReceiptHandler,
   ) {}
 
-  public async listPurchaseOrders(siteId?: string, status?: string, limit = 100) {
+  public async listPurchaseOrders(siteIds?: string[], status?: string, limit = 100) {
     const conditions = [
-      siteId ? eq(purchaseOrders.siteId, siteId) : undefined,
+      siteIds ? inArray(purchaseOrders.siteId, siteIds) : undefined,
       status ? eq(purchaseOrders.status, status) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
     const orders = await this.database.db
@@ -244,11 +244,11 @@ export class ProcurementRepository {
     };
   }
 
-  public async listReceipts(siteId?: string, limit = 100) {
+  public async listReceipts(siteIds?: string[], limit = 100) {
     const receipts = await this.database.db
       .select()
       .from(goodsReceipts)
-      .where(siteId ? eq(goodsReceipts.siteId, siteId) : undefined)
+      .where(siteIds ? inArray(goodsReceipts.siteId, siteIds) : undefined)
       .orderBy(asc(goodsReceipts.receivedAt))
       .limit(Math.min(Math.max(limit, 1), 500));
     return Promise.all(

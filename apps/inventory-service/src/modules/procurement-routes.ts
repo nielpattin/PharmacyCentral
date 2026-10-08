@@ -7,6 +7,7 @@ import {
   purchaseOrderActionSchema,
 } from "../contracts/procurement.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
+import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import { ProcurementRepository } from "./procurement-repository.ts";
 
@@ -14,14 +15,22 @@ const idSchema = z.object({ id: z.string().uuid() });
 const actor = (request: import("express").Request): string =>
   request.header("X-Actor-Id") ?? "00000000-0000-0000-0000-000000000001";
 
-export const createProcurementRouter = (repository: ProcurementRepository | undefined): Router => {
+export type ProcurementRouterOptions = {
+  /** Validated at boot by main.ts, so a missing one is a type error and never a localhost guess. */
+  catalogServiceUrl: string;
+};
+
+export const createProcurementRouter = (
+  repository: ProcurementRepository | undefined,
+  options: ProcurementRouterOptions,
+): Router => {
   const router = Router();
   router.get("/procurement/purchase-orders", async (request, response, next) => {
     if (!repository) return unavailable(response);
     try {
       return response.json(
         await repository.listPurchaseOrders(
-          typeof request.query.siteId === "string" ? request.query.siteId : undefined,
+          listSiteIds(request),
           typeof request.query.status === "string" ? request.query.status : undefined,
           queryLimit(request.query.limit),
         ),
@@ -48,6 +57,7 @@ export const createProcurementRouter = (repository: ProcurementRepository | unde
     if (!parsed.success) return invalid(response);
     try {
       await assertCatalogReferences(
+        options.catalogServiceUrl,
         parsed.data.supplierId,
         parsed.data.siteId,
         parsed.data.lines.map((line) => line.productId),
@@ -78,12 +88,7 @@ export const createProcurementRouter = (repository: ProcurementRepository | unde
   router.get("/procurement/goods-receipts", async (request, response, next) => {
     if (!repository) return unavailable(response);
     try {
-      return response.json(
-        await repository.listReceipts(
-          typeof request.query.siteId === "string" ? request.query.siteId : undefined,
-          queryLimit(request.query.limit),
-        ),
-      );
+      return response.json(await repository.listReceipts(listSiteIds(request), queryLimit(request.query.limit)));
     } catch (error) {
       return next(error);
     }
@@ -107,6 +112,7 @@ export const createProcurementRouter = (repository: ProcurementRepository | unde
     if (!parsed.success) return invalid(response);
     try {
       await assertCatalogReferences(
+        options.catalogServiceUrl,
         parsed.data.supplierId,
         parsed.data.siteId,
         parsed.data.lines.map((line) => line.productId),
@@ -136,12 +142,12 @@ const queryLimit = (value: unknown): number => {
 };
 
 const assertCatalogReferences = async (
+  baseUrl: string,
   supplierId: string,
   siteId: string,
   productIds: string[],
   storageLocationId?: string,
 ): Promise<void> => {
-  const baseUrl = process.env.CATALOG_SERVICE_URL ?? "http://localhost:3002";
   const paths = [
     `/suppliers/${supplierId}`,
     `/sites/${siteId}`,

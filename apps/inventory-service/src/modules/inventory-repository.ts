@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import {
@@ -48,13 +48,13 @@ export class InventoryRepository {
 
   public async listBalances(
     productId?: string,
-    siteId?: string,
+    siteIds?: string[],
     storageLocationId?: string,
     includeZeroBalances = true,
   ) {
     const filters = [
       productId ? eq(productBatches.productId, productId) : undefined,
-      siteId ? eq(inventoryBalances.siteId, siteId) : undefined,
+      siteIds ? inArray(inventoryBalances.siteId, siteIds) : undefined,
       storageLocationId ? eq(inventoryBalances.storageLocationId, storageLocationId) : undefined,
       includeZeroBalances ? undefined : gt(inventoryBalances.quantityOnHand, "0"),
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
@@ -78,7 +78,7 @@ export class InventoryRepository {
     input: {
       productId?: string | undefined;
       productBatchId?: string | undefined;
-      siteId?: string | undefined;
+      siteIds?: string[] | undefined;
       storageLocationId?: string | undefined;
       limit?: number | undefined;
     } = {},
@@ -86,7 +86,7 @@ export class InventoryRepository {
     const conditions = [
       input.productId ? eq(stockLedgerEntries.productId, input.productId) : undefined,
       input.productBatchId ? eq(stockLedgerEntries.productBatchId, input.productBatchId) : undefined,
-      input.siteId ? eq(stockLedgerEntries.siteId, input.siteId) : undefined,
+      input.siteIds ? inArray(stockLedgerEntries.siteId, input.siteIds) : undefined,
       input.storageLocationId ? eq(stockLedgerEntries.storageLocationId, input.storageLocationId) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
     return this.database.db
@@ -99,14 +99,14 @@ export class InventoryRepository {
 
   public async listAdjustments(
     input: {
-      siteId?: string | undefined;
+      siteIds?: string[] | undefined;
       status?: string | undefined;
       stocktakeSessionId?: string | undefined;
       limit?: number | undefined;
     } = {},
   ) {
     const conditions = [
-      input.siteId ? eq(stockAdjustments.siteId, input.siteId) : undefined,
+      input.siteIds ? inArray(stockAdjustments.siteId, input.siteIds) : undefined,
       input.status ? eq(stockAdjustments.status, input.status) : undefined,
       input.stocktakeSessionId ? eq(stockAdjustments.stocktakeSessionId, input.stocktakeSessionId) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
@@ -527,10 +527,10 @@ export class InventoryRepository {
       .orderBy(asc(stockReservations.createdAt));
   }
 
-  public async listTransfers(siteId?: string, status?: string, limit = 100) {
+  public async listTransfers(siteIds?: string[], status?: string, limit = 100) {
     const conditions = [
-      siteId
-        ? sql`${transferOrders.sourceSiteId} = ${siteId} OR ${transferOrders.destinationSiteId} = ${siteId}`
+      siteIds
+        ? or(inArray(transferOrders.sourceSiteId, siteIds), inArray(transferOrders.destinationSiteId, siteIds))
         : undefined,
       status ? eq(transferOrders.status, status) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
@@ -566,9 +566,9 @@ export class InventoryRepository {
       : undefined;
   }
 
-  public async listReplenishments(siteId?: string, status?: string, limit = 100) {
+  public async listReplenishments(siteIds?: string[], status?: string, limit = 100) {
     const conditions = [
-      siteId ? eq(replenishmentRequests.siteId, siteId) : undefined,
+      siteIds ? inArray(replenishmentRequests.siteId, siteIds) : undefined,
       status ? eq(replenishmentRequests.status, status) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
     const requests = await this.database.db
@@ -747,9 +747,9 @@ export class InventoryRepository {
     return result.updated;
   }
 
-  public async listStocktakes(siteId?: string, status?: string, limit = 100) {
+  public async listStocktakes(siteIds?: string[], status?: string, limit = 100) {
     const conditions = [
-      siteId ? eq(stocktakes.siteId, siteId) : undefined,
+      siteIds ? inArray(stocktakes.siteId, siteIds) : undefined,
       status ? eq(stocktakes.status, status) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
     const sessions = await this.database.db
@@ -788,11 +788,11 @@ export class InventoryRepository {
       : undefined;
   }
 
-  public async listReturns(siteId?: string) {
+  public async listReturns(siteIds?: string[]) {
     const requests = await this.database.db
       .select()
       .from(returnRequests)
-      .where(siteId ? eq(returnRequests.siteId, siteId) : undefined)
+      .where(siteIds ? inArray(returnRequests.siteId, siteIds) : undefined)
       .orderBy(desc(returnRequests.createdAt));
     return Promise.all(
       requests.map(async (request) => ({
