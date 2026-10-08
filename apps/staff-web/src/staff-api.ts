@@ -1,5 +1,7 @@
 import { apiServiceForPath, createIdentityContextCache, type IdentityContexts } from "@pharmacy/ui";
 
+import { getLanguage, type Language } from "./i18n.ts";
+
 export type ApiRequestOptions = RequestInit & {
   csrfToken?: string;
   idempotencyKey?: string;
@@ -107,23 +109,34 @@ export const numberValue = (value: unknown, fallback = 0): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-export const formatQuantity = (value: unknown): string =>
-  new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(numberValue(value));
+/**
+ * Numbers and dates follow the language the staff member picked, not the browser's locale, so a Vietnamese screen
+ * reads `1.750.000` and `4 thg 10, 2026` while the English one reads `1,750,000` and `Oct 4, 2026`. The formatters
+ * are built once, because every table cell formats through them.
+ */
+type Formatters = { quantity: Intl.NumberFormat; dateTime: Intl.DateTimeFormat; date: Intl.DateTimeFormat };
+
+const createFormatters = (locale: string): Formatters => ({
+  quantity: new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
+  dateTime: new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }),
+  date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }),
+});
+const FORMATTERS: Record<Language, Formatters> = { en: createFormatters("en-US"), vi: createFormatters("vi-VN") };
+
+export const formatQuantity = (value: unknown): string => FORMATTERS[getLanguage()].quantity.format(numberValue(value));
 
 export const formatDateTime = (value: unknown): string => {
   const raw = text(value, "");
   if (!raw) return "-";
   const date = new Date(raw);
-  return Number.isNaN(date.getTime())
-    ? raw
-    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return Number.isNaN(date.getTime()) ? raw : FORMATTERS[getLanguage()].dateTime.format(date);
 };
 
 export const formatDate = (value: unknown): string => {
   const raw = text(value, "");
   if (!raw) return "-";
   const date = new Date(raw);
-  return Number.isNaN(date.getTime()) ? raw : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+  return Number.isNaN(date.getTime()) ? raw : FORMATTERS[getLanguage()].date.format(date);
 };
 
 export const idOf = (row: JsonRecord): string => text(row.id ?? row.productId ?? row.siteId ?? row.purchaseOrderId);

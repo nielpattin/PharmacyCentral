@@ -200,7 +200,7 @@ Use **Adjustments** to prepare and approve standalone stock adjustments. Approva
 
 ## Financial reconciliation
 
-Use **Finance** to review inventory valuation and operational reconciliation by site and date range. It summarizes value based on published prices, receipts, dispensing, returns, adjustments, and transfers.
+Use **Finance** to review inventory valuation and operational reconciliation by site and date range. Stock on hand is valued at today's published selling price per base unit, because the catalog records no purchase cost; a stocked product without a published price is counted under **Missing prices** and adds nothing to the value. Returns, adjustments, and transfers are the stock ledger movements of the period.
 
 External accounting ledger posting is outside the scope of this workspace.
 

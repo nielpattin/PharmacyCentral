@@ -612,7 +612,7 @@ export const InventorySection = ({
               },
               { key: "quantityDelta", label: "Change", render: (row) => formatQuantity(row.quantityDelta) },
               { key: "quantityAfter", label: "After", render: (row) => formatQuantity(row.quantityAfter) },
-              { key: "movementType", label: "Type" },
+              { key: "movementType", label: "Type", render: (row) => translateText(text(row.movementType)) },
               { key: "occurredAt", label: "Occurred", render: (row) => formatDateTime(row.occurredAt) },
             ]}
           />

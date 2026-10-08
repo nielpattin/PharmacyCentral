@@ -215,8 +215,23 @@ export class OperationsRepository {
     };
   }
 
+  /**
+   * Stock is valued at today's published selling price, because the catalog keeps no purchase cost; a batch whose
+   * product has no published price is listed as missing a price and adds nothing to the value. The movement figures
+   * are the stock ledger of the period, summed by inventory-service.
+   */
   public async financeSummary(from?: string, to?: string, siteIds?: string[]) {
-    const live = await this.loadLiveOperations(siteIds);
+    const fromDate = from ?? new Date(0).toISOString();
+    const toDate = to ?? new Date().toISOString();
+    const period = new URLSearchParams({
+      from: new Date(fromDate).toISOString(),
+      to: new Date(toDate).toISOString(),
+    });
+    const [live, movementSummary, prices] = await Promise.all([
+      this.loadLiveOperations(siteIds),
+      this.fetchRows(this.options.inventoryUrl, `/inventory/movements/summary?${period.toString()}`, siteIds),
+      this.fetchRows(this.options.catalogUrl, "/pricing/prices?status=Published&limit=500"),
+    ]);
     const conditions = [
       from ? gte(financeEntries.occurredAt, new Date(from)) : undefined,
       to ? lte(financeEntries.occurredAt, new Date(to)) : undefined,
@@ -232,8 +247,11 @@ export class OperationsRepository {
     const refunded = entries
       .filter((entry) => entry.entryType === "Refund")
       .reduce((total, entry) => total + Number(entry.amount), 0);
-    const fromDate = from ?? new Date(0).toISOString();
-    const toDate = to ?? new Date().toISOString();
+    // The balances are today's stock, so they are valued at today's prices whatever period the money covers.
+    const valuationLines = valueBalances(live, prices, new Date().toISOString().slice(0, 10));
+    const movements = new Map(movementSummary.map((row) => [String(row.movementType), row]));
+    const moved = (movementType: string, direction: "quantityIn" | "quantityOut"): number =>
+      Number(movements.get(movementType)?.[direction] ?? 0);
     return {
       currency: "VND",
       paid,
@@ -245,10 +263,10 @@ export class OperationsRepository {
       to: toDate,
       totalQuantityOnHand: live.balances.reduce((sum, row) => sum + rowQuantity(row, "quantityOnHand"), 0),
       totalQuantityReserved: live.balances.reduce((sum, row) => sum + rowQuantity(row, "quantityReserved"), 0),
-      inventoryValue: 0,
-      reservedValue: 0,
+      inventoryValue: Math.round(valuationLines.reduce((sum, line) => sum + (line.valueOnHand ?? 0), 0)),
+      reservedValue: Math.round(valuationLines.reduce((sum, line) => sum + (line.valueReserved ?? 0), 0)),
       balanceCount: live.balances.length,
-      missingPriceCount: 0,
+      missingPriceCount: valuationLines.filter((line) => line.unitPrice === null).length,
       receiptCount: live.receipts.length,
       receiptQuantity: live.receipts.reduce(
         (sum, receipt) =>
@@ -272,12 +290,21 @@ export class OperationsRepository {
             : 0),
         0,
       ),
-      returnQuantity: 0,
-      adjustmentQuantity: 0,
-      transferOutQuantity: 0,
-      transferInQuantity: 0,
-      valuationLines: [],
-      activityLines: [],
+      returnQuantity: moved("InventoryReturn", "quantityOut"),
+      adjustmentQuantity: ["StockAdjustment", "StocktakeAdjustment", "Adjustment"].reduce(
+        (sum, movementType) => sum + moved(movementType, "quantityIn") - moved(movementType, "quantityOut"),
+        0,
+      ),
+      transferOutQuantity: moved("TransferOut", "quantityOut"),
+      transferInQuantity: moved("TransferIn", "quantityIn"),
+      valuationLines,
+      activityLines: movementSummary.map((row) => ({
+        activityType: row.movementType,
+        count: row.count,
+        quantityIn: row.quantityIn,
+        quantityOut: row.quantityOut,
+        latestActivityAtUtc: row.latestOccurredAt,
+      })),
     };
   }
 
@@ -310,7 +337,8 @@ export class OperationsRepository {
     ] = await Promise.all([
       this.fetchRows(this.options.catalogUrl, "/sites"),
       this.fetchRows(this.options.catalogUrl, "/storage-locations", siteIds),
-      this.fetchRows(this.options.catalogUrl, "/products?limit=500"),
+      // The catalog caps one page of products at 100; a larger limit is refused with 400 and the list comes back empty.
+      this.fetchRows(this.options.catalogUrl, "/products?limit=100"),
       this.fetchRows(this.options.catalogUrl, "/suppliers"),
       this.fetchRows(this.options.inventoryUrl, "/inventory/balances", siteIds),
       this.fetchRows(this.options.inventoryUrl, "/inventory/batches"),
@@ -429,3 +457,84 @@ const firstUuid = (value: unknown): string | null =>
   typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
     ? value
     : null;
+
+type ValuationLine = {
+  productId: string | null;
+  productName: string;
+  batchNumber: string | null;
+  siteId: string | null;
+  siteName: string;
+  quantityOnHand: number;
+  quantityReserved: number;
+  unitPrice: number | null;
+  valueOnHand: number | null;
+  valueReserved: number | null;
+  priceStatus: "Priced" | "Missing price";
+};
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+/**
+ * Price of one base unit of every product on `day`. A published price is per sale unit while stock is counted in base
+ * units, so each price is divided by its unit's conversion factor; the base unit's own price wins over a larger
+ * unit's. A price whose unit the product list does not carry cannot be converted and is skipped.
+ */
+const basePricesOn = (
+  products: Array<Record<string, unknown>>,
+  prices: Array<Record<string, unknown>>,
+  day: string,
+): Map<string, number> => {
+  const units = new Map<string, { factor: number; isBase: boolean }>();
+  for (const product of products) {
+    for (const unit of Array.isArray(product.units) ? product.units.map(asRecord) : []) {
+      const factor = Number(unit.conversionFactorToBaseUnit);
+      if (typeof unit.id === "string" && factor > 0) units.set(unit.id, { factor, isBase: unit.isBaseUnit === true });
+    }
+  }
+  const chosen = new Map<string, { price: number; isBase: boolean }>();
+  for (const price of prices) {
+    const effectiveTo = typeof price.effectiveTo === "string" ? price.effectiveTo : null;
+    if (String(price.effectiveFrom) > day || (effectiveTo !== null && effectiveTo < day)) continue;
+    const unit = units.get(String(price.productUnitId));
+    const amount = Number(price.unitPrice);
+    if (!unit || !Number.isFinite(amount)) continue;
+    const productId = String(price.productId);
+    const current = chosen.get(productId);
+    if (!current || (unit.isBase && !current.isBase)) {
+      chosen.set(productId, { price: amount / unit.factor, isBase: unit.isBase });
+    }
+  }
+  return new Map([...chosen].map(([productId, entry]) => [productId, entry.price]));
+};
+
+/** One valuation line per stocked balance row; an empty row has nothing to value and is left out. */
+const valueBalances = (live: LiveOperations, prices: Array<Record<string, unknown>>, day: string): ValuationLine[] => {
+  const basePrices = basePricesOn(live.products, prices, day);
+  const productNames = new Map(live.products.map((product) => [String(product.id), String(product.name)]));
+  const siteNames = new Map(live.sites.map((site) => [String(site.id), String(site.name)]));
+  return live.balances
+    .filter((row) => rowQuantity(row, "quantityOnHand") > 0)
+    .map((row) => {
+      const balance = asRecord(row.balance);
+      const batch = asRecord(row.batch);
+      const productId = typeof batch.productId === "string" ? batch.productId : null;
+      const siteId = typeof balance.siteId === "string" ? balance.siteId : null;
+      const unitPrice = productId === null ? null : (basePrices.get(productId) ?? null);
+      const quantityOnHand = rowQuantity(row, "quantityOnHand");
+      const quantityReserved = rowQuantity(row, "quantityReserved");
+      return {
+        productId,
+        productName: (productId === null ? undefined : productNames.get(productId)) ?? productId ?? "-",
+        batchNumber: typeof batch.batchNumber === "string" ? batch.batchNumber : null,
+        siteId,
+        siteName: (siteId === null ? undefined : siteNames.get(siteId)) ?? siteId ?? "-",
+        quantityOnHand,
+        quantityReserved,
+        unitPrice,
+        valueOnHand: unitPrice === null ? null : Math.round(quantityOnHand * unitPrice),
+        valueReserved: unitPrice === null ? null : Math.round(quantityReserved * unitPrice),
+        priceStatus: unitPrice === null ? "Missing price" : "Priced",
+      };
+    });
+};

@@ -82,6 +82,11 @@ const returnSchema = z.object({
 });
 const countSchema = z.object({ countedQuantity: z.number().nonnegative() });
 
+const periodSchema = z.object({
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+});
+
 export const createInventoryRouter = (repository: InventoryRepository | undefined): Router => {
   const router = Router();
   router.get("/inventory/balances", async (request, response, next) => {
@@ -186,6 +191,22 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
       return adjustment
         ? response.json(adjustment)
         : response.status(404).json({ title: "Adjustment not found", status: 404 });
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.get("/inventory/movements/summary", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    const period = periodSchema.safeParse(request.query);
+    if (!period.success) return invalid(response);
+    try {
+      return response.json(
+        await repository.summarizeMovements({
+          siteIds: listSiteIds(request),
+          ...(period.data.from ? { from: new Date(period.data.from) } : {}),
+          ...(period.data.to ? { to: new Date(period.data.to) } : {}),
+        }),
+      );
     } catch (error) {
       return next(error);
     }

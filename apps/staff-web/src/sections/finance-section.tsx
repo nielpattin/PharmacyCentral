@@ -5,7 +5,7 @@ import { useSession } from "../auth.ts";
 import { DataTable } from "../components/data-table.tsx";
 import { Field, RefreshButton, SubTabs } from "../components/forms.tsx";
 import { translateText } from "../i18n.ts";
-import { formatDateTime, readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
+import { formatDateTime, formatQuantity, readOne, readRows, text, type JsonRecord } from "../staff-api.ts";
 import { useStaffMutation } from "../hooks/useStaffMutation.ts";
 
 export const FinanceSection = ({
@@ -87,24 +87,27 @@ export const FinanceSection = ({
       {tab === "Summary" ? (
         <>
           <dl className="dash-grid">
-            {[
-              ["Paid", summary?.paid ?? 0],
-              ["Refunded", summary?.refunded ?? 0],
-              ["Net", summary?.net ?? 0],
-              ["Inventory value", summary?.inventoryValue ?? 0],
-              ["Reserved value", summary?.reservedValue ?? 0],
-              ["Missing prices", summary?.missingPriceCount ?? 0],
-              ["Receipts", summary?.receiptQuantity ?? 0],
-              ["Dispensed", summary?.dispensedQuantity ?? 0],
-              ["Returns", summary?.returnQuantity ?? 0],
-              ["Adjustments", summary?.adjustmentQuantity ?? 0],
-              ["Transfer out", summary?.transferOutQuantity ?? 0],
-              ["Transfer in", summary?.transferInQuantity ?? 0],
-            ].map(([label, value]) => (
-              <div className="dash-card" key={text(label)}>
-                <dt>{text(label)}</dt>
+            {(
+              [
+                ["Paid", summary?.paid, true],
+                ["Refunded", summary?.refunded, true],
+                ["Net", summary?.net, true],
+                ["Inventory value", summary?.inventoryValue, true],
+                ["Reserved value", summary?.reservedValue, true],
+                ["Missing prices", summary?.missingPriceCount, false],
+                ["Receipts", summary?.receiptQuantity, false],
+                ["Dispensed", summary?.dispensedQuantity, false],
+                ["Returns", summary?.returnQuantity, false],
+                ["Adjustments", summary?.adjustmentQuantity, false],
+                ["Transfer out", summary?.transferOutQuantity, false],
+                ["Transfer in", summary?.transferInQuantity, false],
+              ] as const
+            ).map(([label, value, isMoney]) => (
+              <div className="dash-card" key={label}>
+                <dt>{translateText(label)}</dt>
                 <dd>
-                  {text(value)} {text(summary?.currency, "VND")}
+                  {formatQuantity(value ?? 0)}
+                  {isMoney ? ` ${text(summary?.currency, "VND")}` : null}
                 </dd>
               </div>
             ))}
@@ -120,10 +123,10 @@ export const FinanceSection = ({
                 : []
             }
             columns={[
-              { key: "activityType", label: "Activity" },
-              { key: "count", label: "Count" },
-              { key: "quantityIn", label: "Quantity in" },
-              { key: "quantityOut", label: "Quantity out" },
+              { key: "activityType", label: "Activity", render: (row) => translateText(text(row.activityType)) },
+              { key: "count", label: "Count", render: (row) => formatQuantity(row.count) },
+              { key: "quantityIn", label: "Quantity in", render: (row) => formatQuantity(row.quantityIn) },
+              { key: "quantityOut", label: "Quantity out", render: (row) => formatQuantity(row.quantityOut) },
               { key: "latestActivityAtUtc", label: "Latest", render: (row) => formatDateTime(row.latestActivityAtUtc) },
             ]}
           />
@@ -141,9 +144,16 @@ export const FinanceSection = ({
               { key: "productName", label: "Product" },
               { key: "batchNumber", label: "Batch" },
               { key: "siteName", label: "Site" },
-              { key: "quantityOnHand", label: "On hand" },
-              { key: "valueOnHand", label: "Value" },
-              { key: "priceStatus", label: "Price status" },
+              { key: "quantityOnHand", label: "On hand", render: (row) => formatQuantity(row.quantityOnHand) },
+              {
+                key: "valueOnHand",
+                label: "Value",
+                render: (row) =>
+                  row.valueOnHand === null
+                    ? "-"
+                    : `${formatQuantity(row.valueOnHand)} ${text(summary?.currency, "VND")}`,
+              },
+              { key: "priceStatus", label: "Price status", render: (row) => translateText(text(row.priceStatus)) },
             ]}
           />
         </>
@@ -156,7 +166,11 @@ export const FinanceSection = ({
             { key: "id", label: "Invoice" },
             { key: "paymentCode", label: "Payment code" },
             { key: "orderId", label: "Order" },
-            { key: "amount", label: "Amount" },
+            {
+              key: "amount",
+              label: "Amount",
+              render: (row) => `${formatQuantity(row.amount)} ${text(row.currency, "VND")}`,
+            },
             {
               key: "status",
               label: "Status",

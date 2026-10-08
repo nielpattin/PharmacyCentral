@@ -63,6 +63,9 @@ const procurementRepository = database
         quantityDelta: input.quantity,
         movementType: "GoodsReceipt",
         reason: `Goods receipt ${input.batchNumber}`,
+        occurredAtUtc: input.receivedAt.toISOString(),
+        referenceType: "GoodsReceipt",
+        referenceId: input.goodsReceiptId,
         createdBy: input.actorId,
       });
     })

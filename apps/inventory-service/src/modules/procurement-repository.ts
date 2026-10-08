@@ -19,6 +19,9 @@ type InventoryReceipt = {
   storageLocationId: string;
   quantity: number;
   actorId: string;
+  /** The ledger entry is dated when the goods arrived and points back at its receipt. */
+  receivedAt: Date;
+  goodsReceiptId: string;
 };
 type InventoryReceiptHandler = (input: InventoryReceipt) => Promise<void>;
 
@@ -234,6 +237,8 @@ export class ProcurementRepository {
           siteId: input.siteId,
           storageLocationId: input.storageLocationId,
           actorId: input.createdBy,
+          receivedAt: receipt.receivedAt,
+          goodsReceiptId: receipt.id,
         });
     return {
       ...receipt,

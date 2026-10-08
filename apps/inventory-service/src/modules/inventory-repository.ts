@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from "drizzle-orm";
 
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import {
@@ -95,6 +95,38 @@ export class InventoryRepository {
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(stockLedgerEntries.occurredAt))
       .limit(Math.min(Math.max(input.limit ?? 500, 1), 500));
+  }
+
+  /**
+   * Ledger movements of a period grouped by movement type: how often each happened, what it brought in, what it took
+   * out, and when it last happened. Summed in the database, so a busy period is never cut to one page of movements.
+   */
+  public async summarizeMovements(input: { siteIds?: string[] | undefined; from?: Date; to?: Date }) {
+    const conditions = [
+      input.siteIds ? inArray(stockLedgerEntries.siteId, input.siteIds) : undefined,
+      input.from ? gte(stockLedgerEntries.occurredAt, input.from) : undefined,
+      input.to ? lte(stockLedgerEntries.occurredAt, input.to) : undefined,
+    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
+    const latest = sql<Date>`max(${stockLedgerEntries.occurredAt})`;
+    const rows = await this.database.db
+      .select({
+        movementType: stockLedgerEntries.movementType,
+        count: sql<number>`count(*)::int`,
+        quantityIn: sql<string>`coalesce(sum(${stockLedgerEntries.quantityDelta}) filter (where ${stockLedgerEntries.quantityDelta} > 0), 0)`,
+        quantityOut: sql<string>`coalesce(-sum(${stockLedgerEntries.quantityDelta}) filter (where ${stockLedgerEntries.quantityDelta} < 0), 0)`,
+        latestOccurredAt: latest,
+      })
+      .from(stockLedgerEntries)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .groupBy(stockLedgerEntries.movementType)
+      .orderBy(desc(latest));
+    return rows.map((row) => ({
+      movementType: row.movementType,
+      count: Number(row.count),
+      quantityIn: Number(row.quantityIn),
+      quantityOut: Number(row.quantityOut),
+      latestOccurredAt: new Date(row.latestOccurredAt).toISOString(),
+    }));
   }
 
   public async listAdjustments(

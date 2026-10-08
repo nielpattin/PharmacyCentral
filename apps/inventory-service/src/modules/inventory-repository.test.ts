@@ -121,3 +121,69 @@ describe("InventoryRepository site filters", () => {
     await expect(idsFor([])).resolves.toEqual([]);
   });
 });
+
+/** The finance page reads these sums; only the real engine shows the `FILTER` clauses split each direction apart. */
+describe("InventoryRepository movement summary", () => {
+  const client = new PGlite();
+  const db = drizzle({ client, schema });
+  const repository = new InventoryRepository({ db, pool: undefined } as unknown as InventoryDatabase);
+
+  const siteA = "00000000-0000-4000-8000-00000000000a";
+  const siteB = "00000000-0000-4000-8000-00000000000b";
+  const location = "00000000-0000-4000-8000-00000000001a";
+  const product = "00000000-0000-4000-8000-00000000002a";
+  const batch = "00000000-0000-4000-8000-00000000004a";
+
+  const movement = (siteId: string, movementType: string, quantityDelta: string, occurredAt: string) => ({
+    productId: product,
+    productBatchId: batch,
+    siteId,
+    storageLocationId: location,
+    quantityDelta,
+    quantityAfter: "0",
+    movementType,
+    occurredAt: new Date(occurredAt),
+  });
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder });
+    await db
+      .insert(schema.stockLedgerEntries)
+      .values([
+        movement(siteA, "StockAdjustment", "5", "2026-09-10T08:00:00Z"),
+        movement(siteA, "StockAdjustment", "-2", "2026-09-12T08:00:00Z"),
+        movement(siteA, "TransferOut", "-4", "2026-09-11T08:00:00Z"),
+        movement(siteA, "TransferOut", "-7", "2026-08-01T08:00:00Z"),
+        movement(siteB, "StockAdjustment", "100", "2026-09-10T08:00:00Z"),
+      ]);
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it("sums each movement type's inflow and outflow within the period and the reader's sites", async () => {
+    await expect(
+      repository.summarizeMovements({
+        siteIds: [siteA],
+        from: new Date("2026-09-01T00:00:00Z"),
+        to: new Date("2026-09-30T23:59:59Z"),
+      }),
+    ).resolves.toEqual([
+      {
+        movementType: "StockAdjustment",
+        count: 2,
+        quantityIn: 5,
+        quantityOut: 2,
+        latestOccurredAt: "2026-09-12T08:00:00.000Z",
+      },
+      {
+        movementType: "TransferOut",
+        count: 1,
+        quantityIn: 0,
+        quantityOut: 4,
+        latestOccurredAt: "2026-09-11T08:00:00.000Z",
+      },
+    ]);
+  });
+});
