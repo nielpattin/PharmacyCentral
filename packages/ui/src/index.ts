@@ -6,6 +6,7 @@ export { Button, type ButtonProps } from "./components/button.tsx";
 export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./components/card.tsx";
 export { DataTable, type DataColumn } from "./components/data-table.tsx";
 export { Dialog } from "./components/dialog.tsx";
+export { Disclosure, type DisclosureProps } from "./components/disclosure.tsx";
 export { Field } from "./components/field.tsx";
 export { Input, type InputProps } from "./components/input.tsx";
 export { Label, type LabelProps } from "./components/label.tsx";

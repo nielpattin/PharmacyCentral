@@ -27,6 +27,7 @@ const linkTarget = (target: URL) => {
   if (productId) return { to: "/san-pham/$productId", params: { productId } } as const;
   if (target.pathname === "/don-hang") return { to: "/don-hang" } as const;
   if (target.pathname === "/don-hang-cua-toi") return { to: "/don-hang-cua-toi" } as const;
+  if (target.pathname === "/gui-don-thuoc") return { to: "/gui-don-thuoc" } as const;
   if (target.pathname === "/tai-khoan") return { to: "/tai-khoan" } as const;
   return {
     to: "/",

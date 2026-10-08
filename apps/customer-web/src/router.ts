@@ -6,6 +6,7 @@ import { CheckoutPage } from "./pages/CheckoutPage.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
 import { NotFoundPage } from "./pages/NotFoundPage.tsx";
 import { OrdersPage } from "./pages/OrdersPage.tsx";
+import { PrescriptionIntakePage } from "./pages/PrescriptionIntakePage.tsx";
 import { ProductDetailPage } from "./pages/ProductDetailPage.tsx";
 import type { SortMode } from "./storefront/catalog.ts";
 
@@ -59,6 +60,11 @@ const accountRoute = createRoute({
   validateSearch: validateAccountSearch,
   component: AccountPage,
 });
+const prescriptionIntakeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/gui-don-thuoc",
+  component: PrescriptionIntakePage,
+});
 const categoryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/danh-muc/$slug",
@@ -77,6 +83,7 @@ const routeTree = rootRoute.addChildren([
   checkoutRoute,
   ordersRoute,
   accountRoute,
+  prescriptionIntakeRoute,
 ]);
 
 export const router = createRouter({

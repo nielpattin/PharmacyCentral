@@ -23,6 +23,23 @@ export const setIdentityContextsEnabled = (enabled: boolean): void => {
   if (!enabled) identityContextCache.invalidate();
 };
 
+/**
+ * A non-2xx answer from a service. It carries the problem body's `code` and, when the service sent a numeric
+ * `Retry-After`, the seconds to wait, so a caller can act on the reason instead of the wording; every caller that
+ * only reads `message` keeps working because this is still an `Error`.
+ */
+export class ApiError extends Error {
+  public constructor(
+    public readonly status: number,
+    message: string,
+    public readonly code?: string,
+    public readonly retryAfterSeconds?: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export const request = async <T>(url: string, options: ApiRequestOptions = {}): Promise<T> => {
   const attempt = async (retried: boolean): Promise<T> => {
     const headers = new Headers(options.headers);
@@ -44,13 +61,21 @@ export const request = async <T>(url: string, options: ApiRequestOptions = {}): 
     }
     if (!response.ok) {
       let detail = `Không thực hiện được yêu cầu (mã ${response.status})`;
+      let code: string | undefined;
       try {
-        const problem = (await response.json()) as { title?: string; detail?: string };
+        const problem = (await response.json()) as { title?: string; detail?: string; code?: string };
         detail = problem.detail ?? problem.title ?? detail;
+        code = problem.code;
       } catch {
         // Keep the status error when the upstream response is not JSON.
       }
-      throw new Error(detail);
+      const retryAfter = Number(response.headers.get("Retry-After"));
+      throw new ApiError(
+        response.status,
+        detail,
+        code,
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+      );
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
@@ -307,6 +332,47 @@ export const updateDeliveryAddress = (
 ): Promise<DeliveryAddress> =>
   request(`/api/delivery/addresses/${id}`, { method: "PATCH", body: JSON.stringify(input) });
 export const listPrescriptions = (): Promise<CustomerPrescription[]> => request("/api/prescriptions?limit=50");
+
+/** The prescription intake answer, mirroring the sales service contract: each line carries the catalog products suggested for it. */
+export type PrescriptionIntakeMatch = {
+  matchType: "name" | "ingredient";
+  strengthMatch: boolean | null;
+  score: number;
+  product: CatalogProduct;
+};
+export type PrescriptionIntakeLine = {
+  extracted: {
+    rawText: string;
+    name: string | null;
+    activeIngredients: string[];
+    strength: string | null;
+    dosageForm: string | null;
+    quantity: number | null;
+    unit: string | null;
+    usage: string | null;
+  };
+  matches: PrescriptionIntakeMatch[];
+};
+export type PrescriptionIntakeResult = {
+  source: "image" | "qr";
+  prescription: {
+    code: string | null;
+    patientName: string | null;
+    facilityName: string | null;
+    doctorName: string | null;
+    diagnosis: string | null;
+    issuedOn: string | null;
+  };
+  lines: PrescriptionIntakeLine[];
+};
+export const submitPrescriptionImage = (blob: Blob): Promise<PrescriptionIntakeResult> =>
+  request("/api/prescriptions/intake/image", {
+    method: "POST",
+    headers: { "Content-Type": blob.type },
+    body: blob,
+  });
+export const submitPrescriptionQr = (payload: string): Promise<PrescriptionIntakeResult> =>
+  request("/api/prescriptions/intake/qr", { method: "POST", body: JSON.stringify({ payload }) });
 export const updateProfile = (input: { displayName?: string; phoneNumber?: string | null }): Promise<Customer> =>
   request("/api/auth/me", { method: "PATCH", body: JSON.stringify(input) });
 export const registerCustomer = (email: string, password: string, displayName: string) =>

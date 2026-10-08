@@ -13,6 +13,7 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconPin,
+  IconQr,
   IconReceipt,
   IconSearch,
   IconStore,
@@ -60,6 +61,10 @@ export const SiteHeader = ({
               <IconPin className="size-3.5" />
               Tìm nhà thuốc
             </a>
+            <Link className="flex items-center gap-1 hover:underline" href="/gui-don-thuoc">
+              <IconQr className="size-3.5" />
+              Gửi đơn thuốc
+            </Link>
             <Link className="flex items-center gap-1 hover:underline" href="/don-hang-cua-toi">
               <IconReceipt className="size-3.5" />
               Đơn hàng của tôi
