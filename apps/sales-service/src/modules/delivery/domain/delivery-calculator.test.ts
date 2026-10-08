@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DeliveryCalculator } from "./delivery-calculator.ts";
+import { DeliveryCalculator, DeliveryOutOfRangeError } from "./delivery-calculator.ts";
 import { InMemoryDeliveryCache } from "../infrastructure/in-memory-delivery-cache.ts";
 
 describe("delivery calculation", () => {
@@ -8,7 +8,7 @@ describe("delivery calculation", () => {
     const calculator = new DeliveryCalculator(
       {
         route: async () => ({
-          distanceMeters: 12_500,
+          distanceMeters: 8_500,
           durationSeconds: 1_800,
           geometry: {
             type: "LineString",
@@ -21,7 +21,13 @@ describe("delivery calculation", () => {
       },
       { resolveAddress: async () => "Resolved address" },
       new InMemoryDeliveryCache(),
-      { perKilometer: 5_000, minimumFee: 20_000, maximumFee: 100_000, cacheTtlSeconds: 300 },
+      {
+        freeDistanceMeters: 2_000,
+        baseFee: 5_000,
+        perKilometer: 2_000,
+        maxDistanceMeters: 10_000,
+        cacheTtlSeconds: 300,
+      },
     );
 
     const result = await calculator.calculate({
@@ -33,8 +39,8 @@ describe("delivery calculation", () => {
       selectedStoreId: "store-1",
       providerResolvedAddress: "Resolved address",
       addressNote: "Floor 2",
-      distanceMeters: 12_500,
-      fee: 62_500,
+      distanceMeters: 8_500,
+      fee: 17_000,
     });
   });
 
@@ -62,7 +68,13 @@ describe("delivery calculation", () => {
           throw new Error("Valkey unavailable");
         },
       },
-      { perKilometer: 1_000, minimumFee: 0, maximumFee: 100_000, cacheTtlSeconds: 300 },
+      {
+        freeDistanceMeters: 0,
+        baseFee: 0,
+        perKilometer: 1_000,
+        maxDistanceMeters: 10_000,
+        cacheTtlSeconds: 300,
+      },
     );
 
     await expect(
@@ -71,6 +83,46 @@ describe("delivery calculation", () => {
         destination: { latitude: 2, longitude: 2 },
       }),
     ).resolves.toMatchObject({ fee: 1_000 });
+  });
+
+  it("prices routes by free distance, base fee, and full extra kilometers, and refuses far routes", async () => {
+    const quote = (distanceMeters: number) => {
+      const calculator = new DeliveryCalculator(
+        {
+          route: async () => ({
+            distanceMeters,
+            durationSeconds: 60,
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [1, 1],
+                [2, 2],
+              ],
+            },
+          }),
+        },
+        { resolveAddress: async () => "Address" },
+        new InMemoryDeliveryCache(),
+        {
+          freeDistanceMeters: 2_000,
+          baseFee: 5_000,
+          perKilometer: 2_000,
+          maxDistanceMeters: 10_000,
+          cacheTtlSeconds: 300,
+        },
+      );
+      return calculator.calculate({
+        store: { id: "store-1", latitude: 1, longitude: 1 },
+        destination: { latitude: 2, longitude: 2 },
+      });
+    };
+
+    expect((await quote(1_999)).fee).toBe(0);
+    expect((await quote(2_000)).fee).toBe(5_000);
+    expect((await quote(2_999)).fee).toBe(5_000);
+    expect((await quote(3_000)).fee).toBe(7_000);
+    expect((await quote(9_999)).fee).toBe(19_000);
+    await expect(quote(10_000)).rejects.toBeInstanceOf(DeliveryOutOfRangeError);
   });
 
   it("returns cached calculations without calling the provider again", async () => {
@@ -99,7 +151,13 @@ describe("delivery calculation", () => {
         },
       },
       new InMemoryDeliveryCache(),
-      { perKilometer: 1_000, minimumFee: 0, maximumFee: 100_000, cacheTtlSeconds: 300 },
+      {
+        freeDistanceMeters: 0,
+        baseFee: 0,
+        perKilometer: 1_000,
+        maxDistanceMeters: 10_000,
+        cacheTtlSeconds: 300,
+      },
     );
     const input = { store: { id: "store-1", latitude: 1, longitude: 1 }, destination: { latitude: 2, longitude: 2 } };
     await calculator.calculate(input);

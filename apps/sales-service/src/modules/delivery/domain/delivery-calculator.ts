@@ -59,12 +59,33 @@ export type DeliveryCalculation = {
   route: RouteResult["geometry"];
 };
 
+/** The route from the selected store is too long to deliver, so the order has to be picked up instead. */
+export class DeliveryOutOfRangeError extends Error {
+  public constructor(
+    public readonly distanceMeters: number,
+    public readonly maxDistanceMeters: number,
+  ) {
+    super(`Delivery is limited to routes shorter than ${maxDistanceMeters} meters from the selected store`);
+    this.name = "DeliveryOutOfRangeError";
+  }
+}
+
 export class DeliveryCalculator {
   public constructor(
     private readonly router: RouteProvider,
     private readonly geocoder: AddressGeocoder,
     private readonly cache: DeliveryCache,
-    private readonly pricing: { perKilometer: number; minimumFee: number; maximumFee: number; cacheTtlSeconds: number },
+    private readonly pricing: {
+      /** Routes shorter than this many meters are delivered for free. */
+      freeDistanceMeters: number;
+      /** Fee for a route that reaches the free distance but not one full kilometer beyond it. */
+      baseFee: number;
+      /** Added for every full kilometer beyond the free distance. */
+      perKilometer: number;
+      /** Only routes shorter than this many meters are delivered; anything at or past it is refused. */
+      maxDistanceMeters: number;
+      cacheTtlSeconds: number;
+    },
   ) {}
 
   public async calculate(input: {
@@ -86,8 +107,9 @@ export class DeliveryCalculator {
       this.geocoder.resolveAddress(input.destination),
       this.router.route(input.store, input.destination),
     ]);
-    const rawFee = (route.distanceMeters / 1000) * this.pricing.perKilometer;
-    const fee = Math.min(this.pricing.maximumFee, Math.max(this.pricing.minimumFee, Math.round(rawFee)));
+    if (route.distanceMeters >= this.pricing.maxDistanceMeters)
+      throw new DeliveryOutOfRangeError(route.distanceMeters, this.pricing.maxDistanceMeters);
+    const fee = this.priceRoute(route.distanceMeters);
     const calculation: DeliveryCalculation = {
       selectedStoreId: input.store.id,
       origin: input.store,
@@ -108,11 +130,18 @@ export class DeliveryCalculator {
     return calculation;
   }
 
+  private priceRoute(distanceMeters: number): number {
+    const { freeDistanceMeters, baseFee, perKilometer } = this.pricing;
+    if (distanceMeters < freeDistanceMeters) return 0;
+    const extraKilometers = Math.floor((distanceMeters - freeDistanceMeters) / 1000);
+    return baseFee + extraKilometers * perKilometer;
+  }
+
   private cacheKey(store: StoreOrigin, destination: DeliveryPoint, addressNote: string | undefined): string {
     return [
       "sales",
       "delivery",
-      "v2",
+      "v6",
       store.id,
       destination.longitude.toFixed(6),
       destination.latitude.toFixed(6),

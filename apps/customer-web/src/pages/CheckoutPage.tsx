@@ -6,6 +6,7 @@ import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle } from
 
 import {
   addCartLine,
+  ApiError,
   calculateDelivery,
   clearCart,
   createOrder,
@@ -57,6 +58,13 @@ const defaultDestination: Point = { latitude: 10.7905, longitude: 106.682 };
 
 /** How long a confirmation or failure stays on screen before clearing itself. */
 const FEEDBACK_TIMEOUT_MS = 4000;
+
+/** A route longer than the store delivers is refused by the service; tell the shopper what they can do instead. */
+const deliveryErrorMessage = (reason: unknown, fallback: string): string => {
+  if (reason instanceof ApiError && reason.code === "delivery_out_of_range")
+    return "Điểm giao nằm ngoài phạm vi giao hàng của cửa hàng này. Hãy chọn cửa hàng gần hơn hoặc nhận tại cửa hàng.";
+  return reason instanceof Error ? reason.message : fallback;
+};
 
 /**
  * The SePay webhook reaches the payment service a moment after the shopper transfers, so the panel re-reads the
@@ -264,7 +272,7 @@ export const CheckoutPage = (): React.JSX.Element => {
     try {
       setDelivery(await calculateDelivery(selectedStore.id, destination, addressNote));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không tính được phí giao hàng");
+      setError(deliveryErrorMessage(reason, "Không tính được phí giao hàng"));
     } finally {
       setBusy(false);
     }
@@ -302,7 +310,7 @@ export const CheckoutPage = (): React.JSX.Element => {
         message: "Đã lưu điểm giao này. Bạn có thể đổi tên trong Tài khoản › Địa chỉ giao hàng.",
       });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không lưu được điểm giao này.");
+      setError(deliveryErrorMessage(reason, "Không lưu được điểm giao này."));
     } finally {
       setSavingDestination(false);
     }
@@ -403,7 +411,7 @@ export const CheckoutPage = (): React.JSX.Element => {
       });
       scrollToSection(RESULT_SECTION_ID);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Đặt hàng thất bại");
+      setError(deliveryErrorMessage(reason, "Đặt hàng thất bại"));
     } finally {
       setBusy(false);
     }

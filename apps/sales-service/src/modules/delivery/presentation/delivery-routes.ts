@@ -7,7 +7,12 @@ import {
   reverseGeocodeRequestSchema,
 } from "../../../contracts/sales.ts";
 
-import type { AddressGeocoder, AddressSearch, DeliveryCalculator } from "../domain/delivery-calculator.ts";
+import {
+  DeliveryOutOfRangeError,
+  type AddressGeocoder,
+  type AddressSearch,
+  type DeliveryCalculator,
+} from "../domain/delivery-calculator.ts";
 
 export type StoreCoordinateLookup = (
   storeId: string,
@@ -48,6 +53,16 @@ export const createDeliveryRouter = (
         }),
       );
     } catch (error) {
+      if (error instanceof DeliveryOutOfRangeError) {
+        response.status(422).json({
+          title: error.message,
+          status: 422,
+          code: "delivery_out_of_range",
+          distanceMeters: error.distanceMeters,
+          maxDistanceMeters: error.maxDistanceMeters,
+        });
+        return;
+      }
       response.status(502).json({
         title: error instanceof Error ? error.message : "Delivery provider failed",
         status: 502,

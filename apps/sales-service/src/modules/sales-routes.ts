@@ -14,7 +14,11 @@ import {
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
 
-import type { DeliveryCalculation, DeliveryCalculator } from "./delivery/domain/delivery-calculator.ts";
+import {
+  DeliveryOutOfRangeError,
+  type DeliveryCalculation,
+  type DeliveryCalculator,
+} from "./delivery/domain/delivery-calculator.ts";
 import { PrescriptionDispenseError, SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
@@ -263,6 +267,14 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
       });
       return response.status(201).json(await repository.getOrder(order.id));
     } catch (error) {
+      if (error instanceof DeliveryOutOfRangeError)
+        return response.status(422).json({
+          title: error.message,
+          status: 422,
+          code: "delivery_out_of_range",
+          distanceMeters: error.distanceMeters,
+          maxDistanceMeters: error.maxDistanceMeters,
+        });
       return next(error);
     }
   });

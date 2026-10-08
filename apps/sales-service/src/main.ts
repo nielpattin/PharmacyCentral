@@ -72,9 +72,10 @@ const routeProvider = openRouteServiceKey
   : undefined;
 const deliveryCalculator = routeProvider
   ? new DeliveryCalculator(routeProvider, addressGeocoder, deliveryCache, {
+      freeDistanceMeters: Number.parseInt(requireEnv("DELIVERY_FREE_DISTANCE_METERS"), 10),
+      baseFee: Number.parseInt(requireEnv("DELIVERY_FEE_BASE"), 10),
       perKilometer: Number.parseInt(requireEnv("DELIVERY_FEE_PER_KILOMETER"), 10),
-      minimumFee: Number.parseInt(requireEnv("DELIVERY_FEE_MINIMUM"), 10),
-      maximumFee: Number.parseInt(requireEnv("DELIVERY_FEE_MAXIMUM"), 10),
+      maxDistanceMeters: Number.parseInt(requireEnv("DELIVERY_MAX_DISTANCE_METERS"), 10),
       cacheTtlSeconds: 300,
     })
   : undefined;
