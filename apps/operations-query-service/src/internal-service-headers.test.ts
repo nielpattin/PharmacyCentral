@@ -41,12 +41,8 @@ describe("operations-query-service internalServiceHeaders", () => {
     });
   });
 
-  it("falls back to empty string when INTERNAL_SERVICE_SECRET is unset", () => {
+  it("throws when INTERNAL_SERVICE_SECRET is unset instead of sending an empty secret", () => {
     delete process.env.INTERNAL_SERVICE_SECRET;
-    const headers = internalServiceHeaders("usr-456");
-    expect(headers).toEqual({
-      "x-internal-service-secret": "",
-      "x-actor-id": "usr-456",
-    });
+    expect(() => internalServiceHeaders("usr-456")).toThrow(/INTERNAL_SERVICE_SECRET/);
   });
 });

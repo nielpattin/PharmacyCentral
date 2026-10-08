@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 
+import { listSiteIds } from "../middleware/trusted-request.ts";
 import { OperationsRepository, type IntegrationEvent } from "./operations-repository.ts";
 
 const eventSchema = z.object({
@@ -23,7 +24,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       return;
     }
     try {
-      response.json(await repository.dashboard(queryString(request.query.siteId)));
+      response.json(await repository.dashboard(listSiteIds(request)));
     } catch (error) {
       next(error);
     }
@@ -41,7 +42,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       const filters: {
         limit?: number;
         actorId?: string;
-        siteId?: string;
+        siteIds?: string[];
         action?: string;
         entityType?: string;
         entityId?: string;
@@ -50,7 +51,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       } = {};
       const limit = queryNumber(request.query.limit);
       const actorId = queryString(request.query.actorId) ?? queryString(request.query.userId);
-      const siteId = queryString(request.query.siteId);
+      const siteIds = listSiteIds(request);
       const entityId = queryString(request.query.entityId);
       const action = queryString(request.query.action);
       const entityType = queryString(request.query.entityType);
@@ -58,7 +59,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       const to = queryString(request.query.to);
       if (limit !== undefined) filters.limit = limit;
       if (actorId) filters.actorId = actorId;
-      if (siteId) filters.siteId = siteId;
+      if (siteIds) filters.siteIds = siteIds;
       if (action) filters.action = action;
       if (entityType) filters.entityType = entityType;
       if (entityId) filters.entityId = entityId;
@@ -83,7 +84,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
         await repository.financeSummary(
           queryString(request.query.from),
           queryString(request.query.to),
-          queryString(request.query.siteId),
+          listSiteIds(request),
         ),
       );
     } catch (error) {

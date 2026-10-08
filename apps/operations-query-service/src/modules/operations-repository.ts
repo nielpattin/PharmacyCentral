@@ -1,4 +1,5 @@
-import { and, desc, eq, gte, ilike, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import { ACTOR_SITE_IDS_HEADER } from "../middleware/trusted-request.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 
 import type { OperationsDatabase } from "../shared/infrastructure/database.ts";
@@ -19,7 +20,7 @@ export type OperationsServiceOptions = {
 export type AuditFilters = {
   limit?: number;
   actorId?: string;
-  siteId?: string;
+  siteIds?: string[];
   action?: string;
   entityType?: string;
   entityId?: string;
@@ -118,7 +119,7 @@ export class OperationsRepository {
   public async listAudit(filters: AuditFilters = {}) {
     const conditions = [
       filters.actorId ? eq(auditEvents.actorId, filters.actorId) : undefined,
-      filters.siteId ? eq(auditEvents.siteId, filters.siteId) : undefined,
+      filters.siteIds ? inArray(auditEvents.siteId, filters.siteIds) : undefined,
       filters.action ? ilike(auditEvents.action, `%${filters.action}%`) : undefined,
       filters.entityType ? eq(auditEvents.entityType, filters.entityType) : undefined,
       filters.entityId ? eq(auditEvents.entityId, filters.entityId) : undefined,
@@ -141,13 +142,15 @@ export class OperationsRepository {
     }));
   }
 
-  public async dashboard(siteId?: string) {
+  public async dashboard(siteIds?: string[]) {
     const rows = await this.database.db.select().from(projectionCounters);
-    const live = await this.loadLiveOperations(siteId);
-    const counters = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+    const live = await this.loadLiveOperations(siteIds);
+    // The projection counters span every site, so a site-scoped reader is answered from the live lists alone.
+    const counters: Record<string, number> = siteIds ? {} : Object.fromEntries(rows.map((row) => [row.key, row.value]));
     const recentRows = await this.database.db
       .select({ eventId: auditEvents.eventId, eventType: auditEvents.action, occurredAt: auditEvents.occurredAt })
       .from(auditEvents)
+      .where(siteIds ? inArray(auditEvents.siteId, siteIds) : undefined)
       .orderBy(desc(auditEvents.occurredAt))
       .limit(10);
     const recentActivity = recentRows.map((row) => ({
@@ -161,6 +164,10 @@ export class OperationsRepository {
       summary: null,
       occurredAtUtc: row.occurredAt,
     }));
+    // `/inventory/batches` answers every site, so a scoped reader counts only the batches its own balances hold.
+    const expiringBatchCount = siteIds
+      ? scopedExpiringBatchCount(live.balances, live.batches)
+      : live.batches.filter(isExpiringBatch).length;
     return {
       totalSites: live.sites.length || counters.catalog_sites || 0,
       activeSites: live.sites.filter((site) => site.isActive !== false).length || counters.catalog_active_sites || 0,
@@ -184,13 +191,7 @@ export class OperationsRepository {
           .length ||
         counters.inventory_low_stock_batches ||
         0,
-      expiringBatchCount:
-        live.batches.filter(
-          (row) =>
-            typeof row.expiryDate === "string" && new Date(row.expiryDate).getTime() <= Date.now() + 30 * 86400000,
-        ).length ||
-        counters.inventory_expiring_batches ||
-        0,
+      expiringBatchCount: expiringBatchCount || counters.inventory_expiring_batches || 0,
       pendingTransferCount:
         live.transfers.filter((row) =>
           ["PendingApproval", "Draft", "Approved", "InTransit"].includes(String(row.status)),
@@ -214,8 +215,8 @@ export class OperationsRepository {
     };
   }
 
-  public async financeSummary(from?: string, to?: string, siteId?: string) {
-    const live = await this.loadLiveOperations(siteId);
+  public async financeSummary(from?: string, to?: string, siteIds?: string[]) {
+    const live = await this.loadLiveOperations(siteIds);
     const conditions = [
       from ? gte(financeEntries.occurredAt, new Date(from)) : undefined,
       to ? lte(financeEntries.occurredAt, new Date(to)) : undefined,
@@ -289,8 +290,11 @@ export class OperationsRepository {
       .limit(Math.min(Math.max(limit, 1), 500));
   }
 
-  private async loadLiveOperations(siteId?: string): Promise<LiveOperations> {
-    const query = siteId ? `?siteId=${encodeURIComponent(siteId)}` : "";
+  /**
+   * Reads the other services as the caller would: `siteIds` is forwarded as the actor's site scope, so every
+   * site-bound list answers only those sites and the totals never count another pharmacy's stock.
+   */
+  private async loadLiveOperations(siteIds?: string[]): Promise<LiveOperations> {
     const [
       sites,
       locations,
@@ -305,20 +309,21 @@ export class OperationsRepository {
       prescriptions,
     ] = await Promise.all([
       this.fetchRows(this.options.catalogUrl, "/sites"),
-      this.fetchRows(this.options.catalogUrl, `/storage-locations${query}`),
+      this.fetchRows(this.options.catalogUrl, "/storage-locations", siteIds),
       this.fetchRows(this.options.catalogUrl, "/products?limit=500"),
       this.fetchRows(this.options.catalogUrl, "/suppliers"),
-      this.fetchRows(this.options.inventoryUrl, `/inventory/balances${query}`),
+      this.fetchRows(this.options.inventoryUrl, "/inventory/balances", siteIds),
       this.fetchRows(this.options.inventoryUrl, "/inventory/batches"),
-      this.fetchRows(this.options.inventoryUrl, `/inventory/transfers${query}`),
-      this.fetchRows(this.options.inventoryUrl, `/inventory/stocktakes${query}`),
-      this.fetchRows(this.options.inventoryUrl, `/inventory/adjustments${query}`),
-      this.fetchRows(this.options.inventoryUrl, `/procurement/goods-receipts${query}`),
-      this.fetchRows(this.options.salesUrl, `/prescriptions${query}`),
+      this.fetchRows(this.options.inventoryUrl, "/inventory/transfers", siteIds),
+      this.fetchRows(this.options.inventoryUrl, "/inventory/stocktakes", siteIds),
+      this.fetchRows(this.options.inventoryUrl, "/inventory/adjustments", siteIds),
+      this.fetchRows(this.options.inventoryUrl, "/procurement/goods-receipts", siteIds),
+      this.fetchRows(this.options.salesUrl, "/prescriptions", siteIds),
     ]);
     return {
-      sites,
-      locations,
+      sites: siteIds ? sites.filter((site) => siteIds.includes(String(site.id))) : sites,
+      // The scope header is not the only line of defense: a service behind us could answer every location.
+      locations: siteIds ? locations.filter((location) => siteIds.includes(String(location.siteId))) : locations,
       products,
       suppliers,
       balances,
@@ -331,18 +336,37 @@ export class OperationsRepository {
     };
   }
 
-  private async fetchRows(baseUrl: string | undefined, path: string): Promise<Array<Record<string, unknown>>> {
+  /**
+   * A site-bound read belongs to a scoped reader, and swallowing its failure would report a dashboard with no stock
+   * or no takings as if that were the truth, so a scoped read throws and the route answers 5xx. The unscoped reader
+   * keeps the lenient behavior: a network-wide dashboard is still useful without one list.
+   */
+  private async fetchRows(
+    baseUrl: string | undefined,
+    path: string,
+    siteIds?: string[],
+  ): Promise<Array<Record<string, unknown>>> {
     if (!baseUrl) return [];
     try {
       const response = await fetch(`${baseUrl}${path}`, {
-        headers: internalServiceHeaders(),
+        headers: {
+          ...internalServiceHeaders(),
+          ...(siteIds ? { [ACTOR_SITE_IDS_HEADER]: siteIds.join(",") } : {}),
+        },
         signal: AbortSignal.timeout(2_000),
       });
-      if (!response.ok) return [];
+      if (!response.ok) {
+        if (siteIds) throw new Error(`Scoped read of ${path} answered HTTP ${response.status}`);
+        return [];
+      }
       const value = (await response.json()) as unknown;
-      if (!Array.isArray(value)) return [];
+      if (!Array.isArray(value)) {
+        if (siteIds) throw new Error(`Scoped read of ${path} did not answer a list`);
+        return [];
+      }
       return value.filter((row): row is Record<string, unknown> => typeof row === "object" && row !== null);
-    } catch {
+    } catch (error) {
+      if (siteIds) throw error;
       return [];
     }
   }
@@ -369,6 +393,36 @@ const rowQuantity = (row: Record<string, unknown>, key: string): number => {
   if (balance && typeof balance === "object" && key in balance)
     return Number((balance as Record<string, unknown>)[key]);
   return 0;
+};
+
+const isExpiringBatch = (row: Record<string, unknown>): boolean =>
+  typeof row.expiryDate === "string" && new Date(row.expiryDate).getTime() <= Date.now() + 30 * 86400000;
+
+/**
+ * `inventory-service` joins the batch onto every balance row (`GET /inventory/balances` answers `{ balance, batch }`),
+ * so the batch a site holds is readable from either side of the row. A row that carries neither id contributes no
+ * batch, which keeps a scoped count at zero rather than guessing.
+ */
+const balanceBatchId = (row: Record<string, unknown>): string | null => {
+  const batch = row.batch;
+  if (batch && typeof batch === "object") {
+    const id = (batch as Record<string, unknown>).id;
+    if (typeof id === "string" && id.length > 0) return id;
+  }
+  const balance = row.balance;
+  if (balance && typeof balance === "object") {
+    const id = (balance as Record<string, unknown>).productBatchId;
+    if (typeof id === "string" && id.length > 0) return id;
+  }
+  return null;
+};
+
+const scopedExpiringBatchCount = (
+  balances: Array<Record<string, unknown>>,
+  batches: Array<Record<string, unknown>>,
+): number => {
+  const referenced = new Set(balances.map(balanceBatchId).filter((id): id is string => id !== null));
+  return batches.filter((row) => typeof row.id === "string" && referenced.has(row.id) && isExpiringBatch(row)).length;
 };
 
 const firstUuid = (value: unknown): string | null =>

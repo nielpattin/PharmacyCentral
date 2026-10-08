@@ -24,14 +24,11 @@ if (!inventoryUrl)
 const salesUrl = process.env.SALES_SERVICE_URL;
 if (!salesUrl)
   throw new Error("Missing required environment variable: SALES_SERVICE_URL. Please set it in your .env file.");
+// The live dashboard reads the other services with the shared internal service secret.
+if (!process.env.INTERNAL_SERVICE_SECRET)
+  throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
 const database = createOperationsDatabase();
-const repository = database
-  ? new OperationsRepository(database, {
-      catalogUrl: process.env.CATALOG_SERVICE_URL,
-      inventoryUrl: process.env.INVENTORY_SERVICE_URL,
-      salesUrl: process.env.SALES_SERVICE_URL,
-    })
-  : undefined;
+const repository = database ? new OperationsRepository(database, { catalogUrl, inventoryUrl, salesUrl }) : undefined;
 const eventConsumer = repository ? new RabbitMqEventConsumer(repository) : undefined;
 if (eventConsumer)
   void eventConsumer.start().catch((error: unknown) => logger.warn({ error }, "operations event consumer unavailable"));
