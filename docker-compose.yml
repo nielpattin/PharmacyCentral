@@ -157,6 +157,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./deploy/local/gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/local/gateway/routes.conf:/etc/nginx/pharmacy-routes.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz"]
       interval: 10s
@@ -164,6 +165,36 @@ services:
       retries: 12
     ports:
       - "${GATEWAY_PORT}:8080"
+
+  # Same routes as `gateway`, but forwarding to services that `pnpm dev` runs on the host.
+  # Only started when named (`pnpm run infra:up`); it shares GATEWAY_PORT with `gateway`, so run one of them.
+  #
+  # It shares the host network instead of publishing a port, and proxies to the host's own loopback.
+  # A container on the compose bridge cannot reach host services: ufw denies new connections on INPUT
+  # and only manages DOCKER-USER (forwarded) traffic, so `host.docker.internal` upstreams hang and
+  # every route answers 504. `network_mode: host` avoids that hop entirely, and GATEWAY_PORT is then
+  # bound by this container's nginx (hence no `ports:` and no `extra_hosts:`).
+  gateway-dev:
+    image: nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+    profiles: ["dev"]
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      GATEWAY_PORT: ${GATEWAY_PORT}
+      IDENTITY_PORT: ${IDENTITY_PORT}
+      CATALOG_PORT: ${CATALOG_PORT}
+      INVENTORY_PORT: ${INVENTORY_PORT}
+      SALES_PORT: ${SALES_PORT}
+      PAYMENT_PORT: ${PAYMENT_PORT}
+      OPERATIONS_QUERY_PORT: ${OPERATIONS_QUERY_PORT}
+    volumes:
+      - ./deploy/local/gateway/nginx.dev.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/local/gateway/routes.conf:/etc/nginx/pharmacy-routes.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${GATEWAY_PORT}/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   identity-service:
     <<: *backend-defaults

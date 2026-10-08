@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "dev": "node --watch --env-file=../../.env src/main.ts",
+    "dev": "node --experimental-transform-types --watch --env-file=../../.env src/main.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint --type-aware src",

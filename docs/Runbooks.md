@@ -2,13 +2,13 @@
 
 ## Local development quickstart
 
-All local work runs on Docker Compose. Start here once:
+Infra always runs on Docker Compose; the apps run either on the host or in containers (see "Two local modes"). Start here once:
 
 ```bash
 pnpm install --frozen-lockfile
 cp .env.example .env   # then fill in secrets
 pnpm run infra:up
-docker compose ps   # postgres, rabbitmq, valkey, mailpit, otel-collector, seaweedfs healthy
+docker compose ps   # postgres, rabbitmq, valkey, mailpit, otel-collector, seaweedfs, gateway-dev healthy
 ```
 
 SeaweedFS is local product-image object storage. `seaweedfs-init` creates the `product-media` bucket, and the S3 gateway allows anonymous reads on that bucket only. The S3 API is at `http://localhost:9000`; set the port and credentials (`SEAWEEDFS_*`) in `.env` before starting Compose. Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies (the other groups keep Nginx's 1 MB default). `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; other JSON routes keep the 1 MB service default.
@@ -20,46 +20,53 @@ pnpm run db:migrate
 pnpm run seed:accounts
 ```
 
-`API_BASE_URL=http://localhost:8080` in `.env` points browsers and Vite `dev` at the local `gateway`. Never change it per service.
+`API_BASE_URL=http://localhost:8080` in `.env` points browsers and Vite `dev` at whichever local gateway is running. Never change it per service.
 
-### Mode A: work on one service
+### Two local modes
 
-Run the service you own from source with hot reload. Start its dependencies as images by name:
+Infra always runs in Docker. The two modes differ only in where the apps and the gateway run:
 
-```bash
-docker compose up -d gateway catalog-service sales-service
-pnpm --dir apps/sales-service dev
-```
+| | Dev mode (day-to-day work) | Container mode (check what ships) |
+| --- | --- | --- |
+| 6 services | Host, `node --watch` | Containers |
+| 2 webs | Host, Vite HMR | Containers |
+| Gateway on `:8080` | `gateway-dev` container on the host network | `gateway` container |
+| Infra | Containers | The same containers |
+| Start | `pnpm run infra:up`, then `pnpm dev` | Stop `pnpm dev`, then `pnpm run stack:up` |
+| Back to dev mode | | `pnpm run stack:down`, then `pnpm dev` |
+| Stop everything | `pnpm run infra:down` | `pnpm run infra:down` |
 
-Edit, save, and the process restarts. Dependencies you do not own stay as stable images.
+Use dev mode while coding. Run container mode before opening a pull request, and always after changing a Dockerfile, `docker-compose.yml`, environment variables, dependencies, or migrations; every container in `docker compose ps` must be healthy.
 
-### Mode B: work on a web app
-
-Run the web app from source. It hot-reloads against the gateway and the full backend:
-
-```bash
-docker compose up -d gateway identity-service catalog-service inventory-service sales-service payment-service operations-query-service
-pnpm --dir apps/customer-web dev
-```
-
-The Vite config reads `API_BASE_URL` from the repository-root `.env` on its own and proxies `/api/...` to the gateway. A bare `pnpm dev` with no exported variables works. If the app shows `API request failed with status 404` on load, the proxy missed: check that `API_BASE_URL=http://localhost:8080` is set in `.env` and the gateway container is up.
-
-Swap the 1 or 2 services you own to source (`pnpm --dir apps/<service> dev`) and leave the rest as images.
-
-### Mode C: full system
-
-For occasional end-to-end checks and CI:
+#### Dev mode
 
 ```bash
-docker compose up -d --build
-docker compose ps
+pnpm run infra:up   # infra + gateway-dev
+pnpm dev            # nx run-many -t dev --all
 ```
 
-Do not build many services at once on a small machine. Eight parallel image builds exhaust memory and stall. Build one service at a time instead:
+`pnpm dev` starts every service with `node --watch` and both webs with Vite HMR through Nx, which prints a TUI with one pane per app. Each service's `dev` script runs Node with `--experimental-transform-types`, because Node's strip-only TypeScript mode rejects the parameter properties the services use.
+
+Run a subset by project name (the real names live in `apps/*/package.json`). `gateway-dev` still routes every path to the host, so paths of apps you leave out have no process behind them:
 
 ```bash
-docker compose up -d --build <name>
+pnpm nx run-many -t dev -p @pharmacy/sales-service @pharmacy/customer-web
 ```
+
+Ports come from `<SVC>_PORT` in the root `.env`. Nx loads `apps/<svc>-service/.env.dev` for the `dev` target before the root `.env`, so it wins over the root `.env`'s shared `PORT=3000`; each service binds its own port and gets its own `DATABASE_URL`. Run apps through Nx: `pnpm --dir apps/<app> dev` bypasses Nx and skips `.env.dev`, so every service would collide on `PORT=3000`.
+
+Services reach infra through the published ports (`localhost:5432`, `localhost:5672`, ...), never through a gateway. The gateway only forwards browser `/api/...` calls to the services. `gateway-dev` is the one container that has to call into the host, and host firewalls such as ufw drop container-to-host traffic on the Docker bridge, so it uses host networking and forwards to `127.0.0.1:${<SVC>_PORT}` instead.
+
+#### Container mode
+
+```bash
+# Stop `pnpm dev` first: the app containers publish the same host ports.
+pnpm run stack:up     # stops gateway-dev, rebuilds the images, starts everything, waits until healthy
+docker compose ps     # every container must be healthy
+pnpm run stack:down   # back to dev mode: stops gateway and the app containers, starts gateway-dev again
+```
+
+`gateway` and `gateway-dev` share `GATEWAY_PORT` (8080), so only one runs at a time; the two scripts swap them. On a small machine, building all eight images at once can exhaust memory; build them one at a time first with `docker compose build <name>`.
 
 ### Open the app
 
@@ -86,7 +93,7 @@ Mutations also send the CSRF token from the `pharmacy_csrf` cookie as `X-CSRF-TO
 
 ### Path routing map
 
-The ingress forwards paths with identical patterns:
+Both local gateways forward paths with identical patterns: `gateway` (container mode) sends them to the app containers, and `gateway-dev` (dev mode) forwards the same paths to the host processes. The rules live once in `deploy/local/gateway/routes.conf`, included by both server blocks.
 
 - `/api/auth*`, `/api/admin*` -> `identity-service:3001`
 - `/api/sites*`, `/api/storage-locations*`, `/api/products*`, `/api/suppliers*`, `/api/pricing*`, `/api/stores*`, `/api/availability*` -> `catalog-service:3002`
@@ -94,9 +101,8 @@ The ingress forwards paths with identical patterns:
 - `/api/carts*`, `/api/orders*`, `/api/delivery*`, `/api/prescriptions*`, `/api/counter-transactions*` -> `sales-service:3005`
 - `/api/payments*` -> `payment-service:3006`
 - `/api/operations*`, `/api/dashboard*`, `/api/finance*`, `/api/audit*`, `/api/reports*` -> `operations-query-service:3007`
-- `/` -> `customer-web`
 
-`/` serves `customer-web`. The gateway strips `/api` before forwarding.
+Any other path, `/` included, returns a JSON 404. Either gateway strips `/api` before forwarding.
 
 ## Daily commands
 
@@ -132,30 +138,19 @@ Seed the local demo accounts:
 pnpm run seed:accounts
 ```
 
-Tear everything down:
+Tear everything down (including `gateway-dev`):
 
 ```bash
-docker compose down
+pnpm run infra:down
 ```
 
 ## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
-| `localhost:8080` refused or 502 from `/api/...` | Start the gateway: `docker compose up -d gateway` |
-| Gateway 404 on `/api/...` | Check the path against the routing map below |
+| `localhost:8080` refused or 502 from `/api/...` | Start the gateway for your mode: `pnpm run infra:up` for dev mode, or `pnpm run stack:up` for containers. Only one of the two can hold port 8080 |
+| Gateway 404 on `/api/...` | Check the path against the routing map above |
 | `/api/...` returns 401 `trusted_request_required` | The path needs an identity token. Fetch `/api/auth/context` after login and send the matching service token as `x-internal-identity-context` |
-
-## Choosing which services run
-
-Name services explicitly. Compose starts dependencies automatically through `depends_on`:
-
-```bash
-docker compose up -d gateway sales-service   # gateway plus one backend and healthy infra
-docker compose up -d customer-web            # web plus gateway is pulled in the same way
-```
-
-Web apps run from source with `pnpm --dir apps/<web> dev`. Backend services run from source with `pnpm --dir apps/<service> dev`. Images are only for dependencies you are not editing.
 
 ## Runtime contract
 

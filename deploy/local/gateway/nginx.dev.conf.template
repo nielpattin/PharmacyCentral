@@ -1,0 +1,26 @@
+# Local-only API gateway for `pnpm dev`: the services run on the host, and this container shares the
+# host network (see the gateway-dev comment in docker-compose.yml), so every upstream is the host's own
+# loopback on that service's host port from .env. The nginx image renders ${...} at start: the ports
+# below and the listen port come from the environment, while `set $identity ...` and every `$variable`
+# in routes.conf stay untouched because those names are not environment variables.
+# A service that is not running only fails its own routes with 502.
+upstream identity_dev { server 127.0.0.1:${IDENTITY_PORT}; }
+upstream catalog_dev { server 127.0.0.1:${CATALOG_PORT}; }
+upstream inventory_dev { server 127.0.0.1:${INVENTORY_PORT}; }
+upstream sales_dev { server 127.0.0.1:${SALES_PORT}; }
+upstream payment_dev { server 127.0.0.1:${PAYMENT_PORT}; }
+upstream query_dev { server 127.0.0.1:${OPERATIONS_QUERY_PORT}; }
+
+server {
+    listen 127.0.0.1:${GATEWAY_PORT};
+    server_name localhost;
+
+    set $identity http://identity_dev;
+    set $catalog http://catalog_dev;
+    set $inventory http://inventory_dev;
+    set $sales http://sales_dev;
+    set $payment http://payment_dev;
+    set $query http://query_dev;
+
+    include /etc/nginx/pharmacy-routes.conf;
+}

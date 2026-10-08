@@ -27,6 +27,10 @@
     ]
   },
   "targetDefaults": {
+    "dev": {
+      "continuous": true,
+      "cache": false
+    },
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["production", "^production"],
