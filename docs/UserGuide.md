@@ -15,28 +15,34 @@ If the system has no platform administrator, the sign-in page displays a form to
 
 ### Demo credentials
 
-The `pnpm run seed:accounts` seed creates these development accounts. The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`.
+The `pnpm run seed:accounts` seed creates one development account per role, each holding only that role. The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`. Signing in as each account shows exactly what its role may see and do.
 
 | Role | Email | Site Access |
 | --- | --- | --- |
 | Platform Admin | `admin@pharmacycentral.vn` | All sites |
-| Pharmacy Manager | `manager@pharmacycentral.vn` | Assign an imported site from the Users screen |
+| Pharmacy Manager | `manager@pharmacycentral.vn` | `SITE-RTL` |
+| Pharmacist | `pharmacist@pharmacycentral.vn` | `SITE-RTL` |
+| Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH` |
 | Customer | `khachhang@pharmacycentral.vn` | Customer portal |
+
+Site access comes from the imported sites (`data/import-samples/sites.csv`). Before that import, the seed creates the accounts without site access and names the missing sites; run `pnpm run seed:accounts` again after the import. Re-running the seed also resets these accounts' roles and site access to the table above.
 
 Seed accounts are for local development and demonstration only.
 
 ## Role-based workspaces
 
-Pharmacy Central provides four business roles. Platform administrators manage the system rather than pharmacy counter operations. Pharmacists process counter sales and dispense medications.
+Pharmacy Central provides four business roles. Platform administrators manage the system rather than pharmacy counter operations. Pharmacists process counter sales and dispense medications. Dispensing needs a licensed pharmacist, so the permission belongs to the Pharmacist role and never to a job title: a manager who is also a pharmacist holds both roles.
 
 | Role | Primary Workspaces |
 | --- | --- |
 | Platform Admin | Users, roles, audit logs, system monitoring |
-| Pharmacy Manager | Sites, catalog, suppliers, pricing, procurement, reporting, finance |
-| Pharmacist | Pharmacy counter, payments, dispensing, replenishment requests |
+| Pharmacy Manager | Sites, catalog, suppliers, pricing, procurement, reporting, finance; counter oversight (view prescriptions, counter transactions, invoices, and consultation requests without changing them) |
+| Pharmacist | Pharmacy counter, payments, dispensing, consultation replies, replenishment requests |
 | Warehouse Staff | Receiving, quality, transfers, replenishment requests, returns, stocktake, adjustments |
 
 Users who are not Platform Admins are scoped to their assigned sites. They can only view and manage data within their assigned site scope.
+
+Site scoping reaches the lists the operations dashboard reads, so a Pharmacy Manager's dashboard counts only their own sites' storage locations, stock, transfers, stocktakes, adjustments, goods receipts, and prescriptions. Payment finance entries and report rows are recorded without a site, so the money figures on **Finance** and the rows on **Reporting** are network-wide for every reader; only the live stock, receipt, and dispense figures shown beside them are limited to the reader's sites.
 
 When signing in, users with only the Pharmacist role navigate directly to **Pharmacy Counter**. The operational overview dashboard is intended for administrators, operations managers, and warehouse staff.
 

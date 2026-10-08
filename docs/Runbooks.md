@@ -57,6 +57,8 @@ Ports come from `<SVC>_PORT` in the root `.env`. Nx loads `apps/<svc>-service/.e
 
 Services reach infra through the published ports (`localhost:5432`, `localhost:5672`, ...), never through a gateway. The gateway only forwards browser `/api/...` calls to the services. `gateway-dev` is the one container that has to call into the host, and host firewalls such as ufw drop container-to-host traffic on the Docker bridge, so it uses host networking and forwards to `127.0.0.1:${<SVC>_PORT}` instead.
 
+Services also call each other directly, with the `*_SERVICE_URL` values in `.env` (`CATALOG_SERVICE_URL`, `IDENTITY_SERVICE_URL`, `INVENTORY_SERVICE_URL`, `SALES_SERVICE_URL`), never through a gateway. `sales-service` requires `IDENTITY_SERVICE_URL`: it looks the account up there before filing a prescription with a customer, so a missing or wrong value fails the create with `503 identity_unavailable` instead of writing the record against nobody. `payment-service` and `operations-query-service` require `SALES_SERVICE_URL` for the order behind an invoice and for the dashboard's prescription figures.
+
 #### Container mode
 
 ```bash
@@ -95,7 +97,7 @@ Mutations also send the CSRF token from the `pharmacy_csrf` cookie as `X-CSRF-TO
 
 Both local gateways forward paths with identical patterns: `gateway` (container mode) sends them to the app containers, and `gateway-dev` (dev mode) forwards the same paths to the host processes. The rules live once in `deploy/local/gateway/routes.conf`, included by both server blocks.
 
-- `/api/auth*`, `/api/admin*` -> `identity-service:3001`
+- `/api/auth*`, `/api/admin*`, `/api/customers*` -> `identity-service:3001`
 - `/api/sites*`, `/api/storage-locations*`, `/api/products*`, `/api/suppliers*`, `/api/pricing*`, `/api/stores*`, `/api/availability*` -> `catalog-service:3002`
 - `/api/procurement*`, `/api/inventory*`, `/api/quality*` -> `inventory-service:3004`
 - `/api/carts*`, `/api/orders*`, `/api/delivery*`, `/api/prescriptions*`, `/api/counter-transactions*` -> `sales-service:3005`
@@ -179,14 +181,14 @@ In containers, each service executes its compiled `node dist/migrate.js` on star
 Only `identity-service` seeds data, and it seeds local login accounts only. Business master data is imported through the staff import center or the catalog/inventory import APIs.
 
 ```bash
-# Seed the three local accounts
+# Seed one local account per role
 pnpm run seed:accounts
 
 # Validate without writing
 pnpm --dir apps/identity-service seed -- --dry-run
 ```
 
-`DEMO_ACCOUNT_PASSWORD` from `.env` becomes the password for the seeded accounts. Site access is not seeded; a Pharmacy Manager must be assigned to an imported site from the Users screen.
+`DEMO_ACCOUNT_PASSWORD` from `.env` becomes the password for the seeded accounts. The seed creates one account per role (Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff, Customer), each holding only that role, and resets their roles and site access on every run. Site access is looked up by code from the imported sites (`SITE-RTL` for the manager and pharmacist, `SITE-WH` for warehouse staff); before the sites import the seed warns which are missing, so run it again after importing `data/import-samples/sites.csv`. The account list is in `docs/UserGuide.md`.
 
 ### Import staff-managed data
 
@@ -249,11 +251,15 @@ local in `data/product-images/provenance/`.
 
 ### Try prescription intake
 
-Prescription intake needs the catalog migrations `0005_text_search_extensions` (`pg_trgm` and `unaccent`) and `0006_folded_trigram_indexes` (the `catalog_fold` function and its trigram indexes), so run `pnpm run db:migrate` after pulling. Import `products.csv` first, because suggestions come from the catalog.
+Prescription intake needs the catalog migrations `0005_text_search_extensions` (`pg_trgm` and `unaccent`) and `0006_folded_trigram_indexes` (the `catalog_fold` function and its trigram indexes), so run `pnpm run db:migrate` after pulling. Consultation requests also need the `sales-service` migration `0005_salty_trish_tilby` (the `prescription_consultations` table), which the same command applies. Import `products.csv` first, because suggestions come from the catalog.
 
 1. Set `GEMINI_API_KEY`, `GEMINI_BASE_URL`, and `GEMINI_MODEL` in `.env` (see `.env.example`) to read photos. With an empty `GEMINI_API_KEY` the photo path answers `503` and only QR intake works.
 2. Sign in as the customer account and open `http://localhost:5173/gui-don-thuoc`.
 3. Upload a page from `data/prescription-samples/`. `<slug>.png` carries a QR (read in the browser, no provider call); `<slug>-no-qr.png` is the same page without it and exercises Gemini. `<slug>.json` is the ground truth to compare against.
+4. Upload `data/prescription-samples/tre-em-tieu-chay.png`, whose `Paracetamol 250mg` line is dispensed in `Gói` and has no matching sachet in the catalog, so the page marks it "cần dược sĩ hỗ trợ" instead of offering a product.
+5. Press "Nhờ dược sĩ tìm giúp", add a note if you like, and send; the whole read prescription is filed with the unfilled lines flagged.
+6. Sign in as the Pharmacist account, open `http://127.0.0.1:5174` > prescriptions > "Tư vấn đơn thuốc", filter by `Open`, and answer the request; it moves to `Answered`.
+7. Sign back in as the customer, open account > "Đơn thuốc", and read the reply.
 
 `pnpm run prescriptions:samples` generates those pages. They are fictional prescriptions whose medicines mostly come from `products.csv`, and like other generated output they stay local and are not committed.
 
