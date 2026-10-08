@@ -67,13 +67,24 @@ const extractEventDetails = (event = {}) => {
   };
 };
 
+/** How long a session look-up may wait for identity-service before the request is denied. */
+const IDENTITY_LOOKUP_TIMEOUT_MS = 3_000;
+/** Lifetime of the signed identity context handed to the backend services. */
+const IDENTITY_CONTEXT_TTL_MS = 30_000;
+
 export const createAuthorizerHandler = (options = {}) => {
-  const identityServiceUrl = options.identityServiceUrl ?? process.env.IDENTITY_SERVICE_URL ?? "http://localhost:3001";
+  // The runtime points the authorizer at the internal ALB, so there is deliberately no localhost fallback: a guessed
+  // host would either fail every session look-up or, worse, answer from something that is not identity-service. The
+  // handler therefore denies a session look-up outright while the URL is unset, and creating the handler stays safe
+  // so that importing this module never throws.
+  const identityServiceUrl = options.identityServiceUrl ?? process.env.IDENTITY_SERVICE_URL;
   const defaultAudience = options.defaultAudience ?? process.env.INTERNAL_IDENTITY_AUDIENCE;
   const fetchFn = options.fetchFn ?? globalThis.fetch;
   const nowFn = options.nowFn ?? (() => new Date());
-  const timeoutMs = options.timeoutMs ?? (Number(process.env.IDENTITY_SERVICE_TIMEOUT_MS) || 3000);
-  const ttlMs = options.ttlMs ?? 30_000;
+  // Timings are code constants rather than environment settings: no deployment sets them, and an unparsable value
+  // must not quietly become a different timeout. Tests inject their own through the options.
+  const timeoutMs = options.timeoutMs ?? IDENTITY_LOOKUP_TIMEOUT_MS;
+  const ttlMs = options.ttlMs ?? IDENTITY_CONTEXT_TTL_MS;
 
   const secretsResolver =
     options.secretsResolver ??
@@ -97,8 +108,7 @@ export const createAuthorizerHandler = (options = {}) => {
         options.internalServiceSecret ??
         options.internalServiceSecretArn ??
         process.env.INTERNAL_SERVICE_SECRET ??
-        process.env.INTERNAL_SERVICE_SECRET_ARN ??
-        "";
+        process.env.INTERNAL_SERVICE_SECRET_ARN;
 
       let internalIdentitySecret;
       let internalServiceSecret;
@@ -149,6 +159,11 @@ export const createAuthorizerHandler = (options = {}) => {
         }
 
         if (cookieHeader) {
+          if (!identityServiceUrl) {
+            console.error("Missing IDENTITY_SERVICE_URL in authorizer configuration; refusing to resolve a session");
+            return deny();
+          }
+
           try {
             const reqHeaders = {
               cookie: cookieHeader,

@@ -31,6 +31,7 @@ export const employeePrefixes = [
   "/api/prescriptions",
   "/api/counter-transactions",
   "/api/admin",
+  "/api/customers",
 ];
 
 export const catalogWritePrefixes = [
@@ -81,16 +82,32 @@ export const warehousePaths = [
 export const replenishmentPaths = ["/api/inventory/replenishment"];
 export const counterSalePaths = ["/api/prescriptions", "/api/counter-transactions"];
 // Prescription requests that any signed-in account may make, because part of this domain belongs to the shopper:
-// intake uploads a shopper's own prescription, and the list read returns only the records linked to the caller's
-// own account once sales-service has forced the owner filter for a non-staff actor. Every path is listed in full
-// and matched either exactly or by path segment, so a path that merely shares text ("/api/prescriptions/intake-legacy"
-// for the intake prefix, "/api/prescriptions/123" for the list read) stays a staff route. keepsStaffRole records
-// whether a staff caller still has to satisfy the role counterSalePaths demands: reading the whole prescription
-// register is a Pharmacist action, while uploading one's own is not.
+// intake uploads a shopper's own prescription, a consultation sends the whole read prescription to the pharmacists
+// and the list reads return only the records linked to the caller's own account once sales-service has forced the
+// owner filter for a non-staff actor. Every path is listed in full and matched either exactly or by path segment, so
+// a path that merely shares text ("/api/prescriptions/intake-legacy" for the intake prefix, "/api/prescriptions/123"
+// for the list read, "/api/prescriptions/consultations/<id>/answer" for the consultation paths) stays a staff route.
+// keepsStaffRole records whether a staff caller still has to satisfy the role counterSalePaths demands: reading the
+// whole prescription register, consultations included, is a Pharmacist action, while uploading or sending one's own
+// is not.
 export const customerPrescriptionRequests = [
   { method: "GET", path: "/api/prescriptions", match: "exact", keepsStaffRole: true },
+  { method: "GET", path: "/api/prescriptions/consultations", match: "exact", keepsStaffRole: true },
+  { method: "POST", path: "/api/prescriptions/consultations", match: "exact", keepsStaffRole: false },
   { method: "POST", path: "/api/prescriptions/intake/qr", match: "segment", keepsStaffRole: false },
   { method: "POST", path: "/api/prescriptions/intake/image", match: "segment", keepsStaffRole: false },
+];
+// Payment requests that any signed-in account may make, because part of this domain belongs to the shopper: creating
+// an invoice is how a shopper asks to pay for a counter order, and reading one's own invoice is how customer-web
+// learns that the transfer landed, while payment-service answers 404 for an invoice that belongs to somebody else.
+// The read is matched one segment below the invoice list, so the list read itself, the printable invoice
+// ("/api/payments/invoices/<id>/invoice") and every deeper path stay staff routes.
+// keepsStaffRole records whether a staff caller still has to satisfy the role the payments prefix demands: reading
+// the invoice register is a counter action a Pharmacy Manager may also perform, while creating one's own invoice is
+// not.
+export const customerPaymentRequests = [
+  { method: "POST", path: "/api/payments/invoices", match: "exact", keepsStaffRole: false },
+  { method: "GET", path: "/api/payments/invoices", match: "child", keepsStaffRole: true },
 ];
 export const platformAdminPaths = ["/api/admin", "/api/audit"];
 export const managementOnlyPaths = ["/api/finance"];
@@ -134,37 +151,42 @@ export const isCatalogWriteRoute = (path, method = "GET") => {
   return catalogWritePrefixes.some((prefix) => matchesPrefix(norm, prefix));
 };
 
-const isCustomerInvoiceCreationRoute = (path, method = "GET") =>
-  method.toUpperCase() === "POST" && matchesPrefix(path, "/api/payments/invoices");
-
-const matchesCustomerPrescriptionRequest = (request, path, method) => {
+const matchesCustomerRequest = (request, path, method) => {
   if (request.method !== method.toUpperCase()) return false;
   const norm = normalizeApiPath(path);
-  return request.match === "exact" ? norm === request.path : matchesPrefix(norm, request.path);
+  if (request.match === "exact") return norm === request.path;
+  if (request.match === "child") {
+    const prefix = `${normalizeApiPath(request.path)}/`;
+    if (!norm.startsWith(prefix)) return false;
+    const remainder = norm.slice(prefix.length);
+    return remainder.length > 0 && !remainder.includes("/");
+  }
+  return matchesPrefix(norm, request.path);
 };
 
 // True when any signed-in account may make the request. That is a weaker bar than an employee route but not a
 // public one: the caller still has to present a session, because the authorizer resolves identity for every route
 // that is neither public nor an auth route.
 export const isCustomerPrescriptionRoute = (path, method = "GET") =>
-  customerPrescriptionRequests.some((request) => matchesCustomerPrescriptionRequest(request, path, method));
+  customerPrescriptionRequests.some((request) => matchesCustomerRequest(request, path, method));
 
-// Requests nobody behind the counter has a role for. A shared path such as the list read keeps its staff role.
-const isCustomerOnlyPrescriptionRoute = (path, method = "GET") =>
-  customerPrescriptionRequests.some(
-    (request) => !request.keepsStaffRole && matchesCustomerPrescriptionRequest(request, path, method),
-  );
+export const isCustomerPaymentRoute = (path, method = "GET") =>
+  customerPaymentRequests.some((request) => matchesCustomerRequest(request, path, method));
+
+// The entries nobody behind the counter has a role for. A shared path such as the invoice read keeps its staff role,
+// so it is not listed here and a staff caller on it still has to satisfy the role its domain demands.
+const customerOnlyPrescriptionRequests = customerPrescriptionRequests.filter((request) => !request.keepsStaffRole);
+const customerOnlyPaymentRequests = customerPaymentRequests.filter((request) => !request.keepsStaffRole);
 
 export const isEmployeeRoute = (path, method = "GET") => {
   const norm = normalizeApiPath(path);
-  // These routes belong to the shopper: the route itself refuses a request without an actor, so the authorizer only
-  // has to prove that a session exists, not that the account works behind the counter. A staff caller on a path both
-  // audiences share still keeps the role that employeeRolesForRequest demands for it.
-  if (isCustomerPrescriptionRoute(norm, method)) return false;
+  // These routes belong to the shopper: the route itself refuses a request without an actor (payment-service answers
+  // 404 for an invoice that is not the caller's), so the authorizer only has to prove that a session exists, not that
+  // the account works behind the counter. A staff caller on a path both audiences share still keeps the role that
+  // employeeRolesForRequest demands for it.
+  if (isCustomerPrescriptionRoute(norm, method) || isCustomerPaymentRoute(norm, method)) return false;
   const paymentEmployeeRoute =
-    matchesPrefix(norm, "/api/payments") &&
-    !matchesPrefix(norm, "/api/payments/sepay/webhook") &&
-    !isCustomerInvoiceCreationRoute(norm, method);
+    matchesPrefix(norm, "/api/payments") && !matchesPrefix(norm, "/api/payments/sepay/webhook");
   return (
     employeePrefixes.some((prefix) => matchesPrefix(norm, prefix)) ||
     isCatalogWriteRoute(norm, method) ||
@@ -194,19 +216,25 @@ export const employeeRolesForRequest = (path, method = "GET") => {
   const upperMethod = method.toUpperCase();
 
   if (platformAdminPaths.some((prefix) => matchesPrefix(norm, prefix))) return ["Platform Admin"];
+  // Linking a prescription to a customer account is part of the counter, so the lookup carries the Pharmacist role.
+  if (matchesPrefix(norm, "/api/customers")) return ["Pharmacist"];
   if (managementOnlyPaths.some((prefix) => matchesPrefix(norm, prefix))) return ["Pharmacy Manager"];
   if (replenishmentPaths.some((prefix) => matchesPrefix(norm, prefix))) return ["Pharmacist", "Warehouse Staff"];
+  // Dispensing, taking payment and answering consultations need a licensed pharmacist. A Pharmacy Manager supervises
+  // the counter, so they may read the same prescriptions, transactions, invoices and consultations, never change them.
+  const counterRoles =
+    upperMethod === "GET" || upperMethod === "HEAD" ? ["Pharmacist", "Pharmacy Manager"] : ["Pharmacist"];
   if (
     counterSalePaths.some((prefix) => matchesPrefix(norm, prefix)) &&
-    !isCustomerOnlyPrescriptionRoute(norm, upperMethod)
+    !customerOnlyPrescriptionRequests.some((request) => matchesCustomerRequest(request, norm, upperMethod))
   )
-    return ["Pharmacist"];
+    return counterRoles;
   if (
     matchesPrefix(norm, "/api/payments") &&
     !matchesPrefix(norm, "/api/payments/sepay/webhook") &&
-    !isCustomerInvoiceCreationRoute(norm, upperMethod)
+    !customerOnlyPaymentRequests.some((request) => matchesCustomerRequest(request, norm, upperMethod))
   ) {
-    return ["Pharmacist"];
+    return counterRoles;
   }
   if (warehousePaths.some((prefix) => matchesPrefix(norm, prefix))) return ["Warehouse Staff"];
   if (
@@ -227,7 +255,9 @@ export const isEmployeeRoleAllowed = (roles = [], requiredRoles) => {
 
 export const selectTargetService = (path) => {
   const norm = normalizeApiPath(path);
-  if (matchesPrefix(norm, "/api/auth") || matchesPrefix(norm, "/api/admin")) return "identity-service";
+  if (["/api/auth", "/api/admin", "/api/customers"].some((prefix) => matchesPrefix(norm, prefix))) {
+    return "identity-service";
+  }
   if (
     [
       "/api/sites",

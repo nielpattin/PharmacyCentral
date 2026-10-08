@@ -31,7 +31,7 @@ locals {
   path_rules = {
     identity-service = {
       priority = 10
-      paths    = ["/auth*", "/admin*"]
+      paths    = ["/auth*", "/admin*", "/customers*"]
       service  = "identity-service"
     }
     catalog-service = {

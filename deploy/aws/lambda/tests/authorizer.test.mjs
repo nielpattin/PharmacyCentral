@@ -6,6 +6,7 @@ import { decodeAndVerifyIdentityContext } from "../identity.mjs";
 
 describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
   const testSecret = "super-secret-internal-identity-key";
+  const identityServiceUrl = "http://identity-service.local";
   const fixedNow = new Date("2026-01-01T12:00:00.000Z");
 
   const mockCustomer = {
@@ -77,6 +78,7 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
   };
 
   const authorizer = createAuthorizerHandler({
+    identityServiceUrl,
     internalIdentitySecret: testSecret,
     internalServiceSecret: "service-secret",
     fetchFn: createMockFetch(sessionMap),
@@ -333,6 +335,32 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
       };
       assert.equal((await authorizer(managerEvent)).isAuthorized, false);
     });
+
+    it("allows a pharmacist to look up a customer account and denies everyone else", async () => {
+      const pharmacistEvent = {
+        rawPath: "/api/customers/lookup",
+        headers: { cookie: "pharmacy_session=session-pharmacist" },
+        requestContext: { http: { method: "GET", path: "/api/customers/lookup" } },
+      };
+      const pharmacistResult = await authorizer(pharmacistEvent);
+      assert.equal(pharmacistResult.isAuthorized, true);
+      assert.equal(pharmacistResult.context.actorType, "employee");
+      assert.equal(pharmacistResult.context.actorId, mockPharmacist.id);
+
+      const warehouseEvent = {
+        rawPath: "/api/customers/lookup",
+        headers: { cookie: "pharmacy_session=session-warehouse" },
+        requestContext: { http: { method: "GET", path: "/api/customers/lookup" } },
+      };
+      assert.equal((await authorizer(warehouseEvent)).isAuthorized, false);
+
+      const customerEvent = {
+        rawPath: "/api/customers/lookup",
+        headers: { cookie: "pharmacy_session=session-customer" },
+        requestContext: { http: { method: "GET", path: "/api/customers/lookup" } },
+      };
+      assert.equal((await authorizer(customerEvent)).isAuthorized, false);
+    });
   });
 
   describe("prescription domain authorization", () => {
@@ -465,13 +493,26 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
       };
       assert.equal((await authorizer(warehouseListEvent)).isAuthorized, false);
 
-      // The list read is shared with shoppers, but the Pharmacist requirement still applies to staff callers.
+      // The list read is shared with shoppers; a staff caller still needs a counter role, and the supervising
+      // manager holds one for reads.
       const managerListEvent = {
         rawPath: "/api/prescriptions",
         headers: { cookie: "pharmacy_session=session-manager" },
         requestContext: { http: { method: "GET", path: "/api/prescriptions" } },
       };
-      assert.equal((await authorizer(managerListEvent)).isAuthorized, false);
+      assert.equal((await authorizer(managerListEvent)).isAuthorized, true);
+
+      const managerDispenseEvent = {
+        rawPath: "/api/prescriptions/00000000-0000-4000-8000-000000000001/dispense",
+        headers: {
+          cookie: "pharmacy_session=session-manager; pharmacy_csrf=valid-token-123",
+          "x-csrf-token": "valid-token-123",
+        },
+        requestContext: {
+          http: { method: "POST", path: "/api/prescriptions/00000000-0000-4000-8000-000000000001/dispense" },
+        },
+      };
+      assert.equal((await authorizer(managerDispenseEvent)).isAuthorized, false);
 
       const pharmacistOwnSiteEvent = {
         rawPath: "/api/prescriptions",
@@ -499,6 +540,135 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
         requestContext: { http: { method: "POST", path: "/api/prescriptions/intake-legacy" } },
       };
       assert.equal((await authorizer(warehouseIntakeLegacyEvent)).isAuthorized, false);
+    });
+
+    it("allows a signed-in customer to send and read consultations", async () => {
+      const listEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        queryStringParameters: { status: "Open", limit: "50" },
+        headers: { cookie: "pharmacy_session=session-customer" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions/consultations" } },
+      };
+
+      const listResult = await authorizer(listEvent);
+      assert.equal(listResult.isAuthorized, true);
+      assert.equal(listResult.context.actorType, "customer");
+      assert.equal(listResult.context.actorId, mockCustomer.id);
+
+      // Sales-service ignores the site filter for a shopper's own rows, so the staff site check must not run here.
+      const siteFilteredEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        queryStringParameters: { siteId: "22222222-2222-4222-8222-222222222222" },
+        headers: { cookie: "pharmacy_session=session-customer" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions/consultations" } },
+      };
+      assert.equal((await authorizer(siteFilteredEvent)).isAuthorized, true);
+
+      const createEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        headers: {
+          cookie: "pharmacy_session=session-customer; pharmacy_csrf=valid-token-123",
+          "x-csrf-token": "valid-token-123",
+        },
+        requestContext: { http: { method: "POST", path: "/api/prescriptions/consultations" } },
+      };
+
+      const createResult = await authorizer(createEvent);
+      assert.equal(createResult.isAuthorized, true);
+      assert.equal(createResult.context.actorType, "customer");
+      assert.equal(createResult.context.actorId, mockCustomer.id);
+    });
+
+    it("denies anonymous and non-customer consultation requests", async () => {
+      const anonymousListEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        requestContext: { http: { method: "GET", path: "/api/prescriptions/consultations" } },
+      };
+      assert.equal((await authorizer(anonymousListEvent)).isAuthorized, false);
+
+      const anonymousCreateEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        headers: { cookie: "pharmacy_csrf=valid-token-123", "x-csrf-token": "valid-token-123" },
+        requestContext: { http: { method: "POST", path: "/api/prescriptions/consultations" } },
+      };
+      assert.equal((await authorizer(anonymousCreateEvent)).isAuthorized, false);
+
+      // Answering is staff work, so a shopper's session cannot reach it even with a valid CSRF token.
+      const customerAnswerEvent = {
+        rawPath: "/api/prescriptions/consultations/00000000-0000-4000-8000-000000000001/answer",
+        headers: {
+          cookie: "pharmacy_session=session-customer; pharmacy_csrf=valid-token-123",
+          "x-csrf-token": "valid-token-123",
+        },
+        requestContext: {
+          http: {
+            method: "POST",
+            path: "/api/prescriptions/consultations/00000000-0000-4000-8000-000000000001/answer",
+          },
+        },
+      };
+      assert.equal((await authorizer(customerAnswerEvent)).isAuthorized, false);
+    });
+
+    it("keeps answering consultations and the staff consultation list for pharmacists", async () => {
+      const answerPath = "/api/prescriptions/consultations/00000000-0000-4000-8000-000000000001/answer";
+      const pharmacistAnswerEvent = {
+        rawPath: answerPath,
+        headers: {
+          cookie: "pharmacy_session=session-pharmacist; pharmacy_csrf=valid-token-123",
+          "x-csrf-token": "valid-token-123",
+        },
+        requestContext: { http: { method: "POST", path: answerPath } },
+      };
+      assert.equal((await authorizer(pharmacistAnswerEvent)).isAuthorized, true);
+
+      const pharmacistListEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        headers: { cookie: "pharmacy_session=session-pharmacist" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions/consultations" } },
+      };
+      assert.equal((await authorizer(pharmacistListEvent)).isAuthorized, true);
+
+      const pharmacistOwnSiteEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        queryStringParameters: { siteId: "11111111-1111-4111-8111-111111111111" },
+        headers: { cookie: "pharmacy_session=session-pharmacist" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions/consultations" } },
+      };
+      assert.equal((await authorizer(pharmacistOwnSiteEvent)).isAuthorized, true);
+
+      const pharmacistOtherSiteEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        queryStringParameters: { siteId: "22222222-2222-4222-8222-222222222222" },
+        headers: { cookie: "pharmacy_session=session-pharmacist" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions/consultations" } },
+      };
+      assert.equal((await authorizer(pharmacistOtherSiteEvent)).isAuthorized, false);
+
+      // The list is shared with shoppers; warehouse staff hold no counter role, the supervising manager may read.
+      const warehouseListEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        headers: { cookie: "pharmacy_session=session-warehouse" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions/consultations" } },
+      };
+      assert.equal((await authorizer(warehouseListEvent)).isAuthorized, false);
+
+      const managerListEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        headers: { cookie: "pharmacy_session=session-manager" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions/consultations" } },
+      };
+      assert.equal((await authorizer(managerListEvent)).isAuthorized, true);
+
+      const managerAnswerEvent = { ...pharmacistAnswerEvent, headers: { ...pharmacistAnswerEvent.headers, cookie: "pharmacy_session=session-manager; pharmacy_csrf=valid-token-123" } };
+      assert.equal((await authorizer(managerAnswerEvent)).isAuthorized, false);
+
+      const adminListEvent = {
+        rawPath: "/api/prescriptions/consultations",
+        headers: { cookie: "pharmacy_session=session-admin" },
+        requestContext: { http: { method: "GET", path: "/api/prescriptions/consultations" } },
+      };
+      assert.equal((await authorizer(adminListEvent)).isAuthorized, true);
     });
   });
 
@@ -536,6 +706,7 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
       };
 
       const customAuth = createAuthorizerHandler({
+        identityServiceUrl,
         internalIdentitySecret: testSecret,
         fetchFn: createMockFetch({ "session-nosites": employeeNoSites }),
         nowFn: () => fixedNow,
@@ -601,6 +772,44 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
     });
   });
 
+  describe("authorizer configuration", () => {
+    it("denies a protected route without calling identity-service when IDENTITY_SERVICE_URL is unset", async () => {
+      const previousUrl = process.env.IDENTITY_SERVICE_URL;
+      let fetchCalls = 0;
+
+      try {
+        delete process.env.IDENTITY_SERVICE_URL;
+
+        // The URL is read when the handler is created, so an unconfigured deployment builds a handler that refuses
+        // every session look-up instead of aiming at a guessed host.
+        const unconfiguredAuthorizer = createAuthorizerHandler({
+          internalIdentitySecret: testSecret,
+          fetchFn: async () => {
+            fetchCalls += 1;
+            return { ok: true, status: 200, json: async () => mockCustomer };
+          },
+          nowFn: () => fixedNow,
+        });
+
+        const result = await unconfiguredAuthorizer({
+          rawPath: "/api/orders",
+          headers: { cookie: "pharmacy_session=session-customer" },
+          requestContext: { http: { method: "GET", path: "/api/orders" } },
+        });
+
+        assert.equal(result.isAuthorized, false);
+        assert.deepEqual(result.context, {});
+        assert.equal(fetchCalls, 0);
+      } finally {
+        if (previousUrl !== undefined) {
+          process.env.IDENTITY_SERVICE_URL = previousUrl;
+        } else {
+          delete process.env.IDENTITY_SERVICE_URL;
+        }
+      }
+    });
+  });
+
   describe("AWS Secrets Manager ARN secret resolution", () => {
     const identitySecretArn =
       "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/internal-identity";
@@ -630,6 +839,7 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
       };
 
       const secretsAuthorizer = createAuthorizerHandler({
+        identityServiceUrl,
         internalIdentitySecret: identitySecretArn,
         internalServiceSecret: serviceSecretArn,
         secretsClient,

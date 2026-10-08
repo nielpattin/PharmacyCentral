@@ -101,6 +101,10 @@ describe("policy - route classification", () => {
     assert.equal(isEmployeeRoute("/api/prescriptions/123", "GET"), true);
     assert.equal(isEmployeeRoute("/api/counter-transactions", "GET"), true);
     assert.equal(isEmployeeRoute("/api/admin", "GET"), true);
+    // The counter's customer picker is staff-only: only a Pharmacist may reach the customer base.
+    assert.equal(isEmployeeRoute("/api/customers", "GET"), true);
+    assert.equal(isEmployeeRoute("/api/customers/lookup", "GET"), true);
+    assert.equal(isEmployeeRoute("/api/customers/lookup", "POST"), true);
     // Catalog writes are employee routes
     assert.equal(isEmployeeRoute("/api/products", "POST"), true);
     assert.equal(isEmployeeRoute("/api/products", "GET"), false);
@@ -125,6 +129,16 @@ describe("policy - route classification", () => {
     assert.equal(isEmployeeRoute("/api/prescriptions", "POST"), true);
     assert.equal(isEmployeeRoute("/api/prescriptions/123/dispense", "POST"), true);
     assert.equal(isEmployeeRoute("/api/prescriptions/intake/qr", "GET"), true);
+    // A consultation is the shopper's own request as well: they send one and read their own back. Answering one is a
+    // separate path, and a path that only shares text with the shared ones stays a staff route.
+    assert.equal(isEmployeeRoute("/api/prescriptions/consultations", "GET"), false);
+    assert.equal(isEmployeeRoute("/api/prescriptions/consultations?status=Open&limit=50", "GET"), false);
+    assert.equal(isEmployeeRoute("/api/prescriptions/consultations", "POST"), false);
+    assert.equal(
+      isEmployeeRoute("/api/prescriptions/consultations/11111111-1111-4111-8111-111111111111/answer", "POST"),
+      true,
+    );
+    assert.equal(isEmployeeRoute("/api/prescriptions/consultations-archive", "GET"), true);
   });
 
   it("marks exactly the prescription requests a signed-in account may make", () => {
@@ -132,9 +146,21 @@ describe("policy - route classification", () => {
     assert.equal(isCustomerPrescriptionRoute("/prescriptions?limit=50", "GET"), true);
     assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/intake/qr", "POST"), true);
     assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/intake/image", "POST"), true);
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/consultations", "GET"), true);
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/consultations?status=Open&limit=50", "GET"), true);
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/consultations", "POST"), true);
 
     assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/123", "GET"), false);
     assert.equal(isCustomerPrescriptionRoute("/api/prescriptions", "POST"), false);
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/consultations", "DELETE"), false);
+    assert.equal(
+      isCustomerPrescriptionRoute(
+        "/api/prescriptions/consultations/11111111-1111-4111-8111-111111111111/answer",
+        "POST",
+      ),
+      false,
+    );
+    assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/consultations-archive", "GET"), false);
     assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/intake/qr", "GET"), false);
     assert.equal(isCustomerPrescriptionRoute("/api/prescriptions/intake-legacy", "POST"), false);
     assert.equal(isCustomerPrescriptionRoute("/api/counter-transactions", "POST"), false);
@@ -196,6 +222,10 @@ describe("policy - employee roles and authorization", () => {
     // Management Only
     assert.deepEqual(employeeRolesForRequest("/api/finance", "GET"), ["Pharmacy Manager"]);
 
+    // Counter customer lookup: the pharmacist links a prescription to an account, so only that role asks for it.
+    assert.deepEqual(employeeRolesForRequest("/api/customers/lookup", "GET"), ["Pharmacist"]);
+    assert.deepEqual(employeeRolesForRequest("/api/customers/lookup?q=khach@example.com", "GET"), ["Pharmacist"]);
+
     // Replenishment
     assert.deepEqual(employeeRolesForRequest("/api/inventory/replenishment", "POST"), [
       "Pharmacist",
@@ -203,10 +233,12 @@ describe("policy - employee roles and authorization", () => {
     ]);
 
     // Counter Sale
-    // The list read is shared with shoppers, but staff keep the Pharmacist requirement because their call returns
-    // every prescription rather than only the records of the account that asked.
-    assert.deepEqual(employeeRolesForRequest("/api/prescriptions", "GET"), ["Pharmacist"]);
-    assert.deepEqual(employeeRolesForRequest("/api/prescriptions?limit=50", "GET"), ["Pharmacist"]);
+    // A Pharmacy Manager supervises the counter, so reads admit them beside the Pharmacist; every write stays a
+    // Pharmacist action. The list read is shared with shoppers, but staff still need one of these roles because their
+    // call returns every prescription rather than only the records of the account that asked.
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions", "GET"), ["Pharmacist", "Pharmacy Manager"]);
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions?limit=50", "GET"), ["Pharmacist", "Pharmacy Manager"]);
+    assert.deepEqual(employeeRolesForRequest("/api/counter-transactions", "GET"), ["Pharmacist", "Pharmacy Manager"]);
     assert.deepEqual(employeeRolesForRequest("/api/counter-transactions", "POST"), ["Pharmacist"]);
     assert.deepEqual(employeeRolesForRequest("/api/payments", "POST"), ["Pharmacist"]);
     // Prescription intake is a shopper route, like customer invoice creation, so it carries no employee role.
@@ -217,6 +249,14 @@ describe("policy - employee roles and authorization", () => {
     assert.deepEqual(employeeRolesForRequest("/api/prescriptions/intakeX", "POST"), ["Pharmacist"]);
     assert.deepEqual(employeeRolesForRequest("/api/prescriptions", "POST"), ["Pharmacist"]);
     assert.deepEqual(employeeRolesForRequest("/api/prescriptions/123/dispense", "POST"), ["Pharmacist"]);
+    // Sending a consultation is the shopper's own action, so it carries no role; answering one stays a Pharmacist
+    // action, while a staff read of the whole consultation register also admits the supervising manager.
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions/consultations", "POST"), undefined);
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions/consultations", "GET"), [
+      "Pharmacist",
+      "Pharmacy Manager",
+    ]);
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions/consultations/123/answer", "POST"), ["Pharmacist"]);
 
     // Warehouse
     assert.deepEqual(employeeRolesForRequest("/api/procurement/goods-receipts", "GET"), ["Warehouse Staff"]);
@@ -250,6 +290,7 @@ describe("policy - target service selection", () => {
   it("maps paths to the correct backend service domain", () => {
     assert.equal(selectTargetService("/api/auth/login"), "identity-service");
     assert.equal(selectTargetService("/api/admin/users"), "identity-service");
+    assert.equal(selectTargetService("/api/customers/lookup"), "identity-service");
     assert.equal(selectTargetService("/api/products"), "catalog-service");
     assert.equal(selectTargetService("/api/sites"), "catalog-service");
     assert.equal(selectTargetService("/api/pricing/prices"), "catalog-service");
