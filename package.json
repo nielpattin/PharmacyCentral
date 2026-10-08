@@ -15,6 +15,7 @@
     "images:import": "pnpm --dir apps/catalog-service images:import",
     "images:pack": "tar -czf data/product-images/images.tar.gz -C data/product-images images",
     "images:unpack": "tar -xzf data/product-images/images.tar.gz -C data/product-images",
+    "prescriptions:samples": "pnpm --dir apps/sales-service prescriptions:samples",
     "stack:down": "docker compose stop gateway identity-service catalog-service inventory-service sales-service payment-service operations-query-service customer-web staff-web && docker compose up -d --wait gateway-dev",
     "stack:up": "docker compose stop gateway-dev && docker compose up -d --build --wait",
     "sync:check": "nx sync:check",

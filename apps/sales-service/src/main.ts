@@ -16,7 +16,11 @@ import { SalesOutboxPublisher } from "./modules/outbox-publisher.ts";
 import { SalesPaymentEventConsumer } from "./modules/payment-event-consumer.ts";
 import { createSalesRouter } from "./modules/sales-routes.ts";
 import { SalesRepository } from "./modules/sales-repository.ts";
+import { GeminiPrescriptionReader } from "./modules/prescriptions/infrastructure/gemini-prescription-reader.ts";
+import { ValkeyIntakeRateLimiter } from "./modules/prescriptions/infrastructure/valkey-intake-rate-limiter.ts";
+import { createPrescriptionIntakeRouter } from "./modules/prescriptions/presentation/prescription-intake-routes.ts";
 import { createSalesDatabase } from "./shared/infrastructure/database.ts";
+import { createErrorHandler } from "./shared/presentation/error-handler.ts";
 
 const serviceName = "sales-service";
 const logger = createLogger({ name: serviceName });
@@ -114,6 +118,31 @@ const lookupStore = async (
     return undefined;
   }
 };
+/**
+ * Photo intake needs a Gemini key and is off without one, like routing is without an OpenRouteService key. QR
+ * intake needs no provider, so the router is always mounted. The key stays on the server.
+ */
+const geminiApiKey = process.env.GEMINI_API_KEY;
+const prescriptionReader = geminiApiKey
+  ? new GeminiPrescriptionReader({
+      baseUrl: requireEnv("GEMINI_BASE_URL"),
+      apiKey: geminiApiKey,
+      model: requireEnv("GEMINI_MODEL"),
+    })
+  : undefined;
+/**
+ * Intake limits are counted in Valkey so they hold across restarts and replicas. Without a client the limiter
+ * refuses intake rather than letting unmetered reader calls through, so a missing `VALKEY_URL` costs photo intake
+ * and nothing else.
+ */
+const prescriptionIntakeLimiter = new ValkeyIntakeRateLimiter(valkeyClient);
+app.use(
+  createPrescriptionIntakeRouter({
+    reader: prescriptionReader,
+    limiter: prescriptionIntakeLimiter,
+    catalogServiceUrl: requireEnv("CATALOG_SERVICE_URL"),
+  }),
+);
 app.use(
   createSalesRouter(salesRepository, {
     catalogServiceUrl: requireEnv("CATALOG_SERVICE_URL"),
@@ -124,10 +153,7 @@ app.use(
 );
 app.use(createDeliveryRouter(deliveryCalculator, lookupStore, addressGeocoder));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
-app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-  logger.error({ error }, "unhandled request error");
-  response.status(500).json({ title: "Internal Server Error", status: 500 });
-});
+app.use(createErrorHandler(logger));
 
 const server = createServer(app);
 const shutdown = (signal: string): void => {

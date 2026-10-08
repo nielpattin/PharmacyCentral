@@ -11,9 +11,10 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint --type-aware src",
+    "prescriptions:samples": "node scripts/generate-prescription-samples.ts",
     "start": "node dist/main.js",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json"
   },
   "dependencies": {
     "@valkey/valkey-glide": "catalog:",
@@ -27,9 +28,13 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "catalog:",
+    "@resvg/resvg-js": "catalog:",
     "@types/express": "catalog:",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
+    "@types/qrcode": "catalog:",
+    "jsqr": "catalog:",
+    "qrcode": "catalog:",
     "vitest": "catalog:"
   },
   "nx": {

@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The base config is a composite project for `build`, and a composite project may not skip emit or leave files
+    // outside its include, which is exactly what a scripts-only typecheck does.
+    "composite": false,
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["scripts/**/*.ts"]
+}
