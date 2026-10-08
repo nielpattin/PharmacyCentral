@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 
-import { productSearchQuerySchema } from "../contracts/catalog.ts";
+import { productMatchRequestSchema, productSearchQuerySchema } from "../contracts/catalog.ts";
 
 import { ProductMediaStore } from "./catalog/product-media-store.ts";
+import { rankCandidates } from "./catalog/product-matching.ts";
 import type { DrizzleStoreRepository } from "./stores/infrastructure/drizzle-store-repository.ts";
 
 const idParamSchema = z.object({ id: z.string().uuid() });
@@ -256,6 +257,25 @@ export const createCatalogRouter = (
     if (!parsed.success) return invalidRequest(response);
     const products = await repository.searchProducts(parsed.data.search, parsed.data.limit, parsed.data.category);
     response.json(await Promise.all(products.map((product) => withProductUnits(repository, product))));
+  });
+
+  // Answers one entry per requested item, in request order, so a caller can pair each prescription line with its suggestions.
+  router.post("/products/match", async (request, response) => {
+    if (!repository) return databaseUnavailable(response);
+    const parsed = productMatchRequestSchema.safeParse(request.body);
+    if (!parsed.success) return invalidRequest(response);
+    const results = await Promise.all(
+      parsed.data.items.map(async (item) => {
+        const candidates = await repository.matchProducts(item, parsed.data.limit);
+        const ranked = rankCandidates(item, candidates, parsed.data.limit);
+        return {
+          matches: await Promise.all(
+            ranked.map(async (match) => ({ ...match, product: await withProductUnits(repository, match.product) })),
+          ),
+        };
+      }),
+    );
+    response.json(results);
   });
 
   router.get("/products/:id", async (request, response) => {

@@ -34,7 +34,23 @@ export const productSearchQuerySchema = z.object({
   cursor: z.string().optional(),
 });
 
+/** One prescription line to look up: a prescribed name and/or its active ingredients, with the strength if stated. */
+export const productMatchRequestSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        name: z.string().trim().max(500).nullable(),
+        activeIngredients: z.array(z.string().trim().min(1).max(200)).max(10),
+        strength: z.string().trim().max(150).nullable(),
+      }),
+    )
+    .min(1)
+    .max(30),
+  limit: z.number().int().min(1).max(10).default(5),
+});
+
 export type ProductChangedEvent = z.infer<typeof productChangedEventSchema>;
 export type ProductSummary = z.infer<typeof productSummarySchema>;
 export type Store = z.infer<typeof storeSchema>;
 export type ProductSearchQuery = z.infer<typeof productSearchQuerySchema>;
+export type ProductMatchRequest = z.infer<typeof productMatchRequestSchema>;

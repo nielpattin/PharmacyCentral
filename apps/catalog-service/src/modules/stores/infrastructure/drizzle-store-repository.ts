@@ -1,5 +1,13 @@
-import { and, asc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 
+import {
+  INGREDIENT_SIMILARITY_FLOOR,
+  NAME_SIMILARITY_FLOOR,
+  stripStrengths,
+  type MatchCandidate,
+  type MatchItem,
+} from "../../catalog/product-matching.ts";
 import type { CatalogDatabase } from "../../../shared/infrastructure/database.ts";
 import {
   availabilityProjections,
@@ -80,6 +88,97 @@ export class DrizzleStoreRepository {
       .where(and(...filters))
       .orderBy(asc(products.sku))
       .limit(boundedLimit);
+  }
+
+  /**
+   * Candidates for one prescription line by trigram similarity on accent-folded text, so "Paracetamol" finds
+   * "PARACETAMOL 500MG QUANG BÌNH" and "Amoxicilin" still finds Amoxicillin. The name score is how well the
+   * prescribed name sits inside the product name; the ingredient score is the weakest of the prescribed
+   * ingredients, because a product holding only one of two ingredients is a different medicine.
+   *
+   * Every score and every floor is double precision. A line that names no product, or lists no ingredient, scores
+   * the constant zero, and an untyped zero next to an untyped bound makes Postgres resolve the fractional floor
+   * beside it as integer and reject it with 22P02.
+   */
+  public async matchProducts(
+    item: MatchItem,
+    limit: number,
+  ): Promise<Array<MatchCandidate<typeof products.$inferSelect>>> {
+    const nameQuery = stripStrengths(item.name);
+    const ingredientQueries = item.activeIngredients.map(stripStrengths).filter((value) => value.length > 0);
+    // A prescription that only names a generic ("Paracetamol 500mg") is also judged against the ingredient columns.
+    if (ingredientQueries.length === 0 && nameQuery.length > 0) ingredientQueries.push(nameQuery);
+    if (nameQuery.length === 0 && ingredientQueries.length === 0) return [];
+
+    // The GIN trigram indexes are built on catalog_fold, so the comparisons have to fold through the same function.
+    const folded = (value: SQL): SQL => sql`catalog_fold(${value})`;
+    const text = (query: string): SQL => sql`${query}::text`;
+    const doublePrecision = (value: SQL): SQL => sql`(${value})::double precision`;
+    const floor = (value: number): SQL => sql`${value}::double precision`;
+    const nameScore =
+      nameQuery.length > 0
+        ? sql`word_similarity(${folded(text(nameQuery))}, ${folded(sql`${products.name}`)})`
+        : sql`0`;
+    const ingredientScore =
+      ingredientQueries.length > 0
+        ? sql`LEAST(${sql.join(
+            ingredientQueries.map(
+              (query) => sql`GREATEST(
+                similarity(${folded(sql`coalesce(${products.genericName}, '')`)}, ${folded(text(query))}),
+                word_similarity(${folded(text(query))}, ${folded(sql`coalesce(${products.activeIngredient}, '')`)})
+              )`,
+            ),
+            sql`, `,
+          )})`
+        : sql`0`;
+
+    // `<%` (word similarity) and `%` (similarity) are the only forms of those comparisons a GIN trigram index can
+    // answer. They prefilter on the bare folded columns, and the double precision comparisons stay the authority on
+    // which rows count, so the operator thresholds never drop a row the floors keep.
+    const namePrefilters =
+      nameQuery.length > 0 ? [sql`${folded(text(nameQuery))} <% ${folded(sql`${products.name}`)}`] : [];
+    const ingredientPrefilters = ingredientQueries.map((query) => {
+      const foldedQuery = folded(text(query));
+      const foldedGenericName = folded(sql`${products.genericName}`);
+      const foldedActiveIngredient = folded(sql`${products.activeIngredient}`);
+      return sql`(${foldedGenericName} % ${foldedQuery} OR ${foldedQuery} <% ${foldedActiveIngredient})`;
+    });
+
+    const rows = await this.database.db.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`SELECT set_config('pg_trgm.word_similarity_threshold', ${String(NAME_SIMILARITY_FLOOR)}, true),
+                   set_config('pg_trgm.similarity_threshold', ${String(INGREDIENT_SIMILARITY_FLOOR)}, true)`,
+      );
+      return (
+        transaction
+          .select({
+            product: products,
+            nameScore: sql<number>`${nameScore}`,
+            ingredientScore: sql<number>`${ingredientScore}`,
+          })
+          .from(products)
+          .where(
+            and(
+              eq(products.isActive, true),
+              or(
+                and(sql`${doublePrecision(nameScore)} >= ${floor(NAME_SIMILARITY_FLOOR)}`, ...namePrefilters),
+                and(
+                  sql`${doublePrecision(ingredientScore)} >= ${floor(INGREDIENT_SIMILARITY_FLOOR)}`,
+                  ...ingredientPrefilters,
+                ),
+              ),
+            ),
+          )
+          .orderBy(desc(sql`GREATEST(${nameScore}, ${ingredientScore})`), asc(products.sku))
+          // Strengths reorder the survivors afterwards, so the exact tablet must not be cut off by its siblings.
+          .limit(Math.min(Math.max(limit, 1) * 4, 40))
+      );
+    });
+    return rows.map((row) => ({
+      product: row.product,
+      nameScore: Number(row.nameScore),
+      ingredientScore: Number(row.ingredientScore),
+    }));
   }
 
   public async listProductUnits(productId: string): Promise<Array<typeof productUnits.$inferSelect>> {
