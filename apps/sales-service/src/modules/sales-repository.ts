@@ -31,6 +31,18 @@ type OrderLineInput = {
 
 type DeliverySnapshotInput = Omit<typeof orderDeliverySnapshots.$inferInsert, "orderId" | "createdAt">;
 
+/** A dispense the prescription cannot take: it is closed, names a line it lacks, or exceeds what was prescribed. */
+export class PrescriptionDispenseError extends Error {}
+
+/** The goods a dispense takes off the shelf, handed to inventory while the prescription row is still locked. */
+export type PrescriptionStockDispense = {
+  prescriptionId: string;
+  reservationId: string | null;
+  siteId: string;
+  storageLocationId: string;
+  lines: Array<{ productId: string; productBatchId: string; quantity: number }>;
+};
+
 export class SalesRepository {
   public constructor(private readonly database: SalesDatabase) {}
 
@@ -512,23 +524,6 @@ export class SalesRepository {
     });
   }
 
-  public async getIdempotencyResponse(key: string, scope: string, actorId: string): Promise<unknown> {
-    const existing = (
-      await this.database.db
-        .select()
-        .from(idempotencyRecords)
-        .where(
-          and(
-            eq(idempotencyRecords.key, key),
-            eq(idempotencyRecords.scope, scope),
-            eq(idempotencyRecords.actorId, actorId),
-          ),
-        )
-        .limit(1)
-    )[0];
-    return existing ? (JSON.parse(existing.response) as unknown) : undefined;
-  }
-
   public async getPrescription(id: string) {
     const prescription = (
       await this.database.db.select().from(prescriptions).where(eq(prescriptions.id, id)).limit(1)
@@ -594,14 +589,22 @@ export class SalesRepository {
     return prescription;
   }
 
+  /**
+   * Records a dispense and takes the goods off the shelf in one step. The prescription row is locked first, so two
+   * submissions of the same dispense are judged one after the other and the second is refused before any stock
+   * moves. `dispenseStock` runs inside the transaction: when inventory refuses, nothing is recorded here either.
+   */
   public async dispensePrescription(
     id: string,
     input: Array<{ prescriptionLineId: string; productBatchId: string; dispensedQuantity: number }>,
     dispensedBy: string,
+    dispenseStock: (dispense: PrescriptionStockDispense) => Promise<void>,
     idempotencyKey?: string,
   ) {
     return this.database.db.transaction(async (transaction) => {
-      const prescription = (await transaction.select().from(prescriptions).where(eq(prescriptions.id, id)).limit(1))[0];
+      const prescription = (
+        await transaction.select().from(prescriptions).where(eq(prescriptions.id, id)).limit(1).for("update")
+      )[0];
       if (!prescription) return undefined;
       if (idempotencyKey) {
         const existing = (
@@ -620,26 +623,37 @@ export class SalesRepository {
         if (existing) return { ...(JSON.parse(existing.response) as Record<string, unknown>), idempotentReplay: true };
       }
       if (!["Pending", "PartiallyDispensed"].includes(prescription.status))
-        throw new Error("Prescription is not available for dispensing");
+        throw new PrescriptionDispenseError("Prescription is not available for dispensing");
       const lines = await transaction.select().from(prescriptionLines).where(eq(prescriptionLines.prescriptionId, id));
       const requestedIds = new Set(input.map((line) => line.prescriptionLineId));
       if (input.some((line) => !lines.some((existing) => existing.id === line.prescriptionLineId)))
-        throw new Error("Prescription line was not found");
+        throw new PrescriptionDispenseError("Prescription line was not found");
+      // Two entries for one line add up, so the prescribed ceiling is checked against their sum.
+      const dispensedSoFar = new Map(lines.map((line) => [line.id, Number(line.dispensedQuantity)]));
+      const stockLines: PrescriptionStockDispense["lines"] = [];
       for (const line of input) {
         const existing = lines.find((candidate) => candidate.id === line.prescriptionLineId);
-        if (
-          !existing ||
-          Number(existing.dispensedQuantity) + line.dispensedQuantity > Number(existing.prescribedQuantity)
-        )
-          throw new Error("Dispensed quantity exceeds prescribed quantity");
+        const total = (dispensedSoFar.get(line.prescriptionLineId) ?? 0) + line.dispensedQuantity;
+        if (!existing || total > Number(existing.prescribedQuantity))
+          throw new PrescriptionDispenseError("Dispensed quantity exceeds prescribed quantity");
+        dispensedSoFar.set(line.prescriptionLineId, total);
+        stockLines.push({
+          productId: existing.productId,
+          productBatchId: line.productBatchId,
+          quantity: line.dispensedQuantity,
+        });
         await transaction
           .update(prescriptionLines)
-          .set({
-            dispensedQuantity: String(Number(existing.dispensedQuantity) + line.dispensedQuantity),
-            productBatchId: line.productBatchId,
-          })
+          .set({ dispensedQuantity: String(total), productBatchId: line.productBatchId })
           .where(eq(prescriptionLines.id, line.prescriptionLineId));
       }
+      await dispenseStock({
+        prescriptionId: id,
+        reservationId: prescription.reservationId,
+        siteId: prescription.siteId,
+        storageLocationId: prescription.storageLocationId,
+        lines: stockLines,
+      });
       const refreshed = await transaction
         .select()
         .from(prescriptionLines)

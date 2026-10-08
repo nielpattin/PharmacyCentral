@@ -1,12 +1,13 @@
 import { PGlite } from "@electric-sql/pglite";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import * as schema from "../shared/infrastructure/schema.ts";
-import { InventoryRepository } from "./inventory-repository.ts";
+import { InventoryRepository, StockDispenseError } from "./inventory-repository.ts";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle/migrations", import.meta.url));
 
@@ -185,5 +186,309 @@ describe("InventoryRepository movement summary", () => {
         latestOccurredAt: "2026-09-11T08:00:00.000Z",
       },
     ]);
+  });
+});
+
+/**
+ * A dispense must take the goods off the batch the pharmacist handed over, give back the hold FEFO placed, and never
+ * move stock twice for one dispense id; only the real engine with the real migrations shows the rows that result.
+ */
+describe("InventoryRepository dispense", () => {
+  const client = new PGlite();
+  const db = drizzle({ client, schema });
+  const repository = new InventoryRepository({ db, pool: undefined } as unknown as InventoryDatabase);
+
+  const site = "00000000-0000-4000-8000-00000000000a";
+  const location = "00000000-0000-4000-8000-00000000001a";
+  const product = "00000000-0000-4000-8000-00000000002a";
+  const actor = "00000000-0000-4000-8000-00000000003a";
+  // FEFO reserves the earlier expiry; the pharmacist may still hand over the later one.
+  const earlyBatch = "00000000-0000-4000-8000-00000000004a";
+  const lateBatch = "00000000-0000-4000-8000-00000000004b";
+  const expiredBatch = "00000000-0000-4000-8000-00000000004c";
+  const reservation = "00000000-0000-4000-8000-00000000005a";
+  const prescription = "00000000-0000-4000-8000-00000000006a";
+
+  const balanceOf = async (productBatchId: string) => {
+    const [row] = await db
+      .select()
+      .from(schema.inventoryBalances)
+      .where(eq(schema.inventoryBalances.productBatchId, productBatchId));
+    return { onHand: Number(row?.quantityOnHand), reserved: Number(row?.quantityReserved) };
+  };
+  const reservationStatus = async () =>
+    (await db.select().from(schema.stockReservations).where(eq(schema.stockReservations.id, reservation)))[0]?.status;
+  const dispense = (dispenseId: string, productBatchId: string, quantity: number) =>
+    repository.dispense({
+      dispenseId,
+      reservationId: reservation,
+      referenceId: prescription,
+      siteId: site,
+      storageLocationId: location,
+      actorId: actor,
+      lines: [{ productId: product, productBatchId, quantity }],
+    });
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder });
+  });
+
+  beforeEach(async () => {
+    await client.exec(`
+      TRUNCATE product_batches, inventory_balances, stock_reservations, stock_reservation_lines,
+        stock_ledger_entries, idempotency_records, outbox_messages;
+    `);
+    await db.insert(schema.productBatches).values([
+      { id: earlyBatch, productId: product, batchNumber: "EARLY", expiryDate: "2099-01-31", qualityStatus: "Released" },
+      { id: lateBatch, productId: product, batchNumber: "LATE", expiryDate: "2099-12-31", qualityStatus: "Released" },
+    ]);
+    await db.insert(schema.inventoryBalances).values(
+      [earlyBatch, lateBatch].map((productBatchId) => ({
+        productBatchId,
+        siteId: site,
+        storageLocationId: location,
+        quantityOnHand: "10",
+      })),
+    );
+    await repository.reserve({
+      reservationId: reservation,
+      ownerId: prescription,
+      siteId: site,
+      storageLocationId: location,
+      lines: [{ productId: product, quantity: 4 }],
+    });
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it("takes the goods off the handed-over batch, releases the hold, and consumes it once filled", async () => {
+    await dispense("first", lateBatch, 1);
+
+    await expect(balanceOf(lateBatch)).resolves.toEqual({ onHand: 9, reserved: 0 });
+    await expect(balanceOf(earlyBatch)).resolves.toEqual({ onHand: 10, reserved: 3 });
+    await expect(reservationStatus()).resolves.toBe("active");
+
+    await dispense("second", earlyBatch, 3);
+
+    await expect(balanceOf(earlyBatch)).resolves.toEqual({ onHand: 7, reserved: 0 });
+    await expect(reservationStatus()).resolves.toBe("consumed");
+    const ledger = await db.select().from(schema.stockLedgerEntries);
+    expect(ledger.map((entry) => [entry.movementType, entry.referenceId, Number(entry.quantityDelta)])).toEqual([
+      ["Dispense", prescription, -1],
+      ["Dispense", prescription, -3],
+    ]);
+  });
+
+  it("answers a repeated dispense id with the first result and moves no more stock", async () => {
+    const first = await dispense("same", lateBatch, 2);
+    const repeated = await dispense("same", lateBatch, 2);
+
+    expect(repeated).toEqual(JSON.parse(JSON.stringify(first)));
+    await expect(balanceOf(lateBatch)).resolves.toEqual({ onHand: 8, reserved: 0 });
+    await expect(db.select().from(schema.stockLedgerEntries)).resolves.toHaveLength(1);
+  });
+
+  it("refuses an expired batch and leaves the stock and the hold untouched", async () => {
+    await db.insert(schema.productBatches).values({
+      id: expiredBatch,
+      productId: product,
+      batchNumber: "OLD",
+      expiryDate: "2000-01-31",
+      qualityStatus: "Released",
+    });
+    await db
+      .insert(schema.inventoryBalances)
+      .values({ productBatchId: expiredBatch, siteId: site, storageLocationId: location, quantityOnHand: "10" });
+
+    await expect(dispense("expired", expiredBatch, 1)).rejects.toBeInstanceOf(StockDispenseError);
+
+    await expect(balanceOf(expiredBatch)).resolves.toEqual({ onHand: 10, reserved: 0 });
+    await expect(balanceOf(earlyBatch)).resolves.toEqual({ onHand: 10, reserved: 4 });
+    await expect(db.select().from(schema.stockLedgerEntries)).resolves.toHaveLength(0);
+  });
+
+  it("releases only what a partly dispensed reservation still holds, and never another sale's hold", async () => {
+    await dispense("partial", earlyBatch, 1);
+    // Another sale holds two more units of the same batch; a repeated cancel must not give those back.
+    await repository.reserve({
+      reservationId: "00000000-0000-4000-8000-00000000005b",
+      ownerId: "00000000-0000-4000-8000-00000000006b",
+      siteId: site,
+      storageLocationId: location,
+      lines: [{ productId: product, quantity: 2 }],
+    });
+
+    await repository.releaseReservation(reservation);
+    await repository.releaseReservation(reservation);
+
+    await expect(balanceOf(earlyBatch)).resolves.toEqual({ onHand: 9, reserved: 2 });
+    await expect(reservationStatus()).resolves.toBe("released");
+  });
+});
+
+/**
+ * Only released, unexpired stock may be held for a sale or shown to shoppers as available, and availability is the
+ * product's free stock across every such batch at the site, never the one batch that just moved.
+ */
+describe("InventoryRepository sellable stock", () => {
+  const client = new PGlite();
+  const db = drizzle({ client, schema });
+  const published: Array<{ productId: string; siteId: string; inStock: boolean }> = [];
+  const repository = new InventoryRepository({ db, pool: undefined } as unknown as InventoryDatabase, async (input) => {
+    published.push(input);
+  });
+
+  const site = "00000000-0000-4000-8000-00000000000a";
+  const location = "00000000-0000-4000-8000-00000000001a";
+  const product = "00000000-0000-4000-8000-00000000002a";
+  const expiredBatch = "00000000-0000-4000-8000-00000000004a";
+  const pendingBatch = "00000000-0000-4000-8000-00000000004b";
+  const sellableA = "00000000-0000-4000-8000-00000000004c";
+  const sellableB = "00000000-0000-4000-8000-00000000004d";
+
+  const stock = async (
+    batches: Array<{ id: string; expiryDate: string; qualityStatus: string; onHand: number }>,
+  ): Promise<void> => {
+    await db.insert(schema.productBatches).values(
+      batches.map(({ id, expiryDate, qualityStatus }) => ({
+        id,
+        productId: product,
+        batchNumber: id,
+        expiryDate,
+        qualityStatus,
+      })),
+    );
+    await db.insert(schema.inventoryBalances).values(
+      batches.map(({ id, onHand }) => ({
+        productBatchId: id,
+        siteId: site,
+        storageLocationId: location,
+        quantityOnHand: String(onHand),
+      })),
+    );
+  };
+  const takeAll = (productBatchId: string, quantity: number) =>
+    repository.recordMovement({
+      productId: product,
+      productBatchId,
+      siteId: site,
+      storageLocationId: location,
+      quantityDelta: -quantity,
+      movementType: "StockAdjustment",
+    });
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder });
+  });
+
+  beforeEach(async () => {
+    published.length = 0;
+    await client.exec(`
+      TRUNCATE product_batches, inventory_balances, stock_reservations, stock_reservation_lines,
+        stock_ledger_entries, outbox_messages;
+    `);
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it("holds a sale's stock on a sellable batch, never on an expired one that expires first", async () => {
+    await stock([
+      { id: expiredBatch, expiryDate: "2000-01-31", qualityStatus: "Released", onHand: 10 },
+      { id: sellableA, expiryDate: "2099-01-31", qualityStatus: "Released", onHand: 10 },
+    ]);
+
+    const allocations = await repository.reserve({
+      reservationId: "00000000-0000-4000-8000-00000000005a",
+      ownerId: "00000000-0000-4000-8000-00000000006a",
+      siteId: site,
+      storageLocationId: location,
+      lines: [{ productId: product, quantity: 4 }],
+    });
+
+    expect(allocations.map((allocation) => allocation.productBatchId)).toEqual([sellableA]);
+  });
+
+  it("keeps a product available while another sellable batch still has stock", async () => {
+    await stock([
+      { id: sellableA, expiryDate: "2099-01-31", qualityStatus: "Released", onHand: 5 },
+      { id: sellableB, expiryDate: "2099-06-30", qualityStatus: "Released", onHand: 5 },
+    ]);
+
+    await takeAll(sellableA, 5);
+
+    expect(published).toEqual([{ productId: product, siteId: site, inStock: true }]);
+  });
+
+  it("shows a product out of stock when only expired or unreleased goods remain", async () => {
+    await stock([
+      { id: expiredBatch, expiryDate: "2000-01-31", qualityStatus: "Released", onHand: 10 },
+      { id: pendingBatch, expiryDate: "2099-01-31", qualityStatus: "PendingQc", onHand: 10 },
+      { id: sellableA, expiryDate: "2099-01-31", qualityStatus: "Released", onHand: 5 },
+    ]);
+
+    await takeAll(sellableA, 5);
+
+    expect(published).toEqual([{ productId: product, siteId: site, inStock: false }]);
+    const [event] = await db.select().from(schema.outboxMessages);
+    expect(JSON.parse(event?.payload ?? "null")).toEqual({ productId: product, siteId: site, inStock: false });
+  });
+
+  it("puts a product in stock when quality control releases its batch", async () => {
+    await stock([{ id: pendingBatch, expiryDate: "2099-01-31", qualityStatus: "PendingQc", onHand: 10 }]);
+
+    await repository.reviewBatch(pendingBatch, "Released");
+
+    expect(published).toEqual([{ productId: product, siteId: site, inStock: true }]);
+  });
+
+  it("shows a product out of stock once a sale holds its last free unit", async () => {
+    await stock([{ id: sellableA, expiryDate: "2099-01-31", qualityStatus: "Released", onHand: 3 }]);
+
+    await repository.reserve({
+      reservationId: "00000000-0000-4000-8000-00000000005a",
+      ownerId: "00000000-0000-4000-8000-00000000006a",
+      siteId: site,
+      storageLocationId: location,
+      lines: [{ productId: product, quantity: 3 }],
+    });
+
+    expect(published).toEqual([{ productId: product, siteId: site, inStock: false }]);
+  });
+
+  it("shows a product in stock again when the sale gives its hold back", async () => {
+    await stock([{ id: sellableA, expiryDate: "2099-01-31", qualityStatus: "Released", onHand: 3 }]);
+    const reservationId = "00000000-0000-4000-8000-00000000005a";
+    await repository.reserve({
+      reservationId,
+      ownerId: "00000000-0000-4000-8000-00000000006a",
+      siteId: site,
+      storageLocationId: location,
+      lines: [{ productId: product, quantity: 3 }],
+    });
+    published.length = 0;
+
+    await repository.releaseReservation(reservationId);
+
+    expect(published).toEqual([{ productId: product, siteId: site, inStock: true }]);
+  });
+
+  it("takes a product out of stock when its only batch expires while nothing moves", async () => {
+    await stock([{ id: sellableA, expiryDate: "2000-01-31", qualityStatus: "Released", onHand: 5 }]);
+
+    await expect(repository.refreshAvailabilityForExpiredStock()).resolves.toBe(1);
+
+    expect(published).toEqual([{ productId: product, siteId: site, inStock: false }]);
+  });
+
+  it("leaves an expiry already answered alone when the sweep is bounded to later dates", async () => {
+    await stock([{ id: sellableA, expiryDate: "2000-01-31", qualityStatus: "Released", onHand: 5 }]);
+
+    await expect(repository.refreshAvailabilityForExpiredStock("2001-01-01")).resolves.toBe(0);
+
+    expect(published).toEqual([]);
   });
 });

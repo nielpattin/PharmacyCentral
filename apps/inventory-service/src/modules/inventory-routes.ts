@@ -1,10 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
 
-import { reserveStockCommandSchema, stockMovementCommandSchema } from "../contracts/inventory.ts";
+import {
+  dispenseStockCommandSchema,
+  reserveStockCommandSchema,
+  stockMovementCommandSchema,
+} from "../contracts/inventory.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
 
-import { InventoryRepository } from "./inventory-repository.ts";
+import { InventoryRepository, StockDispenseError } from "./inventory-repository.ts";
 
 const idParam = z.object({ id: z.string().uuid() });
 const batchSchema = z.object({
@@ -81,7 +85,6 @@ const returnSchema = z.object({
   lines: z.array(returnLineSchema).min(1),
 });
 const countSchema = z.object({ countedQuantity: z.number().nonnegative() });
-
 const periodSchema = z.object({
   from: z.string().datetime({ offset: true }).optional(),
   to: z.string().datetime({ offset: true }).optional(),
@@ -283,19 +286,47 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
       return next(error);
     }
   });
-  router.post("/inventory/reservations/:id/:action", async (request, response, next) => {
+  router.post("/inventory/reservations/:id/release", async (request, response, next) => {
     if (!repository) return unavailable(response);
     const id = idParam.safeParse(request.params);
-    const action = z.enum(["release", "consume"]).safeParse(request.params.action);
-    if (!id.success || !action.success) return invalid(response);
+    if (!id.success) return invalid(response);
     try {
-      const reservation = await repository.releaseReservation(
-        id.data.id,
-        action.data === "release" ? "released" : "consumed",
-      );
+      const reservation = await repository.releaseReservation(id.data.id);
       if (!reservation) return response.status(404).json({ title: "Reservation not found", status: 404 });
       return response.json(reservation);
     } catch (error) {
+      return next(error);
+    }
+  });
+  router.post("/inventory/dispenses", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    // Stock leaves only together with the sale that records it, so the dispense comes from sales-service, never a browser.
+    if (request.header("x-actor-type") !== "system")
+      return response.status(403).json({ title: "System actor required", status: 403, code: "forbidden" });
+    const parsed = dispenseStockCommandSchema.safeParse(request.body);
+    const actorId = request.header("X-Actor-Id");
+    if (!parsed.success || !actorId) return invalid(response);
+    try {
+      return response.status(201).json(
+        await repository.dispense({
+          dispenseId: parsed.data.dispenseId,
+          reservationId: parsed.data.reservationId,
+          referenceId: parsed.data.prescriptionId,
+          siteId: parsed.data.siteId,
+          storageLocationId: parsed.data.storageLocationId,
+          actorId,
+          lines: parsed.data.lines,
+        }),
+      );
+    } catch (error) {
+      // The stock refused the goods; the caller rolls its own record back and shows the pharmacist why.
+      if (error instanceof StockDispenseError)
+        return response.status(409).json({
+          title: "Stock could not be dispensed",
+          status: 409,
+          code: "dispense_rejected",
+          detail: error.message,
+        });
       return next(error);
     }
   });

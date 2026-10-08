@@ -137,6 +137,8 @@ Use **Quality** to review newly received batches.
 - Reject batches that fail inspection.
 - Add review notes for traceability.
 
+Only released batches that have not passed their expiry date count as sellable. Sales reserve stock only from those batches, and the storefront shows a product in stock at a site only while such batches there still have free stock. Releasing or rejecting a batch updates that availability right away. Holding stock for a sale and giving a reservation back update it as well, and a sweep repeats it every hour for batches that cross their expiry date while nothing else moves.
+
 ## Inventory management
 
 Use **Inventory** to view batch quantities, storage locations, and movement history. This workspace serves Warehouse Staff and Platform Admins.
@@ -155,8 +157,8 @@ Basic flow:
 4. Customer details are optional. The default customer is a walk-in retail customer.
 5. Create the sales order. The system reserves stock for the transaction.
 6. Generate a payment invoice, display payment instructions, and print a receipt if requested.
-7. Confirm dispensing after payment verification.
-8. Cancel the transaction if the customer declines. Canceling releases all reserved inventory.
+7. Confirm dispensing after payment verification. Dispensing takes the quantity off the batch the pharmacist hands over and records a **Dispense** movement in the stock ledger; an expired, unreleased, or short batch is refused and nothing is recorded. A partial dispense keeps the rest of the reservation for the next one.
+8. Cancel the transaction if the customer declines. Canceling releases whatever stock the transaction still holds.
 
 ## Payments and invoicing
 

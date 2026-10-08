@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import {
+  idempotencyRecords,
   inventoryBalances,
   outboxMessages,
   productBatches,
@@ -21,26 +22,45 @@ import {
 import { allocateFefo } from "./stock/application/fefo-allocate.ts";
 import { transitionReplenishment, type ReplenishmentStatus } from "./replenishment/domain/replenishment-request.ts";
 import { transitionTransfer, type TransferStatus } from "./transfers/domain/transfer-order.ts";
+import { recordSiteAvailability, sellableBatch, today, type Availability } from "./site-availability.ts";
+
+/** A dispense the stock cannot honour: the batch is wrong for the product, not releasable, or not on the shelf. */
+export class StockDispenseError extends Error {}
+
+export type StockDispenseLine = { productId: string; productBatchId: string; quantity: number };
+
+export type StockDispense = {
+  /** Idempotency key: the same dispense sent twice moves stock once and answers the first result again. */
+  dispenseId: string;
+  /** The reservation held for this sale; its held quantity is released as the goods leave. */
+  reservationId?: string | undefined;
+  /** The prescription the goods left for, recorded on every ledger entry. */
+  referenceId: string;
+  siteId: string;
+  storageLocationId: string;
+  /** The pharmacist who handed the goods over; the idempotency key is scoped to them. */
+  actorId: string;
+  lines: StockDispenseLine[];
+};
+
+export type StockDispenseResult = {
+  dispenseId: string;
+  reservationStatus: string | null;
+  entries: Array<typeof stockLedgerEntries.$inferSelect>;
+};
+
+const DISPENSE_SCOPE = "inventory.dispense";
 
 export class InventoryRepository {
   public constructor(
     private readonly database: InventoryDatabase,
-    private readonly publishAvailability?: (input: {
-      productId: string;
-      siteId: string;
-      inStock: boolean;
-    }) => Promise<void>,
+    private readonly publishAvailability?: (input: Availability) => Promise<void>,
   ) {}
 
-  private async publishAvailabilitySafely(
-    productId: string,
-    siteId: string,
-    quantityOnHand: number,
-    quantityReserved: number,
-  ): Promise<void> {
+  private async publishAvailabilitySafely({ productId, siteId, inStock }: Availability): Promise<void> {
     if (!this.publishAvailability) return;
     try {
-      await this.publishAvailability({ productId, siteId, inStock: quantityOnHand - quantityReserved > 0 });
+      await this.publishAvailability({ productId, siteId, inStock });
     } catch {
       // The local stock transaction remains authoritative. The outbox retry handles broker recovery.
     }
@@ -244,38 +264,16 @@ export class InventoryRepository {
         movementType: "StockAdjustment",
         reason: adjustment.reason,
       });
-      await transaction.insert(outboxMessages).values({
-        eventType: "inventory.availability.changed.v1",
-        schemaVersion: "1",
-        payload: JSON.stringify({
-          productId: adjustment.productId,
-          siteId: adjustment.siteId,
-          inStock: nextOnHand - quantityReserved > 0,
-        }),
-      });
+      const availability = await recordSiteAvailability(transaction, adjustment.productId, adjustment.siteId);
       const [approved] = await transaction
         .update(stockAdjustments)
         .set({ status: "Approved", approvedBy: actorId, approvalNotes: approvalNotes ?? null, updatedAt: new Date() })
         .where(eq(stockAdjustments.id, id))
         .returning();
-      return {
-        adjustment: approved,
-        availability: {
-          productId: adjustment.productId,
-          siteId: adjustment.siteId,
-          quantityOnHand: nextOnHand,
-          quantityReserved,
-        },
-      };
+      return { adjustment: approved, availability };
     });
     if (!result) return undefined;
-    if (result.availability)
-      await this.publishAvailabilitySafely(
-        result.availability.productId,
-        result.availability.siteId,
-        result.availability.quantityOnHand,
-        result.availability.quantityReserved,
-      );
+    if (result.availability) await this.publishAvailabilitySafely(result.availability);
     return result.adjustment;
   }
 
@@ -285,23 +283,40 @@ export class InventoryRepository {
     return batch;
   }
 
+  /**
+   * Quality control's verdict decides whether a batch may be sold, so every site holding it gets its availability
+   * recorded again: a release can put a product back in stock, a rejection can take it out.
+   */
   public async reviewBatch(
     id: string,
     qualityStatus: "Released" | "Rejected",
     qualityNotes?: string | null,
     reviewedBy?: string,
   ) {
-    const [batch] = await this.database.db
-      .update(productBatches)
-      .set({
-        qualityStatus,
-        qualityNotes: qualityNotes ?? null,
-        qualityReviewedBy: reviewedBy ?? null,
-        qualityReviewedAt: new Date(),
-      })
-      .where(eq(productBatches.id, id))
-      .returning();
-    return batch;
+    const result = await this.database.db.transaction(async (transaction) => {
+      const [batch] = await transaction
+        .update(productBatches)
+        .set({
+          qualityStatus,
+          qualityNotes: qualityNotes ?? null,
+          qualityReviewedBy: reviewedBy ?? null,
+          qualityReviewedAt: new Date(),
+        })
+        .where(eq(productBatches.id, id))
+        .returning();
+      if (!batch) return undefined;
+      const sites = await transaction
+        .selectDistinct({ siteId: inventoryBalances.siteId })
+        .from(inventoryBalances)
+        .where(eq(inventoryBalances.productBatchId, id));
+      const availability: Availability[] = [];
+      for (const { siteId } of sites)
+        availability.push(await recordSiteAvailability(transaction, batch.productId, siteId));
+      return { batch, availability };
+    });
+    if (!result) return undefined;
+    for (const item of result.availability) await this.publishAvailabilitySafely(item);
+    return result.batch;
   }
 
   public async fefoAllocate(input: { productId: string; siteId: string; quantityNeeded: number }) {
@@ -310,11 +325,7 @@ export class InventoryRepository {
       .from(inventoryBalances)
       .innerJoin(productBatches, eq(productBatches.id, inventoryBalances.productBatchId))
       .where(
-        and(
-          eq(productBatches.productId, input.productId),
-          eq(inventoryBalances.siteId, input.siteId),
-          eq(productBatches.qualityStatus, "Released"),
-        ),
+        and(eq(productBatches.productId, input.productId), eq(inventoryBalances.siteId, input.siteId), sellableBatch()),
       );
     const allocations = allocateFefo(
       rows.map(({ balance, batch }) => ({
@@ -424,25 +435,11 @@ export class InventoryRepository {
           createdBy: input.createdBy ?? null,
         })
         .returning();
-      await transaction.insert(outboxMessages).values({
-        eventType: "inventory.availability.changed.v1",
-        schemaVersion: "1",
-        payload: JSON.stringify({
-          productId: input.productId,
-          siteId: input.siteId,
-          inStock: nextOnHand - reserved > 0,
-        }),
-      });
-      return { balance, ledger };
+      const availability = await recordSiteAvailability(transaction, input.productId, input.siteId);
+      return { balance, ledger, availability };
     });
-    if (result.balance)
-      await this.publishAvailabilitySafely(
-        input.productId,
-        input.siteId,
-        Number(result.balance.quantityOnHand),
-        Number(result.balance.quantityReserved),
-      );
-    return result;
+    await this.publishAvailabilitySafely(result.availability);
+    return { balance: result.balance, ledger: result.ledger };
   }
 
   public async reserve(input: {
@@ -452,7 +449,7 @@ export class InventoryRepository {
     storageLocationId: string;
     lines: Array<{ productId: string; quantity: number }>;
   }) {
-    return this.database.db.transaction(async (transaction) => {
+    const result = await this.database.db.transaction(async (transaction) => {
       await transaction
         .insert(stockReservations)
         .values({ id: input.reservationId, ownerId: input.ownerId, status: "active" })
@@ -474,7 +471,7 @@ export class InventoryRepository {
           .where(
             and(
               eq(productBatches.productId, line.productId),
-              eq(productBatches.qualityStatus, "Released"),
+              sellableBatch(),
               eq(inventoryBalances.siteId, input.siteId),
               eq(inventoryBalances.storageLocationId, input.storageLocationId),
               gt(inventoryBalances.quantityOnHand, inventoryBalances.quantityReserved),
@@ -516,39 +513,268 @@ export class InventoryRepository {
           allocations.push({ productId: line.productId, ...allocation });
         }
       }
-      return allocations;
+      // A hold is a change in what a shopper may buy, so every product it touched is answered again once committed.
+      const availability: Availability[] = [];
+      for (const productId of new Set(input.lines.map((line) => line.productId)))
+        availability.push(await recordSiteAvailability(transaction, productId, input.siteId));
+      return { allocations, availability };
     });
+    for (const item of result.availability) await this.publishAvailabilitySafely(item);
+    return result.allocations;
   }
 
-  public async releaseReservation(id: string, status: "released" | "consumed") {
-    return this.database.db.transaction(async (transaction) => {
+  /**
+   * Gives back whatever a reservation still holds. A reservation line's quantity is what it still holds, so a
+   * partly dispensed prescription releases only the rest, and a reservation that is no longer active is answered
+   * as it is, which keeps a repeated cancel from releasing another sale's hold.
+   */
+  public async releaseReservation(id: string) {
+    const { reservation, availability } = await this.database.db.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select()
+        .from(stockReservations)
+        .where(eq(stockReservations.id, id))
+        .for("update");
+      if (!current || current.status !== "active") return { reservation: current, availability: [] as Availability[] };
       const lines = await transaction
         .select()
         .from(stockReservationLines)
         .where(eq(stockReservationLines.reservationId, id));
-      if (status === "released") {
-        for (const line of lines)
-          await transaction
-            .update(inventoryBalances)
-            .set({
-              quantityReserved: sql`GREATEST(${inventoryBalances.quantityReserved} - ${line.quantity}, 0)`,
-              version: sql`${inventoryBalances.version} + 1`,
-              updatedAt: new Date(),
-            })
-            .where(
-              and(
-                eq(inventoryBalances.productBatchId, line.productBatchId),
-                eq(inventoryBalances.storageLocationId, line.storageLocationId),
-              ),
-            );
+      // A line carries no site, so the balance row that gave the hold back is what names the site to answer for.
+      const answered = new Set<string>();
+      const availability: Availability[] = [];
+      for (const line of lines) {
+        const released = await transaction
+          .update(inventoryBalances)
+          .set({
+            quantityReserved: sql`GREATEST(${inventoryBalances.quantityReserved} - ${line.quantity}, 0)`,
+            version: sql`${inventoryBalances.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(inventoryBalances.productBatchId, line.productBatchId),
+              eq(inventoryBalances.storageLocationId, line.storageLocationId),
+            ),
+          )
+          .returning({ siteId: inventoryBalances.siteId });
+        for (const { siteId } of released) {
+          const pair = `${line.productId}:${siteId}`;
+          if (answered.has(pair)) continue;
+          answered.add(pair);
+          availability.push(await recordSiteAvailability(transaction, line.productId, siteId));
+        }
       }
-      const [reservation] = await transaction
+      await transaction
+        .update(stockReservationLines)
+        .set({ quantity: "0" })
+        .where(eq(stockReservationLines.reservationId, id));
+      const [released] = await transaction
         .update(stockReservations)
-        .set({ status, updatedAt: new Date() })
+        .set({ status: "released", updatedAt: new Date() })
         .where(eq(stockReservations.id, id))
         .returning();
-      return reservation;
+      return { reservation: released, availability };
     });
+    for (const item of availability) await this.publishAvailabilitySafely(item);
+    return reservation;
+  }
+
+  /**
+   * Re-answers availability for stock that expired with nothing moving on the shelf. A balance on a released batch
+   * that has crossed its expiry date drops out of what a site can sell, and only a sweep notices. The pairs are the
+   * ones that had free stock on such a batch, because a batch nobody could buy never showed up as available;
+   * `expiredOnOrAfter` gives the sweeper a lower bound so an expiry is not answered again on every run.
+   */
+  public async refreshAvailabilityForExpiredStock(expiredOnOrAfter?: string): Promise<number> {
+    const { availability } = await this.database.db.transaction(async (transaction) => {
+      const pairs = await transaction
+        .selectDistinct({ productId: productBatches.productId, siteId: inventoryBalances.siteId })
+        .from(inventoryBalances)
+        .innerJoin(productBatches, eq(productBatches.id, inventoryBalances.productBatchId))
+        .where(
+          and(
+            gt(inventoryBalances.quantityOnHand, inventoryBalances.quantityReserved),
+            eq(productBatches.qualityStatus, "Released"),
+            lt(productBatches.expiryDate, today()),
+            expiredOnOrAfter ? gte(productBatches.expiryDate, expiredOnOrAfter) : undefined,
+          ),
+        );
+      const availability: Availability[] = [];
+      for (const pair of pairs)
+        availability.push(await recordSiteAvailability(transaction, pair.productId, pair.siteId));
+      return { availability };
+    });
+    for (const item of availability) await this.publishAvailabilitySafely(item);
+    return availability.length;
+  }
+
+  /**
+   * Goods leave the shelf for a prescription. Each line comes off the batch the pharmacist handed over, which may
+   * not be the batch FEFO reserved, so the reservation is released by product (the dispensed batch's hold first) and
+   * the on-hand quantity drops on the dispensed batch. Every line writes a `Dispense` ledger entry, and once nothing
+   * is held any more the reservation is consumed. A partial dispense keeps the rest of the hold for the next one.
+   */
+  public async dispense(input: StockDispense): Promise<StockDispenseResult> {
+    const dispensedOn = today();
+    const { result, availability } = await this.database.db.transaction(async (transaction) => {
+      // Claiming the key first makes a concurrent duplicate wait for this transaction, then answer its result.
+      const [claimed] = await transaction
+        .insert(idempotencyRecords)
+        .values({ key: input.dispenseId, scope: DISPENSE_SCOPE, actorId: input.actorId, response: "" })
+        .onConflictDoNothing()
+        .returning();
+      if (!claimed) {
+        const [existing] = await transaction
+          .select()
+          .from(idempotencyRecords)
+          .where(
+            and(
+              eq(idempotencyRecords.scope, DISPENSE_SCOPE),
+              eq(idempotencyRecords.key, input.dispenseId),
+              eq(idempotencyRecords.actorId, input.actorId),
+            ),
+          )
+          .limit(1);
+        return { result: JSON.parse(existing?.response ?? "null") as StockDispenseResult, availability: [] };
+      }
+      if (input.reservationId) {
+        const [reservation] = await transaction
+          .select()
+          .from(stockReservations)
+          .where(eq(stockReservations.id, input.reservationId))
+          .for("update");
+        if (!reservation || reservation.status !== "active")
+          throw new StockDispenseError("The stock reservation for this prescription is no longer active");
+      }
+      const entries: Array<typeof stockLedgerEntries.$inferSelect> = [];
+      const touchedProducts = new Set<string>();
+      for (const line of input.lines) {
+        const [batch] = await transaction
+          .select()
+          .from(productBatches)
+          .where(eq(productBatches.id, line.productBatchId))
+          .limit(1);
+        if (!batch || batch.productId !== line.productId)
+          throw new StockDispenseError("The dispensed batch does not belong to the prescribed product");
+        if (batch.qualityStatus !== "Released")
+          throw new StockDispenseError(`Batch ${batch.batchNumber} has not been released by quality control`);
+        if (batch.expiryDate < dispensedOn) throw new StockDispenseError(`Batch ${batch.batchNumber} has expired`);
+        if (input.reservationId) {
+          const holds = await transaction
+            .select()
+            .from(stockReservationLines)
+            .where(
+              and(
+                eq(stockReservationLines.reservationId, input.reservationId),
+                eq(stockReservationLines.productId, line.productId),
+                gt(stockReservationLines.quantity, "0"),
+              ),
+            )
+            .for("update");
+          holds.sort(
+            (left, right) =>
+              Number(right.productBatchId === line.productBatchId) -
+              Number(left.productBatchId === line.productBatchId),
+          );
+          let toRelease = line.quantity;
+          for (const hold of holds) {
+            if (toRelease <= 0) break;
+            const released = Math.min(Number(hold.quantity), toRelease);
+            toRelease -= released;
+            await transaction
+              .update(stockReservationLines)
+              .set({ quantity: sql`${stockReservationLines.quantity} - ${String(released)}` })
+              .where(eq(stockReservationLines.id, hold.id));
+            await transaction
+              .update(inventoryBalances)
+              .set({
+                quantityReserved: sql`GREATEST(${inventoryBalances.quantityReserved} - ${String(released)}, 0)`,
+                version: sql`${inventoryBalances.version} + 1`,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(inventoryBalances.productBatchId, hold.productBatchId),
+                  eq(inventoryBalances.storageLocationId, hold.storageLocationId),
+                ),
+              );
+          }
+        }
+        const [balance] = await transaction
+          .select()
+          .from(inventoryBalances)
+          .where(
+            and(
+              eq(inventoryBalances.productBatchId, line.productBatchId),
+              eq(inventoryBalances.storageLocationId, input.storageLocationId),
+            ),
+          )
+          .for("update");
+        const available = balance ? Number(balance.quantityOnHand) - Number(balance.quantityReserved) : 0;
+        if (!balance || available < line.quantity)
+          throw new StockDispenseError(
+            `Batch ${batch.batchNumber} has ${available} available at this location, ${line.quantity} were dispensed`,
+          );
+        const nextOnHand = Number(balance.quantityOnHand) - line.quantity;
+        await transaction
+          .update(inventoryBalances)
+          .set({
+            quantityOnHand: String(nextOnHand),
+            version: sql`${inventoryBalances.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(eq(inventoryBalances.id, balance.id));
+        const [entry] = await transaction
+          .insert(stockLedgerEntries)
+          .values({
+            productId: line.productId,
+            productBatchId: line.productBatchId,
+            siteId: input.siteId,
+            storageLocationId: input.storageLocationId,
+            quantityDelta: String(-line.quantity),
+            quantityAfter: String(nextOnHand),
+            movementType: "Dispense",
+            referenceType: "Prescription",
+            referenceId: input.referenceId,
+            reason: `Prescription ${input.referenceId}`,
+            createdBy: input.actorId,
+          })
+          .returning();
+        if (!entry) throw new Error("Dispense ledger entry was not saved");
+        entries.push(entry);
+        touchedProducts.add(line.productId);
+      }
+      let reservationStatus: string | null = null;
+      if (input.reservationId) {
+        const [held] = await transaction
+          .select({ quantity: sql<string>`coalesce(sum(${stockReservationLines.quantity}), 0)` })
+          .from(stockReservationLines)
+          .where(eq(stockReservationLines.reservationId, input.reservationId));
+        reservationStatus = Number(held?.quantity ?? 0) > 0 ? "active" : "consumed";
+        await transaction
+          .update(stockReservations)
+          .set({ status: reservationStatus, updatedAt: new Date() })
+          .where(eq(stockReservations.id, input.reservationId));
+      }
+      const availability: Availability[] = [];
+      for (const productId of touchedProducts)
+        availability.push(await recordSiteAvailability(transaction, productId, input.siteId));
+      const result: StockDispenseResult = { dispenseId: input.dispenseId, reservationStatus, entries };
+      await transaction
+        .update(idempotencyRecords)
+        .set({ response: JSON.stringify(result) })
+        .where(
+          and(
+            eq(idempotencyRecords.scope, DISPENSE_SCOPE),
+            eq(idempotencyRecords.key, input.dispenseId),
+            eq(idempotencyRecords.actorId, input.actorId),
+          ),
+        );
+      return { result, availability };
+    });
+    for (const item of availability) await this.publishAvailabilitySafely(item);
+    return result;
   }
 
   public async listReservations(ownerId?: string) {
@@ -664,15 +890,7 @@ export class InventoryRepository {
           })
           .where(eq(replenishmentRequests.id, id))
           .returning();
-        return {
-          updated,
-          availability: [] as Array<{
-            productId: string;
-            siteId: string;
-            quantityOnHand: number;
-            quantityReserved: number;
-          }>,
-        };
+        return { updated, availability: [] as Availability[] };
       }
       if (!current.storageLocationId) throw new Error("Fulfillment requires a storage location");
       const effectiveLines = await transaction
@@ -680,12 +898,7 @@ export class InventoryRepository {
         .from(replenishmentRequestLines)
         .where(eq(replenishmentRequestLines.replenishmentRequestId, id));
       if (effectiveLines.length === 0) throw new Error("Fulfillment requires replenishment lines");
-      const availability: Array<{
-        productId: string;
-        siteId: string;
-        quantityOnHand: number;
-        quantityReserved: number;
-      }> = [];
+      const availability: Availability[] = [];
       for (const line of effectiveLines) {
         const batchId = line.productBatchId;
         if (!batchId) throw new Error("Fulfillment requires a product batch");
@@ -709,7 +922,6 @@ export class InventoryRepository {
             .for("update")
         )[0];
         const previousOnHand = Number(existing?.quantityOnHand ?? 0);
-        const quantityReserved = Number(existing?.quantityReserved ?? 0);
         const nextOnHand = previousOnHand + Number(line.requestedQuantity);
         const balance = existing
           ? (
@@ -746,21 +958,7 @@ export class InventoryRepository {
           movementType: "Replenishment",
           reason: line.reason ?? `Replenishment request ${id}`,
         });
-        await transaction.insert(outboxMessages).values({
-          eventType: "inventory.availability.changed.v1",
-          schemaVersion: "1",
-          payload: JSON.stringify({
-            productId: line.productId,
-            siteId: current.siteId,
-            inStock: nextOnHand - quantityReserved > 0,
-          }),
-        });
-        availability.push({
-          productId: line.productId,
-          siteId: current.siteId,
-          quantityOnHand: nextOnHand,
-          quantityReserved,
-        });
+        availability.push(await recordSiteAvailability(transaction, line.productId, current.siteId));
       }
       const [updated] = await transaction
         .update(replenishmentRequests)
@@ -774,8 +972,7 @@ export class InventoryRepository {
       return { updated, availability };
     });
     if (!result) return undefined;
-    for (const item of result.availability)
-      await this.publishAvailabilitySafely(item.productId, item.siteId, item.quantityOnHand, item.quantityReserved);
+    for (const item of result.availability) await this.publishAvailabilitySafely(item);
     return result.updated;
   }
 
@@ -904,12 +1101,7 @@ export class InventoryRepository {
         .from(transferOrderLines)
         .innerJoin(productBatches, eq(productBatches.id, transferOrderLines.productBatchId))
         .where(eq(transferOrderLines.transferOrderId, id));
-      const availability: Array<{
-        productId: string;
-        siteId: string;
-        quantityOnHand: number;
-        quantityReserved: number;
-      }> = [];
+      const availability: Availability[] = [];
       if (action === "ship") {
         for (const { line, batch } of lines) {
           if (!line.sourceStorageLocationId || !line.productBatchId)
@@ -961,21 +1153,7 @@ export class InventoryRepository {
             movementType: "TransferOut",
             reason: `Transfer ${current.transferNumber}`,
           });
-          await transaction.insert(outboxMessages).values({
-            eventType: "inventory.availability.changed.v1",
-            schemaVersion: "1",
-            payload: JSON.stringify({
-              productId: line.productId,
-              siteId: current.sourceSiteId,
-              inStock: nextOnHand - Number(updated.quantityReserved) > 0,
-            }),
-          });
-          availability.push({
-            productId: line.productId,
-            siteId: current.sourceSiteId,
-            quantityOnHand: nextOnHand,
-            quantityReserved: Number(updated.quantityReserved),
-          });
+          availability.push(await recordSiteAvailability(transaction, line.productId, current.sourceSiteId));
         }
       }
       if (action === "receive") {
@@ -1001,7 +1179,6 @@ export class InventoryRepository {
               .for("update")
           )[0];
           const previousOnHand = Number(destination?.quantityOnHand ?? 0);
-          const quantityReserved = Number(destination?.quantityReserved ?? 0);
           const nextOnHand = previousOnHand + requested;
           const balance = destination
             ? (
@@ -1044,21 +1221,7 @@ export class InventoryRepository {
             movementType: "TransferIn",
             reason: `Transfer ${current.transferNumber}`,
           });
-          await transaction.insert(outboxMessages).values({
-            eventType: "inventory.availability.changed.v1",
-            schemaVersion: "1",
-            payload: JSON.stringify({
-              productId: line.productId,
-              siteId: current.destinationSiteId,
-              inStock: nextOnHand - quantityReserved > 0,
-            }),
-          });
-          availability.push({
-            productId: line.productId,
-            siteId: current.destinationSiteId,
-            quantityOnHand: nextOnHand,
-            quantityReserved,
-          });
+          availability.push(await recordSiteAvailability(transaction, line.productId, current.destinationSiteId));
         }
       }
       if (action === "receive") {
@@ -1093,8 +1256,7 @@ export class InventoryRepository {
       return { transfer: detailedTransfer, availability };
     });
     if (!result) return undefined;
-    for (const item of result.availability)
-      await this.publishAvailabilitySafely(item.productId, item.siteId, item.quantityOnHand, item.quantityReserved);
+    for (const item of result.availability) await this.publishAvailabilitySafely(item);
     return result.transfer;
   }
 
@@ -1168,12 +1330,7 @@ export class InventoryRepository {
         .where(eq(stocktakeLines.stocktakeId, id));
       if (lines.length === 0 || lines.some(({ line }) => line.countedQuantity === null))
         throw new Error("All stocktake lines must be counted before posting");
-      const availability: Array<{
-        productId: string;
-        siteId: string;
-        quantityOnHand: number;
-        quantityReserved: number;
-      }> = [];
+      const availability: Availability[] = [];
       for (const { line, batch } of lines) {
         const countedQuantity = Number(line.countedQuantity);
         const variance = countedQuantity - Number(line.systemQuantity);
@@ -1234,23 +1391,9 @@ export class InventoryRepository {
             movementType: "StocktakeAdjustment",
             reason: `Stocktake ${id}`,
           });
-          await transaction.insert(outboxMessages).values({
-            eventType: "inventory.availability.changed.v1",
-            schemaVersion: "1",
-            payload: JSON.stringify({
-              productId: batch.productId,
-              siteId: session.siteId,
-              inStock: nextOnHand - quantityReserved > 0,
-            }),
-          });
+          availability.push(await recordSiteAvailability(transaction, batch.productId, session.siteId));
         }
         await transaction.update(stocktakeLines).set({ status: "Approved" }).where(eq(stocktakeLines.id, line.id));
-        availability.push({
-          productId: batch.productId,
-          siteId: session.siteId,
-          quantityOnHand: nextOnHand,
-          quantityReserved,
-        });
       }
       const [updatedSession] = await transaction
         .update(stocktakes)
@@ -1260,8 +1403,7 @@ export class InventoryRepository {
       return { session: updatedSession, availability };
     });
     if (!result) return undefined;
-    for (const item of result.availability)
-      await this.publishAvailabilitySafely(item.productId, item.siteId, item.quantityOnHand, item.quantityReserved);
+    for (const item of result.availability) await this.publishAvailabilitySafely(item);
     return result.session;
   }
 
@@ -1284,12 +1426,7 @@ export class InventoryRepository {
         .values({ siteId: input.siteId, reason: input.reason, status: "Completed", createdBy: input.createdBy })
         .returning();
       if (!request) throw new Error("Return request insert did not return a row");
-      const availability: Array<{
-        productId: string;
-        siteId: string;
-        quantityOnHand: number;
-        quantityReserved: number;
-      }> = [];
+      const availability: Availability[] = [];
       for (const line of input.lines) {
         const batch = (
           await transaction.select().from(productBatches).where(eq(productBatches.id, line.productBatchId)).limit(1)
@@ -1345,26 +1482,11 @@ export class InventoryRepository {
           notes: line.notes ?? line.destination ?? null,
           occurredAt: line.occurredAtUtc ? new Date(line.occurredAtUtc) : new Date(),
         });
-        await transaction.insert(outboxMessages).values({
-          eventType: "inventory.availability.changed.v1",
-          schemaVersion: "1",
-          payload: JSON.stringify({
-            productId: batch.productId,
-            siteId: input.siteId,
-            inStock: nextOnHand - Number(updated.quantityReserved) > 0,
-          }),
-        });
-        availability.push({
-          productId: batch.productId,
-          siteId: input.siteId,
-          quantityOnHand: nextOnHand,
-          quantityReserved: Number(updated.quantityReserved),
-        });
+        availability.push(await recordSiteAvailability(transaction, batch.productId, input.siteId));
       }
       return { request, availability };
     });
-    for (const item of result.availability)
-      await this.publishAvailabilitySafely(item.productId, item.siteId, item.quantityOnHand, item.quantityReserved);
+    for (const item of result.availability) await this.publishAvailabilitySafely(item);
     return result.request;
   }
 

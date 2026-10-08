@@ -29,6 +29,24 @@ export const stockMovementCommandSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 });
 
+/** Goods leaving the shelf for a prescription, from the batches the pharmacist handed over. */
+export const dispenseStockCommandSchema = z.object({
+  dispenseId: z.string().trim().min(1).max(128),
+  reservationId: z.string().uuid().optional(),
+  prescriptionId: z.string().uuid(),
+  siteId: z.string().uuid(),
+  storageLocationId: z.string().uuid(),
+  lines: z
+    .array(
+      z.object({
+        productId: z.string().uuid(),
+        productBatchId: z.string().uuid(),
+        quantity: z.number().positive(),
+      }),
+    )
+    .min(1),
+});
+
 export const availabilityChangedEventSchema = z.object({
   productId: z.string().uuid(),
   siteId: z.string().uuid(),
@@ -39,4 +57,5 @@ export type ReservationChangedEvent = z.infer<typeof reservationChangedEventSche
 export type ReserveStockLine = z.infer<typeof reserveStockLineSchema>;
 export type ReserveStockCommand = z.infer<typeof reserveStockCommandSchema>;
 export type StockMovementCommand = z.infer<typeof stockMovementCommandSchema>;
+export type DispenseStockCommand = z.infer<typeof dispenseStockCommandSchema>;
 export type AvailabilityChangedEvent = z.infer<typeof availabilityChangedEventSchema>;

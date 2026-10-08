@@ -6,12 +6,9 @@ import type {
   OpeningBalanceImportRow,
 } from "../contracts/imports.ts";
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
-import {
-  inventoryBalances,
-  outboxMessages,
-  productBatches,
-  stockLedgerEntries,
-} from "../shared/infrastructure/schema.ts";
+import { inventoryBalances, productBatches, stockLedgerEntries } from "../shared/infrastructure/schema.ts";
+
+import { recordSiteAvailability, type Availability } from "./site-availability.ts";
 
 export type OpeningBalanceReference = {
   productId: string;
@@ -29,11 +26,7 @@ export class InventoryImportService {
   public constructor(
     private readonly database: InventoryDatabase,
     private readonly resolver: OpeningBalanceReferenceResolver,
-    private readonly publishAvailability?: (input: {
-      productId: string;
-      siteId: string;
-      inStock: boolean;
-    }) => Promise<void>,
+    private readonly publishAvailability?: (input: Availability) => Promise<void>,
   ) {}
 
   public async importOpeningBalances(input: OpeningBalanceImport): Promise<OpeningBalanceImportResult> {
@@ -43,7 +36,8 @@ export class InventoryImportService {
       resolved.push({ row, reference: await this.resolver.resolve(row) });
     }
 
-    const availability = new Map<string, { productId: string; siteId: string; inStock: boolean }>();
+    // One answer per product and site, from all of its sellable stock once every row is in.
+    const touched = new Map<string, { productId: string; siteId: string }>();
     const result = await this.database.db.transaction(async (transaction) => {
       const balances: OpeningBalanceImportResult["balances"] = [];
       let created = 0;
@@ -136,19 +130,9 @@ export class InventoryImportService {
           movementType: "OpeningBalance",
           reason: row.reason ?? "Opening stock balance import",
         });
-        await transaction.insert(outboxMessages).values({
-          eventType: "inventory.availability.changed.v1",
-          schemaVersion: "1",
-          payload: JSON.stringify({
-            productId: reference.productId,
-            siteId: reference.siteId,
-            inStock: row.quantityOnHand > 0,
-          }),
-        });
-        availability.set(`${reference.productId}:${reference.siteId}`, {
+        touched.set(`${reference.productId}:${reference.siteId}`, {
           productId: reference.productId,
           siteId: reference.siteId,
-          inStock: row.quantityOnHand > 0,
         });
         created += 1;
         balances.push({
@@ -159,11 +143,14 @@ export class InventoryImportService {
           quantity: row.quantityOnHand,
         });
       }
-      return { created, unchanged, batchesCreated, balances };
+      const availability: Availability[] = [];
+      for (const { productId, siteId } of touched.values())
+        availability.push(await recordSiteAvailability(transaction, productId, siteId));
+      return { summary: { created, unchanged, batchesCreated, balances }, availability };
     });
 
     if (this.publishAvailability) {
-      for (const entry of availability.values()) {
+      for (const entry of result.availability) {
         try {
           await this.publishAvailability(entry);
         } catch {
@@ -171,6 +158,6 @@ export class InventoryImportService {
         }
       }
     }
-    return result;
+    return result.summary;
   }
 }

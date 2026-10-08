@@ -6,6 +6,7 @@ import { createTrustedRequestMiddleware } from "./middleware/trusted-request.ts"
 
 import { AvailabilityPublisher } from "./modules/availability-publisher.ts";
 import { CatalogServiceReferenceResolver } from "./modules/catalog-reference-resolver.ts";
+import { ExpiryAvailabilitySweeper } from "./modules/expiry-availability-sweeper.ts";
 import { createInventoryImportRouter } from "./modules/inventory-import-routes.ts";
 import { InventoryImportService } from "./modules/inventory-import-service.ts";
 import { createInventoryRouter } from "./modules/inventory-routes.ts";
@@ -34,6 +35,9 @@ await availabilityPublisher
 const repository = database
   ? new InventoryRepository(database, (input) => availabilityPublisher.publish(input))
   : undefined;
+// Expiry changes what a site can sell with no movement on the shelf, so it needs its own periodic recompute.
+const expiryAvailabilitySweeper = repository ? new ExpiryAvailabilitySweeper(repository, logger) : undefined;
+expiryAvailabilitySweeper?.start();
 const inventoryImportService = database
   ? new InventoryImportService(database, new CatalogServiceReferenceResolver(catalogServiceUrl), (input) =>
       availabilityPublisher.publish(input),
@@ -91,6 +95,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 
 const server = createServer(app);
 server.on("close", () => {
+  expiryAvailabilitySweeper?.close();
   void availabilityPublisher.close();
   void database?.pool.end();
 });

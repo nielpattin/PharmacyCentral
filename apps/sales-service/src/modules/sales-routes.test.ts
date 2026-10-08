@@ -2,8 +2,9 @@ import express from "express";
 import { createServer, type Server } from "node:http";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
-import { SalesRepository } from "./sales-repository.ts";
+import { SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
 import { createSalesRouter } from "./sales-routes.ts";
 
 const httpFetch = globalThis.fetch.bind(globalThis);
@@ -165,41 +166,108 @@ describe("sales prescription API", () => {
     expect(cancelPrescription).toHaveBeenCalledWith(ids.prescription, ids.actor);
   });
 
-  it("dispenses multiple prescription lines and consumes the reservation", async () => {
-    const getPrescription = vi
-      .fn<(id: string) => Promise<unknown>>()
-      .mockResolvedValue({ id: ids.prescription, reservationId: ids.prescription, status: "Pending", lines: [] });
-    const dispensePrescription = vi
-      .fn<
-        (
+  // The mocked repository hands the router's stock callback the goods it would take off the shelf.
+  const dispensingRepository = () =>
+    ({
+      dispensePrescription: vi.fn(
+        async (
           id: string,
-          lines: Array<{ prescriptionLineId: string; productBatchId: string; dispensedQuantity: number }>,
-          actorId: string,
-        ) => Promise<unknown>
-      >()
-      .mockResolvedValue({ id: ids.prescription, status: "Dispensed" });
-    const repository = { getPrescription, dispensePrescription } as unknown as SalesRepository;
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 200 })));
-    const testServer = await createTestServer(repository);
-    server = testServer.server;
-
-    const response = await httpFetch(`${testServer.url}/prescriptions/${ids.prescription}/dispense`, {
+          _lines: unknown,
+          _actorId: string,
+          dispenseStock: (dispense: PrescriptionStockDispense) => Promise<void>,
+        ) => {
+          await dispenseStock({
+            prescriptionId: id,
+            reservationId: ids.prescription,
+            siteId: ids.site,
+            storageLocationId: ids.location,
+            lines: [{ productId: ids.productA, productBatchId: ids.batchA, quantity: 2 }],
+          });
+          return { id, status: "Dispensed" };
+        },
+      ),
+    }) as unknown as SalesRepository;
+  const dispense = (url: string, idempotencyKey?: string) =>
+    httpFetch(`${url}/prescriptions/${ids.prescription}/dispense`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      headers: {
+        "content-type": "application/json",
+        "X-Actor-Id": ids.actor,
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+      },
       body: JSON.stringify({
-        lines: [
-          { prescriptionLineId: ids.lineA, productBatchId: ids.batchA, dispensedQuantity: 2 },
-          { prescriptionLineId: ids.lineB, productBatchId: ids.batchB, dispensedQuantity: 3 },
-        ],
+        lines: [{ prescriptionLineId: ids.lineA, productBatchId: ids.batchA, dispensedQuantity: 2 }],
       }),
     });
+  const sentBody = (init: RequestInit | undefined): unknown =>
+    typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+
+  it("takes the dispensed goods off inventory's shelf as the pharmacist", async () => {
+    const fetchMock = vi
+      .fn<(url: string, init: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(new Response("{}", { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const testServer = await createTestServer(dispensingRepository());
+    server = testServer.server;
+
+    const response = await dispense(testServer.url, "retry-key");
 
     expect(response.status).toBe(200);
-    expect(dispensePrescription.mock.calls[0]?.[1].map((line) => line.prescriptionLineId)).toEqual([
-      ids.lineA,
-      ids.lineB,
-    ]);
-    expect(dispensePrescription.mock.calls[0]?.[2]).toBe(ids.actor);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("http://inventory.test/inventory/dispenses");
+    expect(new Headers(init?.headers).get("x-actor-id")).toBe(ids.actor);
+    expect(sentBody(init)).toMatchObject({
+      reservationId: ids.prescription,
+      prescriptionId: ids.prescription,
+      siteId: ids.site,
+      storageLocationId: ids.location,
+      lines: [{ productId: ids.productA, productBatchId: ids.batchA, quantity: 2 }],
+    });
+  });
+
+  it("sends a retried dispense to inventory under the same dispense id", async () => {
+    const fetchMock = vi
+      .fn<(url: string, init: RequestInit) => Promise<Response>>()
+      .mockImplementation(async () => new Response("{}", { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const testServer = await createTestServer(dispensingRepository());
+    server = testServer.server;
+
+    await dispense(testServer.url, "retry-key");
+    await dispense(testServer.url, "retry-key");
+    await dispense(testServer.url, "other-key");
+
+    const [first, retried, other] = fetchMock.mock.calls.map(
+      ([, init]) => z.object({ dispenseId: z.string() }).parse(sentBody(init)).dispenseId,
+    );
+    expect(retried).toBe(first);
+    expect(other).not.toBe(first);
+  });
+
+  it("answers inventory's refusal as a dispense conflict that keeps the reason", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            { title: "Stock could not be dispensed", status: 409, detail: "Batch B-1 has expired" },
+            { status: 409 },
+          ),
+        ),
+    );
+    const testServer = await createTestServer(dispensingRepository());
+    server = testServer.server;
+
+    const response = await dispense(testServer.url);
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      title: "Prescription could not be dispensed",
+      status: 409,
+      code: "dispense_rejected",
+      detail: "Batch B-1 has expired",
+    });
   });
 
   it("refuses a prescription linked to a customer account identity-service does not know", async () => {

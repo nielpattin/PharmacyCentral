@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { Router } from "express";
 import type { Request, Response } from "express";
@@ -15,7 +15,7 @@ import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import type { DeliveryCalculation, DeliveryCalculator } from "./delivery/domain/delivery-calculator.ts";
-import { SalesRepository } from "./sales-repository.ts";
+import { PrescriptionDispenseError, SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
 const actor = (request: Request): string | undefined => request.header("X-Actor-Id") ?? undefined;
@@ -395,7 +395,7 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
       const prescription = await repository.getPrescription(id.data.id);
       if (!prescription) return response.status(404).json({ title: "Prescription not found", status: 404 });
       if (prescription.reservationId)
-        await postInventoryAction(prescription.reservationId, "release", options.inventoryServiceUrl);
+        await postInventoryRelease(prescription.reservationId, options.inventoryServiceUrl);
       return response.json(await repository.cancelPrescription(id.data.id, cancelledBy));
     } catch (error) {
       return next(error);
@@ -410,22 +410,24 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     if (!id.success || !parsed.success || !dispensedBy) return invalid(response);
     try {
       const idempotencyKey = request.header("Idempotency-Key") ?? undefined;
-      if (idempotencyKey) {
-        const replay = await repository.getIdempotencyResponse(
-          idempotencyKey,
-          "sales.prescriptions.dispense",
-          dispensedBy,
-        );
-        if (replay) return response.json(replay);
-      }
-      const prescription = await repository.getPrescription(id.data.id);
-      if (!prescription) return response.status(404).json({ title: "Prescription not found", status: 404 });
-      if (prescription.reservationId)
-        await postInventoryAction(prescription.reservationId, "consume", options.inventoryServiceUrl);
-      return response.json(
-        await repository.dispensePrescription(id.data.id, parsed.data.lines, dispensedBy, idempotencyKey),
+      const dispensed = await repository.dispensePrescription(
+        id.data.id,
+        parsed.data.lines,
+        dispensedBy,
+        (dispense) => dispenseInventoryStock(dispense, dispensedBy, idempotencyKey, options.inventoryServiceUrl),
+        idempotencyKey,
       );
+      if (!dispensed) return response.status(404).json({ title: "Prescription not found", status: 404 });
+      return response.json(dispensed);
     } catch (error) {
+      // A fixed title the staff web can translate; the reason, ours or inventory's, stays in `detail`.
+      if (error instanceof PrescriptionDispenseError || error instanceof InventoryDispenseError)
+        return response.status(409).json({
+          title: "Prescription could not be dispensed",
+          status: 409,
+          code: "dispense_rejected",
+          detail: error.message,
+        });
       return next(error);
     }
   });
@@ -538,17 +540,53 @@ const reservePrescriptionStock = async (
   return { ok: false, reason: body || "Inventory reservation failed" };
 };
 
-const postInventoryAction = async (
-  reservationId: string,
-  action: "release" | "consume",
-  baseUrl: string,
-): Promise<void> => {
-  const response = await fetch(`${baseUrl}/inventory/reservations/${reservationId}/${action}`, {
+const postInventoryRelease = async (reservationId: string, baseUrl: string): Promise<void> => {
+  const response = await fetch(`${baseUrl}/inventory/reservations/${reservationId}/release`, {
     method: "POST",
     headers: internalServiceHeaders(),
     signal: AbortSignal.timeout(5_000),
   });
-  if (!response.ok) throw new Error(`Inventory reservation ${action} failed`);
+  if (!response.ok) throw new Error("Inventory reservation release failed");
+};
+
+/** Inventory refused the goods: wrong batch, not releasable, or not on the shelf. */
+class InventoryDispenseError extends Error {}
+
+/** The reason in inventory's refusal, shown to the pharmacist. */
+const inventoryProblemSchema = z.object({ detail: z.string() });
+
+/**
+ * Takes the dispensed goods off inventory's shelf. A retried request carries the same Idempotency-Key, so inventory
+ * answers it again without moving the stock twice; without a key, the locked prescription is what stops a repeat.
+ */
+const dispenseInventoryStock = async (
+  dispense: PrescriptionStockDispense,
+  actorId: string,
+  idempotencyKey: string | undefined,
+  baseUrl: string,
+): Promise<void> => {
+  const response = await fetch(`${baseUrl}/inventory/dispenses`, {
+    method: "POST",
+    headers: { ...internalServiceHeaders(actorId), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      // Hashed so a long client key still fits inventory's 128-character idempotency key.
+      dispenseId: createHash("sha256")
+        .update(`${dispense.prescriptionId}:${idempotencyKey ?? randomUUID()}`)
+        .digest("hex"),
+      ...(dispense.reservationId ? { reservationId: dispense.reservationId } : {}),
+      prescriptionId: dispense.prescriptionId,
+      siteId: dispense.siteId,
+      storageLocationId: dispense.storageLocationId,
+      lines: dispense.lines,
+    }),
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (response.ok) return;
+  if (response.status === 409) {
+    const problem = inventoryProblemSchema.safeParse(await response.json().catch(() => undefined));
+    throw new InventoryDispenseError(problem.success ? problem.data.detail : "Stock could not be dispensed");
+  }
+  throw new Error(`Inventory dispense failed with status ${response.status}`);
 };
 
 const toDeliverySnapshot = (delivery: DeliveryCalculation) => ({

@@ -2605,6 +2605,7 @@ const literalTranslations: Record<string, string> = {
   "Sales database is not configured": "Cơ sở dữ liệu bán hàng chưa được cấu hình",
   "Invalid sales request": "Yêu cầu bán hàng không hợp lệ",
   "Stock could not be reserved": "Không giữ được tồn kho",
+  "Prescription could not be dispensed": "Không xuất được đơn thuốc",
   "Authentication required": "Cần đăng nhập",
   "Invalid request": "Yêu cầu không hợp lệ",
   Clear: "Bỏ chọn",
