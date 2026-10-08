@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 
 import type { SalesDatabase } from "../shared/infrastructure/database.ts";
 import {
@@ -541,13 +541,13 @@ export class SalesRepository {
   }
 
   public async listPrescriptions(input: {
-    siteId?: string | undefined;
+    siteIds?: string[] | undefined;
     status?: string | undefined;
     customerId?: string | undefined;
     limit: number;
   }) {
     const filters = [
-      input.siteId ? eq(prescriptions.siteId, input.siteId) : undefined,
+      input.siteIds ? inArray(prescriptions.siteId, input.siteIds) : undefined,
       input.status ? eq(prescriptions.status, input.status) : undefined,
       input.customerId ? eq(prescriptions.customerId, input.customerId) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
@@ -673,7 +673,7 @@ export class SalesRepository {
     });
   }
 
-  public async listCounterTransactions(input: { siteId?: string; status?: string; limit: number }) {
+  public async listCounterTransactions(input: { siteIds?: string[]; status?: string; limit: number }) {
     return this.listPrescriptions(input);
   }
 

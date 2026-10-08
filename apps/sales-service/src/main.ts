@@ -33,6 +33,14 @@ const requireEnv = (name: string): string => {
 };
 const app = express();
 const port = Number.parseInt(requireEnv("PORT"), 10);
+/**
+ * Every URL this service calls out to is required at boot, so a missing one stops the service instead of sending
+ * the request to a hard-coded localhost. The same goes for the shared secret of the outbound internal headers.
+ */
+const catalogServiceUrl = requireEnv("CATALOG_SERVICE_URL");
+const inventoryServiceUrl = requireEnv("INVENTORY_SERVICE_URL");
+const identityServiceUrl = requireEnv("IDENTITY_SERVICE_URL");
+requireEnv("INTERNAL_SERVICE_SECRET");
 const openRouteServiceKey = process.env.OPENROUTESERVICE_API_KEY;
 const database = createSalesDatabase();
 const salesRepository = database ? new SalesRepository(database) : undefined;
@@ -104,10 +112,8 @@ const lookupStore = async (
 ): Promise<{ id: string; latitude: number; longitude: number } | undefined> => {
   const configured = storeCoordinates.get(storeId);
   if (configured) return configured;
-  const catalogUrl = process.env.CATALOG_SERVICE_URL;
-  if (!catalogUrl) return undefined;
   try {
-    const upstream = await fetch(`${catalogUrl}/sites/${storeId}`, {
+    const upstream = await fetch(`${catalogServiceUrl}/sites/${storeId}`, {
       headers: internalServiceHeaders(),
       signal: AbortSignal.timeout(2_000),
     });
@@ -140,13 +146,14 @@ app.use(
   createPrescriptionIntakeRouter({
     reader: prescriptionReader,
     limiter: prescriptionIntakeLimiter,
-    catalogServiceUrl: requireEnv("CATALOG_SERVICE_URL"),
+    catalogServiceUrl,
   }),
 );
 app.use(
   createSalesRouter(salesRepository, {
-    catalogServiceUrl: requireEnv("CATALOG_SERVICE_URL"),
-    inventoryServiceUrl: requireEnv("INVENTORY_SERVICE_URL"),
+    catalogServiceUrl,
+    inventoryServiceUrl,
+    identityServiceUrl,
     deliveryCalculator,
     lookupStore,
   }),

@@ -1,12 +1,19 @@
 import express from "express";
 import { createServer, type Server } from "node:http";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SalesRepository } from "./sales-repository.ts";
 import { createSalesRouter } from "./sales-routes.ts";
 
 const httpFetch = globalThis.fetch.bind(globalThis);
+// Every call this router makes to another service carries the shared internal secret, so the helper needs one here.
+beforeEach(() => {
+  vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-internal-secret");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 const ids = {
   actor: "00000000-0000-4000-8000-000000000001",
   prescription: "00000000-0000-4000-8000-000000000002",
@@ -25,7 +32,13 @@ const ids = {
 const createTestServer = async (repository: SalesRepository): Promise<{ server: Server; url: string }> => {
   const app = express();
   app.use(express.json());
-  app.use(createSalesRouter(repository, { inventoryServiceUrl: "http://inventory.test" }));
+  app.use(
+    createSalesRouter(repository, {
+      catalogServiceUrl: "http://catalog.test",
+      inventoryServiceUrl: "http://inventory.test",
+      identityServiceUrl: "http://identity.test",
+    }),
+  );
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
     response.status(500).json({ error: String(error) }),
   );
@@ -121,6 +134,37 @@ describe("sales prescription API", () => {
     expect(inventoryFetch).not.toHaveBeenCalled();
   });
 
+  it("answers a fixed problem when inventory refuses the reservation", async () => {
+    const createPrescription = vi.fn().mockResolvedValue({ id: ids.prescription, status: "Pending" });
+    const cancelPrescription = vi.fn().mockResolvedValue({ id: ids.prescription, status: "Cancelled" });
+    const repository = { createPrescription, cancelPrescription } as unknown as SalesRepository;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Insufficient stock", { status: 409 })));
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/prescriptions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      body: JSON.stringify({
+        siteId: ids.site,
+        storageLocationId: ids.location,
+        patientName: "API Patient",
+        lines: [{ productId: ids.productA, productUnitId: ids.unitA, prescribedQuantity: 2 }],
+      }),
+    });
+
+    // The title is a fixed problem the staff web can translate, so the inventory wording moves into `detail` and
+    // the half-written prescription is cancelled rather than left reserved against nothing.
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      title: "Stock could not be reserved",
+      status: 409,
+      code: "stock_reservation_failed",
+      detail: "Insufficient stock",
+    });
+    expect(cancelPrescription).toHaveBeenCalledWith(ids.prescription, ids.actor);
+  });
+
   it("dispenses multiple prescription lines and consumes the reservation", async () => {
     const getPrescription = vi
       .fn<(id: string) => Promise<unknown>>()
@@ -156,6 +200,67 @@ describe("sales prescription API", () => {
       ids.lineB,
     ]);
     expect(dispensePrescription.mock.calls[0]?.[2]).toBe(ids.actor);
+  });
+
+  it("refuses a prescription linked to a customer account identity-service does not know", async () => {
+    const createPrescription = vi
+      .fn<(input: Parameters<SalesRepository["createPrescription"]>[0]) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.prescription, status: "Pending" });
+    const repository = { createPrescription } as unknown as SalesRepository;
+    const responder = async (url: string): Promise<Response> => {
+      if (String(url).includes("/internal/customers/")) return new Response(null, { status: 404 });
+      return new Response(null, { status: 201 });
+    };
+    vi.stubGlobal("fetch", vi.fn(responder));
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/prescriptions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      body: JSON.stringify({
+        siteId: ids.site,
+        storageLocationId: ids.location,
+        patientName: "Khách quen",
+        customerId: ids.actor,
+        lines: [{ productId: ids.productA, productUnitId: ids.unitA, prescribedQuantity: 1 }],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      title: "Customer account not found",
+      status: 400,
+      code: "invalid_customer",
+    });
+    // Nothing was written: a prescription naming an account that does not exist would belong to nobody.
+    expect(createPrescription).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when identity-service cannot resolve the customer", async () => {
+    const createPrescription = vi
+      .fn<(input: Parameters<SalesRepository["createPrescription"]>[0]) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.prescription, status: "Pending" });
+    const repository = { createPrescription } as unknown as SalesRepository;
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("identity-service is unreachable")));
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/prescriptions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      body: JSON.stringify({
+        siteId: ids.site,
+        storageLocationId: ids.location,
+        patientName: "Khách quen",
+        customerId: ids.actor,
+        lines: [{ productId: ids.productA, productUnitId: ids.unitA, prescribedQuantity: 1 }],
+      }),
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ status: 503, code: "identity_unavailable" });
+    expect(createPrescription).not.toHaveBeenCalled();
   });
 });
 
@@ -228,7 +333,7 @@ describe("sales prescription ownership API", () => {
     expect(shopperFilter?.customerId).toBe(ids.actor);
     expect(shopperFilter?.status).toBe("Pending");
     // A shopper must not be able to widen the read to another site by passing siteId.
-    expect(shopperFilter?.siteId).toBeUndefined();
+    expect(shopperFilter?.siteIds).toBeUndefined();
 
     const staffResponse = await httpFetch(`${testServer.url}/prescriptions?status=Pending&siteId=${ids.site}`, {
       headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
@@ -236,11 +341,18 @@ describe("sales prescription ownership API", () => {
     const staffFilter = listPrescriptions.mock.calls[1]?.[0];
     expect(staffResponse.status).toBe(200);
     expect(staffFilter?.customerId).toBeUndefined();
-    expect(staffFilter?.siteId).toBe(ids.site);
+    expect(staffFilter?.siteIds).toEqual([ids.site]);
+
+    // The operations dashboard reads the register as a service, which carries no actor of its own.
+    const serviceResponse = await httpFetch(`${testServer.url}/prescriptions`, {
+      headers: { "X-Actor-Type": "system", "x-actor-site-ids": ids.site },
+    });
+    expect(serviceResponse.status).toBe(200);
+    expect(listPrescriptions.mock.calls[2]?.[0]).toEqual({ siteIds: [ids.site], status: undefined, limit: 100 });
 
     const anonymousResponse = await httpFetch(`${testServer.url}/prescriptions`);
     expect(anonymousResponse.status).toBe(401);
-    expect(listPrescriptions).toHaveBeenCalledTimes(2);
+    expect(listPrescriptions).toHaveBeenCalledTimes(3);
   });
 
   it("hides another shopper's prescription behind a 404", async () => {
@@ -394,5 +506,59 @@ describe("sales delivery address API", () => {
     });
     expect(outOfRange.status).toBe(400);
     expect(updateDeliveryAddress).not.toHaveBeenCalled();
+  });
+});
+
+describe("sales counter transaction API", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) await closeServer(server);
+    server = undefined;
+    vi.unstubAllGlobals();
+  });
+
+  it("refuses a shopper the takings behind the counter", async () => {
+    const listCounterTransactions = vi
+      .fn<(input: Parameters<SalesRepository["listCounterTransactions"]>[0]) => Promise<unknown>>()
+      .mockResolvedValue([]);
+    const repository = { listCounterTransactions } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/counter-transactions`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "customer" },
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ title: "Forbidden", status: 403, code: "forbidden" });
+    expect(listCounterTransactions).not.toHaveBeenCalled();
+  });
+
+  it("lists the counter's takings for staff, narrowed to the requested site", async () => {
+    const listCounterTransactions = vi
+      .fn<(input: Parameters<SalesRepository["listCounterTransactions"]>[0]) => Promise<unknown>>()
+      .mockResolvedValue([]);
+    const repository = { listCounterTransactions } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/counter-transactions?siteId=${ids.site}&limit=25`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(listCounterTransactions.mock.calls[0]?.[0]).toEqual({ limit: 25, siteIds: [ids.site] });
+  });
+
+  it("requires an actor before it decides on the counter list", async () => {
+    const listCounterTransactions = vi.fn();
+    const repository = { listCounterTransactions } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/counter-transactions`);
+    expect(response.status).toBe(401);
+    expect(listCounterTransactions).not.toHaveBeenCalled();
   });
 });

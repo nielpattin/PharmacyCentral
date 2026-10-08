@@ -12,6 +12,7 @@ import {
   orderTransitionSchema,
 } from "../contracts/sales.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
+import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import type { DeliveryCalculation, DeliveryCalculator } from "./delivery/domain/delivery-calculator.ts";
 import { SalesRepository } from "./sales-repository.ts";
@@ -27,16 +28,15 @@ const guestToken = (request: Request): string | undefined =>
   request.header("X-Guest-Cart-Token") ?? request.headers.cookie?.match(/(?:^|;\s*)pharmacy_guest_cart=([^;]+)/)?.[1];
 
 export type SalesRouterOptions = {
-  catalogServiceUrl?: string | undefined;
-  inventoryServiceUrl?: string | undefined;
+  /** Both URLs are validated at boot by main.ts, so a missing one is a type error and never a localhost guess. */
+  catalogServiceUrl: string;
+  inventoryServiceUrl: string;
+  identityServiceUrl?: string | undefined;
   deliveryCalculator?: DeliveryCalculator | undefined;
   lookupStore?: (storeId: string) => Promise<{ id: string; latitude: number; longitude: number } | undefined>;
 };
 
-export const createSalesRouter = (
-  repository: SalesRepository | undefined,
-  options: SalesRouterOptions = {},
-): Router => {
+export const createSalesRouter = (repository: SalesRepository | undefined, options: SalesRouterOptions): Router => {
   const router = Router();
 
   router.get("/carts", async (request, response, next) => {
@@ -286,17 +286,17 @@ export const createSalesRouter = (
 
   router.get("/prescriptions", async (request, response, next) => {
     if (!repository) return unavailable(response);
-    const requesterId = actor(request);
-    if (!requesterId) return unauthorized(response);
     try {
-      const siteId = queryString(request.query.siteId);
       const status = queryString(request.query.status);
       const limit = queryNumber(request.query.limit, 100);
-      // The staff portal reviews every prescription, optionally narrowed to one site or state. A shopper only ever
-      // sees the records linked to their own account, so the owner filter is never optional on their side.
+      // The staff portal reviews the prescriptions of the caller's sites, optionally narrowed to one site or state, and
+      // an internal reader such as the operations dashboard needs no actor of its own for that. A shopper only ever
+      // sees the records linked to their own account, so the owner filter is never optional there.
       if (readsEveryOrder(request)) {
-        return response.json(await repository.listPrescriptions({ siteId, status, limit }));
+        return response.json(await repository.listPrescriptions({ siteIds: listSiteIds(request), status, limit }));
       }
+      const requesterId = actor(request);
+      if (!requesterId) return unauthorized(response);
       return response.json(await repository.listPrescriptions({ customerId: requesterId, status, limit }));
     } catch (error) {
       return next(error);
@@ -329,6 +329,13 @@ export const createSalesRouter = (
     if (!createdBy) return unauthorized(response);
     if (!parsed.success) return invalid(response);
     try {
+      // A linked prescription belongs to a real customer account: a stale or invented id would file the record
+      // against nobody, so the account is resolved before anything is written.
+      if (parsed.data.customerId) {
+        const customerCheck = await verifyCustomerAccount(parsed.data.customerId, options.identityServiceUrl);
+        if (customerCheck === "missing") return invalidCustomer(response);
+        if (customerCheck === "unavailable") return identityUnavailable(response);
+      }
       const idempotencyKey = request.header("Idempotency-Key") ?? undefined;
       const prescription = await repository.createPrescription({
         siteId: parsed.data.siteId,
@@ -364,9 +371,13 @@ export const createSalesRouter = (
       );
       if (!inventoryResult.ok) {
         await repository.cancelPrescription(prescription.id, createdBy);
-        return response
-          .status(409)
-          .json({ title: inventoryResult.reason, status: 409, code: "stock_reservation_failed" });
+        // A fixed title the staff web can translate; the inventory wording stays in `detail`.
+        return response.status(409).json({
+          title: "Stock could not be reserved",
+          status: 409,
+          code: "stock_reservation_failed",
+          detail: inventoryResult.reason,
+        });
       }
       await repository.setPrescriptionReservation(prescription.id, prescription.id);
       return response.status(201).json(await repository.getPrescription(prescription.id));
@@ -422,13 +433,16 @@ export const createSalesRouter = (
   router.get("/counter-transactions", async (request, response, next) => {
     if (!repository) return unavailable(response);
     if (!actor(request)) return unauthorized(response);
+    // The day's takings behind the counter are a staff read; a shopper's receipts are the orders they placed.
+    if (!readsEveryOrder(request))
+      return response.status(403).json({ title: "Forbidden", status: 403, code: "forbidden" });
     try {
-      const siteId = queryString(request.query.siteId);
+      const siteIds = listSiteIds(request);
       const status = queryString(request.query.paymentStatus);
-      const filter: { limit: number; siteId?: string; status?: string } = {
+      const filter: { limit: number; siteIds?: string[]; status?: string } = {
         limit: queryNumber(request.query.limit, 100),
       };
-      if (siteId) filter.siteId = siteId;
+      if (siteIds) filter.siteIds = siteIds;
       if (status) filter.status = status;
       return response.json(await repository.listCounterTransactions(filter));
     } catch (error) {
@@ -439,9 +453,31 @@ export const createSalesRouter = (
   return router;
 };
 
+type CustomerCheck = "exists" | "missing" | "unavailable";
+
+/**
+ * The counter links a prescription to a customer account, so identity-service has to confirm the account exists
+ * before the record is written. A 404 means the id is not a customer account; every other failure (a refused
+ * connection, a timeout, a 5xx) fails closed, because writing first and checking later leaves an orphan record.
+ */
+const verifyCustomerAccount = async (customerId: string, baseUrl?: string): Promise<CustomerCheck> => {
+  if (!baseUrl) return "unavailable";
+  try {
+    const response = await fetch(`${baseUrl}/internal/customers/${customerId}`, {
+      headers: internalServiceHeaders(),
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (response.status === 404) return "missing";
+    if (response.ok) return "exists";
+    return "unavailable";
+  } catch {
+    return "unavailable";
+  }
+};
+
 const resolveOrderLines = async (
   lines: Array<{ productId: string; productUnitId: string; quantity: number }>,
-  baseUrl: string | undefined = process.env.CATALOG_SERVICE_URL ?? "http://localhost:3002",
+  baseUrl: string,
 ): Promise<
   Array<{
     productId: string;
@@ -489,7 +525,7 @@ const reservePrescriptionStock = async (
   siteId: string,
   storageLocationId: string,
   lines: Array<{ productId: string; quantity: number }>,
-  baseUrl = process.env.INVENTORY_SERVICE_URL ?? "http://localhost:3004",
+  baseUrl: string,
 ): Promise<{ ok: true } | { ok: false; reason: string }> => {
   const response = await fetch(`${baseUrl}/inventory/reservations`, {
     method: "POST",
@@ -505,7 +541,7 @@ const reservePrescriptionStock = async (
 const postInventoryAction = async (
   reservationId: string,
   action: "release" | "consume",
-  baseUrl = process.env.INVENTORY_SERVICE_URL ?? "http://localhost:3004",
+  baseUrl: string,
 ): Promise<void> => {
   const response = await fetch(`${baseUrl}/inventory/reservations/${reservationId}/${action}`, {
     method: "POST",
@@ -544,3 +580,7 @@ const unauthorized = (response: Response) =>
   response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
 const invalid = (response: Response) =>
   response.status(400).json({ title: "Invalid sales request", status: 400, code: "invalid_request" });
+const invalidCustomer = (response: Response) =>
+  response.status(400).json({ title: "Customer account not found", status: 400, code: "invalid_customer" });
+const identityUnavailable = (response: Response) =>
+  response.status(503).json({ title: "Identity service is unavailable", status: 503, code: "identity_unavailable" });

@@ -69,6 +69,8 @@ const startServer = async (
   reader: PrescriptionReader | undefined,
   limiter: PrescriptionIntakeRateLimiter = createTestLimiter().limiter,
 ) => {
+  // The intake route reads the shared internal secret before it calls the catalog for suggestions.
+  vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-internal-secret");
   const catalogBodies: unknown[] = [];
   vi.stubGlobal("fetch", async (input: string | URL, init?: RequestInit) => {
     if (input.toString().startsWith("http://catalog.test/products/match")) {
@@ -109,6 +111,7 @@ describe("prescription intake API", () => {
     if (server) await new Promise<void>((resolve) => server?.close(() => resolve()));
     server = undefined;
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   const postImage = (
