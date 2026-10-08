@@ -26,6 +26,8 @@ if (!salesServiceUrl)
 const catalogServiceUrl = process.env.CATALOG_SERVICE_URL;
 if (!catalogServiceUrl)
   throw new Error("Missing required environment variable: CATALOG_SERVICE_URL. Please set it in your .env file.");
+if (!process.env.INTERNAL_SERVICE_SECRET)
+  throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
 const database = createPaymentDatabase();
 const repository = database ? new PaymentRepository(database) : undefined;
 const outboxPublisher = database ? new PaymentOutboxPublisher(database) : undefined;
@@ -62,7 +64,7 @@ app.post(
 app.use(express.json({ limit: "1mb" }));
 // Payment browser routes require a signed identity context. The verified SePay webhook is registered above.
 app.use(createTrustedRequestMiddleware({ expectedAudience: serviceName }));
-app.use(createPaymentRouter(repository));
+app.use(createPaymentRouter(repository, { salesServiceUrl, catalogServiceUrl }));
 app.get("/health/live", (_request, response) => response.json({ status: "ok", service: serviceName }));
 app.get("/health/ready", (_request, response) =>
   response.status(database ? 200 : 503).json({ status: database ? "ok" : "degraded", service: serviceName }),

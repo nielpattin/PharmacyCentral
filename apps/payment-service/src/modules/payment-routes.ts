@@ -12,7 +12,16 @@ const idSchema = z.object({ id: z.string().uuid() });
 const actor = (request: import("express").Request): string | undefined => request.header("X-Actor-Id") ?? undefined;
 const employee = (request: import("express").Request): boolean => request.header("X-Actor-Type") === "employee";
 
-export const createPaymentRouter = (repository: PaymentRepository | undefined): Router => {
+export type PaymentRouterOptions = {
+  /** Both URLs are validated at boot by main.ts, so a missing one is a type error and never a localhost guess. */
+  salesServiceUrl: string;
+  catalogServiceUrl: string;
+};
+
+export const createPaymentRouter = (
+  repository: PaymentRepository | undefined,
+  options: PaymentRouterOptions,
+): Router => {
   const router = Router();
 
   router.post("/payments/prescriptions/:prescriptionId", async (request, response, next) => {
@@ -23,8 +32,7 @@ export const createPaymentRouter = (repository: PaymentRepository | undefined): 
     try {
       const existing = await repository.getInvoiceByPrescription(prescriptionId.data);
       if (existing) return response.json(existing);
-      const salesUrl = process.env.SALES_SERVICE_URL ?? "http://localhost:3005";
-      const salesResponse = await fetch(`${salesUrl}/prescriptions/${prescriptionId.data}`, {
+      const salesResponse = await fetch(`${options.salesServiceUrl}/prescriptions/${prescriptionId.data}`, {
         headers: internalServiceHeaders(createdBy),
         signal: AbortSignal.timeout(2_000),
       });
@@ -36,16 +44,15 @@ export const createPaymentRouter = (repository: PaymentRepository | undefined): 
         siteId: string;
         lines: Array<{ productId: string; productUnitId: string; prescribedQuantity: string }>;
       };
-      const catalogUrl = process.env.CATALOG_SERVICE_URL ?? "http://localhost:3002";
       const lines = await Promise.all(
         prescription.lines.map(async (line) => {
           const [productResponse, priceResponse] = await Promise.all([
-            fetch(`${catalogUrl}/products/${line.productId}`, {
+            fetch(`${options.catalogServiceUrl}/products/${line.productId}`, {
               headers: internalServiceHeaders(),
               signal: AbortSignal.timeout(2_000),
             }),
             fetch(
-              `${catalogUrl}/pricing/active?productId=${line.productId}&productUnitId=${line.productUnitId}&siteId=${prescription.siteId}&effectiveDate=${new Date().toISOString().slice(0, 10)}`,
+              `${options.catalogServiceUrl}/pricing/active?productId=${line.productId}&productUnitId=${line.productUnitId}&siteId=${prescription.siteId}&effectiveDate=${new Date().toISOString().slice(0, 10)}`,
               { headers: internalServiceHeaders(), signal: AbortSignal.timeout(2_000) },
             ),
           ]);
