@@ -256,12 +256,10 @@ Prescription intake needs the catalog migrations `0005_text_search_extensions` (
 1. Set `GEMINI_API_KEY`, `GEMINI_BASE_URL`, and `GEMINI_MODEL` in `.env` (see `.env.example`) to read photos. With an empty `GEMINI_API_KEY` the photo path answers `503` and only QR intake works.
 2. Sign in as the customer account and open `http://localhost:5173/gui-don-thuoc`.
 3. Upload a page from `data/prescription-samples/`. `<slug>.png` carries a QR (read in the browser, no provider call); `<slug>-no-qr.png` is the same page without it and exercises Gemini. `<slug>.json` is the ground truth to compare against.
-4. Upload `data/prescription-samples/tre-em-tieu-chay.png`, whose `Paracetamol 250mg` line is dispensed in `Gói` and has no matching sachet in the catalog, so the page marks it "cần dược sĩ hỗ trợ" instead of offering a product.
-5. Press "Nhờ dược sĩ tìm giúp", add a note if you like, and send; the whole read prescription is filed with the unfilled lines flagged.
-6. Sign in as the Pharmacist account, open `http://127.0.0.1:5174` > prescriptions > "Tư vấn đơn thuốc", filter by `Open`, and answer the request; it moves to `Answered`.
-7. Sign back in as the customer, open account > "Đơn thuốc", and read the reply.
+4. The sample has one prescription, `tang-huyet-ap-dai-thao-duong`, with six lines. Five match catalog products: Amlodipin 5mg, Savi Losartan 50mg, Diamicron MR 30mg, Atorvastatin 20mg and Plavix 75mg. These are prescription-only with no price, so the page shows "Liên hệ báo giá" and they cannot be added to the cart.
+5. Aspirin 81mg has no catalog match, so the page offers "Nhờ dược sĩ tìm giúp" for the whole prescription; the request is filed through `POST /prescriptions/consultations` with that line flagged.
 
-`pnpm run prescriptions:samples` generates those pages. They are fictional prescriptions whose medicines mostly come from `products.csv`, and like other generated output they stay local and are not committed.
+`pnpm run prescriptions:samples` generates that page. Its medicines all come from `products.csv`, and like other generated output it stays local and is not committed.
 
 ### Demo credentials
 

@@ -108,7 +108,8 @@ export const OrderSummary = ({
               </p>
               {totals.unpricedCount > 0 ? (
                 <p className="text-danger">
-                  {totals.unpricedCount} sản phẩm chưa có giá niêm yết. Hệ thống sẽ báo giá khi xác nhận đơn.
+                  {totals.unpricedCount} sản phẩm chưa có giá niêm yết nên không thể đặt online. Gỡ khỏi giỏ hoặc nhờ
+                  dược sĩ tư vấn.
                 </p>
               ) : null}
               <p>Giá và phí giao hàng được hệ thống tính lại khi bạn xác nhận đặt hàng.</p>

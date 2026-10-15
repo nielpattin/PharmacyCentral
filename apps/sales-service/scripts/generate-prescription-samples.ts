@@ -52,8 +52,6 @@ type Scenario = {
     gioi_tinh: "Nam" | "Nữ";
     ma_bhyt: string;
     noi_thuong_tru: string;
-    /** Only for children under 72 months. */
-    nguoi_dua_tre?: string;
   };
   diagnoses: Array<{ ma_icd: string; ten: string }>;
   medicines: Medicine[];
@@ -70,134 +68,6 @@ const BODY_LIMIT = 1430;
 const DISCLAIMER = "Đơn mẫu dùng để thử nghiệm phần mềm — không có giá trị kê đơn";
 
 const scenarios: Scenario[] = [
-  {
-    slug: "cam-cum",
-    facility: {
-      ten: "Phòng khám Đa khoa Hoa Sen (mẫu)",
-      dia_chi: "12 Đường Số 5, Phường Tân Phú, Quận 7, TP. Hồ Chí Minh",
-      dien_thoai: "028 7100 0101",
-    },
-    patient: {
-      ho_ten: "Nguyễn Văn An",
-      cccd: "079088001234",
-      ngay_sinh: "15/04/1988",
-      can_nang_kg: 64,
-      gioi_tinh: "Nam",
-      ma_bhyt: "DN4790012345",
-      noi_thuong_tru: "45 Đường Lê Văn Việt, Phường Hiệp Phú, TP. Thủ Đức, TP. Hồ Chí Minh",
-    },
-    diagnoses: [{ ma_icd: "J06.9", ten: "Viêm đường hô hấp trên cấp" }],
-    medicines: [
-      {
-        printed: "Paracetamol 500mg",
-        ten_thuoc: "Paracetamol 500mg",
-        biet_duoc: "Paracetamol",
-        don_vi_tinh: "Viên",
-        so_luong: 20,
-        usage: "Uống 1 viên khi sốt trên 38,5°C, cách nhau 6 giờ, tối đa 4 viên/ngày",
-        cach_dung: "1 viên khi sốt, cách 6 giờ",
-      },
-      {
-        printed: "Hapacol 650 (Paracetamol 650mg)",
-        ten_thuoc: "Hapacol 650",
-        biet_duoc: "Paracetamol 650mg",
-        don_vi_tinh: "Viên",
-        so_luong: 10,
-        usage: "Uống 1 viên khi đau đầu, nhức mỏi, cách nhau ít nhất 6 giờ",
-        cach_dung: "1 viên khi đau, cách 6 giờ",
-      },
-      {
-        printed: "Loratadin 10mg",
-        ten_thuoc: "Loratadin 10mg",
-        biet_duoc: "Loratadin",
-        don_vi_tinh: "Viên",
-        so_luong: 10,
-        usage: "Tối 1 viên, uống 10 ngày",
-        cach_dung: "Tối 1 viên",
-      },
-      {
-        printed: "Acemuc 200 (Acetylcysteine 200mg)",
-        ten_thuoc: "Acemuc 200",
-        biet_duoc: "Acetylcysteine 200mg",
-        don_vi_tinh: "Viên",
-        so_luong: 15,
-        usage: "Sáng 1 viên, trưa 1 viên, tối 1 viên sau ăn, uống 5 ngày",
-        cach_dung: "Sáng 1, trưa 1, tối 1 sau ăn",
-      },
-      {
-        printed: "Vitamin C 500mg",
-        ten_thuoc: "Vitamin C 500mg",
-        biet_duoc: "Vitamin C",
-        don_vi_tinh: "Viên",
-        so_luong: 10,
-        usage: "Sáng 1 viên sau ăn, uống 10 ngày",
-        cach_dung: "Sáng 1 sau ăn",
-      },
-    ],
-    advice: ["Uống nhiều nước ấm, nghỉ ngơi, tránh gió lạnh.", "Tái khám sau 5 ngày nếu còn sốt hoặc ho nhiều."],
-    doctor: "BS. Hoàng Thị Mai",
-  },
-  {
-    slug: "da-day",
-    facility: {
-      ten: "Phòng khám Tiêu hóa An Bình (mẫu)",
-      dia_chi: "88 Đường Trần Não, Phường An Khánh, TP. Thủ Đức, TP. Hồ Chí Minh",
-      dien_thoai: "028 7200 0202",
-    },
-    patient: {
-      ho_ten: "Trần Thị Bích Ngọc",
-      cccd: "079179004321",
-      ngay_sinh: "02/09/1979",
-      can_nang_kg: 55,
-      gioi_tinh: "Nữ",
-      ma_bhyt: "GD4790054321",
-      noi_thuong_tru: "27 Đường Nguyễn Duy Trinh, Phường Bình Trưng, TP. Thủ Đức, TP. Hồ Chí Minh",
-    },
-    diagnoses: [{ ma_icd: "K29.7", ten: "Viêm dạ dày" }],
-    medicines: [
-      {
-        printed: "Nexium Mups 40mg (Esomeprazole)",
-        ten_thuoc: "Nexium Mups 40mg",
-        biet_duoc: "Esomeprazole",
-        don_vi_tinh: "Viên",
-        so_luong: 14,
-        usage: "Sáng 1 viên trước ăn 30 phút, uống 14 ngày",
-        cach_dung: "Sáng 1 trước ăn 30 phút",
-      },
-      {
-        printed: "Domperidon 10mg",
-        ten_thuoc: "Domperidon 10mg",
-        biet_duoc: "Domperidon",
-        don_vi_tinh: "Viên",
-        so_luong: 21,
-        usage: "Sáng 1 viên, trưa 1 viên, tối 1 viên trước ăn 15 phút, uống 7 ngày",
-        cach_dung: "Sáng 1, trưa 1, tối 1 trước ăn",
-      },
-      {
-        printed: "Smecta (Diosmectite 3g)",
-        ten_thuoc: "Smecta",
-        biet_duoc: "Diosmectite 3g",
-        don_vi_tinh: "Gói",
-        so_luong: 20,
-        usage: "Sáng 1 gói, tối 1 gói pha với nửa ly nước, uống xa bữa ăn, uống 10 ngày",
-        cach_dung: "Sáng 1, tối 1 xa bữa ăn",
-      },
-      {
-        printed: "Gaviscon Dual Action (Natri alginat + Natri bicarbonat + Calci carbonat)",
-        ten_thuoc: "Gaviscon Dual Action",
-        biet_duoc: "Natri alginat + Natri bicarbonat + Calci carbonat",
-        don_vi_tinh: "Gói",
-        so_luong: 20,
-        usage: "Mỗi lần 1 gói, 4 lần/ngày sau ăn và trước khi ngủ, uống 5 ngày",
-        cach_dung: "1 gói x 4 lần/ngày sau ăn",
-      },
-    ],
-    advice: [
-      "Ăn chín uống sôi, tránh đồ cay nóng, rượu bia, cà phê.",
-      "Tái khám sau 14 ngày hoặc khi đau bụng nhiều, đi ngoài phân đen.",
-    ],
-    doctor: "BS. Lê Quốc Khánh",
-  },
   {
     slug: "tang-huyet-ap-dai-thao-duong",
     facility: {
@@ -238,15 +108,6 @@ const scenarios: Scenario[] = [
         cach_dung: "Sáng 1 viên",
       },
       {
-        printed: "Metformin 500mg",
-        ten_thuoc: "Metformin 500mg",
-        biet_duoc: "Metformin",
-        don_vi_tinh: "Viên",
-        so_luong: 60,
-        usage: "Sáng 1 viên, tối 1 viên trong bữa ăn, uống 30 ngày",
-        cach_dung: "Sáng 1, tối 1 trong bữa ăn",
-      },
-      {
         printed: "Diamicron MR 30mg (Gliclazide)",
         ten_thuoc: "Diamicron MR 30mg",
         biet_duoc: "Gliclazide",
@@ -273,129 +134,18 @@ const scenarios: Scenario[] = [
         usage: "Sáng 1 viên sau ăn, uống 30 ngày",
         cach_dung: "Sáng 1 sau ăn",
       },
+      {
+        printed: "Aspirin 81mg (Acid acetylsalicylic)",
+        ten_thuoc: "Aspirin 81mg",
+        biet_duoc: "Acid acetylsalicylic",
+        don_vi_tinh: "Viên",
+        so_luong: 30,
+        usage: "Sáng 1 viên sau ăn, uống 30 ngày",
+        cach_dung: "Sáng 1 sau ăn",
+      },
     ],
     advice: ["Ăn nhạt, hạn chế đường và tinh bột.", "Tái khám sau 30 ngày, mang theo sổ theo dõi."],
     doctor: "BS. Phạm Đức Hùng",
-  },
-  {
-    slug: "tre-em-tieu-chay",
-    facility: {
-      ten: "Phòng khám Nhi Ánh Dương (mẫu)",
-      dia_chi: "34 Đường Phan Văn Trị, Phường 12, Quận Bình Thạnh, TP. Hồ Chí Minh",
-      dien_thoai: "028 7400 0404",
-    },
-    patient: {
-      ho_ten: "Võ Minh Khôi",
-      cccd: "079223009876",
-      ngay_sinh: "14/05/2023",
-      can_nang_kg: 14,
-      gioi_tinh: "Nam",
-      ma_bhyt: "TE4790098765",
-      noi_thuong_tru: "18 Đường Bạch Đằng, Phường 2, Quận Tân Bình, TP. Hồ Chí Minh",
-      nguoi_dua_tre: "Võ Thị Lan (mẹ)",
-    },
-    diagnoses: [{ ma_icd: "A09", ten: "Tiêu chảy" }],
-    medicines: [
-      {
-        printed: "Oresol 245 (Natri clorid + Natri citrat + Kali clorid + Glucose)",
-        ten_thuoc: "Oresol 245",
-        biet_duoc: "Natri clorid + Natri citrat + Kali clorid + Glucose",
-        don_vi_tinh: "Gói",
-        so_luong: 10,
-        usage: "Pha 1 gói với 200ml nước đun sôi để nguội, uống sau mỗi lần đi ngoài",
-        cach_dung: "1 gói pha 200ml sau mỗi lần đi ngoài",
-      },
-      {
-        printed: "Enterogermina (Bacillus clausii) 4 tỷ/5ml",
-        ten_thuoc: "Enterogermina 4 tỷ/5ml",
-        biet_duoc: "Bacillus clausii",
-        don_vi_tinh: "Ống",
-        so_luong: 10,
-        usage: "Sáng 1 ống, chiều 1 ống, uống 5 ngày",
-        cach_dung: "Sáng 1, chiều 1",
-      },
-      {
-        printed: "Zinc gluconat 10mg",
-        ten_thuoc: "Zinc gluconat 10mg",
-        biet_duoc: "Zinc gluconat",
-        don_vi_tinh: "Gói",
-        so_luong: 10,
-        usage: "Sáng 1 gói hòa với nước, uống 10 ngày",
-        cach_dung: "Sáng 1 gói",
-      },
-      {
-        printed: "Paracetamol 250mg",
-        ten_thuoc: "Paracetamol 250mg",
-        biet_duoc: "Paracetamol",
-        don_vi_tinh: "Gói",
-        so_luong: 6,
-        usage: "Uống 1 gói khi sốt trên 38,5°C, cách nhau 6 giờ",
-        cach_dung: "1 gói khi sốt, cách 6 giờ",
-      },
-    ],
-    advice: [
-      "Cho trẻ ăn lỏng, bú mẹ và uống nhiều nước.",
-      "Tái khám ngay nếu trẻ sốt cao, nôn nhiều hoặc đi ngoài ra máu.",
-    ],
-    doctor: "BS. Đỗ Thanh Tâm",
-  },
-  {
-    slug: "khang-sinh-ho",
-    facility: {
-      ten: "Phòng khám Hô hấp Bình Minh (mẫu)",
-      dia_chi: "210 Đường Cách Mạng Tháng Tám, Phường 10, Quận 3, TP. Hồ Chí Minh",
-      dien_thoai: "028 7500 0505",
-    },
-    patient: {
-      ho_ten: "Đặng Quốc Bảo",
-      cccd: "079094005566",
-      ngay_sinh: "08/07/1994",
-      can_nang_kg: 70,
-      gioi_tinh: "Nam",
-      ma_bhyt: "CN4790055667",
-      noi_thuong_tru: "9 Đường Võ Văn Tần, Phường 6, Quận 3, TP. Hồ Chí Minh",
-    },
-    diagnoses: [{ ma_icd: "J20", ten: "Viêm phế quản cấp" }],
-    medicines: [
-      {
-        printed: "Augmentin 625mg (Amoxicillin + Acid clavulanic)",
-        ten_thuoc: "Augmentin 625mg",
-        biet_duoc: "Amoxicillin + Acid clavulanic",
-        don_vi_tinh: "Viên",
-        so_luong: 14,
-        usage: "Sáng 1 viên, chiều 1 viên sau ăn, uống 7 ngày",
-        cach_dung: "Sáng 1, chiều 1 sau ăn",
-      },
-      {
-        printed: "Amoxicillin 500mg",
-        ten_thuoc: "Amoxicillin 500mg",
-        biet_duoc: "Amoxicillin",
-        don_vi_tinh: "Viên",
-        so_luong: 21,
-        usage: "Sáng 1 viên, trưa 1 viên, tối 1 viên sau ăn, uống 7 ngày",
-        cach_dung: "Sáng 1, trưa 1, tối 1 sau ăn",
-      },
-      {
-        printed: "Ambroxol 30mg",
-        ten_thuoc: "Ambroxol 30mg",
-        biet_duoc: "Ambroxol",
-        don_vi_tinh: "Viên",
-        so_luong: 20,
-        usage: "Sáng 1 viên, tối 1 viên sau ăn, uống 10 ngày",
-        cach_dung: "Sáng 1, tối 1 sau ăn",
-      },
-      {
-        printed: "Dextromethorphan 15mg",
-        ten_thuoc: "Dextromethorphan 15mg",
-        biet_duoc: "Dextromethorphan",
-        don_vi_tinh: "Viên",
-        so_luong: 12,
-        usage: "Mỗi lần 1 viên khi ho khan, ngày 3 lần, uống 4 ngày",
-        cach_dung: "1 viên x 3 lần/ngày khi ho khan",
-      },
-    ],
-    advice: ["Uống đủ liều kháng sinh, không tự ý ngưng thuốc.", "Tái khám sau 7 ngày hoặc khi khó thở, sốt cao."],
-    doctor: "BS. Ngô Thị Thanh Hà",
   },
 ];
 
@@ -538,9 +288,6 @@ function buildSvg(
   field(640, y, "Cân nặng:", `${patient.can_nang_kg} kg`, 30);
   y += 36;
   y = field(MARGIN, y, "Nơi thường trú:", patient.noi_thuong_tru, 66) + 6;
-  if (patient.nguoi_dua_tre) {
-    y = field(MARGIN, y, "Họ và tên người đưa trẻ đến khám bệnh:", patient.nguoi_dua_tre, 70) + 6;
-  }
   const diagnosis = scenario.diagnoses.map((d) => `${d.ma_icd} - ${d.ten}`).join("; ");
   y = field(MARGIN, y, "Chẩn đoán:", diagnosis, 66) + 16;
 

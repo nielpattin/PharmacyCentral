@@ -210,7 +210,10 @@ export const CheckoutPage = (): React.JSX.Element => {
   const totals = useMemo(() => checkoutTotals(cartLines, shippingFee), [cartLines, shippingFee]);
   const step: CheckoutStep = placed ? 3 : cartLines.length === 0 ? 1 : 2;
   const canSubmit = Boolean(
-    cartLines.length && session.authenticated && (fulfillmentType === "pickup" || selectedStore),
+    cartLines.length &&
+    session.authenticated &&
+    (fulfillmentType === "pickup" || selectedStore) &&
+    totals.unpricedCount === 0,
   );
   // Ordering is tied to the account, and the sign-in form now lives on the account page, so the reason names where
   // to go rather than describing a form that is not on this page.
@@ -220,7 +223,9 @@ export const CheckoutPage = (): React.JSX.Element => {
       ? "Thêm thuốc vào giỏ để đặt hàng."
       : !selectedStore
         ? "Chọn nhà thuốc xuất đơn."
-        : undefined;
+        : totals.unpricedCount > 0
+          ? "Gỡ các sản phẩm chưa có giá khỏi giỏ hoặc nhờ dược sĩ tư vấn."
+          : undefined;
 
   const changeLineQuantity = async (line: CheckoutLine, quantity: number): Promise<void> => {
     setPendingLineId(line.id);

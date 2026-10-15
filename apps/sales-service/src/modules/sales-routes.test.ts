@@ -305,6 +305,39 @@ describe("sales prescription API", () => {
     expect(createPrescription).not.toHaveBeenCalled();
   });
 
+  it("refuses an order line whose product has no active price, without writing the order", async () => {
+    const createOrder = vi.fn<(input: unknown) => Promise<unknown>>().mockResolvedValue({ id: ids.prescription });
+    const repository = { createOrder, getOrder: vi.fn() } as unknown as SalesRepository;
+    const responder = async (url: string): Promise<Response> => {
+      if (String(url).includes("/pricing/active")) return new Response(null, { status: 404 });
+      return new Response(JSON.stringify({ id: ids.productA, name: "Thuốc kê đơn mẫu" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    vi.stubGlobal("fetch", vi.fn(responder));
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/orders`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      body: JSON.stringify({
+        selectedStoreId: ids.site,
+        fulfillmentType: "pickup",
+        lines: [{ productId: ids.productA, productUnitId: ids.unitA, quantity: 1 }],
+      }),
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      status: 409,
+      code: "product_unpriced",
+      productId: ids.productA,
+    });
+    expect(createOrder).not.toHaveBeenCalled();
+  });
+
   it("fails closed when identity-service cannot resolve the customer", async () => {
     const createPrescription = vi
       .fn<(input: Parameters<SalesRepository["createPrescription"]>[0]) => Promise<unknown>>()

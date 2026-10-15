@@ -275,6 +275,13 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
           distanceMeters: error.distanceMeters,
           maxDistanceMeters: error.maxDistanceMeters,
         });
+      if (error instanceof UnpricedProductError)
+        return response.status(409).json({
+          title: error.message,
+          status: 409,
+          code: "product_unpriced",
+          productId: error.productId,
+        });
       return next(error);
     }
   });
@@ -489,6 +496,13 @@ const verifyCustomerAccount = async (customerId: string, baseUrl?: string): Prom
   }
 };
 
+class UnpricedProductError extends Error {
+  constructor(public readonly productId: string) {
+    super("Product has no published price and cannot be ordered online");
+    this.name = "UnpricedProductError";
+  }
+}
+
 const resolveOrderLines = async (
   lines: Array<{ productId: string; productUnitId: string; quantity: number }>,
   baseUrl: string,
@@ -513,6 +527,7 @@ const resolveOrderLines = async (
           { headers: internalServiceHeaders(), signal: AbortSignal.timeout(2_000) },
         ),
       ]);
+      if (priceResponse.status === 404) throw new UnpricedProductError(line.productId);
       if (!productResponse.ok || !priceResponse.ok) throw new Error("Product or active price is unavailable");
       const product = (await productResponse.json()) as { id: string; name: string };
       const price = (await priceResponse.json()) as {

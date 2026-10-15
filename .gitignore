@@ -100,6 +100,7 @@ coverage/
 !/data/import-samples/
 !/data/import-samples/*.csv
 !/data/product-images/
+!/data/research/
 /data/product-images/images/
 /data/product-images/originals/
 /data/product-images/image-urls.csv

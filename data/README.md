@@ -23,9 +23,11 @@ resolved by natural key:
 4. `opening-balances.csv`
 
 The files are internally consistent: the opening balances reference SKUs, site codes, storage
-location codes, and a supplier code that the other four files create. Product names and units come
-from public pharmacy listings; prices, barcodes, registration numbers, and supplier contacts are
-fabricated sample values (`@example.com`). This is coursework data, not a real catalog.
+location code, and a supplier code that the other four files create. Product names, units, and images come
+from public pharmacy listings (Long Châu), and the three over-the-counter prices in `products.csv` are the
+listed prices. Barcodes, registration numbers, and supplier contacts are fabricated sample values
+(`@example.com`). Prescription-only products have no price: the storefront shows "Liên hệ báo giá", and
+`POST /orders` rejects them with `409 product_unpriced`. This is coursework data, not a real catalog.
 
 ## One command from a fresh checkout
 
