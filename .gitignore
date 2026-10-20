@@ -91,9 +91,9 @@ coverage/
 .tmp/
 
 # Local data. Committed on purpose: data/README.md, the sample CSV inputs under
-# data/import-samples/, and the coursework product-image set as a single archive
-# (data/product-images/images.tar.gz), so every developer gets the same fixtures.
-# Extracted images, original downloads, generated output, source-verification
+# data/import-samples/, and the coursework product-image folder
+# (data/product-images/images/), so every developer gets the same fixtures.
+# Original downloads, generated output, source-verification
 # records, and scratch research stay local.
 /data/*
 !/data/README.md
@@ -101,7 +101,6 @@ coverage/
 !/data/import-samples/*.csv
 !/data/product-images/
 !/data/research/
-/data/product-images/images/
 /data/product-images/originals/
 /data/product-images/image-urls.csv
 /data/product-images/provenance/
@@ -115,6 +114,9 @@ docs/*
 !docs/Baseline.md
 !docs/Runbooks.md
 !docs/ProjectSummary.md
+!docs/diagrams/
+!docs/diagrams/**
+docs/diagrams/png/
 bin-build
 .lazyweb/
 .cloudflared/

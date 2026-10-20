@@ -7,6 +7,7 @@ const packages = [
   "@pharmacy/sales-service",
   "@pharmacy/payment-service",
   "@pharmacy/operations-query-service",
+  "@pharmacy/chatbot-service",
 ];
 
 const dirs = {
@@ -16,6 +17,7 @@ const dirs = {
   "@pharmacy/sales-service": "apps/sales-service",
   "@pharmacy/payment-service": "apps/payment-service",
   "@pharmacy/operations-query-service": "apps/operations-query-service",
+  "@pharmacy/chatbot-service": "apps/chatbot-service",
 };
 
 for (const packageName of packages) {
