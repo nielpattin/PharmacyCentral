@@ -16,10 +16,10 @@ internal Application Load Balancer (managed security group, ingress: VPC Link & 
         |
 ECS Fargate services (managed security group, ingress: ALB & East-West:3001-3007, egress: outbound/NAT)
         |
-RDS PostgreSQL, Valkey, RabbitMQ, and Secrets Manager
+RDS PostgreSQL, Redis, RabbitMQ, Typesense, and Secrets Manager
 ```
 
-The backend services use the same immutable image references as the existing container pipeline. The task definition exposes each service's current port and health endpoint. Cloud Map names provide private service-to-service DNS. PostgreSQL, Valkey, and RabbitMQ are supplied via Secrets Manager ARNs; this first stack does not provision those data services.
+The backend services use the same immutable image references as the existing container pipeline. The task definition exposes each service's current port and health endpoint. Cloud Map names provide private service-to-service DNS. PostgreSQL, Redis, RabbitMQ, and Typesense are supplied via Secrets Manager ARNs; this first stack does not provision those data services. Production needs a 3-node Typesense cluster or Typesense Cloud. The search index is a derived copy. catalog-service rebuilds it from PostgreSQL, so losing it costs a rebuild and no data.
 
 ## Networking and security groups
 
@@ -27,13 +27,14 @@ Terraform manages all security groups and traffic rules:
 
 - **API Gateway VPC Link SG:** Restricts outbound egress to port 80 on the internal Application Load Balancer security group.
 - **Internal Application Load Balancer SG:** Allows inbound HTTP on port 80 only from the VPC Link and authorizer Lambda security groups; forwards egress traffic to backend ECS tasks on ports 3001 through 3007.
-- **ECS Tasks SG:** Allows inbound traffic on backend service ports 3001 through 3007 from the internal Application Load Balancer and task-to-task east-west traffic for Cloud Map service discovery; maintains outbound egress to `0.0.0.0/0` for third-party external APIs (such as SePay), managed data stores (PostgreSQL, Valkey, RabbitMQ), and NAT gateways.
+- **ECS Tasks SG:** Allows inbound traffic on backend service ports 3001 through 3007 from the internal Application Load Balancer and task-to-task east-west traffic for Cloud Map service discovery; maintains outbound egress to `0.0.0.0/0` for third-party external APIs (such as SePay), managed data stores (PostgreSQL, Redis, RabbitMQ, Typesense), and NAT gateways.
 - **Authorizer Lambda SG:** Resides in the private VPC subnets with outbound access to reach the internal ALB and AWS APIs via NAT or VPC endpoints.
 
 ## Container images and secrets management
 
 - **Private GHCR Authentication:** Task definitions and the task execution IAM role support an optional Secrets Manager ARN (`repository_credentials_secret_arn`) to authenticate with private container registries (such as GitHub Container Registry).
-- **Secrets Manager ARN Maps:** Sensitive connection strings and credentials (`DATABASE_URL`, `RABBITMQ_URL`, `VALKEY_URL`, `INTERNAL_IDENTITY_SECRET`, `INTERNAL_SERVICE_SECRET`, and `SEPAY_WEBHOOK_SECRET`) are configured as Secrets Manager ARN maps (`shared_secrets` and `service_secrets`) and injected at container launch rather than stored as plaintext in `service_environment`.
+- **Secrets Manager ARN Maps:** Sensitive connection strings and credentials (`DATABASE_URL`, `RABBITMQ_URL`, `REDIS_URL`, `TYPESENSE_URL`, `TYPESENSE_API_KEY`, `SECRETS_ENCRYPTION_KEY`, `INTERNAL_IDENTITY_SECRET`, `INTERNAL_SERVICE_SECRET`, and `SEPAY_WEBHOOK_SECRET`) are configured as Secrets Manager ARN maps (`shared_secrets` and `service_secrets`) and injected at container launch rather than stored as plaintext in `service_environment`.
+- **AI provider settings:** No AI provider setting or key is configured in Terraform, so the `AI_<FEATURE>_*` variables are not in `service_environment`. A Platform Admin sets each feature's provider, model, base URL and API key in staff-web. `chatbot-service`, `sales-service`, and `catalog-service` each keep theirs encrypted in their own database. They need `SECRETS_ENCRYPTION_KEY` (32 random bytes, base64) in `service_secrets`. Give the three services the same secret so that one value protects all three. Replacing it does not re-encrypt what is stored, so the saved keys become unreadable and an admin must enter them again. Production leaves every `AI_<FEATURE>_*` variable unset, so the admin page is the only place these settings live.
 - **Authorizer Secrets Wiring:** Authorizer secret ARNs (`authorizer_secrets`, such as `INTERNAL_IDENTITY_SECRET` and `INTERNAL_SERVICE_SECRET`) are wired directly into the authorizer Lambda function environment variables and permitted in the authorizer IAM execution policy.
 - **Lambda Runtime:** Lambda functions (authorizer and CSRF token generator) use the Node.js 22 runtime (`nodejs22.x`).
 

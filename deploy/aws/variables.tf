@@ -53,7 +53,7 @@ variable "images" {
 
   validation {
     condition = alltrue([
-      for service in ["identity-service", "catalog-service", "inventory-service", "sales-service", "payment-service", "operations-query-service"] :
+      for service in ["identity-service", "catalog-service", "inventory-service", "sales-service", "payment-service", "operations-query-service", "chatbot-service"] :
       contains(keys(var.images), service) && strcontains(var.images[service], "@sha256:")
     ])
     error_message = "Every backend service image must be provided as an immutable image@sha256:digest reference."

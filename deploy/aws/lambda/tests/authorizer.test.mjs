@@ -336,6 +336,41 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
       assert.equal((await authorizer(managerEvent)).isAuthorized, false);
     });
 
+    it("lets only a Platform Admin reach an AI credential path, even under the public products prefix", async () => {
+      const paths = [
+        ["/api/chatbot/credential", "chatbot-service"],
+        ["/api/chatbot/intent-gate-credential", "chatbot-service"],
+        ["/api/prescriptions/intake-credential", "sales-service"],
+        ["/api/products/search-credential", "catalog-service"],
+      ];
+      const eventFor = (path, method, session, csrf = true) => ({
+        rawPath: path,
+        headers: {
+          cookie: [session ? `pharmacy_session=${session}` : "", csrf ? "pharmacy_csrf=token" : ""].filter(Boolean).join("; "),
+          ...(csrf ? { "x-csrf-token": "token" } : {}),
+        },
+        requestContext: { http: { method, path } },
+      });
+
+      for (const [path, audience] of paths) {
+        for (const method of ["GET", "PUT", "DELETE"]) {
+          const allowed = await authorizer(eventFor(path, method, "session-admin"));
+          assert.equal(allowed.isAuthorized, true, `admin ${method} ${path}`);
+          const context = decodeAndVerifyIdentityContext(allowed.context.signedIdentityContext, testSecret, fixedNow);
+          assert.equal(context?.actorType, "employee", `${method} ${path} must carry the admin identity`);
+          assert.equal(context?.audience, audience, `${method} ${path} must be signed for ${audience}`);
+
+          for (const session of ["session-manager", "session-pharmacist", "session-customer", undefined]) {
+            const denied = await authorizer(eventFor(path, method, session));
+            assert.equal(denied.isAuthorized, false, `${session ?? "anonymous"} ${method} ${path}`);
+          }
+        }
+      }
+
+      const noCsrf = await authorizer(eventFor("/api/chatbot/credential", "PUT", "session-admin", false));
+      assert.equal(noCsrf.isAuthorized, false, "a key change still needs the CSRF token");
+    });
+
     it("allows a pharmacist to look up a customer account and denies everyone else", async () => {
       const pharmacistEvent = {
         rawPath: "/api/customers/lookup",

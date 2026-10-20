@@ -19,6 +19,13 @@ export const publicPrefixes = [
 
 export const optionalIdentityPrefixes = ["/api/carts", "/api/delivery/calculate"];
 
+export const aiCredentialPaths = [
+  "/api/chatbot/credential",
+  "/api/chatbot/intent-gate-credential",
+  "/api/prescriptions/intake-credential",
+  "/api/products/search-credential",
+];
+
 export const employeePrefixes = [
   "/api/procurement",
   "/api/inventory",
@@ -32,6 +39,7 @@ export const employeePrefixes = [
   "/api/counter-transactions",
   "/api/admin",
   "/api/customers",
+  ...aiCredentialPaths,
 ];
 
 export const catalogWritePrefixes = [
@@ -109,7 +117,7 @@ export const customerPaymentRequests = [
   { method: "POST", path: "/api/payments/invoices", match: "exact", keepsStaffRole: false },
   { method: "GET", path: "/api/payments/invoices", match: "child", keepsStaffRole: true },
 ];
-export const platformAdminPaths = ["/api/admin", "/api/audit"];
+export const platformAdminPaths = ["/api/admin", "/api/audit", ...aiCredentialPaths];
 export const managementOnlyPaths = ["/api/finance"];
 
 export const csrfExemptPrefixes = [
@@ -282,6 +290,7 @@ export const selectTargetService = (path) => {
   ) {
     return "sales-service";
   }
+  if (matchesPrefix(norm, "/api/chatbot")) return "chatbot-service";
   if (matchesPrefix(norm, "/api/payments")) return "payment-service";
   if (
     ["/api/operations", "/api/dashboard", "/api/finance", "/api/audit", "/api/reports"].some((prefix) =>

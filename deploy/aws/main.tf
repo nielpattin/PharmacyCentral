@@ -26,6 +26,10 @@ locals {
       port  = 3007
       image = var.images["operations-query-service"]
     }
+    chatbot-service = {
+      port  = 3008
+      image = var.images["chatbot-service"]
+    }
   }
 
   path_rules = {
@@ -63,6 +67,11 @@ locals {
       priority = 70
       paths    = ["/operations*", "/dashboard*", "/finance*", "/audit*", "/reports*"]
       service  = "operations-query-service"
+    }
+    chatbot = {
+      priority = 80
+      paths    = ["/chatbot*"]
+      service  = "chatbot-service"
     }
   }
 

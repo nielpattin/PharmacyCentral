@@ -7,7 +7,7 @@ x-backend-defaults: &backend-defaults
       condition: service_healthy
     rabbitmq:
       condition: service_healthy
-    valkey:
+    redis:
       condition: service_healthy
     otel-collector:
       condition: service_healthy
@@ -27,7 +27,7 @@ x-backend-environment: &backend-environment
   DATABASE_USER: ${POSTGRES_USER}
   DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
-  VALKEY_URL: redis://valkey:6379
+  REDIS_URL: redis://redis:6379
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
   INTERNAL_IDENTITY_SECRET: ${INTERNAL_IDENTITY_SECRET}
   INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
@@ -66,19 +66,39 @@ services:
       - "${RABBITMQ_AMQP_PORT}:5672"
       - "${RABBITMQ_MANAGEMENT_PORT}:15672"
 
-  valkey:
-    image: valkey/valkey:9.1.1@sha256:70739f85ad2ee01a726a965584a0f94895f01b0c60b3cc8b0aeef11eaa6888cf
+  redis:
+    image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
     restart: unless-stopped
-    command: ["valkey-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes"]
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 12
     volumes:
-      - pharmacy-central-valkey-data:/data
+      - pharmacy-central-redis-data:/data
     ports:
-      - "${VALKEY_PORT}:6379"
+      - "${REDIS_PORT}:6379"
+
+  typesense:
+    image: typesense/typesense:30.2@sha256:610f2d34b1f93d00762869da2c67736775e5798d19a2c8b91b014b8a0cc1e110
+    restart: unless-stopped
+    environment:
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}
+      TYPESENSE_DATA_DIR: /data
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - exec 3<>/dev/tcp/127.0.0.1/8108 && printf 'GET /health HTTP/1.0\r\n\r\n' >&3 && grep -q '"ok":true' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - pharmacy-central-typesense-data:/data
+    ports:
+      - "${TYPESENSE_PORT}:8108"
 
   mailpit:
     image: axllent/mailpit:v1.30.7@sha256:d5ecbb067db3705fa953d79e1b7f81ef84038df67aba6c52825d8c02a1ea748a
@@ -185,6 +205,7 @@ services:
       CATALOG_PORT: ${CATALOG_PORT}
       INVENTORY_PORT: ${INVENTORY_PORT}
       SALES_PORT: ${SALES_PORT}
+      CHATBOT_PORT: ${CHATBOT_PORT}
       PAYMENT_PORT: ${PAYMENT_PORT}
       OPERATIONS_QUERY_PORT: ${OPERATIONS_QUERY_PORT}
     volumes:
@@ -231,7 +252,9 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      valkey:
+      redis:
+        condition: service_healthy
+      typesense:
         condition: service_healthy
       otel-collector:
         condition: service_healthy
@@ -246,6 +269,13 @@ services:
       SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY}
       SEAWEEDFS_MEDIA_BUCKET: ${SEAWEEDFS_MEDIA_BUCKET}
       SEAWEEDFS_PUBLIC_MEDIA_URL: ${SEAWEEDFS_PUBLIC_MEDIA_URL}
+      TYPESENSE_URL: http://typesense:8108
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY}
+      AI_EMBEDDING_PROVIDER: ${AI_EMBEDDING_PROVIDER}
+      AI_EMBEDDING_BASE_URL: ${AI_EMBEDDING_BASE_URL}
+      AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL}
+      AI_EMBEDDING_API_KEY: ${AI_EMBEDDING_API_KEY}
     ports:
       - "${CATALOG_PORT}:3002"
 
@@ -288,11 +318,43 @@ services:
       DELIVERY_MAX_DISTANCE_METERS: ${DELIVERY_MAX_DISTANCE_METERS}
       VIETMAP_API_KEY: ${VIETMAP_API_KEY}
       VIETMAP_BASE_URL: ${VIETMAP_BASE_URL}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GEMINI_BASE_URL: ${GEMINI_BASE_URL}
-      GEMINI_MODEL: ${GEMINI_MODEL}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY}
+      AI_PRESCRIPTION_READER_PROVIDER: ${AI_PRESCRIPTION_READER_PROVIDER}
+      AI_PRESCRIPTION_READER_BASE_URL: ${AI_PRESCRIPTION_READER_BASE_URL}
+      AI_PRESCRIPTION_READER_MODEL: ${AI_PRESCRIPTION_READER_MODEL}
+      AI_PRESCRIPTION_READER_API_KEY: ${AI_PRESCRIPTION_READER_API_KEY}
     ports:
       - "${SALES_PORT}:3005"
+
+  chatbot-service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: apps/Dockerfile.service
+      args:
+        APP_NAME: "@pharmacy/chatbot-service"
+        APP_DIR: apps/chatbot-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      catalog-service:
+        condition: service_healthy
+    environment:
+      PORT: 3008
+      INTERNAL_IDENTITY_SECRET: ${INTERNAL_IDENTITY_SECRET}
+      CATALOG_SERVICE_URL: http://catalog-service:3002
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/chatbot_service
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY}
+      AI_CHATBOT_PROVIDER: ${AI_CHATBOT_PROVIDER}
+      AI_CHATBOT_BASE_URL: ${AI_CHATBOT_BASE_URL}
+      AI_CHATBOT_MODEL: ${AI_CHATBOT_MODEL}
+      AI_CHATBOT_API_KEY: ${AI_CHATBOT_API_KEY}
+      AI_INTENT_GATE_PROVIDER: ${AI_INTENT_GATE_PROVIDER}
+      AI_INTENT_GATE_BASE_URL: ${AI_INTENT_GATE_BASE_URL}
+      AI_INTENT_GATE_MODEL: ${AI_INTENT_GATE_MODEL}
+      AI_INTENT_GATE_API_KEY: ${AI_INTENT_GATE_API_KEY}
+    ports:
+      - "${CHATBOT_PORT}:3008"
 
   payment-service:
     <<: *backend-defaults
@@ -381,5 +443,6 @@ services:
 
 volumes:
   pharmacy-central-postgres-data:
-  pharmacy-central-valkey-data:
+  pharmacy-central-redis-data:
+  pharmacy-central-typesense-data:
   pharmacy-central-seaweedfs-data:

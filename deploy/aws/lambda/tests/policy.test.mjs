@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  aiCredentialPaths,
   catalogWritePrefixes,
   csrfExemptPrefixes,
   employeePrefixes,
@@ -64,6 +65,8 @@ describe("policy - route classification", () => {
     assert.equal(isPublicRoute("/api/auth/google"), true);
     assert.equal(isPublicRoute("/api/inventory/balances"), false);
     assert.equal(isPublicRoute("/api/orders"), false);
+    // Chatbot calls a metered provider, so anonymous callers must not reach it.
+    assert.equal(isPublicRoute("/api/chatbot/messages"), false);
   });
 
   it("identifies optional identity routes", () => {
@@ -214,6 +217,24 @@ describe("policy - route classification", () => {
 });
 
 describe("policy - employee roles and authorization", () => {
+  it("keeps every AI credential path Platform Admin only, whatever the method or the prefix it lives under", () => {
+    for (const path of aiCredentialPaths) {
+      for (const method of ["GET", "PUT", "DELETE"]) {
+        assert.equal(isEmployeeRoute(path, method), true, `${method} ${path} must need an employee`);
+        assert.deepEqual(employeeRolesForRequest(path, method), ["Platform Admin"], `${method} ${path}`);
+      }
+    }
+    assert.equal(isPublicRoute("/api/products/search-credential"), true, "the products prefix is public");
+    assert.equal(isEmployeeRoute("/api/products/search-credential", "GET"), true, "yet this path still needs a session");
+  });
+
+  it("leaves the paths next to an AI credential path as they were", () => {
+    assert.equal(isEmployeeRoute("/api/products/search-credential-other", "GET"), false);
+    assert.equal(isEmployeeRoute("/api/chatbot/sessions", "POST"), false);
+    assert.deepEqual(employeeRolesForRequest("/api/chatbot/sessions", "POST"), undefined);
+    assert.deepEqual(employeeRolesForRequest("/api/prescriptions/intake/image", "POST"), undefined);
+  });
+
   it("determines required roles for specific endpoints", () => {
     // Platform Admin
     assert.deepEqual(employeeRolesForRequest("/api/admin", "GET"), ["Platform Admin"]);
@@ -302,6 +323,7 @@ describe("policy - target service selection", () => {
     assert.equal(selectTargetService("/api/delivery/calculate"), "sales-service");
     assert.equal(selectTargetService("/api/prescriptions"), "sales-service");
     assert.equal(selectTargetService("/api/payments"), "payment-service");
+    assert.equal(selectTargetService("/api/chatbot/messages"), "chatbot-service");
     assert.equal(selectTargetService("/api/operations/metrics"), "operations-query-service");
     assert.equal(selectTargetService("/api/dashboard/summary"), "operations-query-service");
     assert.equal(selectTargetService("/api/finance/summary"), "operations-query-service");
