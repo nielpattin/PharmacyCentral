@@ -49,8 +49,12 @@
     "test": {
       "dependsOn": ["^build"],
       "inputs": ["default", "^production"],
-      "cache": true
+      "cache": true,
+      "parallelism": false
     }
+  },
+  "tui": {
+    "autoExit": true
   },
   "analytics": false
 }

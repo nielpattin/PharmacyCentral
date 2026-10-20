@@ -17,11 +17,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json"
   },
   "dependencies": {
-    "@valkey/valkey-glide": "catalog:",
     "amqplib": "catalog:",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "express": "catalog:",
+    "ioredis": "catalog:",
     "pg": "catalog:",
     "pino": "catalog:",
     "zod": "catalog:"

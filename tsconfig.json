@@ -27,6 +27,9 @@
     },
     {
       "path": "./packages/ui"
+    },
+    {
+      "path": "./apps/chatbot-service"
     }
   ],
   "extends": "./tsconfig.base.json"
