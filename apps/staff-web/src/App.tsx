@@ -16,6 +16,7 @@ import {
   Settings,
   ShieldCheck,
   ShoppingBag,
+  Sparkles,
   Tags,
   Upload,
   X,
@@ -28,6 +29,7 @@ import { useMountEffect } from "./hooks/useMountEffect.ts";
 import { StaffNotFoundPage } from "./pages/NotFoundPage.tsx";
 import { toggleLanguage, translateText, useLanguage } from "./i18n.ts";
 import { datasets } from "./import-datasets.ts";
+import { AiIntegrationsSection } from "./sections/ai-integrations-section.tsx";
 import { CatalogSection } from "./sections/catalog-section.tsx";
 import { DashboardSection } from "./sections/dashboard-section.tsx";
 import { FinanceSection } from "./sections/finance-section.tsx";
@@ -38,6 +40,7 @@ import { MasterDataSection } from "./sections/master-data-section.tsx";
 import { OrdersSection } from "./sections/orders-section.tsx";
 import { PrescriptionsSection } from "./sections/prescriptions-section.tsx";
 import { ProcurementSection } from "./sections/procurement-section.tsx";
+import { SearchSynonymsSection } from "./sections/search-synonyms-section.tsx";
 import { request, setIdentityContextsEnabled } from "./staff-api.ts";
 import { governanceTabPaths, pathForSection, sectionFromPath, type Section } from "./router.ts";
 import "./styles.css";
@@ -55,6 +58,7 @@ const sectionRoles: Record<Section, readonly string[]> = {
   sites: ["Platform Admin", "Pharmacy Manager"],
   storageLocations: ["Platform Admin", "Pharmacy Manager"],
   catalog: ["Platform Admin", "Pharmacy Manager"],
+  searchSynonyms: ["Platform Admin", "Pharmacy Manager", "Pharmacist"],
   units: ["Platform Admin", "Pharmacy Manager"],
   pricing: ["Platform Admin", "Pharmacy Manager"],
   supplier: ["Platform Admin", "Pharmacy Manager"],
@@ -74,6 +78,7 @@ const sectionRoles: Record<Section, readonly string[]> = {
   finance: ["Platform Admin", "Pharmacy Manager"],
   users: ["Platform Admin"],
   audit: ["Platform Admin"],
+  aiIntegrations: ["Platform Admin"],
 };
 
 export const canAccessSection = (section: Section, roles: readonly string[]): boolean =>
@@ -102,6 +107,7 @@ const navGroups: NavGroup[] = [
       { key: "sites", label: "Sites", icon: <Building2 size={16} strokeWidth={2} /> },
       { key: "storageLocations", label: "Storage locations", icon: <MapPin size={16} strokeWidth={2} /> },
       { key: "catalog", label: "Catalog", icon: <Tags size={16} strokeWidth={2} /> },
+      { key: "searchSynonyms", label: "Search synonyms", icon: <Sparkles size={16} strokeWidth={2} /> },
       { key: "units", label: "Units", icon: <Ruler size={16} strokeWidth={2} /> },
       { key: "pricing", label: "Pricing", icon: <BadgeDollarSign size={16} strokeWidth={2} /> },
       { key: "supplier", label: "Suppliers", icon: <Building2 size={16} strokeWidth={2} /> },
@@ -140,6 +146,7 @@ const navGroups: NavGroup[] = [
     items: [
       { key: "users", label: "Users", icon: <ShieldCheck size={16} strokeWidth={2} /> },
       { key: "audit", label: "Audit", icon: <ShieldCheck size={16} strokeWidth={2} /> },
+      { key: "aiIntegrations", label: "AI integrations", icon: <Sparkles size={16} strokeWidth={2} /> },
     ],
   },
 ];
@@ -280,6 +287,8 @@ export const App = (): React.JSX.Element => {
         return <MasterDataSection key={activeSection} kind="locations" />;
       case "catalog":
         return <CatalogSection key={activeSection} kind="products" />;
+      case "searchSynonyms":
+        return <SearchSynonymsSection key={activeSection} />;
       case "units":
         return <CatalogSection key={activeSection} kind="units" />;
       case "pricing":
@@ -318,6 +327,8 @@ export const App = (): React.JSX.Element => {
         return <GovernanceSection key={location.pathname} initialTab={governanceTab} />;
       case "audit":
         return <GovernanceSection key={location.pathname} initialTab={governanceTab} />;
+      case "aiIntegrations":
+        return <AiIntegrationsSection key={activeSection} />;
       case "dashboard":
         return <DashboardSection key={activeSection} />;
     }

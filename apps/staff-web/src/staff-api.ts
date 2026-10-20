@@ -1,4 +1,5 @@
 import { apiServiceForPath, createIdentityContextCache, type IdentityContexts } from "@pharmacy/ui";
+import { z } from "zod";
 
 import { getLanguage, type Language } from "./i18n.ts";
 
@@ -218,3 +219,52 @@ export const answerPrescriptionConsultation = async (id: string, reply: string):
   writeJson<PrescriptionConsultation>(`/api/prescriptions/consultations/${encodeURIComponent(id)}/answer`, "POST", {
     reply,
   });
+
+// Search synonyms: groups of words shoppers may use for one symptom. Mirrors the catalog-service contract
+// (search-synonyms). A group is live in search only after a staff member other than its submitter approves it.
+const isoDateTime = z.iso.datetime({ offset: true });
+
+const searchSynonymBase = z.object({
+  id: z.uuid(),
+  terms: z.array(z.string()),
+  version: z.number().int(),
+  submittedBy: z.uuid(),
+  submittedAt: isoDateTime,
+});
+
+export const searchSynonymGroupSchema = z.discriminatedUnion("status", [
+  searchSynonymBase.extend({ status: z.literal("pending") }),
+  searchSynonymBase.extend({
+    status: z.literal("approved"),
+    approvedBy: z.uuid(),
+    approvedAt: isoDateTime,
+  }),
+]);
+
+export type SearchSynonymGroup = z.infer<typeof searchSynonymGroupSchema>;
+
+const searchSynonymListSchema = z.object({ items: z.array(searchSynonymGroupSchema) });
+
+const SEARCH_SYNONYMS_PATH = "/api/products/search-synonyms";
+
+const searchSynonymPath = (id: string): string => `${SEARCH_SYNONYMS_PATH}/${encodeURIComponent(id)}`;
+
+export const listSearchSynonymGroups = async (): Promise<SearchSynonymGroup[]> =>
+  searchSynonymListSchema.parse(await request<unknown>(SEARCH_SYNONYMS_PATH)).items;
+
+export const createSearchSynonymGroup = async (terms: string[]): Promise<SearchSynonymGroup> =>
+  searchSynonymGroupSchema.parse(await writeJson<unknown>(SEARCH_SYNONYMS_PATH, "POST", { terms }));
+
+export const updateSearchSynonymGroup = async (
+  id: string,
+  terms: string[],
+  version: number,
+): Promise<SearchSynonymGroup> =>
+  searchSynonymGroupSchema.parse(await writeJson<unknown>(searchSynonymPath(id), "PUT", { terms, version }));
+
+export const approveSearchSynonymGroup = async (id: string, version: number): Promise<SearchSynonymGroup> =>
+  searchSynonymGroupSchema.parse(await writeJson<unknown>(`${searchSynonymPath(id)}/approve`, "POST", { version }));
+
+export const deleteSearchSynonymGroup = async (id: string): Promise<void> => {
+  await writeJson<unknown>(searchSynonymPath(id), "DELETE");
+};

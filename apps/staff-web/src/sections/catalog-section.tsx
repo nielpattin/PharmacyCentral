@@ -15,6 +15,7 @@ const productInitial = {
   name: "",
   genericName: "",
   activeIngredient: "",
+  indications: "",
   strength: "",
   dosageForm: "",
   packageDescription: "",
@@ -168,6 +169,7 @@ export const CatalogSection = ({ kind }: { kind: CatalogPage }): React.JSX.Eleme
           name: value.name,
           genericName: value.genericName || null,
           activeIngredient: value.activeIngredient || null,
+          indications: value.indications || null,
           strength: value.strength || null,
           dosageForm: value.dosageForm || null,
           packageDescription: value.packageDescription || null,
@@ -240,6 +242,7 @@ export const CatalogSection = ({ kind }: { kind: CatalogPage }): React.JSX.Eleme
       name: text(row.name, ""),
       genericName: text(row.genericName, ""),
       activeIngredient: text(row.activeIngredient, ""),
+      indications: text(row.indications, ""),
       strength: text(row.strength, ""),
       dosageForm: text(row.dosageForm, ""),
       packageDescription: text(row.packageDescription, ""),
@@ -261,6 +264,7 @@ export const CatalogSection = ({ kind }: { kind: CatalogPage }): React.JSX.Eleme
       dontUpdateMeta: true,
       dontValidate: true,
     });
+    productForm.setFieldValue("indications", values.indications, { dontUpdateMeta: true, dontValidate: true });
     productForm.setFieldValue("strength", values.strength, { dontUpdateMeta: true, dontValidate: true });
     productForm.setFieldValue("dosageForm", values.dosageForm, { dontUpdateMeta: true, dontValidate: true });
     productForm.setFieldValue("packageDescription", values.packageDescription, {
@@ -397,6 +401,9 @@ export const CatalogSection = ({ kind }: { kind: CatalogPage }): React.JSX.Eleme
           </productForm.Field>
           <productForm.Field name="activeIngredient">
             {(field) => <Field label="Active ingredient" value={field.state.value} onChange={field.handleChange} />}
+          </productForm.Field>
+          <productForm.Field name="indications">
+            {(field) => <Field label="Indications" value={field.state.value} onChange={field.handleChange} />}
           </productForm.Field>
           <productForm.Field name="strength">
             {(field) => <Field label="Strength" value={field.state.value} onChange={field.handleChange} />}

@@ -12,6 +12,7 @@ export type Section =
   | "sites"
   | "storageLocations"
   | "catalog"
+  | "searchSynonyms"
   | "units"
   | "pricing"
   | "supplier"
@@ -30,7 +31,8 @@ export type Section =
   | "reporting"
   | "finance"
   | "users"
-  | "audit";
+  | "audit"
+  | "aiIntegrations";
 
 export const sectionPaths = {
   dashboard: "/",
@@ -42,6 +44,7 @@ export const sectionPaths = {
   sites: "/sites",
   storageLocations: "/storage-locations",
   catalog: "/catalog",
+  searchSynonyms: "/search-synonyms",
   units: "/units",
   pricing: "/pricing",
   supplier: "/suppliers",
@@ -61,6 +64,7 @@ export const sectionPaths = {
   finance: "/finance",
   users: "/users",
   audit: "/audit",
+  aiIntegrations: "/ai-integrations",
 } as const satisfies Record<Section, string>;
 
 export const governanceTabPaths = {
@@ -84,6 +88,7 @@ const sectionsByPath: Record<string, Section> = {
   "/sites": "sites",
   "/storage-locations": "storageLocations",
   "/catalog": "catalog",
+  "/search-synonyms": "searchSynonyms",
   "/units": "units",
   "/pricing": "pricing",
   "/suppliers": "supplier",
@@ -105,6 +110,7 @@ const sectionsByPath: Record<string, Section> = {
   "/users/create": "users",
   "/users/access": "users",
   "/audit": "audit",
+  "/ai-integrations": "aiIntegrations",
 };
 
 export const pathForSection = (section: Section): StaffPath => sectionPaths[section];
@@ -125,6 +131,7 @@ const replenishmentRoute = createRoute({ getParentRoute: () => rootRoute, path: 
 const sitesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sites" });
 const storageLocationsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/storage-locations" });
 const catalogRoute = createRoute({ getParentRoute: () => rootRoute, path: "/catalog" });
+const searchSynonymsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/search-synonyms" });
 const unitsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/units" });
 const pricingRoute = createRoute({ getParentRoute: () => rootRoute, path: "/pricing" });
 const supplierRoute = createRoute({ getParentRoute: () => rootRoute, path: "/suppliers" });
@@ -144,6 +151,7 @@ const reportingRoute = createRoute({ getParentRoute: () => rootRoute, path: "/re
 const financeRoute = createRoute({ getParentRoute: () => rootRoute, path: "/finance" });
 const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users" });
 const auditRoute = createRoute({ getParentRoute: () => rootRoute, path: "/audit" });
+const aiIntegrationsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/ai-integrations" });
 
 const createUserRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users/create" });
 const editAccessRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users/access" });
@@ -158,6 +166,7 @@ const routeTree = rootRoute.addChildren([
   sitesRoute,
   storageLocationsRoute,
   catalogRoute,
+  searchSynonymsRoute,
   unitsRoute,
   pricingRoute,
   supplierRoute,
@@ -179,6 +188,7 @@ const routeTree = rootRoute.addChildren([
   createUserRoute,
   editAccessRoute,
   auditRoute,
+  aiIntegrationsRoute,
 ]);
 
 export const router = createRouter({ routeTree, scrollRestoration: true });
