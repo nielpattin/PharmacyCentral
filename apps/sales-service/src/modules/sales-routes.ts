@@ -13,6 +13,7 @@ import {
 } from "../contracts/sales.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
+import { sendDatabaseUnavailable as unavailable } from "../shared/presentation/database-unavailable.ts";
 
 import {
   DeliveryOutOfRangeError,
@@ -639,8 +640,6 @@ const queryNumber = (value: unknown, fallback: number): number => {
 const setGuestCookie = (response: Response, token: string): void => {
   response.setHeader("Set-Cookie", `pharmacy_guest_cart=${token}; SameSite=Lax; Path=/; Max-Age=2592000`);
 };
-const unavailable = (response: Response) =>
-  response.status(503).json({ title: "Sales database is not configured", status: 503 });
 const unauthorized = (response: Response) =>
   response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
 const invalid = (response: Response) =>

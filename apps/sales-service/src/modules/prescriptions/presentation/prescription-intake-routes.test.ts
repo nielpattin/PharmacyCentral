@@ -48,10 +48,6 @@ if (!minuteWindow) throw new Error("prescription intake minute window is missing
 const minuteLimit = minuteWindow.limit;
 const minuteSeconds = minuteWindow.seconds;
 
-/**
- * Stands in for the Valkey limiter. Its counters are per actor and never expire, which one test cannot tell apart
- * from the real fixed windows and which keeps the outcome independent of where the clock sits inside the minute.
- */
 const createTestLimiter = () => {
   const attemptsByActor = new Map<string, number>();
   const consume = vi.fn<PrescriptionIntakeRateLimiter["consume"]>(async (actorId) => {
@@ -66,7 +62,7 @@ const createTestLimiter = () => {
 
 /** Starts the intake router and stands in for the catalog; every other URL goes to the real network stack. */
 const startServer = async (
-  reader: PrescriptionReader | undefined,
+  reader: Omit<PrescriptionReader, "isAvailable">,
   limiter: PrescriptionIntakeRateLimiter = createTestLimiter().limiter,
 ) => {
   // The intake route reads the shared internal secret before it calls the catalog for suggestions.
@@ -95,13 +91,26 @@ const startServer = async (
   });
   const app = express();
   app.use(express.json());
-  app.use(createPrescriptionIntakeRouter({ reader, limiter, catalogServiceUrl: "http://catalog.test" }));
+  app.use(
+    createPrescriptionIntakeRouter({
+      reader: { isAvailable: async () => true, ...reader },
+      limiter,
+      catalogServiceUrl: "http://catalog.test",
+    }),
+  );
   app.use(createErrorHandler(createLogger({ level: "silent" })));
   const server = createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Test server did not bind to a port");
   return { server, url: `http://127.0.0.1:${address.port}`, catalogBodies };
+};
+
+/** Stands in for a reader a shopper cannot reach because no Gemini key is stored yet. */
+const noKeyReader = () => {
+  const read = vi.fn<PrescriptionReader["read"]>().mockRejectedValue(new Error("reader must not be reached"));
+  const reader: PrescriptionReader = { isAvailable: async () => false, read };
+  return { reader, read };
 };
 
 describe("prescription intake API", () => {
@@ -248,7 +257,7 @@ describe("prescription intake API", () => {
   });
 
   it("keeps QR intake working when photo reading is not configured", async () => {
-    const started = await startServer(undefined);
+    const started = await startServer(noKeyReader().reader);
     server = started.server;
 
     const photo = await postImage(started.url, jpeg);
@@ -292,7 +301,7 @@ describe("prescription intake API", () => {
   });
 
   it("rejects a QR that is not an e-prescription", async () => {
-    const started = await startServer(undefined);
+    const started = await startServer(noKeyReader().reader);
     server = started.server;
 
     for (const payload of ["https://example.com", JSON.stringify({ ma_don_thuoc: "bad", thong_tin_don_thuoc: [] })]) {
@@ -379,9 +388,10 @@ describe("prescription intake API", () => {
     expect(consume).not.toHaveBeenCalled();
   });
 
-  it("does not spend an intake allowance on a photo the reader cannot answer", async () => {
+  it("does not spend an intake allowance on a photo when no key is stored", async () => {
+    const { reader, read } = noKeyReader();
     const { limiter, consume } = createTestLimiter();
-    const started = await startServer(undefined, limiter);
+    const started = await startServer(reader, limiter);
     server = started.server;
 
     const response = await postImage(started.url, jpeg);
@@ -389,6 +399,7 @@ describe("prescription intake API", () => {
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ code: "reader_unavailable" });
     expect(consume).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
   });
 
   it("refuses the photo when the limiter cannot count, without calling the reader", async () => {

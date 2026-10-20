@@ -43,6 +43,13 @@
       "when": 1791435986610,
       "tag": "0005_salty_trish_tilby",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792380180792,
+      "tag": "0006_ai_credentials",
+      "breakpoints": true
     }
   ]
 }

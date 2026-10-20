@@ -6,6 +6,7 @@ export type ImageMimeType = (typeof IMAGE_MIME_TYPES)[number];
 /** Turns the photo of a printed prescription into structured medicine lines. */
 export interface PrescriptionReader {
   read(image: Buffer, mimeType: ImageMimeType): Promise<PrescriptionExtraction>;
+  isAvailable(): Promise<boolean>;
 }
 
 /**

@@ -2,17 +2,13 @@ import { prescriptionExtractionSchema, type PrescriptionExtraction } from "../..
 import { PrescriptionReaderError, type ImageMimeType, type PrescriptionReader } from "../domain/prescription-reader.ts";
 
 /**
- * Reads a printed prescription with a Gemini vision model in one call: the image goes in, JSON that follows
- * `prescriptionExtractionSchema` comes out. A separate OCR step is skipped on purpose. Document-parsing
- * models read Vietnamese diacritics well, but the part that matters here, telling the medicine lines from the
- * header, dosing text and stamps, is layout understanding that a single multimodal call does better than OCR text
- * handed to a second model. The API key is only read here and never reaches the browser.
+ * Sends a prescription photo to a Gemini vision model and parses the JSON answer against `prescriptionExtractionSchema`.
+ * The API key is read per call and sent only in the provider header. It never reaches the browser.
  *
- * Nothing is stored: the photo is sent, the answer is parsed and both are dropped, because the page carries a
- * patient's name, diagnosis and medicines.
+ * Nothing is stored: the photo and the answer are dropped after the call, because the page carries a patient's name,
+ * diagnosis, and medicines.
  */
-
-type GeminiOptions = { baseUrl: string; apiKey: string; model: string };
+export type GeminiPrescriptionSettings = { baseUrl: string; model: string; apiKey: string };
 
 const REQUEST_TIMEOUT_MS = 45_000;
 
@@ -71,8 +67,8 @@ type GeminiResponse = {
   promptFeedback?: { blockReason?: string };
 };
 
-export class GeminiPrescriptionReader implements PrescriptionReader {
-  public constructor(private readonly options: GeminiOptions) {}
+export class GeminiPrescriptionReader implements Pick<PrescriptionReader, "read"> {
+  public constructor(private readonly options: GeminiPrescriptionSettings) {}
 
   public async read(image: Buffer, mimeType: ImageMimeType): Promise<PrescriptionExtraction> {
     const url = new URL(

@@ -16,6 +16,17 @@ import {
 import type { ConsultationLine } from "../../contracts/prescription-consultation.ts";
 import type { IntakePrescription } from "../../contracts/prescription-intake.ts";
 
+export const aiCredentials = pgTable("ai_credentials", {
+  purpose: varchar("purpose", { length: 32 }).primaryKey(),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  model: varchar("model", { length: 128 }).notNull(),
+  baseUrl: varchar("base_url", { length: 512 }).notNull(),
+  ciphertext: text("ciphertext").notNull(),
+  last4: varchar("last4", { length: 4 }).notNull(),
+  updatedBy: uuid("updated_by").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
 export const carts = pgTable(
   "carts",
   {

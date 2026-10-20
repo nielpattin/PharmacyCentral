@@ -23,8 +23,7 @@ import {
 import { linesFromQr, parsePrescriptionQr } from "../domain/prescription-qr.ts";
 
 export type PrescriptionIntakeOptions = {
-  /** `undefined` when no Gemini key is configured; photo intake then answers 503 and QR intake keeps working. */
-  reader: PrescriptionReader | undefined;
+  reader: PrescriptionReader;
   /** Counts every photo intake, and refuses the request when it cannot count. QR intake never consults it. */
   limiter: PrescriptionIntakeRateLimiter;
   catalogServiceUrl: string;
@@ -108,7 +107,7 @@ export const createPrescriptionIntakeRouter = (options: PrescriptionIntakeOption
     "/prescriptions/intake/image",
     express.raw({ type: [...IMAGE_MIME_TYPES], limit: MAX_IMAGE_BYTES }),
     async (request, response) => {
-      if (!options.reader) {
+      if (!(await options.reader.isAvailable())) {
         return problem(
           response,
           503,

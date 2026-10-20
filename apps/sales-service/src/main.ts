@@ -1,24 +1,33 @@
 import express from "express";
 import { createServer } from "node:http";
 
-import type { GlideClient } from "@valkey/valkey-glide";
+import { Redis } from "ioredis";
+import { z } from "zod";
 
 import { internalServiceHeaders } from "./internal-service-headers.ts";
 import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware, matchesPathPrefix } from "./middleware/trusted-request.ts";
 
+import { DrizzleCredentialStore } from "./infrastructure/drizzle-credential-store.ts";
+import { readAiProviderSettings } from "./infrastructure/ai-provider-config.ts";
+import { SecretBox } from "./infrastructure/secret-box.ts";
 import { DeliveryCalculator } from "./modules/delivery/domain/delivery-calculator.ts";
 import { InMemoryDeliveryCache } from "./modules/delivery/infrastructure/in-memory-delivery-cache.ts";
 import { OpenRouteServiceClient } from "./modules/delivery/infrastructure/open-route-service-client.ts";
+import { RedisDeliveryCache } from "./modules/delivery/infrastructure/redis-delivery-cache.ts";
 import { VietmapGeocoder } from "./modules/delivery/infrastructure/vietmap-geocoder.ts";
 import { createDeliveryRouter } from "./modules/delivery/presentation/delivery-routes.ts";
 import { SalesOutboxPublisher } from "./modules/outbox-publisher.ts";
 import { SalesPaymentEventConsumer } from "./modules/payment-event-consumer.ts";
 import { createSalesRouter } from "./modules/sales-routes.ts";
 import { SalesRepository } from "./modules/sales-repository.ts";
+import { createAdapterSource } from "./modules/credentials/ai-adapters.ts";
+import { AiCredentialVault } from "./modules/credentials/ai-credential-vault.ts";
+import { createCredentialRouter } from "./modules/credentials/credential-routes.ts";
+import { ConfiguredPrescriptionReader } from "./modules/prescriptions/infrastructure/configured-prescription-reader.ts";
 import { GeminiPrescriptionReader } from "./modules/prescriptions/infrastructure/gemini-prescription-reader.ts";
 import { PrescriptionConsultationRepository } from "./modules/prescriptions/infrastructure/prescription-consultation-repository.ts";
-import { ValkeyIntakeRateLimiter } from "./modules/prescriptions/infrastructure/valkey-intake-rate-limiter.ts";
+import { RedisIntakeRateLimiter } from "./modules/prescriptions/infrastructure/redis-intake-rate-limiter.ts";
 import { createPrescriptionConsultationRouter } from "./modules/prescriptions/presentation/prescription-consultation-routes.ts";
 import { createPrescriptionIntakeRouter } from "./modules/prescriptions/presentation/prescription-intake-routes.ts";
 import { createSalesDatabase } from "./shared/infrastructure/database.ts";
@@ -34,7 +43,10 @@ const requireEnv = (name: string): string => {
   return value;
 };
 const app = express();
-const port = Number.parseInt(requireEnv("PORT"), 10);
+const portResult = z.coerce.number().int().min(1).max(65535).safeParse(requireEnv("PORT"));
+if (!portResult.success) throw new Error("PORT must be an integer from 1 to 65535.");
+const port = portResult.data;
+const identitySecret = requireEnv("INTERNAL_IDENTITY_SECRET");
 /**
  * Every URL this service calls out to is required at boot, so a missing one stops the service instead of sending
  * the request to a hard-coded localhost. The same goes for the shared secret of the outbound internal headers.
@@ -54,8 +66,8 @@ if (paymentEventConsumer)
   await paymentEventConsumer
     .start()
     .catch((error: unknown) => logger.warn({ error }, "sales payment consumer unavailable"));
-const valkeyClient = await createValkeyClient();
-const deliveryCache = valkeyClient ? await createValkeyDeliveryCache(valkeyClient) : new InMemoryDeliveryCache();
+const redisClient = await createRedisClient();
+const deliveryCache = redisClient ? new RedisDeliveryCache(redisClient) : new InMemoryDeliveryCache();
 /**
  * Two providers with two jobs. OpenRouteService prices the route and can only answer in the language its own
  * data happens to hold; Vietmap names the point, and is the one Vietnamese address source that keeps house
@@ -108,7 +120,7 @@ app.get("/health/live", (_request, response) => response.json({ status: "ok", se
 app.get("/health/ready", (_request, response) =>
   response
     .status(database ? 200 : 503)
-    .json({ status: database ? "ok" : "degraded", service: serviceName, valkey: Boolean(valkeyClient) }),
+    .json({ status: database ? "ok" : "degraded", service: serviceName, redis: Boolean(redisClient) }),
 );
 const lookupStore = async (
   storeId: string,
@@ -127,25 +139,25 @@ const lookupStore = async (
     return undefined;
   }
 };
-/**
- * Photo intake needs a Gemini key and is off without one, like routing is without an OpenRouteService key. QR
- * intake needs no provider, so the router is always mounted. The key stays on the server.
- */
-const geminiApiKey = process.env.GEMINI_API_KEY;
-const prescriptionReader = geminiApiKey
-  ? new GeminiPrescriptionReader({
-      baseUrl: requireEnv("GEMINI_BASE_URL"),
-      apiKey: geminiApiKey,
-      model: requireEnv("GEMINI_MODEL"),
+
+const environmentSettings = readAiProviderSettings("prescription-reader", process.env);
+const vault = database
+  ? new AiCredentialVault({
+      store: new DrizzleCredentialStore(database),
+      sealer: new SecretBox(requireEnv("SECRETS_ENCRYPTION_KEY")),
+      purpose: "prescription-reader",
+      fallback: environmentSettings,
+      cacheMs: 60_000,
     })
   : undefined;
-/**
- * Intake limits are counted in Valkey so they hold across restarts and replicas. Without a client the limiter
- * refuses intake rather than letting unmetered reader calls through, so a missing `VALKEY_URL` costs photo intake
- * and nothing else.
- */
-const prescriptionIntakeLimiter = new ValkeyIntakeRateLimiter(valkeyClient);
+const prescriptionReader = new ConfiguredPrescriptionReader(
+  createAdapterSource(async () => (vault ? vault.current() : undefined), {
+    gemini: (settings) => new GeminiPrescriptionReader(settings),
+  }),
+);
+const prescriptionIntakeLimiter = new RedisIntakeRateLimiter(redisClient);
 const prescriptionConsultationRepository = database ? new PrescriptionConsultationRepository(database) : undefined;
+app.use(createCredentialRouter({ vault, identitySecret, audience: serviceName }));
 app.use(
   createPrescriptionIntakeRouter({
     reader: prescriptionReader,
@@ -177,7 +189,7 @@ const shutdown = (signal: string): void => {
       process.exitCode = 1;
     }
   });
-  valkeyClient?.close();
+  redisClient?.disconnect();
   void outboxPublisher?.close();
   void paymentEventConsumer?.close();
   void database?.pool.end();
@@ -187,23 +199,17 @@ process.once("SIGINT", () => shutdown("SIGINT"));
 process.once("SIGTERM", () => shutdown("SIGTERM"));
 server.listen(port, "0.0.0.0", () => logger.info({ port }, "listening"));
 
-async function createValkeyClient(): Promise<GlideClient | undefined> {
-  const configuredUrl = process.env.VALKEY_URL;
+async function createRedisClient(): Promise<Redis | undefined> {
+  const configuredUrl = process.env.REDIS_URL;
   if (!configuredUrl) return undefined;
-  const url = new URL(configuredUrl);
+  const client = new Redis(configuredUrl, { commandTimeout: 500, lazyConnect: true });
+  client.on("error", (error: unknown) => logger.warn({ error }, "Redis client error"));
   try {
-    const { GlideClient: NativeGlideClient } = await import("@valkey/valkey-glide");
-    return await NativeGlideClient.createClient({
-      addresses: [{ host: url.hostname, port: Number(url.port || 6379) }],
-      requestTimeout: 500,
-    });
+    await client.connect();
+    return client;
   } catch (error) {
-    logger.warn({ error }, "Valkey connection failed during sales startup");
+    client.disconnect();
+    logger.warn({ error }, "Redis connection failed during sales startup");
     return undefined;
   }
-}
-
-async function createValkeyDeliveryCache(client: GlideClient) {
-  const { ValkeyDeliveryCache } = await import("./modules/delivery/infrastructure/valkey-delivery-cache.ts");
-  return new ValkeyDeliveryCache(client);
 }

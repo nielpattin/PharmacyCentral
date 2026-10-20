@@ -62,10 +62,10 @@ describe("delivery calculation", () => {
       { resolveAddress: async () => "Address" },
       {
         get: async () => {
-          throw new Error("Valkey unavailable");
+          throw new Error("Redis unavailable");
         },
         set: async () => {
-          throw new Error("Valkey unavailable");
+          throw new Error("Redis unavailable");
         },
       },
       {

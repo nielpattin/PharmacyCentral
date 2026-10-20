@@ -9,6 +9,7 @@ import {
 } from "../../../contracts/prescription-consultation.ts";
 import { internalServiceHeaders } from "../../../internal-service-headers.ts";
 import { actorSiteIds, listSiteIds } from "../../../middleware/trusted-request.ts";
+import { sendDatabaseUnavailable as unavailable } from "../../../shared/presentation/database-unavailable.ts";
 import type { PrescriptionConsultationRepository } from "../infrastructure/prescription-consultation-repository.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
@@ -69,10 +70,6 @@ const verifyCustomerFacingSite = async (siteId: string, catalogServiceUrl: strin
     return "unavailable";
   }
 };
-
-/** Mirrors `sales-routes.ts`: without a database every route answers the same 503. */
-const unavailable = (response: Response) =>
-  response.status(503).json({ title: "Sales database is not configured", status: 503 });
 
 export type PrescriptionConsultationRouterOptions = {
   /** Validated at boot by main.ts; the create route resolves the shopper's chosen store through it. */
