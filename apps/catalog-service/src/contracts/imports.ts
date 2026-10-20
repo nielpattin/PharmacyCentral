@@ -69,6 +69,7 @@ export const productImportSchema = z.object({
   name: z.string().trim().min(1).max(300),
   genericName: optionalText(300),
   activeIngredient: optionalText(2000),
+  indications: optionalText(4000),
   strength: optionalText(150),
   dosageForm: optionalText(150),
   packageDescription: optionalText(500),

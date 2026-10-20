@@ -6,6 +6,7 @@ import {
   geometry,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -14,6 +15,8 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+
+import type { SearchSynonymTerms } from "../../contracts/synonyms.ts";
 
 export const sites = pgTable(
   "sites",
@@ -63,6 +66,7 @@ export const products = pgTable(
     name: varchar("name", { length: 300 }).notNull(),
     genericName: varchar("generic_name", { length: 300 }),
     activeIngredient: text("active_ingredient"),
+    indications: text("indications"),
     strength: varchar("strength", { length: 150 }),
     dosageForm: varchar("dosage_form", { length: 150 }),
     packageDescription: varchar("package_description", { length: 500 }),
@@ -179,3 +183,36 @@ export const inboxMessages = pgTable("inbox_messages", {
   eventType: varchar("event_type", { length: 200 }).notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const aiCredentials = pgTable("ai_credentials", {
+  purpose: varchar("purpose", { length: 32 }).primaryKey(),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  model: varchar("model", { length: 128 }).notNull(),
+  baseUrl: varchar("base_url", { length: 512 }).notNull(),
+  ciphertext: text("ciphertext").notNull(),
+  last4: varchar("last4", { length: 4 }).notNull(),
+  updatedBy: uuid("updated_by").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
+export const searchSynonymGroups = pgTable(
+  "search_synonym_groups",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    terms: jsonb("terms").$type<SearchSynonymTerms>().notNull(),
+    version: integer("version").notNull(),
+    status: text("status").notNull(),
+    submittedBy: uuid("submitted_by").notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),
+    approvedBy: uuid("approved_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+  },
+  (table) => [
+    check("search_synonym_groups_status_check", sql`${table.status} IN ('pending', 'approved')`),
+    check(
+      "search_synonym_groups_review_check",
+      sql`(${table.status} = 'approved' AND ${table.approvedBy} IS NOT NULL AND ${table.approvedAt} IS NOT NULL)
+        OR (${table.status} = 'pending' AND ${table.approvedBy} IS NULL AND ${table.approvedAt} IS NULL)`,
+    ),
+  ],
+);

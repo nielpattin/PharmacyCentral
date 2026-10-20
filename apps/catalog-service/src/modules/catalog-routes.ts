@@ -7,6 +7,9 @@ import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import { ProductMediaStore } from "./catalog/product-media-store.ts";
 import { rankCandidates } from "./catalog/product-matching.ts";
+import { searchCatalogProducts } from "./catalog/search/hybrid-search.ts";
+import type { ProductSearchIndex } from "./catalog/search/product-search-index.ts";
+import type { TextEmbedderSource } from "./catalog/search/text-embedder.ts";
 import type { DrizzleStoreRepository } from "./stores/infrastructure/drizzle-store-repository.ts";
 
 const idParamSchema = z.object({ id: z.string().uuid() });
@@ -28,6 +31,7 @@ const productInputSchema = z.object({
   name: z.string().trim().min(1).max(300),
   genericName: z.string().trim().max(300).nullable().optional(),
   activeIngredient: z.string().trim().max(2000).nullable().optional(),
+  indications: z.string().trim().max(4000).nullable().optional(),
   strength: z.string().trim().max(150).nullable().optional(),
   dosageForm: z.string().trim().max(150).nullable().optional(),
   packageDescription: z.string().trim().max(500).nullable().optional(),
@@ -116,6 +120,11 @@ const activePriceQuerySchema = z.object({
 export const createCatalogRouter = (
   repository: DrizzleStoreRepository | undefined,
   mediaStore?: ProductMediaStore,
+  options: {
+    search?: { index: ProductSearchIndex; embedders?: TextEmbedderSource | undefined };
+    onProductsChanged?: (() => void) | undefined;
+    warn?: ((error: unknown) => void) | undefined;
+  } = {},
 ): Router => {
   const router = Router();
 
@@ -264,7 +273,18 @@ export const createCatalogRouter = (
     if (!repository) return databaseUnavailable(response);
     const parsed = productSearchQuerySchema.safeParse(request.query);
     if (!parsed.success) return invalidRequest(response);
-    const products = await repository.searchProducts(parsed.data.search, parsed.data.limit, parsed.data.category);
+    const products = options.search
+      ? await searchCatalogProducts(
+          {
+            repository,
+            index: options.search.index,
+            embedders: options.search.embedders,
+            warn: options.warn,
+            onIndexMissing: options.onProductsChanged,
+          },
+          parsed.data,
+        )
+      : await repository.searchProducts(parsed.data);
     response.json(await Promise.all(products.map((product) => withProductUnits(repository, product))));
   });
 
@@ -387,6 +407,7 @@ export const createCatalogRouter = (
           )
         : [];
       response.status(201).json({ ...created, units: savedUnits });
+      options.onProductsChanged?.();
     } catch (error) {
       writeError(response, error);
     }
@@ -416,6 +437,7 @@ export const createCatalogRouter = (
           )
         : await repository.listProductUnits(id.data.id);
       response.json({ ...product, units: savedUnits });
+      options.onProductsChanged?.();
     } catch (error) {
       writeError(response, error);
     }
@@ -427,6 +449,7 @@ export const createCatalogRouter = (
     if (!id.success) return invalidRequest(response);
     await repository.deleteProduct(id.data.id);
     response.status(204).end();
+    options.onProductsChanged?.();
   });
 
   router.get("/pricing/prices", async (request, response) => {

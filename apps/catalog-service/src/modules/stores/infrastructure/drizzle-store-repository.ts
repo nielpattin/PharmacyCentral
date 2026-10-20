@@ -21,6 +21,9 @@ import {
 
 export type Coordinates = { latitude: number; longitude: number };
 
+/** Escape LIKE wildcards so "%" and "_" in a shopper's query match literally. */
+const escapeLike = (value: string): string => value.replace(/[\\%_]/g, (character) => `\\${character}`);
+
 export type StoreSummary = {
   id: string;
   code: string;
@@ -65,22 +68,23 @@ export class DrizzleStoreRepository {
     return rows.map((row) => ({ ...this.toSummary(row), straightLineMeters: Number(row.straightLineMeters) }));
   }
 
-  public async searchProducts(
-    search: string | undefined,
-    limit = 20,
-    category?: string,
-  ): Promise<Array<typeof products.$inferSelect>> {
-    const boundedLimit = Math.min(Math.max(limit, 1), 100);
+  public async searchProducts(query: {
+    search?: string | undefined;
+    limit?: number | undefined;
+    category?: string | undefined;
+    prescriptionRequired?: boolean | undefined;
+  }): Promise<Array<typeof products.$inferSelect>> {
+    const boundedLimit = Math.min(Math.max(query.limit ?? 20, 1), 100);
+    const pattern = query.search ? `%${escapeLike(query.search)}%` : undefined;
     const filters = [
       eq(products.isActive, true),
-      search
-        ? or(
-            ilike(products.name, `%${search}%`),
-            ilike(products.sku, `%${search}%`),
-            ilike(products.barcode, `%${search}%`),
-          )
+      pattern
+        ? or(ilike(products.name, pattern), ilike(products.sku, pattern), ilike(products.barcode, pattern))
         : undefined,
-      category ? eq(products.category, category) : undefined,
+      query.category ? eq(products.category, query.category) : undefined,
+      query.prescriptionRequired === undefined
+        ? undefined
+        : eq(products.prescriptionRequired, query.prescriptionRequired),
     ].filter((filter): filter is NonNullable<typeof filter> => filter !== undefined);
     return this.database.db
       .select()
@@ -88,6 +92,19 @@ export class DrizzleStoreRepository {
       .where(and(...filters))
       .orderBy(asc(products.sku))
       .limit(boundedLimit);
+  }
+
+  public async listActiveProductsByIds(ids: string[]): Promise<Array<typeof products.$inferSelect>> {
+    if (ids.length === 0) return [];
+    const rows = await this.database.db
+      .select()
+      .from(products)
+      .where(and(inArray(products.id, ids), eq(products.isActive, true)));
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.flatMap((id) => {
+      const row = byId.get(id);
+      return row ? [row] : [];
+    });
   }
 
   /**
@@ -463,6 +480,7 @@ export class DrizzleStoreRepository {
     name: string;
     genericName?: string | null | undefined;
     activeIngredient?: string | null | undefined;
+    indications?: string | null | undefined;
     strength?: string | null | undefined;
     dosageForm?: string | null | undefined;
     packageDescription?: string | null | undefined;
@@ -483,6 +501,7 @@ export class DrizzleStoreRepository {
         name: input.name.trim(),
         genericName: input.genericName?.trim() ?? null,
         activeIngredient: input.activeIngredient?.trim() ?? null,
+        indications: input.indications?.trim() ?? null,
         strength: input.strength?.trim() ?? null,
         dosageForm: input.dosageForm?.trim() ?? null,
         packageDescription: input.packageDescription?.trim() ?? null,
@@ -514,6 +533,7 @@ export class DrizzleStoreRepository {
       name?: string | undefined;
       genericName?: string | null | undefined;
       activeIngredient?: string | null | undefined;
+      indications?: string | null | undefined;
       strength?: string | null | undefined;
       dosageForm?: string | null | undefined;
       packageDescription?: string | null | undefined;
@@ -533,6 +553,7 @@ export class DrizzleStoreRepository {
       ...(input.name === undefined ? {} : { name: input.name.trim() }),
       ...(input.genericName === undefined ? {} : { genericName: input.genericName?.trim() ?? null }),
       ...(input.activeIngredient === undefined ? {} : { activeIngredient: input.activeIngredient?.trim() ?? null }),
+      ...(input.indications === undefined ? {} : { indications: input.indications?.trim() ?? null }),
       ...(input.strength === undefined ? {} : { strength: input.strength?.trim() ?? null }),
       ...(input.dosageForm === undefined ? {} : { dosageForm: input.dosageForm?.trim() ?? null }),
       ...(input.packageDescription === undefined

@@ -30,6 +30,10 @@ export const storeSchema = z.object({
 export const productSearchQuerySchema = z.object({
   search: z.string().trim().max(200).optional(),
   category: z.string().trim().max(100).optional(),
+  prescriptionRequired: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.string().optional(),
 });

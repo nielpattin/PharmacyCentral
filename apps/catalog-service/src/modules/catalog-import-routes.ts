@@ -4,7 +4,10 @@ import { catalogImportSchema } from "../contracts/imports.ts";
 
 import type { CatalogImportService } from "./catalog-import-service.ts";
 
-export const createCatalogImportRouter = (importService: CatalogImportService | undefined): Router => {
+export const createCatalogImportRouter = (
+  importService: CatalogImportService | undefined,
+  onProductsChanged?: () => void,
+): Router => {
   const router = Router();
   router.post("/products/imports", async (request, response) => {
     if (!importService) return response.status(503).json({ title: "Catalog database is not configured", status: 503 });
@@ -18,6 +21,7 @@ export const createCatalogImportRouter = (importService: CatalogImportService | 
       });
     try {
       const summary = await importService.import(parsed.data);
+      onProductsChanged?.();
       response.json({ status: "imported", summary });
     } catch (error) {
       response.status(409).json({

@@ -72,6 +72,7 @@ describe("DrizzleStoreRepository product matching", () => {
         name varchar(300) NOT NULL,
         generic_name varchar(300),
         active_ingredient text,
+        indications text,
         strength varchar(150),
         dosage_form varchar(150),
         package_description varchar(500),
