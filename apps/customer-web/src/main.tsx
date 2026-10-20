@@ -20,7 +20,7 @@ createRoot(root).render(
     </StrictMode>
     {QueryDevtools ? (
       <Suspense fallback={null}>
-        <QueryDevtools initialIsOpen={false} />
+        <QueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
       </Suspense>
     ) : null}
   </QueryClientProvider>,

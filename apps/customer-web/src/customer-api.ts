@@ -1,4 +1,5 @@
 import { apiServiceForPath, createIdentityContextCache, type IdentityContexts } from "@pharmacy/ui";
+import { z } from "zod";
 
 import { setSessionSnapshot } from "./auth.ts";
 
@@ -101,6 +102,7 @@ export type CatalogProduct = {
   name: string;
   genericName: string | null;
   activeIngredient: string | null;
+  indications: string | null;
   strength: string | null;
   dosageForm: string | null;
   packageDescription: string | null;
@@ -304,6 +306,47 @@ export const createPaymentInvoice = (input: {
   }>;
 }): Promise<PaymentInvoice> =>
   request("/api/payments/invoices", { method: "POST", body: JSON.stringify(input), idempotencyKey: input.invoiceId });
+const chatbotProductSchema = z.object({
+  id: z.string(),
+  sku: z.string(),
+  name: z.string(),
+  manufacturer: z.string().nullable(),
+  prescriptionRequired: z.boolean(),
+  imageUrl: z.string().nullable(),
+  price: z.object({ amount: z.string(), currency: z.string(), unitName: z.string() }).nullable(),
+});
+const chatbotReplySchema = z.object({ reply: z.string(), products: z.array(chatbotProductSchema) });
+const chatbotSessionSchema = z.object({ id: z.string() });
+export type ChatbotProduct = z.infer<typeof chatbotProductSchema>;
+export type ChatbotReply = z.infer<typeof chatbotReplySchema>;
+
+class ChatbotResponseError extends Error {
+  public constructor() {
+    super("Chatbot returned an unexpected response");
+    this.name = "ChatbotResponseError";
+  }
+}
+
+const parseChatbotResponse = <T>(result: z.ZodSafeParseResult<T>): T => {
+  if (!result.success) throw new ChatbotResponseError();
+  return result.data;
+};
+
+export const startChatbotSession = async (): Promise<z.infer<typeof chatbotSessionSchema>> =>
+  parseChatbotResponse(
+    chatbotSessionSchema.safeParse(
+      await request<unknown>("/api/chatbot/sessions", { method: "POST", body: JSON.stringify({}) }),
+    ),
+  );
+export const sendChatbotMessage = async (sessionId: string, content: string): Promise<ChatbotReply> =>
+  parseChatbotResponse(
+    chatbotReplySchema.safeParse(
+      await request<unknown>(`/api/chatbot/sessions/${encodeURIComponent(sessionId)}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ content }),
+      }),
+    ),
+  );
 export const listOrders = (): Promise<CustomerOrder[]> => request("/api/orders");
 export const getOrder = (id: string): Promise<CustomerOrderDetail> => request(`/api/orders/${id}`);
 /** The invoice as the payment service has it now, which is how a shopper's page learns the transfer has landed. */

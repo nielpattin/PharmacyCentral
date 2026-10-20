@@ -61,6 +61,7 @@ describe("account csrf route", () => {
     const body = (await response.json()) as { contexts?: Record<string, string> };
     expect(Object.keys(body.contexts ?? {}).sort()).toEqual([
       "catalog-service",
+      "chatbot-service",
       "inventory-service",
       "operations-query-service",
       "payment-service",

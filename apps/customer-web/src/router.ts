@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 
 import { AccountPage } from "./pages/AccountPage.tsx";
+import { RootLayout } from "./components/RootLayout.tsx";
 import { CategoryPage } from "./pages/CategoryPage.tsx";
 import { CheckoutPage } from "./pages/CheckoutPage.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
@@ -37,7 +38,7 @@ const validateAccountSearch = (search: Record<string, unknown>): { section: Acco
   return { section: ACCOUNT_SECTIONS.includes(section as AccountSection) ? (section as AccountSection) : "tong-quan" };
 };
 
-const rootRoute = createRootRoute({ notFoundComponent: NotFoundPage });
+const rootRoute = createRootRoute({ component: RootLayout, notFoundComponent: NotFoundPage });
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",

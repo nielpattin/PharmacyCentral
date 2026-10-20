@@ -123,6 +123,7 @@ export const ProductDetailPage = (): React.JSX.Element => {
           { label: "Danh mục", value: categoryLabel(product.category) },
           { label: "Nhà sản xuất", value: product.manufacturer },
           { label: "Hoạt chất", value: product.activeIngredient ?? product.genericName },
+          { label: "Công dụng", value: product.indications },
           { label: "Hàm lượng", value: product.strength },
           { label: "Dạng bào chế", value: product.dosageForm },
           { label: "Quy cách đóng gói", value: product.packageDescription },
