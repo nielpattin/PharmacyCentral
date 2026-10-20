@@ -14,7 +14,7 @@ Pharmacy Central is a Node.js 24 pharmacy platform split into an Express 5 micro
 - `apps/customer-web` and `apps/staff-web`: independently deployable React/Vite applications.
 - `packages/`: only stable technical packages and versioned transport contracts.
 
-PostgreSQL/PostGIS stores are service-owned databases. RabbitMQ carries integration events. Valkey provides delivery caching. OpenRouteService supplies server-side delivery address resolution, Matrix, Directions, distance, duration, and GeoJSON route data.
+PostgreSQL/PostGIS stores are service-owned databases. RabbitMQ carries integration events. Redis provides delivery caching. OpenRouteService supplies server-side delivery address resolution, Matrix, Directions, distance, duration, and GeoJSON route data.
 
 ## Prerequisites
 
@@ -69,11 +69,11 @@ pnpm run seed:accounts
 
 Demo credentials are documented in `docs/Runbooks.md` and are for local use only.
 
-Import master data and product images:
+Load the demo accounts, product images, and sample master data (development only):
 
 ```bash
-# Fixtures live in data/: sample CSVs, plus the image set as one archive.
-pnpm run images:import
+# Fixtures live in data/. They are sample CSVs and a folder of product images. Needs `pnpm dev` running.
+pnpm run dev:data
 ```
 
 Staff users import CSV files from the Data import screen in `staff-web`, which generates a header-only CSV

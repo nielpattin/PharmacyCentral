@@ -8,7 +8,7 @@ Infra always runs on Docker Compose; the apps run either on the host or in conta
 pnpm install --frozen-lockfile
 cp .env.example .env   # then fill in secrets
 pnpm run infra:up
-docker compose ps   # postgres, rabbitmq, valkey, mailpit, otel-collector, seaweedfs, gateway-dev healthy
+docker compose ps   # postgres, rabbitmq, redis, mailpit, otel-collector, seaweedfs, gateway-dev healthy
 ```
 
 SeaweedFS is local product-image object storage. `seaweedfs-init` creates the `product-media` bucket, and the S3 gateway allows anonymous reads on that bucket only. The S3 API is at `http://localhost:9000`; set the port and credentials (`SEAWEEDFS_*`) in `.env` before starting Compose. Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies, `/api/prescriptions/intake*` allows 10 MB, and the other groups keep Nginx's 1 MB default. `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; `sales-service` accepts prescription photos up to 8 MB; other JSON routes keep the 1 MB service default.
@@ -58,6 +58,8 @@ Ports come from `<SVC>_PORT` in the root `.env`. Nx loads `apps/<svc>-service/.e
 Services reach infra through the published ports (`localhost:5432`, `localhost:5672`, ...), never through a gateway. The gateway only forwards browser `/api/...` calls to the services. `gateway-dev` is the one container that has to call into the host, and host firewalls such as ufw drop container-to-host traffic on the Docker bridge, so it uses host networking and forwards to `127.0.0.1:${<SVC>_PORT}` instead.
 
 Services also call each other directly, with the `*_SERVICE_URL` values in `.env` (`CATALOG_SERVICE_URL`, `IDENTITY_SERVICE_URL`, `INVENTORY_SERVICE_URL`, `SALES_SERVICE_URL`), never through a gateway. `sales-service` requires `IDENTITY_SERVICE_URL`: it looks the account up there before filing a prescription with a customer, so a missing or wrong value fails the create with `503 identity_unavailable` instead of writing the record against nobody. `payment-service` and `operations-query-service` require `SALES_SERVICE_URL` for the order behind an invoice and for the dashboard's prescription figures.
+
+On Docker Desktop (Windows and macOS), host networking runs inside the Docker VM, so `gateway-dev` needs it turned on. Open Settings, then Resources, then Network, and turn on **Enable host networking** (Docker Desktop 4.34 or later). Choose Apply & restart, then run `pnpm run infra:up` again. Without it, the container reports healthy but nothing listens on `localhost:8080`, and the Vite proxy logs `http proxy error: /api/... AggregateError [ECONNREFUSED]` for every call. Check with `curl http://localhost:8080/api/products?limit=1`. Linux hosts need no setting.
 
 #### Container mode
 
@@ -151,6 +153,7 @@ pnpm run infra:down
 | Symptom | Fix |
 | --- | --- |
 | `localhost:8080` refused or 502 from `/api/...` | Start the gateway for your mode: `pnpm run infra:up` for dev mode, or `pnpm run stack:up` for containers. Only one of the two can hold port 8080 |
+| Vite logs `http proxy error: /api/... ECONNREFUSED` while `gateway-dev` is healthy (Docker Desktop) | Host networking is off, so port 8080 never reaches the host. Enable it as described under Dev mode, then rerun `pnpm run infra:up` |
 | Gateway 404 on `/api/...` | Check the path against the routing map above |
 | `/api/...` returns 401 `trusted_request_required` | The path needs an identity token. Fetch `/api/auth/context` after login and send the matching service token as `x-internal-identity-context` |
 
@@ -208,12 +211,12 @@ Import order matters, because rows are resolved by natural key: sites first, the
 suppliers, then products, then opening balances.
 
 Source files stay outside the application image. The committed fixture set lives in `data/`: the sample CSVs in
-`data/import-samples/` and the coursework image set as `data/product-images/images.tar.gz`, so a fresh checkout can
+`data/import-samples/` and the coursework images as the folder `data/product-images/images/`, so a fresh checkout can
 exercise both flows. Any other file comes from the operator machine (`~/Downloads/...`), and the API never reads a
-server-side path. Import in dependency order: images (`images:import`, since `products.csv` carries SeaweedFS URLs whose
+server-side path. Dependency order matters. Images come first (uploaded by `dev:data`, since `products.csv` carries SeaweedFS URLs whose
 object keys are content hashes), then sites, storage locations, suppliers, products, and finally opening balances. After
 an import the truth lives in the owning service database: catalog data in `catalog-service`, stock in
-`inventory-service`, images in SeaweedFS. Extracted images, original downloads, source-verification records
+`inventory-service`, images in SeaweedFS. Original downloads, source-verification records
 (`provenance/`), and research dumps (`research/`) stay local.
 
 Imports are idempotent on natural keys (`code`, `sku`, `batchNumber`). An opening balance row is accepted only while the batch and storage location have no stock balance or ledger history. Reimporting the same quantity is a no-op; changing an existing balance requires a stock adjustment so the ledger keeps an audit trail.
@@ -224,42 +227,57 @@ pnpm run infra:up
 
 Then open `http://127.0.0.1:5174/imports` from the staff web app.
 
-### Import local product images
+#### Local sample data (development only)
 
-The image command uploads the committed image archive to the local SeaweedFS bucket and prints the public URL
-of each image. It does not touch the database.
+A fresh local database has no accounts and no master data. Migrations create empty tables, and sites, storage locations, suppliers, products, prices, and opening stock exist only after an import. The steps below fill all of it:
 
 ```bash
-pnpm run infra:up
-pnpm run images:import        # data/product-images/images.tar.gz -> SeaweedFS, prints sku,imageUrl
+pnpm run infra:up   # infra + gateway-dev (host networking on Docker Desktop)
+pnpm run db:migrate
+pnpm dev            # the services must be running: the import goes through the API
+pnpm run dev:data   # in another terminal
 ```
 
-The committed image set is one gzip archive (`data/product-images/images.tar.gz`) and every member is named
-`<SKU>.<ext>`, so the command takes the SKU from the file name: no manifest, no extraction, no flags. It
-validates every file before uploading anything, then prints `sku,imageUrl` per image. The URLs are exactly
-the ones `data/import-samples/products.csv` already carries, because the object key is the content hash
-(`product-images/<SKU>/<sha256>.<ext>`), so they are reproducible for everyone who runs the command.
+`dev:data` runs `tools/dev-import-samples.mjs` and performs the steps in order. It seeds the demo accounts, uploads the product images to SeaweedFS, and signs in as the demo admin (`admin@pharmacycentral.vn`, password `DEMO_ACCOUNT_PASSWORD`). It posts the sample CSVs from `data/import-samples/` to the same endpoints as the Data import screen. Then it seeds the accounts again, so the manager, pharmacist, and warehouse accounts get their `SITE-RTL` / `SITE-WH` access. It reuses the screen's CSV mapping from `apps/staff-web/src/import-datasets.ts`, so the two cannot drift. Every step is idempotent, so running the script again is safe. Stock rows wait for the product search index to catch up, which takes a few seconds after a product import.
 
-The files keep their source formats and pixel dimensions (30 JPEG + 20 PNG, 44.2 MB → 16.8 MB) and are sized
-down by re-encoding only: indexed-colour PNG (≤256 colours) and JPEG quality 92 at 4:4:4. The originals stay
-local in the ignored `data/product-images/originals/`. `images:pack` regenerates the archive after the set
-changes; `images:unpack` extracts it with `tar` for inspection (the import does not need it).
+Last, it creates and approves the six local search synonym groups, such as `tiêu chảy, đi ngoài, đi lỏng`. The demo admin creates them, and the demo pharmacist approves them, so live search uses them from the start. Production starts with no synonym groups. Staff add them in staff-web under Search synonyms.
 
-`data/` is excluded from container builds via `.dockerignore`, so the images only reach SeaweedFS through that
-command. Source-verification records (source URLs, byte counts, SHA-256, download summary, review sheet) stay
-local in `data/product-images/provenance/`.
+This is a development tool, kept apart from production on purpose.
+
+- It only runs from the `dev:data` script, is not part of any image or deployment, and uses the demo admin that only the local seed creates.
+- It refuses to run with `NODE_ENV=production` and refuses any `API_BASE_URL` that is not `localhost`, `127.0.0.1`, or `[::1]`.
+- The sample files are fabricated coursework data. Production data is imported by an operator on the staff-web Data import screen with a real account, from the operator's own files.
+
+Without the script, run `pnpm run seed:accounts`, then upload the same files by hand at `http://127.0.0.1:5174/imports`, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv`, `products.csv`, and `opening-balances.csv`. Finally, run `pnpm run seed:accounts` again.
+
+### Product images
+
+The committed images are one file per product in `data/product-images/images/`, named `<SKU>.<ext>` (PNG, JPEG, or WebP). `pnpm run dev:data` uploads them to the local SeaweedFS bucket under the content-hash key `product-images/<SKU>/<sha256>.<ext>`, so the URL is the same for everyone and matches the `imageUrl` column of `data/import-samples/products.csv`. The upload validates every file before sending any, and the script warns about a product whose `imageUrl` was not uploaded. To add or replace an image, drop `<SKU>.<ext>` into the folder, rerun the command, and copy the new URL into `products.csv`. Original downloads and source-verification records stay local in `data/product-images/originals/` and `provenance/`. `data/` is excluded from container builds via `.dockerignore`.
 
 ### Try prescription intake
 
 Prescription intake needs the catalog migrations `0005_text_search_extensions` (`pg_trgm` and `unaccent`) and `0006_folded_trigram_indexes` (the `catalog_fold` function and its trigram indexes), so run `pnpm run db:migrate` after pulling. Consultation requests also need the `sales-service` migration `0005_salty_trish_tilby` (the `prescription_consultations` table), which the same command applies. Import `products.csv` first, because suggestions come from the catalog.
 
-1. Set `GEMINI_API_KEY`, `GEMINI_BASE_URL`, and `GEMINI_MODEL` in `.env` (see `.env.example`) to read photos. With an empty `GEMINI_API_KEY` the photo path answers `503` and only QR intake works.
+1. Sign in to staff-web as `admin@pharmacycentral.vn`, open **AI integrations**, and save the provider, model, base URL and API key under **Prescription photo reading**. Or set all four `AI_PRESCRIPTION_READER_*` variables in `.env` (see `.env.example`), which are all or none. Until settings are saved, or the four variables are set, the photo path answers `503` and only QR intake works.
 2. Sign in as the customer account and open `http://localhost:5173/gui-don-thuoc`.
 3. Upload a page from `data/prescription-samples/`. `<slug>.png` carries a QR (read in the browser, no provider call); `<slug>-no-qr.png` is the same page without it and exercises Gemini. `<slug>.json` is the ground truth to compare against.
 4. The sample has one prescription, `tang-huyet-ap-dai-thao-duong`, with six lines. Five match catalog products: Amlodipin 5mg, Savi Losartan 50mg, Diamicron MR 30mg, Atorvastatin 20mg and Plavix 75mg. These are prescription-only with no price, so the page shows "Liên hệ báo giá" and they cannot be added to the cart.
 5. Aspirin 81mg has no catalog match, so the page offers "Nhờ dược sĩ tìm giúp" for the whole prescription; the request is filed through `POST /prescriptions/consultations` with that line flagged.
 
 `pnpm run prescriptions:samples` generates that page. Its medicines all come from `products.csv`, and like other generated output it stays local and is not committed.
+
+### Chatbot token usage
+
+The chatbot service logs one line for each question the model answers. The message is `chat turn usage`. The line has five counts: input tokens, cached input tokens, output tokens, thought tokens, and `modelCalls`. `modelCalls` is the number of model calls made for that question, at most three. A question that needs no product lookup has one model call. A high thought count means the model spent many tokens reasoning at its thinking level. A cached count above zero means implicit caching hit. Caching cannot start until the stable prompt prefix reaches the model's minimum size, so a cached count of zero is expected while the prompt stays below that minimum. The line holds counts only, never the question, the reply, or any customer or product data.
+
+### Intent gate
+
+The intent gate runs one TypeSafe Jev request before each question reaches the chat model. Its settings use the purpose `INTENT_GATE`, the environment group `AI_INTENT_GATE_*`, and the staff-web card **Question screening**. With no settings the gate is off.
+
+- Each decision logs `intent gate decision` with the fields `decision`, `reason`, `intent`, `intentConfidence`, `emergency`, and `injection`.
+- A Jev failure after the retries answers `503 assistant_unavailable`. The service logs `chat dependency failed` with the error `IntentGateError`.
+- The timeout and retry constants are `ATTEMPT_TIMEOUT_MS = 4000`, `MAX_ATTEMPTS = 3`, `BACKOFF_BASE_MS = 200` and `BACKOFF_CAP_MS = 2000` in `apps/chatbot-service/src/infrastructure/jev-intent-classifier.ts`.
+- The thresholds are `EMERGENCY_THRESHOLD = 0.6`, `INJECTION_THRESHOLD = 0.7` and `INTENT_CONFIDENCE_THRESHOLD = 0.6` in `apps/chatbot-service/src/modules/chat/intent-policy.ts`. They are untuned starting values.
 
 ### Demo credentials
 
@@ -284,6 +302,8 @@ pnpm run build
 pnpm test
 git diff --check
 ```
+
+`pnpm test` runs one project's tests at a time (`"parallelism": false` on the `test` target in `nx.json`). The database tests start an in-process PGlite and apply every migration in `beforeAll`. With several projects testing at once, that hook ran past Vitest's 10-second limit. The whole run takes about 45 seconds. The Nx terminal UI closes by itself when the run ends (`"tui": { "autoExit": true }`).
 
 Each service also supports running its local checks independently:
 
@@ -347,7 +367,7 @@ Local development uses a single RabbitMQ node.
 
 ## Cache policy
 
-Valkey stores rate-limit counters and delivery route calculations.
+Redis stores rate-limit counters and delivery route calculations.
 
 - PostgreSQL remains the authoritative source of truth.
 - Delivery cache misses call Vietmap for the address label and OpenRouteService for the route. Cache keys carry a version, so a change in what a cached calculation contains bumps it.

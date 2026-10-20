@@ -75,6 +75,17 @@ Use **Catalog** to manage product codes, names, manufacturers, statuses, units o
 
 Use **Suppliers** to manage approved vendors.
 
+### Search synonyms
+
+Use **Search synonyms** to manage groups of words that shoppers may use for the same symptom, such as "tiêu chảy" and "đi ngoài". Platform Admins, Pharmacy Managers, and Pharmacists can use this screen.
+
+- A group goes live in shopper search only after another staff member approves it. You cannot approve a group that you created or last edited. The button shows why when it is unavailable.
+- Add a group in the **Terms** box, one term per line or separated by commas. A group needs 2 to 20 terms, and each term can be up to 60 characters. Terms that differ only in accents or capitals count as the same term.
+- The **Pending review** list shows groups waiting for approval. The **In use** list shows groups that shoppers' searches already use. Each row shows who proposed the group and when.
+- **Edit** sends a group back to **Pending review**, so it leaves search until another staff member approves the new terms.
+- **Delete** removes a group from search at once. No review is needed.
+- If the group changed while you were viewing it, the screen shows a message and reloads the list. Check the group again before you approve it.
+
 ### Importing master data
 
 Use **Data import** to load sites, storage locations, suppliers, products with units and prices, and opening
@@ -221,6 +232,21 @@ Platform Admins use **Users** to:
 - Update account permissions
 - Reset user passwords
 - Revoke active user sessions after security updates
+
+## AI integrations
+
+Platform Admins use **AI integrations** to manage the provider, model, base URL and API key of each AI feature. The features are the shopping assistant, question screening, prescription photo reading, and semantic product search.
+
+- Each card shows a source badge. The badge reads **Saved key**, **Environment key**, or **Not configured** when neither exists. It also shows the provider, the model, the base URL, and the last four characters of the key. For saved settings, it shows who saved them and when.
+- The form has **Provider**, **Model**, **Base URL** and **API key** fields. Choose **Save settings** to save them. The key is encrypted and cannot be read back.
+- Leave **API key** empty to keep the saved key when the provider is unchanged.
+- Saved settings always win over the server environment settings, as a whole, for that feature.
+- Choose **Remove key** to delete the saved settings. The feature goes back to the environment settings when the server has them. Otherwise the shopping assistant and photo reading answer with an error, and product search matches keywords only. QR intake is unaffected.
+- **Question screening** is optional. Without a key every question goes straight to the shopping assistant.
+
+When the shopping assistant cannot answer, the customer sees "Trợ lý tư vấn đang gặp sự cố. Vui lòng thử lại sau ít phút." in the chat widget.
+
+Saving product search settings starts a background reindex that creates embeddings for existing products, so semantic results appear shortly afterwards. A change of model embeds the products again.
 
 ## Demo walkthrough
 
