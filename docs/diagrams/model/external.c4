@@ -1,0 +1,35 @@
+model {
+  googleOidc = external "Google OIDC" {
+    summary "Identity provider of the Google sign-in."
+  }
+
+  geminiApi = external "Google Gemini API" {
+    summary "Model provider of every AI feature: the embeddings, the prescription vision and the chat."
+  }
+
+  typesafeApi = external "TypeSafe Jev API" {
+    technology "POST https://api.typesafe.ai/v1/systemone"
+    summary "System One model of TypeSafe. It answers typed questions (Choice, Noul, Score) about a text with probabilities and a confidence, and generates no text. It is the classifier in front of the chat model."
+  }
+
+  openaiCompatibleApi = external "OpenAI-compatible API" {
+    technology "POST {baseUrl}/chat/completions"
+    summary "Optional provider of the shopping assistant's chat model, any server that speaks the OpenAI chat completions API with tool calling. The admin picks it in AI integrations."
+  }
+
+  vietmapApi = external "VietMap API" {
+    summary "Vietnamese geocoding and place resolution, it keeps the house numbers."
+  }
+
+  openRouteService = external "OpenRouteService" {
+    summary "Routing provider of the delivery matrix and of the directions."
+  }
+
+  resendMail = external "Resend" {
+    summary "Transactional email provider, used in production."
+  }
+
+  sepayGateway = external "SePay" {
+    summary "Bank gateway of the QR payment, it calls the webhook back."
+  }
+}

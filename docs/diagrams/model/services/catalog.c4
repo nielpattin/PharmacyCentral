@@ -1,0 +1,37 @@
+model {
+  extend pharmacyCentral.services {
+    catalogService = service "catalog-service" {
+      technology "Express 5 + Drizzle + Typesense"
+      summary "The only owner of the products, the prices, the sites and the product search."
+      metadata { port "3002"; package "@pharmacy/catalog-service" }
+
+      products = component "Products, units and suppliers" {
+        summary "Product master data: SKU, names, active ingredients, dosage form, units and suppliers."
+      }
+
+      pricing = component "Prices" {
+        summary "Selling prices with a Draft, Published and Archived lifecycle."
+      }
+
+      sites = component "Sites, storage locations and stores" {
+        summary "Branches, storage locations and retail stores, with PostGIS coordinates."
+      }
+
+      search = component "Product search" {
+        summary "The Typesense index: the folded names, the keywords and the embedding of every product."
+      }
+
+      availability = component "Availability projection" {
+        summary "The in stock flag per site and product, fed by the inventory events."
+      }
+
+      imports = component "CSV imports" {
+        summary "Bulk import of the products, the prices and the sites from CSV."
+      }
+
+      aiCredentials = component "AI credentials" {
+        summary "The sealed key and the settings of the embedding provider."
+      }
+    }
+  }
+}

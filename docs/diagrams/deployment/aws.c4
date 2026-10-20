@@ -1,0 +1,92 @@
+deployment {
+  aws = environment "AWS, ECS Fargate" {
+    summary "The production topology of deploy/aws. Configuration only, no AWS resource has been created."
+
+    edge = zone "Public edge" {
+      webTier = workload "Web tier" {
+        summary "The two single page applications, published as digest addressed images to GHCR."
+      }
+
+      apiGateway = managed "API Gateway, HTTP API" {
+        summary "The public surface of /api. CORS, throttling, and the raw bytes of the SePay webhook."
+      }
+
+      authorizer = workload "Lambda, session and CSRF authorizer" {
+        instanceOf pharmacyCentral.security.sessionAuthorizer
+      }
+
+      csrfLambda = managed "Lambda, CSRF token" {
+        summary "Answers GET /api/auth/csrf and issues the pharmacy_csrf cookie."
+      }
+
+      vpcLink = managed "VPC Link" {
+        summary "The private path from the API Gateway into the VPC."
+      }
+
+      alb = managed "Internal Application Load Balancer" {
+        summary "Routes the paths to the ECS services, the same routing map as the local gateway."
+      }
+    }
+
+    compute = zone "Private subnets" {
+      ecs = cluster "ECS Fargate cluster" {
+        summary "One long running task per service, and one shot migration tasks that never run on start."
+
+        identityTask = workload "identity-service :3001" {
+          instanceOf pharmacyCentral.services.identityService
+        }
+        catalogTask = workload "catalog-service :3002" {
+          instanceOf pharmacyCentral.services.catalogService
+        }
+        inventoryTask = workload "inventory-service :3004" {
+          instanceOf pharmacyCentral.services.inventoryService
+        }
+        salesTask = workload "sales-service :3005" {
+          instanceOf pharmacyCentral.services.salesService
+        }
+        paymentTask = workload "payment-service :3006" {
+          instanceOf pharmacyCentral.services.paymentService
+        }
+        operationsTask = workload "operations-query-service :3007" {
+          instanceOf pharmacyCentral.services.operationsService
+        }
+        chatbotTask = workload "chatbot-service :3008" {
+          instanceOf pharmacyCentral.services.chatbotService
+        }
+      }
+    }
+
+    managedData = zone "Managed data services" {
+      summary "Not provisioned by the first stack. Their keys come from Secrets Manager ARNs."
+
+      rds = workload "RDS PostgreSQL" {
+        instanceOf pharmacyCentral.data.postgres
+      }
+      redisManaged = workload "ElastiCache Redis" {
+        instanceOf pharmacyCentral.data.redis
+      }
+      rabbitManaged = workload "Amazon MQ for RabbitMQ" {
+        instanceOf pharmacyCentral.data.rabbitmq
+      }
+      typesenseManaged = workload "Typesense, three node cluster or Typesense Cloud" {
+        instanceOf pharmacyCentral.data.typesense
+      }
+      secrets = managed "Secrets Manager" {
+        summary "Holds DATABASE_URL, RABBITMQ_URL, REDIS_URL, TYPESENSE_* and the internal secrets."
+      }
+      cloudwatch = managed "CloudWatch Logs" {
+        summary "Receives the logs of the tasks, of the Lambdas and of the API Gateway."
+      }
+    }
+
+    external = zone "Third parties" {
+      googleNode = managed "Google OIDC"
+      geminiNode = managed "Google Gemini API"
+      typesafeNode = managed "TypeSafe Jev API"
+      openaiCompatibleNode = managed "OpenAI-compatible API"
+      vietmapNode = managed "VietMap API"
+      openRouteNode = managed "OpenRouteService"
+      sepayNode = managed "SePay"
+    }
+  }
+}

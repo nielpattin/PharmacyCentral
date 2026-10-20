@@ -1,0 +1,68 @@
+deployment {
+  aws.edge.webTier -> aws.edge.apiGateway "HTTPS /api" {
+    technology "HTTPS"
+  }
+
+  aws.edge.apiGateway -> aws.edge.authorizer "Session, role, site scope and CSRF" {
+    technology "Lambda invoke"
+  }
+  aws.edge.apiGateway -> aws.edge.csrfLambda "GET /api/auth/csrf" {
+    technology "Lambda invoke"
+  }
+  aws.edge.apiGateway -> aws.edge.vpcLink "HTTP /api" {
+    technology "HTTP"
+  }
+  aws.edge.vpcLink -> aws.edge.alb "HTTP on port 80" {
+    technology "HTTP"
+  }
+
+  aws.edge.alb -> aws.compute.ecs.identityTask "route /api/auth, /api/admin, /api/customers" {
+    technology "HTTP"
+  }
+  aws.edge.alb -> aws.compute.ecs.catalogTask "route /api/sites, /api/products, /api/pricing, /api/stores, /api/availability" {
+    technology "HTTP"
+  }
+  aws.edge.alb -> aws.compute.ecs.inventoryTask "route /api/procurement, /api/inventory" {
+    technology "HTTP"
+  }
+  aws.edge.alb -> aws.compute.ecs.salesTask "route /api/carts, /api/orders, /api/delivery, /api/prescriptions" {
+    technology "HTTP"
+  }
+  aws.edge.alb -> aws.compute.ecs.paymentTask "route /api/payments" {
+    technology "HTTP"
+  }
+  aws.edge.alb -> aws.compute.ecs.operationsTask "route /api/dashboard, /api/finance, /api/reports" {
+    technology "HTTP"
+  }
+  aws.edge.alb -> aws.compute.ecs.chatbotTask "route /api/chatbot" {
+    technology "HTTP"
+  }
+
+  aws.compute.ecs.identityTask -> aws.external.googleNode "Google sign-in" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.catalogTask -> aws.external.geminiNode "Product embeddings" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.salesTask -> aws.external.geminiNode "Prescription vision call" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.chatbotTask -> aws.external.geminiNode "Chat model with tool calling" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.chatbotTask -> aws.external.openaiCompatibleNode "Chat model with tool calling, optional provider" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.chatbotTask -> aws.external.typesafeNode "Jev gate" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.salesTask -> aws.external.vietmapNode "Geocoding" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.salesTask -> aws.external.openRouteNode "Driving route" {
+    technology "HTTPS"
+  }
+  aws.external.sepayNode -> aws.edge.apiGateway "Payment webhook, raw bytes preserved" {
+    technology "HTTPS"
+  }
+}

@@ -1,0 +1,21 @@
+model {
+  customer = actor "Customer" {
+    summary "Shopper: browses the catalogue, keeps a cart, orders, uploads a prescription photo, pays and asks the assistant."
+  }
+
+  pharmacist = actor "Pharmacist" {
+    summary "Counter staff of a site: answers consultations, checks and dispenses prescriptions, serves the counter."
+  }
+
+  warehouseStaff = actor "Warehouse staff" {
+    summary "Handles the stock of a site: goods receipts, batches, transfers, returns and stocktakes."
+  }
+
+  branchManager = actor "Branch manager" {
+    summary "Manages one site: approves replenishment and purchase orders, watches the dashboards of the site."
+  }
+
+  platformAdmin = actor "Platform admin" {
+    summary "Runs the platform: the AI integrations, the employee accounts and the site access."
+  }
+}

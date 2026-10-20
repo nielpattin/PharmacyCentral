@@ -1,0 +1,33 @@
+model {
+  extend pharmacyCentral.services {
+    chatbotService = service "chatbot-service" {
+      technology "Express 5 + Drizzle"
+      summary "The shopping assistant. It answers with tool calling and reads the catalogue over HTTP."
+      metadata { port "3008"; package "@pharmacy/chatbot-service" }
+
+      chat = component "Chat session and answer" {
+        summary "The session, the rate limits of the assistant and the final text answer."
+      }
+
+      intentGate = component "Intent gate" {
+        summary """
+          Runs before the chat model. One Jev request carries the question and the last exchange as the
+          state, and three typed questions: a Choice for the intent (product search, product detail,
+          order help, greeting, out of scope), a Noul for a possible emergency and a Noul for a prompt
+          injection. The thresholds are in code. A greeting, an out of scope question, an emergency or an
+          injection gets a fixed reply and costs no Gemini call. Anything else goes on to the chat model.
+          The Jev call has a timeout and two retries with backoff. After that the question fails with a
+          503 and nothing is saved. Without Jev settings the gate is skipped.
+        """
+      }
+
+      catalogTools = component "Catalogue tools" {
+        summary "search_products and get_product_details, the tools of the assistant."
+      }
+
+      aiCredentials = component "AI credentials" {
+        summary "The sealed key and the settings of the chat model, and of the Jev gate once it exists."
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+model {
+  extend pharmacyCentral.services {
+    operationsService = service "operations-query-service" {
+      technology "Express 5 + Drizzle"
+      summary "The read side of the platform: dashboards, finance, audit and reports, built from the events."
+      metadata { port "3007"; package "@pharmacy/operations-query-service" }
+
+      eventConsumer = component "Event consumer" {
+        summary "Consumes every event of the exchange and applies it idempotently."
+      }
+
+      projections = component "Dashboards and counters" {
+        summary "The dashboard counters and the operational summary of a site."
+      }
+
+      finance = component "Finance entries" {
+        summary "The finance entries of the paid and refunded invoices, network wide."
+      }
+
+      audit = component "Audit trail" {
+        summary "The audit events of the orders, the prescriptions and the catalogue changes."
+      }
+
+      reports = component "Reports" {
+        summary "The report rows, for example the stock valuation of a day."
+      }
+    }
+  }
+}

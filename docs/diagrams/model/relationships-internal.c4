@@ -1,0 +1,128 @@
+model {
+  // ── Inside identity-service ──────────────────────────────────────────────────────
+  pharmacyCentral.services.identityService.sessions -> pharmacyCentral.services.identityService.accounts "Resolve the account behind a session" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.identityService.admin -> pharmacyCentral.services.identityService.accounts "Grant roles and site access" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.identityService.customers -> pharmacyCentral.services.identityService.accounts "Read the customer profile" {
+    technology "in-process"
+  }
+
+  // ── Inside catalog-service ───────────────────────────────────────────────────────
+  pharmacyCentral.services.catalogService.search -> pharmacyCentral.services.catalogService.products "Index the product text and its embedding" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.catalogService.availability -> pharmacyCentral.services.catalogService.products "Set the in stock flag per site" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.catalogService.imports -> pharmacyCentral.services.catalogService.products "Import products, prices and suppliers" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.catalogService.pricing -> pharmacyCentral.services.catalogService.products "Price of a product" {
+    technology "in-process"
+  }
+
+  // ── Inside inventory-service ─────────────────────────────────────────────────────
+  pharmacyCentral.services.inventoryService.reservations -> pharmacyCentral.services.inventoryService.stock "Hold and hand over the FEFO batches" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.inventoryService.availabilityPublisher -> pharmacyCentral.services.inventoryService.stock "Read the availability after the commit" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.inventoryService.quality -> pharmacyCentral.services.inventoryService.stock "Expiry and quality of a batch" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.inventoryService.transfers -> pharmacyCentral.services.inventoryService.stock "Move a batch between storage locations" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.inventoryService.stocktakes -> pharmacyCentral.services.inventoryService.stock "Count and adjust the balances" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.inventoryService.replenishment -> pharmacyCentral.services.inventoryService.stock "Level of a product at a site" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.inventoryService.procurement -> pharmacyCentral.services.inventoryService.stock "A goods receipt creates the batch" {
+    technology "in-process"
+  }
+
+  // ── Inside sales-service ─────────────────────────────────────────────────────────
+  pharmacyCentral.services.salesService.orders -> pharmacyCentral.services.salesService.prescriptions "An order carries its prescriptions" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.salesService.paymentEvents -> pharmacyCentral.services.salesService.orders "Mark the order paid or refunded" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.salesService.orders -> pharmacyCentral.services.salesService.outbox "Write the order event to the outbox" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.salesService.delivery -> pharmacyCentral.services.salesService.orders "Fee, distance and route of the order" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.salesService.prescriptions -> pharmacyCentral.services.salesService.aiCredentials "Read the settings of the prescription reader" {
+    technology "in-process"
+  }
+
+  // ── Inside payment-service ───────────────────────────────────────────────────────
+  pharmacyCentral.services.paymentService.sepay -> pharmacyCentral.services.paymentService.invoices "Reconcile the webhook with the invoice" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.paymentService.invoices -> pharmacyCentral.services.paymentService.refunds "Refund a paid invoice" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.paymentService.invoices -> pharmacyCentral.services.paymentService.outbox "Write the invoice event to the outbox" {
+    technology "in-process"
+  }
+
+  // ── Inside operations-query-service ──────────────────────────────────────────────
+  pharmacyCentral.services.operationsService.eventConsumer -> pharmacyCentral.services.operationsService.projections "Apply an event to the counters" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.operationsService.eventConsumer -> pharmacyCentral.services.operationsService.finance "Apply a paid or a refunded invoice" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.operationsService.eventConsumer -> pharmacyCentral.services.operationsService.audit "Apply an audited change" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.operationsService.eventConsumer -> pharmacyCentral.services.operationsService.reports "Apply a reported event" {
+    technology "in-process"
+  }
+
+  // ── Inside chatbot-service ───────────────────────────────────────────────────────
+  pharmacyCentral.services.chatbotService.chat -> pharmacyCentral.services.chatbotService.intentGate "Classify the question before any model call" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.chatbotService.intentGate -> pharmacyCentral.services.chatbotService.aiCredentials "Read the settings of the Jev gate" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.chatbotService.chat -> pharmacyCentral.services.chatbotService.catalogTools "Call a tool when the model asks for it" {
+    technology "in-process"
+  }
+  pharmacyCentral.services.chatbotService.chat -> pharmacyCentral.services.chatbotService.aiCredentials "Read the settings of the chat model" {
+    technology "in-process"
+  }
+
+  // ── Telemetry ────────────────────────────────────────────────────────────────────
+  pharmacyCentral.services.identityService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+    technology "OTLP"
+  }
+  pharmacyCentral.services.catalogService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+    technology "OTLP"
+  }
+  pharmacyCentral.services.inventoryService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+    technology "OTLP"
+  }
+  pharmacyCentral.services.salesService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+    technology "OTLP"
+  }
+  pharmacyCentral.services.paymentService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+    technology "OTLP"
+  }
+  pharmacyCentral.services.operationsService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+    technology "OTLP"
+  }
+  pharmacyCentral.services.chatbotService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+    technology "OTLP"
+  }
+}

@@ -1,0 +1,77 @@
+deployment {
+  local = environment "Local, Docker Compose" {
+    summary "The development topology: the same images and the same path routing map as production."
+
+    edge = zone "Edge" {
+      gateway = workload "gateway, nginx 1.27" {
+        summary "The reverse proxy. It strips the /api prefix and forwards each path to the service that owns it."
+      }
+
+      customerWebNode = workload "customer-web, nginx 1.27" {
+        customerWebInstance = instanceOf pharmacyCentral.web.customerWeb
+      }
+
+      staffWebNode = workload "staff-web, nginx 1.27" {
+        staffWebInstance = instanceOf pharmacyCentral.web.staffWeb
+      }
+    }
+
+    apps = zone "Application services" {
+      identityTask = workload "identity-service :3001" {
+        instanceOf pharmacyCentral.services.identityService
+      }
+      catalogTask = workload "catalog-service :3002" {
+        instanceOf pharmacyCentral.services.catalogService
+      }
+      inventoryTask = workload "inventory-service :3004" {
+        instanceOf pharmacyCentral.services.inventoryService
+      }
+      salesTask = workload "sales-service :3005" {
+        instanceOf pharmacyCentral.services.salesService
+      }
+      paymentTask = workload "payment-service :3006" {
+        instanceOf pharmacyCentral.services.paymentService
+      }
+      operationsTask = workload "operations-query-service :3007" {
+        instanceOf pharmacyCentral.services.operationsService
+      }
+      chatbotTask = workload "chatbot-service :3008" {
+        instanceOf pharmacyCentral.services.chatbotService
+      }
+    }
+
+    infra = zone "Infrastructure" {
+      postgresNode = workload "postgis/postgis 18" {
+        instanceOf pharmacyCentral.data.postgres
+      }
+      rabbitNode = workload "rabbitmq 4.3" {
+        instanceOf pharmacyCentral.data.rabbitmq
+      }
+      redisNode = workload "redis 8.10" {
+        instanceOf pharmacyCentral.data.redis
+      }
+      typesenseNode = workload "typesense 30.2" {
+        instanceOf pharmacyCentral.data.typesense
+      }
+      seaweedNode = workload "seaweedfs 4.48" {
+        instanceOf pharmacyCentral.data.seaweedfs
+      }
+      mailpitNode = workload "mailpit 1.30" {
+        instanceOf pharmacyCentral.data.mailpit
+      }
+      otelNode = workload "otel-collector 0.159" {
+        instanceOf pharmacyCentral.data.telemetry
+      }
+    }
+
+    external = zone "Third parties" {
+      googleNode = managed "Google OIDC"
+      geminiNode = managed "Google Gemini API"
+      typesafeNode = managed "TypeSafe Jev API"
+      openaiCompatibleNode = managed "OpenAI-compatible API"
+      vietmapNode = managed "VietMap API"
+      openRouteNode = managed "OpenRouteService"
+      sepayNode = managed "SePay"
+    }
+  }
+}

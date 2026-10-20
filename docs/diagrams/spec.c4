@@ -1,0 +1,92 @@
+specification {
+  element actor {
+    notation "Person"
+    style { shape person; color blue }
+  }
+  element system {
+    notation "System"
+    style { shape rectangle; color primary }
+  }
+  element container {
+    notation "Container"
+    style { shape rectangle; color secondary }
+  }
+  element service {
+    notation "Service"
+    style { shape component; color primary }
+  }
+  element component {
+    notation "Component"
+    style { shape component; color secondary }
+  }
+  element webapp {
+    notation "Web app"
+    style { shape browser; color sky }
+  }
+  element gateway {
+    notation "Gateway"
+    style { shape component; color indigo }
+  }
+  element function {
+    notation "Function"
+    style { shape component; color amber }
+  }
+  element database {
+    notation "Database"
+    style { shape storage; color slate }
+  }
+  element broker {
+    notation "Event broker"
+    style { shape queue; color amber }
+  }
+  element cache {
+    notation "Cache"
+    style { shape storage; color gray }
+  }
+  element searchIndex {
+    notation "Search index"
+    style { shape storage; color indigo }
+  }
+  element objectStorage {
+    notation "Object storage"
+    style { shape storage; color green }
+  }
+  element mail {
+    notation "Mail"
+    style { shape component; color green }
+  }
+  element observability {
+    notation "Telemetry"
+    style { shape component; color muted }
+  }
+  element external {
+    notation "External system"
+    style { shape rectangle; color sky }
+  }
+
+  relationship sync { line solid; color slate }
+  relationship async { line dotted; color amber; head diamond; tail vee }
+
+  tag obs
+
+  deploymentNode environment {
+    notation "Environment"
+    style { color gray }
+  }
+  deploymentNode zone {
+    notation "Zone"
+    style { color gray }
+  }
+  deploymentNode cluster {
+    notation "Cluster"
+    style { color gray }
+  }
+  deploymentNode workload {
+    notation "Workload"
+    style { color primary }
+  }
+  deploymentNode managed {
+    notation "Managed service"
+    style { color indigo }
+  }
+}

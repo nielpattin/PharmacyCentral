@@ -1,0 +1,179 @@
+model {
+  // ── People ────────────────────────────────────────────────────────────────────────
+  customer -> pharmacyCentral.web.customerWeb "Browse the catalogue, keep a cart, order, upload a prescription, pay an invoice, ask the assistant" {
+    technology "HTTPS"
+  }
+  pharmacist -> pharmacyCentral.web.staffWeb "Answer consultations, check and dispense prescriptions, serve the counter" {
+    technology "HTTPS"
+  }
+  warehouseStaff -> pharmacyCentral.web.staffWeb "Goods receipts, transfers, returns, stocktakes" {
+    technology "HTTPS"
+  }
+  branchManager -> pharmacyCentral.web.staffWeb "Approve replenishment and purchase orders, read the dashboards of the site" {
+    technology "HTTPS"
+  }
+  platformAdmin -> pharmacyCentral.web.staffWeb "Configure the AI integrations, manage the accounts and the site access" {
+    technology "HTTPS"
+  }
+
+  // ── Path routing map, the same in the local gateway and in the AWS ALB ───────────
+  pharmacyCentral.web.customerWeb -> pharmacyCentral.services.identityService "Sign in, session, profile (/api/auth, /api/customers)" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.web.customerWeb -> pharmacyCentral.services.catalogService "Products, stores, prices (/api/products, /api/stores, /api/pricing)" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.web.customerWeb -> pharmacyCentral.services.salesService "Cart, order, delivery, prescription (/api/carts, /api/orders, /api/delivery)" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.web.customerWeb -> pharmacyCentral.services.paymentService "Invoice of the order (/api/payments)" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.web.customerWeb -> pharmacyCentral.services.chatbotService "Shopping assistant (/api/chatbot)" {
+    technology "HTTPS"
+  }
+
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.identityService "Employee accounts, site access (/api/admin)" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.catalogService "Master data and prices (/api/sites, /api/products, /api/pricing)" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.inventoryService "Stock, quality, procurement (/api/inventory, /api/quality)" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.salesService "Consultations, prescriptions, counter (/api/prescriptions)" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.paymentService "Payments and reconciliation (/api/payments)" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.operationsService "Dashboard, finance, audit, reports (/api/dashboard, /api/reports)" {
+    technology "HTTPS"
+  }
+
+  // ── Edge and access control ──────────────────────────────────────────────────────
+  pharmacyCentral.security.sessionAuthorizer -> pharmacyCentral.services.identityService "GET /auth/me, resolve the session, the role and the site scope" {
+    technology "HTTP"
+  }
+
+  // ── Service to service, the only way two services talk ───────────────────────────
+  pharmacyCentral.services.salesService -> pharmacyCentral.services.identityService "GET /internal/customers/{id}, the buyer behind an order" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.salesService -> pharmacyCentral.services.catalogService "Sites, products, prices and POST /products/match" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.salesService -> pharmacyCentral.services.inventoryService "Reserve, release and dispense the FEFO stock" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.inventoryService -> pharmacyCentral.services.catalogService "Resolve the product and the site of a stock movement" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.paymentService -> pharmacyCentral.services.salesService "The order and the prescription behind the invoice" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.paymentService -> pharmacyCentral.services.catalogService "The published price of the invoiced lines" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.operationsService -> pharmacyCentral.services.catalogService "Storage locations, the site list of the reader scope" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.operationsService -> pharmacyCentral.services.inventoryService "Balances, transfers, stocktakes, receipts" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.operationsService -> pharmacyCentral.services.salesService "Prescriptions, with the scope as x-actor-site-ids" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.chatbotService -> pharmacyCentral.services.catalogService "search_products, get_product_details" {
+    technology "HTTP"
+  }
+
+  // ── Own data ─────────────────────────────────────────────────────────────────────
+  pharmacyCentral.services.identityService -> pharmacyCentral.data.postgres.identityDb "Accounts, sessions, tokens, employee access" {
+    technology "SQL"
+  }
+  pharmacyCentral.services.catalogService -> pharmacyCentral.data.postgres.catalogDb "Master data, prices, synonyms, AI credentials" {
+    technology "SQL"
+  }
+  pharmacyCentral.services.inventoryService -> pharmacyCentral.data.postgres.inventoryDb "Batches, balances, movement ledger, purchase orders" {
+    technology "SQL"
+  }
+  pharmacyCentral.services.salesService -> pharmacyCentral.data.postgres.salesDb "Carts, orders, prescriptions, consultations" {
+    technology "SQL"
+  }
+  pharmacyCentral.services.paymentService -> pharmacyCentral.data.postgres.paymentDb "Invoices, attempts, transactions, refunds" {
+    technology "SQL"
+  }
+  pharmacyCentral.services.operationsService -> pharmacyCentral.data.postgres.operationsDb "Projections, finance entries, audit events, report rows" {
+    technology "SQL"
+  }
+  pharmacyCentral.services.chatbotService -> pharmacyCentral.data.postgres.chatbotDb "Chat sessions and messages" {
+    technology "SQL"
+  }
+
+  pharmacyCentral.services.catalogService -> pharmacyCentral.data.typesense "Product search index, keyword and vector score" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.catalogService -> pharmacyCentral.data.seaweedfs "Product images in the S3 media bucket" {
+    technology "S3"
+  }
+  pharmacyCentral.services.salesService -> pharmacyCentral.data.redis "Delivery route cache and prescription intake rate limiter" {
+    technology "RESP"
+  }
+
+  // ── Domain events over the pharmacy.events exchange ───────────────────────────────
+  pharmacyCentral.services.inventoryService -> pharmacyCentral.data.rabbitmq "Publish inventory.availability.changed.v1 from the outbox" {
+    technology "AMQP"
+  }
+  pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.catalogService "Consume inventory.availability.changed.v1" {
+    technology "AMQP"
+  }
+  pharmacyCentral.services.salesService -> pharmacyCentral.data.rabbitmq "Publish sales.order.* and sales.prescription.* from the outbox" {
+    technology "AMQP"
+  }
+  pharmacyCentral.services.paymentService -> pharmacyCentral.data.rabbitmq "Publish payment.invoice.* from the outbox" {
+    technology "AMQP"
+  }
+  pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.salesService "Consume payment.invoice.paid.v1 and .refunded.v1" {
+    technology "AMQP"
+  }
+  pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.operationsService "Consume every event of the exchange" {
+    technology "AMQP"
+  }
+
+  // ── Third parties ────────────────────────────────────────────────────────────────
+  pharmacyCentral.services.identityService -> googleOidc "Google sign-in" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.services.identityService -> pharmacyCentral.data.mailpit "Verification email over SMTP, local" {
+    technology "SMTP"
+  }
+  pharmacyCentral.services.identityService -> resendMail "Verification email, production" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.services.catalogService -> geminiApi "Embeddings of the product text for the semantic search" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.services.salesService -> geminiApi "One vision call reads the photo of the prescription" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.services.chatbotService -> geminiApi "Chat model with tool calling" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.services.chatbotService -> openaiCompatibleApi "Chat model with tool calling, when the admin picks this provider" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.services.chatbotService -> typesafeApi "Intent, emergency and injection checks of the question, before the chat model" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.services.salesService -> vietmapApi "Address search, place resolution, reverse geocoding" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.services.salesService -> openRouteService "Driving-car matrix and directions" {
+    technology "HTTPS"
+  }
+  sepayGateway -> pharmacyCentral.services.paymentService "Payment webhook, HMAC over the raw bytes" {
+    technology "HTTPS"
+  }
+}

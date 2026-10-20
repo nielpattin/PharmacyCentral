@@ -1,0 +1,85 @@
+views {
+  view identityDetail {
+    title "identity-service"
+    description "Accounts, sessions, employee access and the customer directory."
+    include pharmacyCentral.services.identityService
+    include pharmacyCentral.services.identityService.*
+    include pharmacyCentral.data.postgres.identityDb
+    include googleOidc
+    include resendMail
+    include pharmacyCentral.data.mailpit
+  }
+
+  view catalogDetail {
+    title "catalog-service"
+    description "The owner of the products, the prices, the sites and the product search."
+    include pharmacyCentral.services.catalogService
+    include pharmacyCentral.services.catalogService.*
+    include pharmacyCentral.data.postgres.catalogDb
+    include pharmacyCentral.data.typesense
+    include pharmacyCentral.data.seaweedfs
+    include geminiApi
+  }
+
+  view inventoryDetail {
+    title "inventory-service"
+    description "The physical stock, its ledger, the reservations and the procurement."
+    include pharmacyCentral.services.inventoryService
+    include pharmacyCentral.services.inventoryService.*
+    include pharmacyCentral.data.postgres.inventoryDb
+    include pharmacyCentral.data.rabbitmq
+    include pharmacyCentral.services.catalogService
+  }
+
+  view salesDetail {
+    title "sales-service"
+    description "Carts, orders, delivery and the prescription intake."
+    include pharmacyCentral.services.salesService
+    include pharmacyCentral.services.salesService.*
+    include pharmacyCentral.data.postgres.salesDb
+    include pharmacyCentral.data.redis
+    include pharmacyCentral.data.rabbitmq
+    include pharmacyCentral.services.catalogService
+    include pharmacyCentral.services.inventoryService
+    include pharmacyCentral.services.identityService
+    include vietmapApi
+    include openRouteService
+    include geminiApi
+  }
+
+  view paymentDetail {
+    title "payment-service"
+    description "The invoices, the SePay QR and the webhook that settles them."
+    include pharmacyCentral.services.paymentService
+    include pharmacyCentral.services.paymentService.*
+    include pharmacyCentral.data.postgres.paymentDb
+    include pharmacyCentral.data.rabbitmq
+    include pharmacyCentral.services.salesService
+    include pharmacyCentral.services.catalogService
+    include sepayGateway
+  }
+
+  view operationsDetail {
+    title "operations-query-service"
+    description "The read model: dashboards, finance, audit and reports, fed by the events."
+    include pharmacyCentral.services.operationsService
+    include pharmacyCentral.services.operationsService.*
+    include pharmacyCentral.data.postgres.operationsDb
+    include pharmacyCentral.data.rabbitmq
+    include pharmacyCentral.services.catalogService
+    include pharmacyCentral.services.inventoryService
+    include pharmacyCentral.services.salesService
+  }
+
+  view chatbotDetail {
+    title "chatbot-service"
+    description "The shopping assistant, its tools and its session, and the Jev gate that classifies a question before the chat model runs."
+    include pharmacyCentral.services.chatbotService
+    include pharmacyCentral.services.chatbotService.*
+    include pharmacyCentral.data.postgres.chatbotDb
+    include pharmacyCentral.services.catalogService
+    include geminiApi
+    include typesafeApi
+    include openaiCompatibleApi
+  }
+}

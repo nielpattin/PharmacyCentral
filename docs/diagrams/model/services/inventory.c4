@@ -1,0 +1,41 @@
+model {
+  extend pharmacyCentral.services {
+    inventoryService = service "inventory-service" {
+      technology "Express 5 + Drizzle"
+      summary "Owns the physical stock: batches, balances, reservations, transfers, stocktakes and procurement."
+      metadata { port "3004"; package "@pharmacy/inventory-service" }
+
+      stock = component "Batches, balances and movements" {
+        summary "The stock ledger, every change of a balance writes a movement row."
+      }
+
+      quality = component "Quality and expiry" {
+        summary "Quality checks, expiry dates and the sweeper of the expired batches."
+      }
+
+      reservations = component "Reservations and dispenses" {
+        summary "FEFO reservations, their release and the dispense of the counter."
+      }
+
+      transfers = component "Transfers and returns" {
+        summary "Movement of the stock between the storage locations, and the returns."
+      }
+
+      stocktakes = component "Stocktakes and adjustments" {
+        summary "Count sheets, the counted quantities and the adjustments that reconcile a count."
+      }
+
+      replenishment = component "Replenishment" {
+        summary "Detects a product that runs low at a site and proposes the quantity to reorder."
+      }
+
+      procurement = component "Purchase orders and goods receipts" {
+        summary "The purchase order, its approval and the goods receipt that creates the batches."
+      }
+
+      availabilityPublisher = component "Availability publisher" {
+        summary "Publishes inventory.availability.changed.v1 after the stock transaction commits."
+      }
+    }
+  }
+}

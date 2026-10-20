@@ -1,0 +1,33 @@
+model {
+  extend pharmacyCentral.services {
+    salesService = service "sales-service" {
+      technology "Express 5 + Drizzle"
+      summary "Owns the carts, the orders, the delivery, the prescriptions and the counter transactions."
+      metadata { port "3005"; package "@pharmacy/sales-service" }
+
+      orders = component "Carts, orders and counter transactions" {
+        summary "The cart, the customer order and the counter sale."
+      }
+
+      delivery = component "Delivery calculation" {
+        summary "VietMap names the place, OpenRouteService prices the route, the settings set the fee."
+      }
+
+      prescriptions = component "Prescription intake and consultations" {
+        summary "Reads the photo with one vision call, matches the lines, files a consultation."
+      }
+
+      paymentEvents = component "Payment event consumer" {
+        summary "Consumes the payment events and moves the order to paid or refunded."
+      }
+
+      outbox = component "Outbox publisher" {
+        summary "Publishes the sales events from the outbox rows of the sales database."
+      }
+
+      aiCredentials = component "AI credentials" {
+        summary "The sealed key and the settings of the prescription reader."
+      }
+    }
+  }
+}

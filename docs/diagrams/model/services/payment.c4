@@ -1,0 +1,25 @@
+model {
+  extend pharmacyCentral.services {
+    paymentService = service "payment-service" {
+      technology "Express 5 + Drizzle"
+      summary "Owns the invoices, the attempts, the refunds, the SePay QR and the reconciliation."
+      metadata { port "3006"; package "@pharmacy/payment-service" }
+
+      invoices = component "Invoices and transactions" {
+        summary "The invoice of an order, the payment attempts and the transactions that moved the money."
+      }
+
+      refunds = component "Refunds and reconciliation" {
+        summary "The refund of a paid invoice and the reconciliation of the bank movements."
+      }
+
+      sepay = component "SePay QR and webhook" {
+        summary "Builds the QR instruction and verifies the webhook with an HMAC over the raw bytes."
+      }
+
+      outbox = component "Outbox publisher" {
+        summary "Publishes the payment events from the outbox rows of the payment database."
+      }
+    }
+  }
+}

@@ -1,0 +1,141 @@
+views {
+  view index {
+    title "Pharmacy Central, system context"
+    description """
+      The people, the system and the third parties. Every arrow of this diagram is a path of the
+      routing map, so it is the same in the local gateway and in the AWS load balancer.
+    """
+    include *
+  }
+
+  view containers of pharmacyCentral {
+    title "Containers"
+    description """
+      The four tiers of the system: the web tier, the edge, the application services and the data
+      tier. The telemetry edges are left out here, they have a diagram of their own.
+    """
+    include *
+    include pharmacyCentral.web.*
+    include pharmacyCentral.services.*
+    include pharmacyCentral.security.*
+    include pharmacyCentral.data.postgres
+    include pharmacyCentral.data.rabbitmq
+    include pharmacyCentral.data.redis
+    include pharmacyCentral.data.typesense
+    include pharmacyCentral.data.seaweedfs
+    include pharmacyCentral.data.mailpit
+    include pharmacyCentral.data.telemetry
+    exclude customer, pharmacist, warehouseStaff, branchManager, platformAdmin
+    exclude googleOidc, geminiApi, openaiCompatibleApi, typesafeApi, vietmapApi, openRouteService, resendMail, sepayGateway
+    exclude * -> * where target.tag is #obs
+  }
+
+  view dataOwnership {
+    title "Data ownership"
+    description """
+      Every service owns its database and never reads the database of another one. The operations
+      query service is the exception that proves the rule: it reads through events and through the
+      HTTP API of the owning service.
+    """
+    include pharmacyCentral.services.*
+    include pharmacyCentral.data.postgres
+    include pharmacyCentral.data.postgres.*
+    exclude * -> * where source.kind is service and target.kind is service
+    exclude * -> * where target.kind is not database
+    exclude * -> * where target.tag is #obs
+  }
+
+  view eventFlow {
+    title "Domain events"
+    description """
+      The outbox of the writing service publishes on the exchange pharmacy.events, the consumers
+      bind their own durable queue, and every consumer stays idempotent.
+    """
+    include pharmacyCentral.data.rabbitmq
+    include pharmacyCentral.services.inventoryService
+    include pharmacyCentral.services.catalogService
+    include pharmacyCentral.services.salesService
+    include pharmacyCentral.services.paymentService
+    include pharmacyCentral.services.operationsService
+    exclude * -> * where source.kind is service and target.kind is service
+  }
+
+  view serviceGraph {
+    title "Service dependency graph"
+    description """
+      Every service of the platform on one canvas, with the data it owns, the events it publishes and
+      consumes, and the third parties it calls. This is the view to open in the Graph mode of the
+      app, where the hierarchy of the containers is dropped and only the relations are drawn.
+    """
+    include pharmacyCentral.services.*
+    include pharmacyCentral.web.*
+    include pharmacyCentral.security.*
+    include pharmacyCentral.data.postgres
+    include pharmacyCentral.data.postgres.*
+    include pharmacyCentral.data.rabbitmq
+    include pharmacyCentral.data.redis
+    include pharmacyCentral.data.typesense
+    include pharmacyCentral.data.seaweedfs
+    include pharmacyCentral.data.mailpit
+    include pharmacyCentral.data.telemetry
+    include customer, pharmacist, warehouseStaff, branchManager, platformAdmin
+    include googleOidc, geminiApi, openaiCompatibleApi, typesafeApi, vietmapApi, openRouteService, resendMail, sepayGateway
+    exclude * -> * where target.tag is #obs
+  }
+
+  view serviceDependencies {
+    title "Service dependencies"
+    description """
+      The seven services, the event bus and the third parties, without the databases and without the
+      people. This is the view that reads best in the Graph mode of the app, where the hierarchy is
+      dropped and only the relations are drawn.
+    """
+    include pharmacyCentral.services.*
+    include pharmacyCentral.data.rabbitmq
+    include googleOidc, geminiApi, openaiCompatibleApi, typesafeApi, vietmapApi, openRouteService, resendMail, sepayGateway
+    exclude * -> * where target.tag is #obs
+  }
+
+  view aiFeatures {
+    title "AI features"
+    description """
+      Four features, three owners. Each service keeps the provider, the model, the base URL and
+      the sealed key of its own feature, and a saved setting always wins over the environment group.
+      chatbot-service owns two of them: the chat model, which runs on Gemini or on an OpenAI-compatible
+      API, and the question screening, which runs on TypeSafe Jev.
+    """
+    include pharmacyCentral.services.catalogService
+    include pharmacyCentral.services.catalogService.aiCredentials
+    include pharmacyCentral.services.salesService
+    include pharmacyCentral.services.salesService.aiCredentials
+    include pharmacyCentral.services.chatbotService
+    include pharmacyCentral.services.chatbotService.aiCredentials
+    include geminiApi
+    include typesafeApi
+    include openaiCompatibleApi
+    include pharmacyCentral.security.sessionAuthorizer
+  }
+
+  view securityModel {
+    title "Trust boundary and access control"
+    description """
+      The session cookie is the only credential of the browser. The edge authorizer resolves it
+      against identity-service and hands the services a short lived signed identity context, and
+      every mutating request needs the CSRF token.
+    """
+    include customer
+    include pharmacist
+    include warehouseStaff
+    include branchManager
+    include platformAdmin
+    include pharmacyCentral.web.*
+    include pharmacyCentral.security.*
+    include pharmacyCentral.services.identityService
+    include pharmacyCentral.services.identityService.*
+    include pharmacyCentral.services.salesService
+    include pharmacyCentral.services.inventoryService
+    include googleOidc
+    include resendMail
+    include pharmacyCentral.data.mailpit
+  }
+}

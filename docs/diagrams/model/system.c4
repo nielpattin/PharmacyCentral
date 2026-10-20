@@ -1,0 +1,89 @@
+model {
+  pharmacyCentral = system "Pharmacy Central" {
+    summary "Express 5 microservices monorepo for the customer and staff pharmacy workflows."
+
+    web = container "Web tier" {
+      summary "Two independent Vite single page applications, built on the shared @pharmacy/ui package."
+
+      customerWeb = webapp "customer-web" {
+        technology "React + Vite"
+        summary "Storefront: search, cart, checkout, prescription photo, invoice and shopping assistant."
+        metadata { package "@pharmacy/customer-web" }
+      }
+
+      staffWeb = webapp "staff-web" {
+        technology "React + Vite"
+        summary "Internal portal: dashboards, finance, audit, reports, master data, stock, procurement and imports."
+        metadata { package "@pharmacy/staff-web" }
+      }
+    }
+
+    security = container "Edge and access control" {
+      summary "The components in front of the services that decide who the caller is."
+
+      sessionAuthorizer = function "Session and CSRF authorizer" {
+        technology "AWS Lambda (Node.js 22)"
+        summary "Lambda authorizer: session, role, site scope, CSRF, and the signed identity context."
+      }
+    }
+
+    services = container "Application services" {
+      summary "Seven business services. They never import each other, they talk over HTTP and over events."
+    }
+
+    data = container "Data tier" {
+      summary "The infrastructure owned by the platform, not by a single service."
+
+      postgres = database "PostgreSQL 18 + PostGIS" {
+        summary "One database per service. Each service owns its schema, its migrations and its write model."
+
+        identityDb = database "identity_service" {
+          summary "Accounts, sessions, verification tokens, employee roles and site access."
+        }
+        catalogDb = database "catalog_service" {
+          summary "Sites, storage locations, products, units, suppliers, prices, synonyms, AI credentials."
+        }
+        inventoryDb = database "inventory_service" {
+          summary "Batches, balances, movements, reservations, transfers, stocktakes, purchase orders, receipts."
+        }
+        salesDb = database "sales_service" {
+          summary "Carts, orders, delivery snapshots, prescriptions, consultations, counter transactions."
+        }
+        paymentDb = database "payment_service" {
+          summary "Invoices, attempts, transactions, refunds, QR instructions, reconciliation."
+        }
+        operationsDb = database "operations_query_service" {
+          summary "Dashboard counters, finance entries, audit events, report rows."
+        }
+        chatbotDb = database "chatbot_service" {
+          summary "Chat sessions, chat messages, AI credentials."
+        }
+      }
+
+      rabbitmq = broker "RabbitMQ 4" {
+        summary "The domain event bus. The topic exchange pharmacy.events carries the versioned events."
+      }
+
+      redis = cache "Redis 8" {
+        summary "Non authoritative cache: the delivery route cache and the prescription intake rate limiter."
+      }
+
+      typesense = searchIndex "Typesense 30" {
+        summary "Derived product search index, rebuilt from PostgreSQL by the catalogue."
+      }
+
+      seaweedfs = objectStorage "SeaweedFS (S3)" {
+        summary "Object storage of the product images, S3 compatible."
+      }
+
+      mailpit = mail "Mailpit" {
+        summary "Local SMTP sink of the verification and password reset emails."
+      }
+
+      telemetry = observability "OpenTelemetry Collector" {
+        #obs
+        summary "Receives the OTLP traces and metrics of every service."
+      }
+    }
+  }
+}

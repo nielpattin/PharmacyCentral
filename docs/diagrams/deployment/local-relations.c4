@@ -1,0 +1,58 @@
+deployment {
+  local.edge.customerWebInstance -> local.edge.gateway "HTTP /api, proxied to the gateway" {
+    technology "HTTP"
+  }
+  local.edge.staffWebInstance -> local.edge.gateway "HTTP /api, proxied to the gateway" {
+    technology "HTTP"
+  }
+
+  local.edge.gateway -> local.apps.identityTask "route /api/auth, /api/admin, /api/customers" {
+    technology "HTTP"
+  }
+  local.edge.gateway -> local.apps.catalogTask "route /api/sites, /api/products, /api/pricing, /api/stores, /api/availability" {
+    technology "HTTP"
+  }
+  local.edge.gateway -> local.apps.inventoryTask "route /api/procurement, /api/inventory" {
+    technology "HTTP"
+  }
+  local.edge.gateway -> local.apps.salesTask "route /api/carts, /api/orders, /api/delivery, /api/prescriptions" {
+    technology "HTTP"
+  }
+  local.edge.gateway -> local.apps.paymentTask "route /api/payments" {
+    technology "HTTP"
+  }
+  local.edge.gateway -> local.apps.operationsTask "route /api/dashboard, /api/finance, /api/reports" {
+    technology "HTTP"
+  }
+  local.edge.gateway -> local.apps.chatbotTask "route /api/chatbot" {
+    technology "HTTP"
+  }
+
+  local.apps.identityTask -> local.external.googleNode "Google sign-in" {
+    technology "HTTPS"
+  }
+  local.apps.catalogTask -> local.external.geminiNode "Product embeddings" {
+    technology "HTTPS"
+  }
+  local.apps.salesTask -> local.external.geminiNode "Prescription vision call" {
+    technology "HTTPS"
+  }
+  local.apps.chatbotTask -> local.external.geminiNode "Chat model with tool calling" {
+    technology "HTTPS"
+  }
+  local.apps.chatbotTask -> local.external.openaiCompatibleNode "Chat model with tool calling, optional provider" {
+    technology "HTTPS"
+  }
+  local.apps.chatbotTask -> local.external.typesafeNode "Jev gate" {
+    technology "HTTPS"
+  }
+  local.apps.salesTask -> local.external.vietmapNode "Geocoding" {
+    technology "HTTPS"
+  }
+  local.apps.salesTask -> local.external.openRouteNode "Driving route" {
+    technology "HTTPS"
+  }
+  local.external.sepayNode -> local.apps.paymentTask "Payment webhook, raw bytes and HMAC" {
+    technology "HTTPS"
+  }
+}

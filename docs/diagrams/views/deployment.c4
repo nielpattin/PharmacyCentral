@@ -1,0 +1,21 @@
+views {
+  deployment view localCompose {
+    title "Local topology, Docker Compose"
+    description """
+      The same images and the same path routing map as production, behind the Nginx gateway of the
+      Compose stack. The telemetry edges are left out of this diagram.
+    """
+    include local.**
+    exclude * -> * where target.tag is #obs
+    exclude * -> * where source.kind is webapp
+  }
+
+  deployment view awsEcs {
+    title "Production topology, AWS ECS Fargate"
+    description """
+      The public edge is the API Gateway with a Lambda authorizer, the private path goes through the
+      VPC Link to the internal ALB, and the services run as ECS Fargate tasks.
+    """
+    include aws.**
+  }
+}
