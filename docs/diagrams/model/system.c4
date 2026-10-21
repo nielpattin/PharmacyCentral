@@ -82,7 +82,7 @@ model {
 
       telemetry = observability "OpenTelemetry Collector" {
         #obs
-        summary "Receives the OTLP traces, metrics and logs of every service and fans them out to the backends."
+        summary "Receives the OTLP traces, metrics and logs of every service and fans them out to the backends. Also scrapes the queue depth of RabbitMQ from its management API."
       }
 
       tempo = observability "Tempo" {

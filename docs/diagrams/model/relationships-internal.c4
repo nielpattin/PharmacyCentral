@@ -135,6 +135,9 @@ model {
   pharmacyCentral.data.telemetry -> pharmacyCentral.data.loki "OTLP logs" {
     technology "OTLP HTTP"
   }
+  pharmacyCentral.data.telemetry -> pharmacyCentral.data.rabbitmq "Scrapes queue depth from the management API" {
+    technology "HTTP"
+  }
 
   pharmacyCentral.data.grafana -> pharmacyCentral.data.tempo "Query traces" {
     technology "HTTP"

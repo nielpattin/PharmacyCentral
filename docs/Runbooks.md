@@ -389,6 +389,25 @@ The local stack collects traces, metrics and logs. `pnpm run infra:up` starts th
 - Tempo and Loki keep data for 72 hours (`block_retention` and `retention_period`).
 - Services push metrics once a minute, so the Prometheus datasource sets `timeInterval: 60s` and a panel needs a few minutes of traffic before `rate()` draws anything. The collector derives `traces_spanmetrics_*` and `traces_service_graph_*` from the traces, which feed the Tempo service map. HTTP calls between services (`fetch`) are traced by the undici instrumentation, so the map shows `sales-service -> inventory-service` and the like. Postgres and RabbitMQ calls appear as `unknown` nodes.
 
+Business metrics and alerts:
+
+- The dashboard `Pharmacy Central - Business Health` (uid `pc-business-health`) answers whether the business flows are moving. Its rows show the outbox (unpublished rows and publish lag), the queues (`.dead` depth and consumer retries), the SePay webhook outcomes, the chatbot latency and errors per step, and the delivery calculation latency.
+- Business metrics reach Prometheus through the collector. Outbox metrics carry `service_name` (`inventory-service`, `sales-service`, `payment-service`):
+  - `pharmacy_outbox_unpublished`, `pharmacy_outbox_oldest_age_seconds`, `pharmacy_outbox_published_total`, `pharmacy_outbox_publish_lag_seconds`.
+  - Consumers: `pharmacy_consumer_messages_total{queue,outcome}` and `pharmacy_consumer_duration_seconds`. `outcome` is `processed`, `duplicate`, `retried` or `dead_lettered`.
+  - Queue depth: `rabbitmq_message_current{rabbitmq_queue_name,state}` for the `.v2` queues and their `.dead` parking queues.
+  - SePay: `pharmacy_payment_webhook_total{outcome}`. `outcome` is `accepted`, `duplicate`, `invalid_signature`, `invalid_payload`, `unmatched` or `error`.
+  - Chatbot: `pharmacy_chatbot_step_duration_seconds{step,outcome}`. `step` is `intent_gate`, `model` or `tool`, `outcome` is `ok` or `error`.
+  - Delivery: `pharmacy_delivery_calculation_duration_seconds{outcome}`, with `outcome` `ok`, `out_of_range` or `provider_error`, and `pharmacy_delivery_cache_total{result}`, with `result` `hit` or `miss`.
+- The collector scrapes queue depth from the RabbitMQ management API. It needs `RABBITMQ_USER` and `RABBITMQ_PASSWORD`, which are passed to the collector container.
+- Five alert rules live in the folder `Pharmacy Central`, group `pharmacy-central`, in `deploy/local/grafana/provisioning/alerting/alerts.yaml`. They evaluate over `[5m]` windows:
+  - `Outbox stuck`: unpublished rows stay above zero while the oldest row ages. Check that RabbitMQ is up with `docker compose logs rabbitmq`, then the relay logs of the service. The rows stay safe in the table and drain when the broker is back.
+  - `Dead-letter queue not empty`: a `<queue>.dead` queue holds a message. Open RabbitMQ management on `http://localhost:${RABBITMQ_MANAGEMENT_PORT}`, inspect the message in `<queue>.dead`, and fix the cause. Then shovel the message back to `pharmacy.events` or purge it.
+  - `Server error rate high`: the 5xx rate is high. Search Tempo with `{ status = error }` and open the Service Overview dashboard.
+  - `Consumer failures`: consumers are failing. The service logs show the attempt count for each message.
+  - `SePay webhook errors`: webhooks fail. Check the payment-service logs and the SePay delivery log.
+- Locally the alerts have no notification channel. View their state in Grafana under Alerting > Alert rules. Production notification wiring is a TODO for deploy.
+
 Daily workflow:
 
 - To find a trace, open Explore in Grafana, choose the `Tempo` datasource, and search by `service.name` (for example `sales-service`).
