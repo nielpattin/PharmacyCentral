@@ -18,7 +18,7 @@ model {
       }
 
       outbox = component "Outbox publisher" {
-        summary "Publishes the payment events from the outbox rows of the payment database."
+        summary "Publishes the payment events from the outbox rows of the payment database, under the trace context stored on each row."
       }
     }
   }

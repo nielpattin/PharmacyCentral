@@ -22,7 +22,7 @@ model {
       }
 
       outbox = component "Outbox publisher" {
-        summary "Publishes the sales events from the outbox rows of the sales database."
+        summary "Publishes the sales events from the outbox rows of the sales database, under the trace context stored on each row."
       }
 
       aiCredentials = component "AI credentials" {

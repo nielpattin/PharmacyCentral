@@ -12,7 +12,7 @@ views {
     title "Containers"
     description """
       The four tiers of the system: the web tier, the edge, the application services and the data
-      tier. The telemetry edges are left out here, they have a diagram of their own.
+      tier. The telemetry edges are left out here, the observability view shows them.
     """
     include *
     include pharmacyCentral.web.*

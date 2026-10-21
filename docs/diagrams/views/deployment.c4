@@ -3,7 +3,7 @@ views {
     title "Local topology, Docker Compose"
     description """
       The same images and the same path routing map as production, behind the Nginx gateway of the
-      Compose stack. The telemetry edges are left out of this diagram.
+      Compose stack. The telemetry edges are left out of this diagram, the observability view shows them.
     """
     include local.**
     exclude * -> * where target.tag is #obs

@@ -52,6 +52,8 @@ Run a subset by project name (the real names live in `apps/*/package.json`). `ga
 pnpm nx run-many -t dev -p @pharmacy/sales-service @pharmacy/customer-web
 ```
 
+The web ports are `CUSTOMER_WEB_PORT` (5301) and `STAFF_WEB_PORT` (5302) in the root `.env`. Vite sets `strictPort`, so a busy port makes the app fail instead of moving to another port.
+
 Ports come from `<SVC>_PORT` in the root `.env`. Nx loads `apps/<svc>-service/.env.dev` for the `dev` target before the root `.env`, so it wins over the root `.env`'s shared `PORT=3000`; each service binds its own port and gets its own `DATABASE_URL`. Run apps through Nx: `pnpm --dir apps/<app> dev` bypasses Nx and skips `.env.dev`, so every service would collide on `PORT=3000`.
 
 Services reach infra through the published ports (`localhost:5432`, `localhost:5672`, ...), never through a gateway. The gateway only forwards browser `/api/...` calls to the services. `gateway-dev` is the one container that has to call into the host, and host firewalls such as ufw drop container-to-host traffic on the Docker bridge, so it uses host networking and forwards to `127.0.0.1:${<SVC>_PORT}` instead.
@@ -218,7 +220,7 @@ Imports are idempotent on natural keys (`code`, `sku`, `batchNumber`). An openin
 pnpm run infra:up
 ```
 
-Then open `http://127.0.0.1:5174/imports` from the staff web app.
+Then open `http://127.0.0.1:5302/imports` from the staff web app.
 
 #### Local sample data (development only)
 
@@ -241,7 +243,7 @@ This is a development tool, kept apart from production on purpose.
 - It refuses to run with `NODE_ENV=production` and refuses any `API_BASE_URL` that is not `localhost`, `127.0.0.1`, or `[::1]`.
 - The sample files are fabricated coursework data. Production data is imported by an operator on the staff-web Data import screen with a real account, from the operator's own files.
 
-Without the script, run `pnpm --dir apps/identity-service seed`, then upload the same files by hand at `http://127.0.0.1:5174/imports`, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv`, `products.csv`, and `opening-balances.csv`. Finally, run `pnpm --dir apps/identity-service seed` again.
+Without the script, run `pnpm --dir apps/identity-service seed`, then upload the same files by hand at `http://127.0.0.1:5302/imports`, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv`, `products.csv`, and `opening-balances.csv`. Finally, run `pnpm --dir apps/identity-service seed` again.
 
 ### Product images
 
@@ -252,7 +254,7 @@ The committed images are one file per product in `data/product-images/images/`, 
 Prescription intake needs the catalog migrations `0005_text_search_extensions` (`pg_trgm` and `unaccent`) and `0006_folded_trigram_indexes` (the `catalog_fold` function and its trigram indexes), so run `pnpm run db:migrate` after pulling. Consultation requests also need the `sales-service` migration `0005_salty_trish_tilby` (the `prescription_consultations` table), which the same command applies. Import `products.csv` first, because suggestions come from the catalog.
 
 1. Sign in to staff-web as `admin@pharmacycentral.vn`, open **AI integrations**, and save the provider, model, base URL and API key under **Prescription photo reading**. Or set all four `AI_PRESCRIPTION_READER_*` variables in `.env` (see `.env.example`), which are all or none. Until settings are saved, or the four variables are set, the photo path answers `503` and only QR intake works.
-2. Sign in as the customer account and open `http://localhost:5173/gui-don-thuoc`.
+2. Sign in as the customer account and open `http://localhost:5301/gui-don-thuoc`.
 3. Upload a page from `data/prescription-samples/`. `<slug>.png` carries a QR (read in the browser, no provider call); `<slug>-no-qr.png` is the same page without it and exercises Gemini. `<slug>.json` is the ground truth to compare against.
 4. The sample has one prescription, `tang-huyet-ap-dai-thao-duong`, with six lines. Five match catalog products: Amlodipin 5mg, Savi Losartan 50mg, Diamicron MR 30mg, Atorvastatin 20mg and Plavix 75mg. These are prescription-only with no price, so the page shows "Liên hệ báo giá" and they cannot be added to the cart.
 5. Aspirin 81mg has no catalog match, so the page offers "Nhờ dược sĩ tìm giúp" for the whole prescription; the request is filed through `POST /prescriptions/consultations` with that line flagged.
@@ -385,11 +387,13 @@ The local stack collects traces, metrics and logs. `pnpm run infra:up` starts th
 - The provisioned configuration lives under `deploy/local/`: `otel/collector.yaml`, `tempo/tempo.yaml`, `prometheus/prometheus.yml`, `loki/loki.yaml` and `grafana/provisioning/`.
 - `tempo` and `loki` have no healthcheck because their images are distroless (no shell or `wget`). Check them with `docker compose logs tempo` and `docker compose logs loki`.
 - Tempo and Loki keep data for 72 hours (`block_retention` and `retention_period`).
+- Services push metrics once a minute, so the Prometheus datasource sets `timeInterval: 60s` and a panel needs a few minutes of traffic before `rate()` draws anything. The collector derives `traces_spanmetrics_*` and `traces_service_graph_*` from the traces, which feed the Tempo service map. HTTP calls between services (`fetch`) are traced by the undici instrumentation, so the map shows `sales-service -> inventory-service` and the like. Postgres and RabbitMQ calls appear as `unknown` nodes.
 
 Daily workflow:
 
 - To find a trace, open Explore in Grafana, choose the `Tempo` datasource, and search by `service.name` (for example `sales-service`).
 - To go from a log line to its trace, open Explore with the `Loki` datasource and select the `TraceID` link on a line that carries a `trace_id`. Tempo opens on that trace.
+- To follow an event across services, search Tempo with `{span.messaging.system="rabbitmq"}`. The outbox row stores the `traceparent` of the request that wrote it (`outbox_messages.traceparent`, in inventory, sales and payment), and the relay publishes under it. One trace therefore runs from the request, through `publish pharmacy.events`, to every consumer's `process` span.
 
 ## Online order stock
 

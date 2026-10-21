@@ -9,7 +9,7 @@ repository (the local Docker Compose stack and the AWS ECS Fargate stack).
 The project is self contained, it needs no dependency of the monorepo.
 
 ```bash
-# live preview on http://localhost:3000
+# live preview on http://localhost:5303
 pnpm diagrams:serve
 
 # static site
@@ -24,6 +24,8 @@ pnpm diagrams:validate
 # format the sources
 pnpm dlx likec4@1.60.0 format docs/diagrams
 ```
+
+The live preview port comes from `DIAGRAMS_PORT` in the root `.env`; `pnpm diagrams:serve` stops with an error if it is missing.
 
 The `diagrams:*` scripts run `tools/likec4.mjs`, which wraps the CLI. The wrapper exists because of
 two things in 1.60.0:
@@ -60,6 +62,7 @@ two things in 1.60.0:
 | `views/domain.c4` | One diagram per service, with its modules and its dependencies. |
 | `views/flows.c4` | The sequence diagrams: checkout, prescription intake, chatbot tool calling, import, read model. |
 | `views/deployment.c4` | The two deployment diagrams. |
+| `views/observability.c4` | The telemetry: the seven services, the collector, Tempo, Prometheus, Loki and Grafana. |
 
 ## The views
 
@@ -78,9 +81,11 @@ two things in 1.60.0:
 | `staffDataImport` | The import of the master data and of the opening balances. |
 | `operationsReadModel` | How the staff dashboards get their figures. |
 | `outboxDelivery` | How a stock change becomes an event: the outbox row, the relay, the durable queue. |
+| `traceThroughOutbox` | One trace from the request, through the outbox and the broker, to the consumers and Tempo. |
 | `asyncReliability` | What the relay and the consumer do when the broker is down, a payload is bad, or a handler keeps failing. |
 | `localCompose` | The local stack: the gateway, the seven services, the infrastructure. |
 | `awsEcs` | The production stack: the API Gateway, the authorizer, the ALB, the Fargate tasks. |
+| `observability` | The telemetry: the OTLP edges of the services, the collector and its backends, Grafana. |
 
 ## Notes on the model
 
@@ -96,8 +101,9 @@ two things in 1.60.0:
   `payment-service` write the event row in the same transaction as the change, and an outbox
   publisher relays the unpublished rows every second over a confirm channel, and marks a row
   published only after the broker confirmed the message, so delivery is at least once. An advisory
-  lock lets one relay per database publish at a time, which keeps the order. A consumer reads a
-  durable quorum queue one message at a time; a message that keeps failing is retried five times and
+  lock lets one relay per database publish at a time, which keeps the order. Each row also stores
+  the `traceparent` of the request that wrote it, so the trace continues across the broker. A consumer
+  reads a durable quorum queue one message at a time; a message that keeps failing is retried five times and
   then parked on `<queue>.dead` through the exchange `pharmacy.events.dead`, and a payload that can
   never be applied is parked at once.
 - **The browser is never authoritative.** Prices, stock quantities, delivery fees, distances and

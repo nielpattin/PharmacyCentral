@@ -34,7 +34,7 @@ model {
       }
 
       outbox = component "Outbox publisher" {
-        summary "Publishes the availability events from the outbox rows of the inventory database."
+        summary "Publishes the availability events from the outbox rows of the inventory database, under the trace context stored on each row."
       }
     }
   }

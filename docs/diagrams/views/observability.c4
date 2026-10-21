@@ -1,0 +1,16 @@
+views {
+  view observability {
+    title "Telemetry"
+    description """
+      The seven services export their traces, metrics and logs over OTLP to the OpenTelemetry Collector,
+      which fans them out to Tempo, Prometheus and Loki. Grafana reads the three backends.
+    """
+    include pharmacyCentral.services.*
+    include pharmacyCentral.data.telemetry
+    include pharmacyCentral.data.tempo
+    include pharmacyCentral.data.prometheus
+    include pharmacyCentral.data.loki
+    include pharmacyCentral.data.grafana
+    exclude * -> * where target.kind is service
+  }
+}
