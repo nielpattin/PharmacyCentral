@@ -1,6 +1,8 @@
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
+import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
 import { ExpressInstrumentation } from "@opentelemetry/instrumentation-express";
@@ -17,6 +19,8 @@ const sdk = new NodeSDK({
   serviceName: "operations-query-service",
   traceExporter: new OTLPTraceExporter(),
   metricReaders: [new PeriodicExportingMetricReader({ exporter: new OTLPMetricExporter() })],
+  logRecordProcessors: [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() })],
+  // Pino records are exported only when pino is loaded through require() (see src/logger.ts), not an ESM import.
   instrumentations: [
     new HttpInstrumentation(),
     new ExpressInstrumentation(),

@@ -113,6 +113,9 @@ catalogs:
     '@electric-sql/pglite':
       specifier: 0.5.8
       version: 0.5.8
+    '@opentelemetry/exporter-logs-otlp-http':
+      specifier: 0.223.0
+      version: 0.223.0
     '@opentelemetry/exporter-metrics-otlp-http':
       specifier: 0.223.0
       version: 0.223.0
@@ -137,6 +140,9 @@ catalogs:
     '@opentelemetry/instrumentation-pino':
       specifier: 0.69.0
       version: 0.69.0
+    '@opentelemetry/sdk-logs':
+      specifier: 0.223.0
+      version: 0.223.0
     '@opentelemetry/sdk-metrics':
       specifier: 2.12.0
       version: 2.12.0
@@ -295,6 +301,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 'catalog:'
         version: 3.1146.0
+      '@opentelemetry/exporter-logs-otlp-http':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/exporter-metrics-otlp-http':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)
@@ -316,6 +325,9 @@ importers:
       '@opentelemetry/instrumentation-pino':
         specifier: 'catalog:'
         version: 0.69.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@opentelemetry/sdk-logs':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics':
         specifier: 'catalog:'
         version: 2.12.0(@opentelemetry/api@1.9.1)
@@ -362,6 +374,9 @@ importers:
 
   apps/chatbot-service:
     dependencies:
+      '@opentelemetry/exporter-logs-otlp-http':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/exporter-metrics-otlp-http':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)
@@ -380,6 +395,9 @@ importers:
       '@opentelemetry/instrumentation-pino':
         specifier: 'catalog:'
         version: 0.69.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@opentelemetry/sdk-logs':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics':
         specifier: 'catalog:'
         version: 2.12.0(@opentelemetry/api@1.9.1)
@@ -481,6 +499,9 @@ importers:
 
   apps/identity-service:
     dependencies:
+      '@opentelemetry/exporter-logs-otlp-http':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/exporter-metrics-otlp-http':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)
@@ -499,6 +520,9 @@ importers:
       '@opentelemetry/instrumentation-pino':
         specifier: 'catalog:'
         version: 0.69.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@opentelemetry/sdk-logs':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics':
         specifier: 'catalog:'
         version: 2.12.0(@opentelemetry/api@1.9.1)
@@ -554,6 +578,9 @@ importers:
 
   apps/inventory-service:
     dependencies:
+      '@opentelemetry/exporter-logs-otlp-http':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/exporter-metrics-otlp-http':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)
@@ -575,6 +602,9 @@ importers:
       '@opentelemetry/instrumentation-pino':
         specifier: 'catalog:'
         version: 0.69.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@opentelemetry/sdk-logs':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics':
         specifier: 'catalog:'
         version: 2.12.0(@opentelemetry/api@1.9.1)
@@ -621,6 +651,9 @@ importers:
 
   apps/operations-query-service:
     dependencies:
+      '@opentelemetry/exporter-logs-otlp-http':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/exporter-metrics-otlp-http':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)
@@ -642,6 +675,9 @@ importers:
       '@opentelemetry/instrumentation-pino':
         specifier: 'catalog:'
         version: 0.69.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@opentelemetry/sdk-logs':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics':
         specifier: 'catalog:'
         version: 2.12.0(@opentelemetry/api@1.9.1)
@@ -688,6 +724,9 @@ importers:
 
   apps/payment-service:
     dependencies:
+      '@opentelemetry/exporter-logs-otlp-http':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/exporter-metrics-otlp-http':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)
@@ -709,6 +748,9 @@ importers:
       '@opentelemetry/instrumentation-pino':
         specifier: 'catalog:'
         version: 0.69.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@opentelemetry/sdk-logs':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics':
         specifier: 'catalog:'
         version: 2.12.0(@opentelemetry/api@1.9.1)
@@ -755,6 +797,9 @@ importers:
 
   apps/sales-service:
     dependencies:
+      '@opentelemetry/exporter-logs-otlp-http':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/exporter-metrics-otlp-http':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)
@@ -779,6 +824,9 @@ importers:
       '@opentelemetry/instrumentation-pino':
         specifier: 'catalog:'
         version: 0.69.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@opentelemetry/sdk-logs':
+        specifier: 'catalog:'
+        version: 0.223.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics':
         specifier: 'catalog:'
         version: 2.12.0(@opentelemetry/api@1.9.1)
