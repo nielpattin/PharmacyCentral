@@ -3,6 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { Channel, ChannelModel, ConsumeMessage } from "amqplib";
 
 import type { Logger } from "../logger.ts";
+import type { OrderStock } from "./orders/application/order-stock.ts";
 import type { SalesRepository } from "./sales-repository.ts";
 
 const EXCHANGE = "pharmacy.events";
@@ -29,6 +30,7 @@ export class SalesPaymentEventConsumer {
 
   public constructor(
     private readonly repository: SalesRepository,
+    private readonly orderStock: OrderStock,
     private readonly logger: Logger,
     private readonly url: string,
   ) {}
@@ -116,10 +118,13 @@ export class SalesPaymentEventConsumer {
         typeof orderId === "string" &&
         (event.eventType === "payment.invoice.paid.v1" || event.eventType === "payment.invoice.refunded.v1")
       ) {
-        await this.repository.applyPaymentStatus(
-          orderId,
-          event.eventType === "payment.invoice.refunded.v1" ? "Refunded" : "Paid",
-        );
+        const refunded = event.eventType === "payment.invoice.refunded.v1";
+        const order = await this.repository.applyPaymentStatus(orderId, refunded ? "Refunded" : "Paid");
+        // An order that was not handed over will not happen once its money went back: cancel it and free its stock.
+        if (order && refunded) await this.orderStock.cancelRefunded(order);
+        // The order was cancelled before the transfer arrived. Nothing here can send the money back.
+        if (order && !refunded && order.status === "Cancelled")
+          this.logger.error({ orderId }, "a cancelled order was paid and needs a refund");
       }
       channel.ack(message);
     } catch (error) {

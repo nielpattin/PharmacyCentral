@@ -107,6 +107,8 @@ export const deliverySnapshotSchema = z.object({
 export const createOrderRequestSchema = z.object({
   selectedStoreId: z.string().uuid(),
   fulfillmentType: z.enum(["pickup", "delivery"]),
+  /** How the shopper means to pay; it sets how long an unpaid order holds its stock. */
+  paymentMethod: z.enum(["sepay_qr", "cash_on_delivery"]).optional(),
   lines: z
     .array(
       z.object({

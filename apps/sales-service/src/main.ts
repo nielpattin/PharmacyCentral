@@ -17,6 +17,8 @@ import { OpenRouteServiceClient } from "./modules/delivery/infrastructure/open-r
 import { RedisDeliveryCache } from "./modules/delivery/infrastructure/redis-delivery-cache.ts";
 import { VietmapGeocoder } from "./modules/delivery/infrastructure/vietmap-geocoder.ts";
 import { createDeliveryRouter } from "./modules/delivery/presentation/delivery-routes.ts";
+import { OrderStock, OrderStockSweeper } from "./modules/orders/application/order-stock.ts";
+import { InventoryReservations } from "./modules/orders/infrastructure/inventory-reservations.ts";
 import { SalesOutboxPublisher } from "./modules/outbox-publisher.ts";
 import { SalesPaymentEventConsumer } from "./modules/payment-event-consumer.ts";
 import { createSalesRouter } from "./modules/sales-routes.ts";
@@ -61,9 +63,15 @@ const salesRepository = database ? new SalesRepository(database) : undefined;
 const rabbitmqUrl = requireEnv("RABBITMQ_URL");
 const outboxPublisher = database ? new SalesOutboxPublisher(database, logger, rabbitmqUrl) : undefined;
 outboxPublisher?.start();
-const paymentEventConsumer = salesRepository
-  ? new SalesPaymentEventConsumer(salesRepository, logger, rabbitmqUrl)
+const orderStock = salesRepository
+  ? new OrderStock(salesRepository, new InventoryReservations(inventoryServiceUrl), logger)
   : undefined;
+const orderStockSweeper = orderStock ? new OrderStockSweeper(orderStock, logger) : undefined;
+orderStockSweeper?.start();
+const paymentEventConsumer =
+  salesRepository && orderStock
+    ? new SalesPaymentEventConsumer(salesRepository, orderStock, logger, rabbitmqUrl)
+    : undefined;
 paymentEventConsumer?.start();
 const redisClient = await createRedisClient();
 const deliveryCache = redisClient ? new RedisDeliveryCache(redisClient) : new InMemoryDeliveryCache();
@@ -170,6 +178,7 @@ app.use(
   createSalesRouter(salesRepository, {
     catalogServiceUrl,
     inventoryServiceUrl,
+    orderStock,
     identityServiceUrl,
     deliveryCalculator,
     lookupStore,
@@ -190,6 +199,7 @@ const shutdown = (signal: string): void => {
   });
   redisClient?.disconnect();
   void outboxPublisher?.close();
+  orderStockSweeper?.close();
   void paymentEventConsumer?.close();
   void database?.pool.end();
 };

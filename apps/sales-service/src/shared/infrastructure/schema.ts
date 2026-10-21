@@ -68,6 +68,10 @@ export const orders = pgTable(
     deliveryFee: numeric("delivery_fee", { precision: 18, scale: 2 }).notNull().default("0"),
     currency: varchar("currency", { length: 3 }).notNull().default("VND"),
     paymentStatus: varchar("payment_status", { length: 20 }).notNull().default("Pending"),
+    /** How the shopper chose to pay; an order that names none is treated as paid by QR when it expires. */
+    paymentMethod: varchar("payment_method", { length: 30 }),
+    /** `held` while inventory-service may hold stock for the order, then `released` or `consumed`; `none` before holds existed. */
+    stockHold: varchar("stock_hold", { length: 20 }).notNull().default("none"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

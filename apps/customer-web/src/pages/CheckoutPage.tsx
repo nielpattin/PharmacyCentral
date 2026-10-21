@@ -63,6 +63,10 @@ const FEEDBACK_TIMEOUT_MS = 4000;
 const deliveryErrorMessage = (reason: unknown, fallback: string): string => {
   if (reason instanceof ApiError && reason.code === "delivery_out_of_range")
     return "Điểm giao nằm ngoài phạm vi giao hàng của cửa hàng này. Hãy chọn cửa hàng gần hơn hoặc nhận tại cửa hàng.";
+  if (reason instanceof ApiError && reason.code === "insufficient_stock")
+    return "Cửa hàng này không còn đủ hàng cho đơn của bạn. Hãy giảm số lượng hoặc chọn cửa hàng khác.";
+  if (reason instanceof ApiError && reason.code === "stock_unavailable")
+    return "Chưa kiểm tra được tồn kho. Vui lòng thử đặt lại sau ít phút.";
   return reason instanceof Error ? reason.message : fallback;
 };
 
@@ -386,6 +390,7 @@ export const CheckoutPage = (): React.JSX.Element => {
       const order = await createOrder({
         selectedStoreId: selectedStore.id,
         fulfillmentType,
+        paymentMethod,
         lines: cart.lines.map((line) => ({
           productId: line.productId,
           productUnitId: line.productUnitId,

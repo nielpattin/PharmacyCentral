@@ -380,6 +380,26 @@ Local development uses a single RabbitMQ node.
   otherwise it keeps collecting copies of every event that nobody reads.
 - Inspect the `pharmacy.events` exchange and consumer queues via RabbitMQ Management UI (`http://localhost:15672`, guest/guest).
 
+## Online order stock
+
+An online order holds stock in inventory-service from the moment it is placed.
+
+- `POST /api/orders` asks inventory to hold the lines against every storage location of the store's site, earliest
+  expiry first, all or nothing. The order id is the reservation id. A store that cannot cover the order answers `409
+  insufficient_stock`; inventory being down answers `503 stock_unavailable`. In both cases the order is cancelled
+  and nothing stays held.
+- `orders.stock_hold` says what inventory may still hold: `held`, then `released` (given back) or `consumed` (handed
+  over). `none` marks an order from before holds existed, and those are never swept or consumed.
+- The goods leave the shelf only when staff move the order to `Delivering` or `Completed`: sales asks inventory to
+  consume the reservation first, and the status does not change when inventory cannot be reached (`502`). Only staff
+  can run those moves. A shopper can only withdraw their own order while nothing was paid.
+- A sweep in sales-service runs every minute. It cancels an order that is still unpaid after 30 minutes (QR, or no
+  method named) or 24 hours (cash on delivery), then gives back the hold of every cancelled order that still says
+  `held`. A refund (`payment.invoice.refunded.v1`) cancels an order that was not handed over and frees its hold.
+- A payment that arrives for an order that was already cancelled cannot be reversed by the system: sales logs
+  `a cancelled order was paid and needs a refund`. Search the sales log for it and refund the invoice by hand.
+- Payment-service prices a shopper invoice from the order in sales-service. The request's unit prices are ignored.
+
 ## Cache policy
 
 Redis stores rate-limit counters and delivery route calculations.

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import * as schema from "../shared/infrastructure/schema.ts";
 import { InventoryRepository, StockDispenseError } from "./inventory-repository.ts";
+import { InsufficientStockError } from "./stock/application/fefo-allocate.ts";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle/migrations", import.meta.url));
 
@@ -489,5 +490,122 @@ describe("InventoryRepository sellable stock", () => {
     await expect(repository.refreshAvailabilityForExpiredStock("2001-01-01")).resolves.toBe(0);
 
     expect(await published()).toEqual([]);
+  });
+});
+
+/**
+ * An online order is held against the whole site, the stock a shopper sees as available there, and the hold must be
+ * all or nothing. The goods leave the shelf only when the order is handed over, once, and a hold that was given back
+ * must never take stock away later.
+ */
+describe("InventoryRepository online order holds", () => {
+  const client = new PGlite();
+  const db = drizzle({ client, schema });
+  const repository = new InventoryRepository({ db, pool: undefined } as unknown as InventoryDatabase);
+
+  const site = "00000000-0000-4000-8000-00000000000a";
+  const front = "00000000-0000-4000-8000-00000000001a";
+  const back = "00000000-0000-4000-8000-00000000001b";
+  const product = "00000000-0000-4000-8000-00000000002a";
+  const frontBatch = "00000000-0000-4000-8000-00000000004a";
+  const backBatch = "00000000-0000-4000-8000-00000000004b";
+  const order = "00000000-0000-4000-8000-00000000005a";
+
+  const balanceOf = async (productBatchId: string) => {
+    const [row] = await db
+      .select()
+      .from(schema.inventoryBalances)
+      .where(eq(schema.inventoryBalances.productBatchId, productBatchId));
+    return { onHand: Number(row?.quantityOnHand), reserved: Number(row?.quantityReserved) };
+  };
+  const hold = (reservationId: string, quantity: number) =>
+    repository.reserve({
+      reservationId,
+      ownerId: reservationId,
+      siteId: site,
+      lines: [{ productId: product, quantity }],
+    });
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder });
+  });
+
+  beforeEach(async () => {
+    await client.exec(`
+      TRUNCATE product_batches, inventory_balances, stock_reservations, stock_reservation_lines,
+        stock_ledger_entries, outbox_messages;
+    `);
+    // The front batch expires first, so FEFO takes it before the back one.
+    await db.insert(schema.productBatches).values([
+      { id: frontBatch, productId: product, batchNumber: "FRONT", expiryDate: "2098-01-31", qualityStatus: "Released" },
+      { id: backBatch, productId: product, batchNumber: "BACK", expiryDate: "2099-01-31", qualityStatus: "Released" },
+    ]);
+    await db.insert(schema.inventoryBalances).values([
+      { productBatchId: frontBatch, siteId: site, storageLocationId: front, quantityOnHand: "3" },
+      { productBatchId: backBatch, siteId: site, storageLocationId: back, quantityOnHand: "5" },
+    ]);
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it("holds the stock of every location of the site, earliest expiry first", async () => {
+    const allocations = await hold(order, 5);
+
+    expect(allocations.map(({ productBatchId, quantity }) => [productBatchId, quantity])).toEqual([
+      [frontBatch, 3],
+      [backBatch, 2],
+    ]);
+  });
+
+  it("holds nothing at all when the site cannot cover the order", async () => {
+    await expect(hold(order, 9)).rejects.toBeInstanceOf(InsufficientStockError);
+
+    await expect(balanceOf(frontBatch)).resolves.toEqual({ onHand: 3, reserved: 0 });
+    await expect(balanceOf(backBatch)).resolves.toEqual({ onHand: 5, reserved: 0 });
+    await expect(db.select().from(schema.stockReservations)).resolves.toHaveLength(0);
+  });
+
+  it("does not sell the same units to a second order", async () => {
+    await hold(order, 7);
+
+    await expect(hold("00000000-0000-4000-8000-00000000005b", 2)).rejects.toBeInstanceOf(InsufficientStockError);
+  });
+
+  it("takes the held goods off the shelf once, with a ledger entry that names the order", async () => {
+    await hold(order, 5);
+
+    await repository.consumeReservation(order, "Order", order);
+    await repository.consumeReservation(order, "Order", order);
+
+    await expect(balanceOf(frontBatch)).resolves.toEqual({ onHand: 0, reserved: 0 });
+    await expect(balanceOf(backBatch)).resolves.toEqual({ onHand: 3, reserved: 0 });
+    const ledger = await db.select().from(schema.stockLedgerEntries);
+    expect(
+      ledger
+        .map((entry) => [entry.referenceType, entry.referenceId, Number(entry.quantityDelta)] as const)
+        .toSorted((left, right) => left[2] - right[2]),
+    ).toEqual([
+      ["Order", order, -3],
+      ["Order", order, -2],
+    ]);
+    const [reservation] = await db.select().from(schema.stockReservations);
+    expect(reservation?.status).toBe("consumed");
+  });
+
+  it("takes nothing when an order whose hold was given back is handed over", async () => {
+    await hold(order, 5);
+    await repository.releaseReservation(order);
+
+    await repository.consumeReservation(order, "Order", order);
+
+    await expect(balanceOf(frontBatch)).resolves.toEqual({ onHand: 3, reserved: 0 });
+    await expect(balanceOf(backBatch)).resolves.toEqual({ onHand: 5, reserved: 0 });
+    await expect(db.select().from(schema.stockLedgerEntries)).resolves.toHaveLength(0);
+  });
+
+  it("answers an unknown reservation with nothing", async () => {
+    await expect(repository.consumeReservation(order, "Order", order)).resolves.toBeUndefined();
   });
 });

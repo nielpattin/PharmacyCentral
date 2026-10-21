@@ -3,27 +3,34 @@ views {
     variant sequence
     title "Checkout, from the cart to the paid invoice"
     description """
-      The price, the distance and the fee of the checkout are recalculated by sales-service, and the
-      stock is reserved with FEFO before the invoice exists.
+      The price, the distance and the fee of the order are recalculated by sales-service, and the stock of
+      the store is held for the order before it exists for the shopper: the hold is all or nothing, taken
+      from the earliest expiry first, and an order the store cannot cover is cancelled and answered 409.
+
+      The browser then asks payment-service for the invoice. A shopper never sets a price: payment-service
+      reads the order from sales-service and prices the invoice from the lines sales snapshot.
+
+      Paying confirms the order through payment.invoice.paid.v1. The goods leave the shelf only when staff
+      hand the order over (Delivering or Completed). A cancelled order, an order nobody paid for within 30
+      minutes (24 hours for cash on delivery), and a refunded order that was not handed over give the hold back.
     """
 
     customer -> pharmacyCentral.web.customerWeb "adds a product to the cart"
     pharmacyCentral.web.customerWeb -> pharmacyCentral.services.salesService "POST /api/carts, POST /api/orders"
     pharmacyCentral.services.salesService -> pharmacyCentral.services.catalogService "GET /api/products, GET /api/pricing/active"
     pharmacyCentral.services.catalogService -> pharmacyCentral.services.salesService "the product and the published price"
-    pharmacyCentral.services.salesService -> pharmacyCentral.services.inventoryService "POST /api/inventory/reservations, FEFO"
-    pharmacyCentral.services.inventoryService -> pharmacyCentral.services.salesService "the reservation"
-    pharmacyCentral.services.salesService -> pharmacyCentral.services.paymentService "POST /api/payments/invoices"
-    pharmacyCentral.services.paymentService -> pharmacyCentral.services.salesService "the order and the prescription behind the invoice"
-    pharmacyCentral.services.salesService -> pharmacyCentral.services.paymentService "the order"
-    pharmacyCentral.services.paymentService -> pharmacyCentral.services.catalogService "the published price of the invoiced lines"
-    pharmacyCentral.services.catalogService -> pharmacyCentral.services.paymentService "the price"
+    pharmacyCentral.services.salesService -> pharmacyCentral.services.inventoryService "POST /api/inventory/reservations, the order id is the reservation id"
+    pharmacyCentral.services.inventoryService -> pharmacyCentral.services.salesService "held, or 409 insufficient_stock"
+    pharmacyCentral.services.salesService -> pharmacyCentral.web.customerWeb "the Pending order, with the recalculated lines and fee"
+    pharmacyCentral.web.customerWeb -> pharmacyCentral.services.paymentService "POST /api/payments/invoices, the order id"
+    pharmacyCentral.services.paymentService -> pharmacyCentral.services.salesService "GET /api/orders, as the shopper"
+    pharmacyCentral.services.salesService -> pharmacyCentral.services.paymentService "the order and its snapshot prices"
     pharmacyCentral.services.paymentService -> pharmacyCentral.web.customerWeb "the SePay QR instruction"
     sepayGateway -> pharmacyCentral.services.paymentService "POST /api/payments/sepay/webhook, HMAC over the raw bytes"
     pharmacyCentral.services.paymentService -> pharmacyCentral.data.rabbitmq "publish payment.invoice.paid.v1"
     pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.salesService "payment.invoice.paid.v1"
     pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.operationsService "payment.invoice.paid.v1"
-    pharmacyCentral.services.salesService -> pharmacyCentral.web.customerWeb "the order is paid"
+    pharmacyCentral.services.salesService -> pharmacyCentral.web.customerWeb "the order is Confirmed"
   }
 
   dynamic view prescriptionIntake {

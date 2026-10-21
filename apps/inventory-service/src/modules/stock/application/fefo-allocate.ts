@@ -13,6 +13,13 @@ export type FefoAllocation = {
   quantity: number;
 };
 
+/** The sellable stock cannot cover the quantity asked for. */
+export class InsufficientStockError extends Error {
+  public constructor() {
+    super("Insufficient stock");
+  }
+}
+
 export const allocateFefo = (balances: FefoBalance[], quantityNeeded: number): FefoAllocation[] => {
   if (!(quantityNeeded > 0)) {
     throw new Error("Quantity needed must be positive");
@@ -28,7 +35,7 @@ export const allocateFefo = (balances: FefoBalance[], quantityNeeded: number): F
     );
   const available = ordered.reduce((total, balance) => total + balance.quantityOnHand - balance.quantityReserved, 0);
   if (available < quantityNeeded) {
-    throw new Error("Insufficient stock");
+    throw new InsufficientStockError();
   }
 
   let remaining = quantityNeeded;

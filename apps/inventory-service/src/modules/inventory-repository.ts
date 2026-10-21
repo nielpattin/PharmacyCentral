@@ -426,7 +426,8 @@ export class InventoryRepository {
     reservationId: string;
     ownerId: string;
     siteId: string;
-    storageLocationId: string;
+    /** One storage location, or every location of the site when left out. */
+    storageLocationId?: string | undefined;
     lines: Array<{ productId: string; quantity: number }>;
   }) {
     const result = await this.database.db.transaction(async (transaction) => {
@@ -453,7 +454,7 @@ export class InventoryRepository {
               eq(productBatches.productId, line.productId),
               sellableBatch(),
               eq(inventoryBalances.siteId, input.siteId),
-              eq(inventoryBalances.storageLocationId, input.storageLocationId),
+              input.storageLocationId ? eq(inventoryBalances.storageLocationId, input.storageLocationId) : undefined,
               gt(inventoryBalances.quantityOnHand, inventoryBalances.quantityReserved),
             ),
           )
@@ -554,6 +555,81 @@ export class InventoryRepository {
       return released;
     });
     return reservation;
+  }
+
+  /**
+   * Hands the goods of a reservation over: each held quantity leaves the batch it was held on, with a `Dispense`
+   * ledger entry that names the sale. A reservation that is not active is answered as it is, so a repeated call
+   * never takes the stock twice, and an unknown reservation answers `undefined`.
+   */
+  public async consumeReservation(id: string, referenceType: string, referenceId: string, actorId?: string) {
+    return this.database.db.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select()
+        .from(stockReservations)
+        .where(eq(stockReservations.id, id))
+        .for("update");
+      if (!current || current.status !== "active") return current;
+      const lines = await transaction
+        .select()
+        .from(stockReservationLines)
+        .where(and(eq(stockReservationLines.reservationId, id), gt(stockReservationLines.quantity, "0")))
+        .for("update");
+      const answered = new Set<string>();
+      for (const line of lines) {
+        const [balance] = await transaction
+          .select()
+          .from(inventoryBalances)
+          .where(
+            and(
+              eq(inventoryBalances.productBatchId, line.productBatchId),
+              eq(inventoryBalances.storageLocationId, line.storageLocationId),
+            ),
+          )
+          .for("update");
+        const held = Number(line.quantity);
+        if (!balance || Number(balance.quantityOnHand) < held)
+          throw new StockDispenseError("A batch no longer holds the quantity that was reserved on it");
+        const nextOnHand = Number(balance.quantityOnHand) - held;
+        await transaction
+          .update(inventoryBalances)
+          .set({
+            quantityOnHand: String(nextOnHand),
+            quantityReserved: sql`GREATEST(${inventoryBalances.quantityReserved} - ${String(held)}, 0)`,
+            version: sql`${inventoryBalances.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(eq(inventoryBalances.id, balance.id));
+        await transaction.insert(stockLedgerEntries).values({
+          productId: line.productId,
+          productBatchId: line.productBatchId,
+          siteId: balance.siteId,
+          storageLocationId: line.storageLocationId,
+          quantityDelta: String(-held),
+          quantityAfter: String(nextOnHand),
+          movementType: "Dispense",
+          referenceType,
+          referenceId,
+          reason: `${referenceType} ${referenceId}`,
+          createdBy: actorId ?? null,
+        });
+        answered.add(`${line.productId}:${balance.siteId}`);
+      }
+      await transaction
+        .update(stockReservationLines)
+        .set({ quantity: "0" })
+        .where(eq(stockReservationLines.reservationId, id));
+      const [consumed] = await transaction
+        .update(stockReservations)
+        .set({ status: "consumed", updatedAt: new Date() })
+        .where(eq(stockReservations.id, id))
+        .returning();
+      for (const pair of answered) {
+        const [productId, siteId] = pair.split(":") as [string, string];
+        await recordSiteAvailability(transaction, productId, siteId);
+      }
+      return consumed;
+    });
   }
 
   /**

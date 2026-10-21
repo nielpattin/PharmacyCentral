@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, ne, or, sql } from "drizzle-orm";
 
 import type { SalesDatabase } from "../shared/infrastructure/database.ts";
 import {
@@ -180,6 +180,7 @@ export class SalesRepository {
     subtotal: number;
     deliveryFee: number;
     currency: string;
+    paymentMethod?: string | undefined;
     lines: OrderLineInput[];
     delivery?: DeliverySnapshotInput;
   }) {
@@ -193,6 +194,10 @@ export class SalesRepository {
           subtotal: String(input.subtotal),
           deliveryFee: String(input.deliveryFee),
           currency: input.currency,
+          paymentMethod: input.paymentMethod ?? null,
+          // Inventory is asked to hold the stock right after this insert; `held` is what lets a sweep give a hold
+          // back even when the process dies between the two steps.
+          stockHold: "held",
         })
         .returning();
       if (!order) throw new Error("Order insert did not return a row");
@@ -271,6 +276,61 @@ export class SalesRepository {
     if (order)
       await this.appendEvent("sales.order.status-changed.v1", order.id, { orderId: order.id, status: order.status });
     return order;
+  }
+
+  /** Ends the stock hold of an order, once: `false` when the order no longer held stock. */
+  public async endStockHold(id: string, to: "released" | "consumed"): Promise<boolean> {
+    const moved = await this.database.db
+      .update(orders)
+      .set({ stockHold: to, updatedAt: new Date() })
+      .where(and(eq(orders.id, id), eq(orders.stockHold, "held")))
+      .returning({ id: orders.id });
+    return moved.length > 0;
+  }
+
+  /** Cancelled orders that still owe inventory a release, oldest first. */
+  public async listCancelledOrdersWithHold(limit: number) {
+    return this.database.db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(and(eq(orders.status, "Cancelled"), eq(orders.stockHold, "held")))
+      .orderBy(asc(orders.updatedAt))
+      .limit(limit);
+  }
+
+  /**
+   * Cancels the orders that held stock and were never paid. An order paid by QR waits `qrTtlMs`, one paid on
+   * delivery waits `cashTtlMs`, and an order that names no method is treated as a QR order. The update is
+   * conditional on the order still being unpaid, so a payment that lands during the sweep is never cancelled, and
+   * the status event commits with the status.
+   */
+  public async cancelExpiredUnpaidOrders(now: Date, qrTtlMs: number, cashTtlMs: number): Promise<string[]> {
+    const qrCutoff = new Date(now.getTime() - qrTtlMs);
+    const cashCutoff = new Date(now.getTime() - cashTtlMs);
+    return this.database.db.transaction(async (transaction) => {
+      const cancelled = await transaction
+        .update(orders)
+        .set({ status: "Cancelled", updatedAt: now })
+        .where(
+          and(
+            eq(orders.status, "Pending"),
+            eq(orders.paymentStatus, "Pending"),
+            eq(orders.stockHold, "held"),
+            or(
+              and(sql`${orders.paymentMethod} is distinct from 'cash_on_delivery'`, lt(orders.createdAt, qrCutoff)),
+              and(eq(orders.paymentMethod, "cash_on_delivery"), lt(orders.createdAt, cashCutoff)),
+            ),
+          ),
+        )
+        .returning({ id: orders.id });
+      for (const { id } of cancelled)
+        await transaction.insert(outboxMessages).values({
+          eventType: "sales.order.status-changed.v1",
+          aggregateId: id,
+          payload: JSON.stringify({ orderId: id, status: "Cancelled" }),
+        });
+      return cancelled.map(({ id }) => id);
+    });
   }
 
   /**

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 
 import {
+  consumeReservationCommandSchema,
   dispenseStockCommandSchema,
   reserveStockCommandSchema,
   stockMovementCommandSchema,
@@ -9,6 +10,7 @@ import {
 import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import { InventoryRepository, StockDispenseError } from "./inventory-repository.ts";
+import { InsufficientStockError } from "./stock/application/fefo-allocate.ts";
 
 const idParam = z.object({ id: z.string().uuid() });
 const batchSchema = z.object({
@@ -271,6 +273,10 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
         }),
       });
     } catch (error) {
+      if (error instanceof InsufficientStockError)
+        return response
+          .status(409)
+          .json({ title: "Stock could not be reserved", status: 409, code: "insufficient_stock" });
       return next(error);
     }
   });
@@ -295,6 +301,34 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
       if (!reservation) return response.status(404).json({ title: "Reservation not found", status: 404 });
       return response.json(reservation);
     } catch (error) {
+      return next(error);
+    }
+  });
+  router.post("/inventory/reservations/:id/consume", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    // The goods of an order leave only when sales-service hands the order over, never from a browser.
+    if (request.header("x-actor-type") !== "system")
+      return response.status(403).json({ title: "System actor required", status: 403, code: "forbidden" });
+    const id = idParam.safeParse(request.params);
+    const parsed = consumeReservationCommandSchema.safeParse(request.body);
+    if (!id.success || !parsed.success) return invalid(response);
+    try {
+      const reservation = await repository.consumeReservation(
+        id.data.id,
+        "Order",
+        parsed.data.orderId,
+        request.header("X-Actor-Id"),
+      );
+      if (!reservation) return response.status(404).json({ title: "Reservation not found", status: 404 });
+      return response.json(reservation);
+    } catch (error) {
+      if (error instanceof StockDispenseError)
+        return response.status(409).json({
+          title: "Stock could not be handed over",
+          status: 409,
+          code: "dispense_rejected",
+          detail: error.message,
+        });
       return next(error);
     }
   });

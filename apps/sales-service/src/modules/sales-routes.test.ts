@@ -4,6 +4,8 @@ import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import type { OrderStock } from "./orders/application/order-stock.ts";
+import { InsufficientStockError, InventoryRequestError } from "./orders/infrastructure/inventory-reservations.ts";
 import { SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
 import { createSalesRouter } from "./sales-routes.ts";
 
@@ -30,7 +32,10 @@ const ids = {
   location: "00000000-0000-4000-8000-000000000012",
 };
 
-const createTestServer = async (repository: SalesRepository): Promise<{ server: Server; url: string }> => {
+const createTestServer = async (
+  repository: SalesRepository,
+  orderStock: Partial<OrderStock> = {},
+): Promise<{ server: Server; url: string }> => {
   const app = express();
   app.use(express.json());
   app.use(
@@ -38,6 +43,7 @@ const createTestServer = async (repository: SalesRepository): Promise<{ server: 
       catalogServiceUrl: "http://catalog.test",
       inventoryServiceUrl: "http://inventory.test",
       identityServiceUrl: "http://identity.test",
+      orderStock: orderStock as OrderStock,
     }),
   );
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
@@ -661,5 +667,145 @@ describe("sales counter transaction API", () => {
     const response = await httpFetch(`${testServer.url}/counter-transactions`);
     expect(response.status).toBe(401);
     expect(listCounterTransactions).not.toHaveBeenCalled();
+  });
+});
+
+describe("sales order stock API", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) await closeServer(server);
+    server = undefined;
+    vi.unstubAllGlobals();
+  });
+
+  const catalogResponder = async (url: string): Promise<Response> => {
+    const body = String(url).includes("/pricing/active")
+      ? { productId: ids.productA, productUnitId: ids.unitA, unitPrice: "45000", currency: "VND" }
+      : { id: ids.productA, name: "Paracetamol" };
+    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const placeOrder = (url: string) =>
+    httpFetch(`${url}/orders`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      body: JSON.stringify({
+        selectedStoreId: ids.site,
+        fulfillmentType: "pickup",
+        paymentMethod: "sepay_qr",
+        lines: [{ productId: ids.productA, productUnitId: ids.unitA, quantity: 2 }],
+      }),
+    });
+  const order = { id: ids.prescription, customerId: ids.actor, selectedStoreId: ids.site, status: "Pending" };
+
+  it("holds the stock of the store for the lines it priced, and answers 201 with the order", async () => {
+    const createOrder = vi.fn().mockResolvedValue(order);
+    const hold = vi.fn().mockResolvedValue(undefined);
+    const repository = { createOrder, getOrder: vi.fn().mockResolvedValue(order) } as unknown as SalesRepository;
+    vi.stubGlobal("fetch", vi.fn(catalogResponder));
+    const testServer = await createTestServer(repository, { hold });
+    server = testServer.server;
+
+    const response = await placeOrder(testServer.url);
+
+    expect(response.status).toBe(201);
+    expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({ paymentMethod: "sepay_qr" }));
+    expect(hold).toHaveBeenCalledWith(order, [{ productId: ids.productA, quantity: 2 }]);
+  });
+
+  it.each([
+    ["the store cannot cover the order", new InsufficientStockError(), 409, "insufficient_stock"],
+    ["inventory cannot be reached", new InventoryRequestError("down"), 503, "stock_unavailable"],
+  ])("tells the shopper when %s", async (_label, failure, status, code) => {
+    const repository = {
+      createOrder: vi.fn().mockResolvedValue(order),
+      getOrder: vi.fn(),
+    } as unknown as SalesRepository;
+    vi.stubGlobal("fetch", vi.fn(catalogResponder));
+    const testServer = await createTestServer(repository, { hold: vi.fn().mockRejectedValue(failure) });
+    server = testServer.server;
+
+    const response = await placeOrder(testServer.url);
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({ code });
+  });
+
+  const transition = (url: string, body: unknown, headers: Record<string, string>) =>
+    httpFetch(`${url}/orders/${ids.prescription}/transition`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+  const staff = { "X-Actor-Id": "00000000-0000-4000-8000-0000000000aa", "X-Actor-Type": "employee" };
+  const shopper = { "X-Actor-Id": ids.actor, "X-Actor-Type": "customer" };
+
+  it("never lets a shopper confirm or hand over their own order", async () => {
+    const consume = vi.fn();
+    const transitionOrder = vi.fn();
+    const repository = {
+      getOrder: vi.fn().mockResolvedValue({ ...order, paymentStatus: "Pending" }),
+      transitionOrder,
+    } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository, { consume });
+    server = testServer.server;
+
+    for (const status of ["Confirmed", "Delivering", "Completed"]) {
+      const response = await transition(testServer.url, { status }, shopper);
+      expect(response.status).toBe(403);
+    }
+
+    expect(consume).not.toHaveBeenCalled();
+    expect(transitionOrder).not.toHaveBeenCalled();
+  });
+
+  it("lets a shopper withdraw an unpaid order and frees its stock, but not a paid one", async () => {
+    const releaseQuietly = vi.fn().mockResolvedValue(undefined);
+    const getOrder = vi.fn().mockResolvedValue({ ...order, paymentStatus: "Pending" });
+    const transitionOrder = vi.fn().mockResolvedValue({ ...order, status: "Cancelled" });
+    const repository = { getOrder, transitionOrder } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository, { releaseQuietly });
+    server = testServer.server;
+
+    const withdrawn = await transition(testServer.url, { status: "Cancelled" }, shopper);
+    getOrder.mockResolvedValue({ ...order, status: "Confirmed", paymentStatus: "Paid" });
+    const refused = await transition(testServer.url, { status: "Cancelled" }, shopper);
+
+    expect(withdrawn.status).toBe(200);
+    expect(releaseQuietly).toHaveBeenCalledTimes(1);
+    expect(refused.status).toBe(403);
+  });
+
+  it("takes the stock off the shelf before staff hand an order over, and refuses an illegal move first", async () => {
+    const consume = vi.fn().mockResolvedValue(undefined);
+    const getOrder = vi.fn().mockResolvedValue({ ...order, status: "Ready", paymentStatus: "Paid" });
+    const transitionOrder = vi.fn().mockResolvedValue({ ...order, status: "Completed" });
+    const repository = { getOrder, transitionOrder } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository, { consume });
+    server = testServer.server;
+
+    const handedOver = await transition(testServer.url, { status: "Completed" }, staff);
+    getOrder.mockResolvedValue({ ...order, status: "Pending", paymentStatus: "Pending" });
+    const illegal = await transition(testServer.url, { status: "Completed" }, staff);
+
+    expect(handedOver.status).toBe(200);
+    expect(consume).toHaveBeenCalledTimes(1);
+    expect(illegal.status).toBe(500);
+    expect(consume).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the order as it was when inventory cannot hand the goods over", async () => {
+    const getOrder = vi.fn().mockResolvedValue({ ...order, status: "Ready", paymentStatus: "Paid" });
+    const transitionOrder = vi.fn();
+    const repository = { getOrder, transitionOrder } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository, {
+      consume: vi.fn().mockRejectedValue(new InventoryRequestError("down")),
+    });
+    server = testServer.server;
+
+    const response = await transition(testServer.url, { status: "Completed" }, staff);
+
+    expect(response.status).toBe(502);
+    expect(transitionOrder).not.toHaveBeenCalled();
   });
 });

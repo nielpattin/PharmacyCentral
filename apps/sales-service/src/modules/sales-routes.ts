@@ -20,6 +20,9 @@ import {
   type DeliveryCalculation,
   type DeliveryCalculator,
 } from "./delivery/domain/delivery-calculator.ts";
+import type { OrderStock } from "./orders/application/order-stock.ts";
+import { transitionOrder as assertOrderTransition, type OrderStatus } from "./orders/domain/order-status.ts";
+import { InsufficientStockError, InventoryRequestError } from "./orders/infrastructure/inventory-reservations.ts";
 import { PrescriptionDispenseError, SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
@@ -36,6 +39,8 @@ export type SalesRouterOptions = {
   /** Both URLs are validated at boot by main.ts, so a missing one is a type error and never a localhost guess. */
   catalogServiceUrl: string;
   inventoryServiceUrl: string;
+  /** Absent exactly when the database is, and then the routes that hold or hand over stock answer 503. */
+  orderStock?: OrderStock | undefined;
   identityServiceUrl?: string | undefined;
   deliveryCalculator?: DeliveryCalculator | undefined;
   lookupStore?: (storeId: string) => Promise<{ id: string; latitude: number; longitude: number } | undefined>;
@@ -233,7 +238,8 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
   });
 
   router.post("/orders", async (request, response, next) => {
-    if (!repository) return unavailable(response);
+    const orderStock = options.orderStock;
+    if (!repository || !orderStock) return unavailable(response);
     const customerId = actor(request);
     const parsed = createOrderRequestSchema.safeParse(request.body);
     if (!customerId) return unauthorized(response);
@@ -263,11 +269,24 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
         subtotal: roundMoney(subtotal),
         deliveryFee: parsed.data.fulfillmentType === "pickup" ? 0 : (delivery?.fee ?? 0),
         currency: "VND",
+        paymentMethod: parsed.data.paymentMethod,
         lines,
         ...(delivery ? { delivery: toDeliverySnapshot(delivery) } : {}),
       });
+      await orderStock.hold(
+        order,
+        lines.map((line) => ({ productId: line.productId, quantity: line.quantity })),
+      );
       return response.status(201).json(await repository.getOrder(order.id));
     } catch (error) {
+      if (error instanceof InsufficientStockError)
+        return response
+          .status(409)
+          .json({ title: "Not enough stock for this order", status: 409, code: "insufficient_stock" });
+      if (error instanceof InventoryRequestError)
+        return response
+          .status(503)
+          .json({ title: "Stock could not be checked, try again", status: 503, code: "stock_unavailable" });
       if (error instanceof DeliveryOutOfRangeError)
         return response.status(422).json({
           title: error.message,
@@ -288,18 +307,37 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
   });
 
   router.post("/orders/:id/transition", async (request, response, next) => {
-    if (!repository) return unavailable(response);
+    const orderStock = options.orderStock;
+    if (!repository || !orderStock) return unavailable(response);
     const id = idSchema.safeParse(request.params);
     const parsed = orderTransitionSchema.safeParse(request.body);
     if (!id.success || !parsed.success) return invalid(response);
     try {
       const current = await repository.getOrder(id.data.id);
       if (!current) return response.status(404).json({ title: "Order not found", status: 404 });
-      const customerId = actor(request);
-      if (customerId && current.customerId !== customerId)
+      const staff = readsEveryOrder(request);
+      if (!staff && current.customerId !== actor(request))
         return response.status(404).json({ title: "Order not found", status: 404 });
-      return response.json(await repository.transitionOrder(id.data.id, parsed.data.status));
+      // Staff run an order through its states. A shopper may only withdraw an order they have not paid for: any other
+      // move would confirm or hand over an order without the money, and a hand over takes the stock off the shelf.
+      if (
+        !staff &&
+        (parsed.data.status !== "Cancelled" || current.status !== "Pending" || current.paymentStatus !== "Pending")
+      )
+        return response.status(403).json({ title: "Staff action required", status: 403, code: "forbidden" });
+      // Refuse an illegal move before anything touches the stock.
+      assertOrderTransition(current.status as OrderStatus, parsed.data.status);
+      // The goods leave the shelf when the order is handed over: out for delivery, or collected at the store.
+      if (parsed.data.status === "Delivering" || parsed.data.status === "Completed")
+        await orderStock.consume(id.data.id);
+      const transitioned = await repository.transitionOrder(id.data.id, parsed.data.status);
+      if (parsed.data.status === "Cancelled") await orderStock.releaseQuietly(id.data.id);
+      return response.json(transitioned);
     } catch (error) {
+      if (error instanceof InventoryRequestError)
+        return response
+          .status(502)
+          .json({ title: "Stock could not be handed over, try again", status: 502, code: "stock_unavailable" });
       return next(error);
     }
   });

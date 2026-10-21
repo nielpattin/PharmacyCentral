@@ -288,6 +288,7 @@ export const reverseGeocode = (destination: {
 export const createOrder = (input: {
   selectedStoreId: string;
   fulfillmentType: "pickup" | "delivery";
+  paymentMethod: "sepay_qr" | "cash_on_delivery";
   lines: Array<{ productId: string; productUnitId: string; quantity: number }>;
   delivery?: { destination: { latitude: number; longitude: number }; addressNote?: string };
 }): Promise<CustomerOrderDetail> =>

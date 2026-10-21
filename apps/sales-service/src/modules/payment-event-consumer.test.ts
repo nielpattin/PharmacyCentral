@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createLogger } from "../logger.ts";
 import { SalesPaymentEventConsumer } from "./payment-event-consumer.ts";
+import type { OrderStock } from "./orders/application/order-stock.ts";
 import type { SalesRepository } from "./sales-repository.ts";
 
 const broker = vi.hoisted(() => ({
@@ -51,6 +52,7 @@ describe("SalesPaymentEventConsumer", () => {
     applyPaymentStatus.mockReset();
     consumer = new SalesPaymentEventConsumer(
       { applyPaymentStatus } as unknown as SalesRepository,
+      { cancelRefunded: async () => undefined } as unknown as OrderStock,
       createLogger({ level: "silent" }),
       "amqp://broker.test",
     );
