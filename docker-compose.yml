@@ -118,6 +118,13 @@ services:
     command: ["--config=/etc/otelcol-contrib/collector.yaml"]
     volumes:
       - ./deploy/local/otel/collector.yaml:/etc/otelcol-contrib/collector.yaml:ro
+    depends_on:
+      tempo:
+        condition: service_started
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
     healthcheck:
       test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otelcol-contrib/collector.yaml"]
       interval: 10s
@@ -126,6 +133,70 @@ services:
     ports:
       - "4317:4317"
       - "4318:4318"
+
+  # Local observability backends. The collector fans telemetry out to them; only Grafana publishes a host port.
+  # The tempo and loki images are distroless (no shell, wget or health command), so they have no healthcheck.
+  tempo:
+    image: grafana/tempo:3.1.0@sha256:3076b8dcdfb32fd6bc5ccef85e7b7313e6199b9cb84366257fc17ecb696db5fd
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    # The image runs as 10001:10001; the named volume inherits that ownership from the image on first creation.
+    volumes:
+      - ./deploy/local/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - pharmacy-central-tempo-data:/var/tempo
+
+  prometheus:
+    image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-otlp-receiver
+      - --storage.tsdb.path=/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    volumes:
+      - ./deploy/local/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - pharmacy-central-prometheus-data:/prometheus
+
+  loki:
+    image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./deploy/local/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - pharmacy-central-loki-data:/loki
+
+  grafana:
+    image: grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
+    restart: unless-stopped
+    depends_on:
+      tempo:
+        condition: service_started
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    volumes:
+      - ./deploy/local/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/local/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - pharmacy-central-grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT}:3000"
 
   seaweedfs:
     image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
@@ -446,3 +517,7 @@ volumes:
   pharmacy-central-redis-data:
   pharmacy-central-typesense-data:
   pharmacy-central-seaweedfs-data:
+  pharmacy-central-tempo-data:
+  pharmacy-central-prometheus-data:
+  pharmacy-central-loki-data:
+  pharmacy-central-grafana-data:

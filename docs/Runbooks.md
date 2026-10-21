@@ -375,6 +375,22 @@ Local development uses a single RabbitMQ node.
   otherwise it keeps collecting copies of every event that nobody reads.
 - Inspect the `pharmacy.events` exchange and consumer queues via RabbitMQ Management UI (`http://localhost:15672`, guest/guest).
 
+## Observability
+
+The local stack collects traces, metrics and logs. `pnpm run infra:up` starts the `otel-collector`, `tempo`, `prometheus`, `loki` and `grafana` containers together with the rest of the infrastructure.
+
+- `otel-collector` receives OTLP on host ports 4317 (gRPC) and 4318 (HTTP). It sends traces to Tempo, metrics to Prometheus (its OTLP receiver) and logs to Loki.
+- Grafana runs at `http://localhost:${GRAFANA_PORT}` (3030 in `.env.example`). Log in with `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` from `.env`. The datasources `Prometheus`, `Tempo` and `Loki` are provisioned.
+- Every service requires `OTEL_EXPORTER_OTLP_ENDPOINT` and fails at startup without it. Dev mode (`pnpm dev`) uses `http://localhost:4318` from `.env`. The containers use `http://otel-collector:4318`, set in `docker-compose.yml`.
+- The provisioned configuration lives under `deploy/local/`: `otel/collector.yaml`, `tempo/tempo.yaml`, `prometheus/prometheus.yml`, `loki/loki.yaml` and `grafana/provisioning/`.
+- `tempo` and `loki` have no healthcheck because their images are distroless (no shell or `wget`). Check them with `docker compose logs tempo` and `docker compose logs loki`.
+- Tempo and Loki keep data for 72 hours (`block_retention` and `retention_period`).
+
+Daily workflow:
+
+- To find a trace, open Explore in Grafana, choose the `Tempo` datasource, and search by `service.name` (for example `sales-service`).
+- To go from a log line to its trace, open Explore with the `Loki` datasource and select the `TraceID` link on a line that carries a `trace_id`. Tempo opens on that trace.
+
 ## Online order stock
 
 An online order holds stock in inventory-service from the moment it is placed.

@@ -104,25 +104,45 @@ model {
   }
 
   // ── Telemetry ────────────────────────────────────────────────────────────────────
-  pharmacyCentral.services.identityService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+  pharmacyCentral.services.identityService -> pharmacyCentral.data.telemetry "OTLP traces, metrics and logs" {
     technology "OTLP"
   }
-  pharmacyCentral.services.catalogService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+  pharmacyCentral.services.catalogService -> pharmacyCentral.data.telemetry "OTLP traces, metrics and logs" {
     technology "OTLP"
   }
-  pharmacyCentral.services.inventoryService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+  pharmacyCentral.services.inventoryService -> pharmacyCentral.data.telemetry "OTLP traces, metrics and logs" {
     technology "OTLP"
   }
-  pharmacyCentral.services.salesService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+  pharmacyCentral.services.salesService -> pharmacyCentral.data.telemetry "OTLP traces, metrics and logs" {
     technology "OTLP"
   }
-  pharmacyCentral.services.paymentService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+  pharmacyCentral.services.paymentService -> pharmacyCentral.data.telemetry "OTLP traces, metrics and logs" {
     technology "OTLP"
   }
-  pharmacyCentral.services.operationsService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+  pharmacyCentral.services.operationsService -> pharmacyCentral.data.telemetry "OTLP traces, metrics and logs" {
     technology "OTLP"
   }
-  pharmacyCentral.services.chatbotService -> pharmacyCentral.data.telemetry "OTLP traces and metrics" {
+  pharmacyCentral.services.chatbotService -> pharmacyCentral.data.telemetry "OTLP traces, metrics and logs" {
     technology "OTLP"
+  }
+
+  pharmacyCentral.data.telemetry -> pharmacyCentral.data.tempo "OTLP traces" {
+    technology "OTLP HTTP"
+  }
+  pharmacyCentral.data.telemetry -> pharmacyCentral.data.prometheus "OTLP metrics" {
+    technology "OTLP HTTP"
+  }
+  pharmacyCentral.data.telemetry -> pharmacyCentral.data.loki "OTLP logs" {
+    technology "OTLP HTTP"
+  }
+
+  pharmacyCentral.data.grafana -> pharmacyCentral.data.tempo "Query traces" {
+    technology "HTTP"
+  }
+  pharmacyCentral.data.grafana -> pharmacyCentral.data.prometheus "Query metrics" {
+    technology "HTTP"
+  }
+  pharmacyCentral.data.grafana -> pharmacyCentral.data.loki "Query logs" {
+    technology "HTTP"
   }
 }

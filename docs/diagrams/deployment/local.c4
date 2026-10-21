@@ -62,6 +62,18 @@ deployment {
       otelNode = workload "otel-collector 0.159" {
         instanceOf pharmacyCentral.data.telemetry
       }
+      tempoNode = workload "tempo 3.1.0" {
+        instanceOf pharmacyCentral.data.tempo
+      }
+      prometheusNode = workload "prometheus 3.15.0" {
+        instanceOf pharmacyCentral.data.prometheus
+      }
+      lokiNode = workload "loki 3.7.8" {
+        instanceOf pharmacyCentral.data.loki
+      }
+      grafanaNode = workload "grafana 13.2.4" {
+        instanceOf pharmacyCentral.data.grafana
+      }
     }
 
     external = zone "Third parties" {

@@ -82,7 +82,27 @@ model {
 
       telemetry = observability "OpenTelemetry Collector" {
         #obs
-        summary "Receives the OTLP traces and metrics of every service."
+        summary "Receives the OTLP traces, metrics and logs of every service and fans them out to the backends."
+      }
+
+      tempo = observability "Tempo" {
+        #obs
+        summary "Trace store. Keeps the traces for 72 hours."
+      }
+
+      prometheus = observability "Prometheus" {
+        #obs
+        summary "Metrics store, fed by the OTLP receiver of the collector."
+      }
+
+      loki = observability "Loki" {
+        #obs
+        summary "Log store, fed by the OTLP ingest of the collector. Keeps the logs for 72 hours."
+      }
+
+      grafana = observability "Grafana" {
+        #obs
+        summary "Dashboards and Explore over Tempo, Prometheus and Loki. The local UI of the telemetry."
       }
     }
   }
