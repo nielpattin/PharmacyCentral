@@ -1,5 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
-import { asc } from "drizzle-orm";
+import { context, trace } from "@opentelemetry/api";
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
+import { asc, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { fileURLToPath } from "node:url";
@@ -15,6 +17,8 @@ const broker = vi.hoisted(() => ({
   refusals: new Map<string, number>(),
   /** Every publish the broker saw, in order, with whether it confirmed it. */
   seen: [] as Array<{ eventId: string; confirmed: boolean }>,
+  /** The span context that was active inside each publish, keyed by event id. */
+  activeSpans: new Map<string, { traceId: string; spanId: string } | undefined>(),
 }));
 
 vi.mock("amqplib", () => {
@@ -23,6 +27,8 @@ vi.mock("amqplib", () => {
     assertExchange: async () => undefined,
     publish: (_exchange: string, _key: string, content: Buffer, _options: unknown, done: (error?: Error) => void) => {
       const { eventId } = JSON.parse(content.toString()) as { eventId: string };
+      const active = trace.getSpanContext(context.active());
+      broker.activeSpans.set(eventId, active && { traceId: active.traceId, spanId: active.spanId });
       const remaining = broker.refusals.get(eventId) ?? 0;
       broker.seen.push({ eventId, confirmed: remaining === 0 });
       if (remaining > 0) {
@@ -95,5 +101,50 @@ describe("SalesOutboxPublisher", () => {
       { eventId: second.id, confirmed: true },
       { eventId: third.id, confirmed: true },
     ]);
+  });
+
+  it("publishes under the span captured on the row, and without a parent when the row has none", async () => {
+    context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+    const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+    const spanId = "00f067aa0ba902b7";
+    const [traced, untraced] = await db
+      .insert(schema.outboxMessages)
+      .values([
+        {
+          eventType: "sales.order.created.v1",
+          aggregateId: crypto.randomUUID(),
+          payload: JSON.stringify({ orderId: "traced" }),
+          occurredAt: new Date(2026, 0, 2, 0, 0, 1),
+          traceparent: `00-${traceId}-${spanId}-01`,
+        },
+        {
+          eventType: "sales.order.created.v1",
+          aggregateId: crypto.randomUUID(),
+          payload: JSON.stringify({ orderId: "untraced" }),
+          occurredAt: new Date(2026, 0, 2, 0, 0, 2),
+          traceparent: null,
+        },
+      ])
+      .returning();
+    if (!traced || !untraced) throw new Error("outbox rows were not created");
+    const publisher = new SalesOutboxPublisher(
+      { db, pool: undefined } as unknown as SalesDatabase,
+      createLogger({ level: "silent" }),
+      "amqp://broker.test",
+    );
+
+    publisher.start();
+    await vi.waitFor(
+      async () => {
+        const rows = await db.select().from(schema.outboxMessages).where(isNotNull(schema.outboxMessages.publishedAt));
+        expect(rows.map((row) => row.id)).toEqual(expect.arrayContaining([traced.id, untraced.id]));
+      },
+      { timeout: 5_000, interval: 100 },
+    );
+    await publisher.close();
+    context.disable();
+
+    expect(broker.activeSpans.get(traced.id)).toEqual({ traceId, spanId });
+    expect(broker.activeSpans.get(untraced.id)).toBeUndefined();
   });
 });

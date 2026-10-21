@@ -15,6 +15,7 @@ import {
 
 import type { ConsultationLine } from "../../contracts/prescription-consultation.ts";
 import type { IntakePrescription } from "../../contracts/prescription-intake.ts";
+import { currentTraceparent } from "./trace-context.ts";
 
 export const aiCredentials = pgTable("ai_credentials", {
   purpose: varchar("purpose", { length: 32 }).primaryKey(),
@@ -221,4 +222,6 @@ export const outboxMessages = pgTable("outbox_messages", {
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   publishedAt: timestamp("published_at", { withTimezone: true }),
   attempts: integer("attempts").notNull().default(0),
+  /** The request's W3C trace context, captured at insert so the relay can publish under it. */
+  traceparent: varchar("traceparent", { length: 200 }).$type<string | null>().$defaultFn(currentTraceparent),
 });

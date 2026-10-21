@@ -5,6 +5,7 @@ import type { ChannelModel, ConfirmChannel } from "amqplib";
 import type { Logger } from "../logger.ts";
 import type { SalesDatabase } from "../shared/infrastructure/database.ts";
 import { outboxMessages } from "../shared/infrastructure/schema.ts";
+import { withTraceparent } from "../shared/infrastructure/trace-context.ts";
 
 const EXCHANGE = "pharmacy.events";
 const TICK_MS = 1_000;
@@ -98,12 +99,14 @@ export class SalesOutboxPublisher {
       occurredAt: message.occurredAt.toISOString(),
       payload: JSON.parse(message.payload) as Record<string, unknown>,
     };
-    channel.publish(
-      EXCHANGE,
-      message.eventType,
-      Buffer.from(JSON.stringify(envelope)),
-      { persistent: true, contentType: "application/json" },
-      (error) => (error ? reject(error) : resolve()),
+    withTraceparent(message.traceparent, () =>
+      channel.publish(
+        EXCHANGE,
+        message.eventType,
+        Buffer.from(JSON.stringify(envelope)),
+        { persistent: true, contentType: "application/json" },
+        (error) => (error ? reject(error) : resolve()),
+      ),
     );
     return promise;
   }

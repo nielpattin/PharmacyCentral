@@ -12,6 +12,8 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+import { currentTraceparent } from "./trace-context.ts";
+
 export const productBatches = pgTable(
   "product_batches",
   {
@@ -234,6 +236,7 @@ export const outboxMessages = pgTable("outbox_messages", {
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   publishedAt: timestamp("published_at", { withTimezone: true }),
   attempts: integer("attempts").notNull().default(0),
+  traceparent: varchar("traceparent", { length: 200 }).$type<string | null>().$defaultFn(currentTraceparent),
 });
 
 export const inboxMessages = pgTable("inbox_messages", {

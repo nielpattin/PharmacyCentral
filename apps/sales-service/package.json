@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json"
   },
   "dependencies": {
+    "@opentelemetry/api": "catalog:",
     "@opentelemetry/exporter-logs-otlp-http": "catalog:",
     "@opentelemetry/exporter-metrics-otlp-http": "catalog:",
     "@opentelemetry/exporter-trace-otlp-http": "catalog:",
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "catalog:",
+    "@opentelemetry/context-async-hooks": "catalog:",
     "@resvg/resvg-js": "catalog:",
     "@types/express": "catalog:",
     "@types/node": "catalog:",

@@ -4,6 +4,7 @@ import type { ChannelModel, ConfirmChannel } from "amqplib";
 
 import type { Logger } from "../logger.ts";
 import type { PaymentDatabase } from "../shared/infrastructure/database.ts";
+import { withTraceparent } from "../shared/infrastructure/trace-context.ts";
 import { outboxMessages } from "./payments/infrastructure/schema.ts";
 
 const EXCHANGE = "pharmacy.events";
@@ -98,12 +99,15 @@ export class PaymentOutboxPublisher {
       occurredAt: message.occurredAt.toISOString(),
       payload: JSON.parse(message.payload) as Record<string, unknown>,
     };
-    channel.publish(
-      EXCHANGE,
-      message.eventType,
-      Buffer.from(JSON.stringify(envelope)),
-      { persistent: true, contentType: "application/json" },
-      (error) => (error ? reject(error) : resolve()),
+    // The relay runs on a timer, so the publish is parented on the request that wrote the row, not on the tick.
+    withTraceparent(message.traceparent, () =>
+      channel.publish(
+        EXCHANGE,
+        message.eventType,
+        Buffer.from(JSON.stringify(envelope)),
+        { persistent: true, contentType: "application/json" },
+        (error) => (error ? reject(error) : resolve()),
+      ),
     );
     return promise;
   }

@@ -1,5 +1,7 @@
 import { index, numeric, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
+import { currentTraceparent } from "../../../shared/infrastructure/trace-context.ts";
+
 export const paymentInvoices = pgTable(
   "payment_invoices",
   {
@@ -91,4 +93,6 @@ export const outboxMessages = pgTable("outbox_messages", {
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   publishedAt: timestamp("published_at", { withTimezone: true }),
   attempts: numeric("attempts", { precision: 10, scale: 0 }).notNull().default("0"),
+  /** Captured from the request's active span on insert, so the relay can publish under that trace. */
+  traceparent: varchar("traceparent", { length: 200 }).$type<string | null>().$defaultFn(currentTraceparent),
 });

@@ -1,4 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
+import { context, trace } from "@opentelemetry/api";
 import { asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
@@ -15,6 +17,8 @@ const broker = vi.hoisted(() => ({
   refusals: new Map<string, number>(),
   /** Every publish the broker saw, in order, with whether it confirmed it. */
   seen: [] as Array<{ eventId: string; confirmed: boolean }>,
+  /** The span context that was active inside each publish call, keyed by event id. */
+  activeSpans: new Map<string, { traceId: string; spanId: string } | undefined>(),
 }));
 
 vi.mock("amqplib", () => {
@@ -23,6 +27,8 @@ vi.mock("amqplib", () => {
     assertExchange: async () => undefined,
     publish: (_exchange: string, _key: string, content: Buffer, _options: unknown, done: (error?: Error) => void) => {
       const { eventId } = JSON.parse(content.toString()) as { eventId: string };
+      const active = trace.getSpanContext(context.active());
+      broker.activeSpans.set(eventId, active && { traceId: active.traceId, spanId: active.spanId });
       const remaining = broker.refusals.get(eventId) ?? 0;
       broker.seen.push({ eventId, confirmed: remaining === 0 });
       if (remaining > 0) {
@@ -51,10 +57,12 @@ describe("PaymentOutboxPublisher", () => {
   const db = drizzle({ client, schema });
 
   beforeAll(async () => {
+    context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
     await migrate(db, { migrationsFolder });
   });
 
   afterAll(async () => {
+    context.disable();
     await client.close();
   });
 
@@ -95,5 +103,49 @@ describe("PaymentOutboxPublisher", () => {
       { eventId: second.id, confirmed: true },
       { eventId: third.id, confirmed: true },
     ]);
+  });
+
+  it("publishes under the trace of the request that wrote the row", async () => {
+    const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+    const spanId = "00f067aa0ba902b7";
+    const [traced] = await db
+      .insert(schema.outboxMessages)
+      .values({
+        eventType: "payment.invoice.paid.v1",
+        aggregateId: crypto.randomUUID(),
+        payload: JSON.stringify({ orderId: "order-traced" }),
+        occurredAt: new Date(2026, 1, 1),
+        traceparent: `00-${traceId}-${spanId}-01`,
+      })
+      .returning();
+    const [untraced] = await db
+      .insert(schema.outboxMessages)
+      .values({
+        eventType: "payment.invoice.paid.v1",
+        aggregateId: crypto.randomUUID(),
+        payload: JSON.stringify({ orderId: "order-untraced" }),
+        occurredAt: new Date(2026, 1, 1, 0, 0, 1),
+        traceparent: null,
+      })
+      .returning();
+    if (!traced || !untraced) throw new Error("outbox rows were not created");
+    const publisher = new PaymentOutboxPublisher(
+      { db, pool: undefined } as unknown as PaymentDatabase,
+      createLogger({ level: "silent" }),
+      "amqp://broker.test",
+    );
+
+    publisher.start();
+    await vi.waitFor(
+      () => {
+        expect(broker.activeSpans.has(traced.id)).toBe(true);
+        expect(broker.activeSpans.has(untraced.id)).toBe(true);
+      },
+      { timeout: 5_000, interval: 100 },
+    );
+    await publisher.close();
+
+    expect(broker.activeSpans.get(traced.id)).toEqual({ traceId, spanId });
+    expect(broker.activeSpans.get(untraced.id)).toBeUndefined();
   });
 });
