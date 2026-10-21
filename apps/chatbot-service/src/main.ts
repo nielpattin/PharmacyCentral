@@ -1,3 +1,4 @@
+import "./telemetry.ts"; // Must load first so the instrumentations can patch libraries.
 import { createServer } from "node:http";
 
 import { z } from "zod";

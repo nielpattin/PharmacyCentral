@@ -1,3 +1,5 @@
+// telemetry.ts must load first so the OpenTelemetry instrumentations can patch libraries before they are imported.
+import "./telemetry.ts";
 import express from "express";
 import { createServer } from "node:http";
 
