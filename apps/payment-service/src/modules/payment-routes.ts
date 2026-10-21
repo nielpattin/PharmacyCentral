@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createInvoiceRequestSchema } from "../contracts/payment.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 
+import { InvoiceRefusal, priceInvoiceRequest, type PayableOrder } from "./invoice-pricing.ts";
 import { PaymentRepository } from "./payment-repository.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
@@ -88,12 +89,30 @@ export const createPaymentRouter = (
     const parsed = createInvoiceRequestSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response);
     try {
+      const isEmployee = employee(request);
+      if (!isEmployee) {
+        // A retry of the request that already made this shopper's invoice gets the same invoice back, even after
+        // the order has been paid and no longer waits for payment.
+        const existing = await repository.getInvoice(parsed.data.invoiceId);
+        if (existing)
+          return existing.customerId === actor(request) && existing.orderId === (parsed.data.orderId ?? null)
+            ? response.status(201).json(existing)
+            : response.status(404).json({ title: "Order not found", status: 404, code: "order_not_found" });
+      }
+      const priced = await priceInvoiceRequest({
+        body: parsed.data,
+        actorId: actor(request),
+        isEmployee,
+        loadOrder: (orderId, actorId) => loadOrderOf(options.salesServiceUrl, orderId, actorId),
+      });
       const invoice = await repository.createInvoice({
-        ...parsed.data,
+        ...priced,
         ...(actor(request) ? { customerId: actor(request) } : {}),
       });
       return response.status(201).json(invoice);
     } catch (error) {
+      if (error instanceof InvoiceRefusal)
+        return response.status(error.status).json({ title: error.message, status: error.status, code: error.code });
       return next(error);
     }
   });
@@ -253,6 +272,21 @@ const extractPaymentCodes = (value: Record<string, unknown>): string[] => {
     }
   }
   return codes;
+};
+
+/** Reads an order from sales-service as the shopper; sales answers 404 for an order that belongs to someone else. */
+const loadOrderOf = async (
+  salesServiceUrl: string,
+  orderId: string,
+  actorId: string,
+): Promise<PayableOrder | undefined> => {
+  const upstream = await fetch(`${salesServiceUrl}/orders/${orderId}`, {
+    headers: internalServiceHeaders(actorId),
+    signal: AbortSignal.timeout(2_000),
+  });
+  if (upstream.status === 404) return undefined;
+  if (!upstream.ok) throw new Error(`Sales-service answered ${upstream.status} for the order of an invoice`);
+  return (await upstream.json()) as PayableOrder;
 };
 
 const canReadInvoice = (request: import("express").Request, customerId: string | null): boolean =>
