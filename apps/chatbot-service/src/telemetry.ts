@@ -2,6 +2,7 @@ import { ExpressInstrumentation } from "@opentelemetry/instrumentation-express";
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
 import { PgInstrumentation } from "@opentelemetry/instrumentation-pg";
 import { PinoInstrumentation } from "@opentelemetry/instrumentation-pino";
+import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
@@ -25,6 +26,7 @@ const sdk = new NodeSDK({
     new HttpInstrumentation(),
     new ExpressInstrumentation(),
     new PinoInstrumentation(),
+    new UndiciInstrumentation(),
     new PgInstrumentation(),
   ],
 });

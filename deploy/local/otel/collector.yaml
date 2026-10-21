@@ -19,6 +19,17 @@ exporters:
   otlp_http/loki:
     endpoint: http://loki:3100/otlp
 
+connectors:
+  # Emits traces_spanmetrics_calls_total and traces_spanmetrics_duration_seconds_* (labels: service_name, span_name, span_kind, status_code).
+  span_metrics:
+    namespace: traces.spanmetrics
+    histogram:
+      unit: s
+    # Single collector instance: drop the per-start random instance id to keep series stable across restarts.
+    exclude_dimensions: ["collector.instance.id"]
+  # Emits traces_service_graph_request_total, traces_service_graph_request_failed_total and traces_service_graph_request_{server,client}_seconds_*.
+  service_graph: {}
+
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
@@ -29,9 +40,9 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [debug, otlp_http/tempo]
+      exporters: [debug, otlp_http/tempo, span_metrics, service_graph]
     metrics:
-      receivers: [otlp]
+      receivers: [otlp, span_metrics, service_graph]
       processors: [batch]
       exporters: [debug, otlp_http/prometheus]
     logs:

@@ -11,6 +11,8 @@ datasources:
     jsonData:
       httpMethod: POST
       prometheusType: Prometheus
+      # Services push metrics over OTLP once a minute, not every 15 seconds, so $__rate_interval must span several pushes.
+      timeInterval: 60s
       exemplarTraceIdDestinations:
         - name: trace_id
           datasourceUid: tempo

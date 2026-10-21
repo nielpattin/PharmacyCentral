@@ -7,6 +7,7 @@ import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
 import { ExpressInstrumentation } from "@opentelemetry/instrumentation-express";
 import { PinoInstrumentation } from "@opentelemetry/instrumentation-pino";
+import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import { PgInstrumentation } from "@opentelemetry/instrumentation-pg";
 import { AmqplibInstrumentation } from "@opentelemetry/instrumentation-amqplib";
 
@@ -25,6 +26,7 @@ const sdk = new NodeSDK({
     new HttpInstrumentation(),
     new ExpressInstrumentation(),
     new PinoInstrumentation(),
+    new UndiciInstrumentation(),
     new PgInstrumentation(),
     new AmqplibInstrumentation(),
   ],
