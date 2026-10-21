@@ -13,11 +13,10 @@ docker compose ps   # postgres, rabbitmq, redis, mailpit, otel-collector, seawee
 
 SeaweedFS is local product-image object storage. `seaweedfs-init` creates the `product-media` bucket, and the S3 gateway allows anonymous reads on that bucket only. The S3 API is at `http://localhost:9000`; set the port and credentials (`SEAWEEDFS_*`) in `.env` before starting Compose. Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies, `/api/prescriptions/intake*` allows 10 MB, and the other groups keep Nginx's 1 MB default. `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; `sales-service` accepts prescription photos up to 8 MB; other JSON routes keep the 1 MB service default.
 
-Create the databases and seed the local accounts. The seed reads `.env` on its own:
+Create the databases. The demo accounts come with `pnpm run dev:data`:
 
 ```bash
 pnpm run db:migrate
-pnpm run seed:accounts
 ```
 
 `API_BASE_URL=http://localhost:8080` in `.env` points browsers and Vite `dev` at whichever local gateway is running. Never change it per service.
@@ -136,12 +135,6 @@ Open backing tools on your laptop (ports come from `.env`):
 # RabbitMQ management UI at http://localhost:15672, Mailpit UI at http://localhost:8025
 ```
 
-Seed the local demo accounts:
-
-```bash
-pnpm run seed:accounts
-```
-
 Tear everything down (including `gateway-dev`):
 
 ```bash
@@ -184,14 +177,14 @@ In containers, each service executes its compiled `node dist/migrate.js` on star
 Only `identity-service` seeds data, and it seeds local login accounts only. Business master data is imported through the staff import center or the catalog/inventory import APIs.
 
 ```bash
-# Seed one local account per role
-pnpm run seed:accounts
+# Seed one local account per role, with the rest of the demo data (needs pnpm dev running)
+pnpm run dev:data
 
 # Validate without writing
 pnpm --dir apps/identity-service seed -- --dry-run
 ```
 
-`DEMO_ACCOUNT_PASSWORD` from `.env` becomes the password for the seeded accounts. The seed creates one account per role (Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff, Customer), each holding only that role, and resets their roles and site access on every run. Site access is looked up by code from the imported sites (`SITE-RTL` for the manager and pharmacist, `SITE-WH` for warehouse staff); before the sites import the seed warns which are missing, so run it again after importing `data/import-samples/sites.csv`. The account list is in `docs/UserGuide.md`.
+`DEMO_ACCOUNT_PASSWORD` from `.env` becomes the password for the seeded accounts. The seed creates one account per role (Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff, Customer), each holding only that role, and resets their roles and site access on every run. Site access is looked up by code from the imported sites (`SITE-RTL` for the manager and pharmacist, `SITE-WH` for warehouse staff); before the sites import the seed warns which are missing, and `dev:data` seeds again after it imports `data/import-samples/sites.csv`. The account list is in `docs/UserGuide.md`.
 
 ### Import staff-managed data
 
@@ -248,7 +241,7 @@ This is a development tool, kept apart from production on purpose.
 - It refuses to run with `NODE_ENV=production` and refuses any `API_BASE_URL` that is not `localhost`, `127.0.0.1`, or `[::1]`.
 - The sample files are fabricated coursework data. Production data is imported by an operator on the staff-web Data import screen with a real account, from the operator's own files.
 
-Without the script, run `pnpm run seed:accounts`, then upload the same files by hand at `http://127.0.0.1:5174/imports`, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv`, `products.csv`, and `opening-balances.csv`. Finally, run `pnpm run seed:accounts` again.
+Without the script, run `pnpm --dir apps/identity-service seed`, then upload the same files by hand at `http://127.0.0.1:5174/imports`, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv`, `products.csv`, and `opening-balances.csv`. Finally, run `pnpm --dir apps/identity-service seed` again.
 
 ### Product images
 

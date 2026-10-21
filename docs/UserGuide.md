@@ -15,7 +15,7 @@ If the system has no platform administrator, the sign-in page displays a form to
 
 ### Demo credentials
 
-The `pnpm run seed:accounts` seed creates one development account per role, each holding only that role. The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`. Signing in as each account shows exactly what its role may see and do.
+The `pnpm run dev:data` seed creates one development account per role, each holding only that role. The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`. Signing in as each account shows exactly what its role may see and do.
 
 | Role | Email | Site Access |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ The `pnpm run seed:accounts` seed creates one development account per role, each
 | Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH` |
 | Customer | `khachhang@pharmacycentral.vn` | Customer portal |
 
-Site access comes from the imported sites (`data/import-samples/sites.csv`). Before that import, the seed creates the accounts without site access and names the missing sites; run `pnpm run seed:accounts` again after the import. Re-running the seed also resets these accounts' roles and site access to the table above.
+Site access comes from the imported sites (`data/import-samples/sites.csv`). Before that import, the seed creates the accounts without site access and names the missing sites; `dev:data` seeds again right after the import. Re-running the seed also resets these accounts' roles and site access to the table above.
 
 Seed accounts are for local development and demonstration only.
 

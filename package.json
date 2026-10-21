@@ -11,7 +11,6 @@
     "graph": "nx graph",
     "infra:down": "docker compose --profile dev down",
     "infra:up": "docker compose up -d postgres rabbitmq redis typesense mailpit otel-collector seaweedfs seaweedfs-init gateway-dev",
-    "seed:accounts": "pnpm --dir apps/identity-service seed",
     "dev:data": "node --experimental-transform-types --env-file=.env tools/dev-import-samples.mjs",
     "prescriptions:samples": "pnpm --dir apps/sales-service prescriptions:samples",
     "stack:down": "docker compose stop gateway identity-service catalog-service inventory-service sales-service payment-service chatbot-service operations-query-service customer-web staff-web && docker compose up -d --wait gateway-dev",

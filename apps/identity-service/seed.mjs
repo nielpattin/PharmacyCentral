@@ -131,7 +131,7 @@ try {
   // The accounts still seed before any import, because the admin is who imports the sites.
   if (missingSites.length) {
     console.warn(
-      `Sites ${missingSites.join(", ")} are not imported yet, so the accounts above lack that site access. Import data/import-samples/sites.csv, then run pnpm run seed:accounts again.`,
+      `Sites ${missingSites.join(", ")} are not imported yet, so the accounts above lack that site access. Import data/import-samples/sites.csv, then run pnpm run dev:data again.`,
     );
   }
 } catch (error) {

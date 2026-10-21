@@ -61,12 +61,6 @@ pnpm --dir apps/payment-service db:migrate
 pnpm --dir apps/operations-query-service db:migrate
 ```
 
-Seed the local demo accounts:
-
-```bash
-pnpm run seed:accounts
-```
-
 Demo credentials are documented in `docs/Runbooks.md` and are for local use only.
 
 Load the demo accounts, product images, and sample master data (development only):

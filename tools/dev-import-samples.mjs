@@ -108,18 +108,22 @@ const foldSearchTerm = (text) =>
 const synonymKey = (terms) => JSON.stringify([...new Set(terms.map(foldSearchTerm))].sort());
 
 const pnpm = process.env.npm_execpath;
+// The one place that seeds the demo accounts: the identity-service seed, run through the same pnpm.
+const seedArgs = ["--dir", "apps/identity-service", "seed"];
 if (!pnpm) throw new Error("Run this through pnpm: pnpm run dev:data");
-const runScript = (name, { show = false } = {}) => {
+const seedAccounts = ({ show = false } = {}) => {
   // pnpm 12 ships as a native binary. Older installs set npm_execpath to a .js file that node must run.
-  const [command, args] = /\.[cm]?js$/.test(pnpm) ? [process.execPath, [pnpm, "run", name]] : [pnpm, ["run", name]];
+  const [command, args] = /\.[cm]?js$/.test(pnpm) ? [process.execPath, [pnpm, ...seedArgs]] : [pnpm, seedArgs];
   const result = spawnSync(command, args, { encoding: "utf8", stdio: show ? "inherit" : "pipe" });
   if (result.status !== 0) {
-    throw new Error(`pnpm run ${name} failed (exit ${result.status})\n${result.stdout ?? ""}${result.stderr ?? ""}`);
+    throw new Error(
+      `seeding the accounts failed (exit ${result.status})\n${result.stdout ?? ""}${result.stderr ?? ""}`,
+    );
   }
 };
 
 console.log("Seeding demo accounts...");
-runScript("seed:accounts");
+seedAccounts();
 console.log("Uploading product images to SeaweedFS...");
 const uploadedImageUrls = new Set(
   (await uploadProductImages(fileURLToPath(new URL("../data/product-images/images", import.meta.url)))).map(
@@ -156,7 +160,7 @@ for (const id of order) {
   console.log(`${dataset.label}: ${JSON.stringify(result?.summary ?? result)}`);
 }
 console.log("Granting site access to the staff accounts...");
-runScript("seed:accounts", { show: true });
+seedAccounts({ show: true });
 // After the reseed, so the pharmacist's session carries SITE-RTL access when it approves.
 console.log("Seeding search synonyms...");
 await seedSearchSynonyms(admin);
