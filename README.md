@@ -96,8 +96,7 @@ GitHub Actions validates affected projects on pull requests and on demand throug
 
 ## Documentation
 
-- [Architecture](docs/Architecture.md)
+- [Architecture diagrams](docs/diagrams/README.md) (LikeC4 model; `pnpm diagrams:serve`)
 - [API Guide](docs/ApiGuide.md)
-- [Dependency baseline](docs/Baseline.md)
+- [User Guide](docs/UserGuide.md)
 - [Runbooks](docs/Runbooks.md)
-- [Project summary](docs/ProjectSummary.md)

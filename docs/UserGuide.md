@@ -2,281 +2,338 @@
 
 ## Purpose
 
-This document describes how internal teams operate Pharmacy Central according to implemented business roles. It covers real operational workflows rather than generic administrative screens.
+This document describes how internal teams and shoppers use the two Pharmacy Central web apps as they exist today:
+
+- **Staff Web** (`http://localhost:5174/`) for employees: pharmacists, pharmacy managers, warehouse staff and platform administrators.
+- **Customer Web** (`http://localhost:5173/`) for shoppers: product search, cart, checkout, orders, prescriptions, account and the shopping assistant.
+
+Screens are described as the code renders them. A sidebar item lists only for roles that may open it; the labels are the ones shown on screen.
 
 ## Sign in
 
-1. Start the local system with Docker Compose (`docker compose up -d`) or start the development server.
-2. Open the web interface: Customer Web at `http://localhost:5173/`, Staff Web at `http://localhost:5174/`.
-3. Sign in with your assigned staff account.
-4. The sidebar displays only the workspaces permitted for your role.
+### Staff Web
 
-If the system has no platform administrator, the sign-in page displays a form to create the initial administrator. Once created, the system returns to normal sign-in flow.
+1. Start the local system with Docker Compose (`docker compose up -d`) or start the development servers.
+2. Open `http://localhost:5174/`.
+3. Enter your employee email and password, then choose **Sign in**.
+4. The sidebar shows only the workspaces permitted for your roles.
+
+Customer accounts cannot sign in to Staff Web (it answers "Employee account required").
+
+### Customer Web
+
+1. Open `http://localhost:5173/`.
+2. Choose **Tài khoản** (Account) in the header. Signed-out visitors see the sign-in form there.
+3. Sign in with **Đăng nhập**, or choose **Tạo tài khoản mới** to register with a display name, an email and a password of at least 8 characters.
+
+Browsing, searching and the shopping assistant work without an account. Checkout, orders, prescription intake and the account pages require a signed-in customer.
 
 ### Demo credentials
 
-The `pnpm run dev:data` seed creates one development account per role, each holding only that role. The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`. Signing in as each account shows exactly what its role may see and do.
+The `pnpm run dev:data` command seeds one account per role (`tools/dev-import-samples.mjs` runs the identity seed in `apps/identity-service/seed.mjs`). Each account holds only the role shown. The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`.
 
-| Role | Email | Site Access |
+| Role | Email | Site access |
 | --- | --- | --- |
-| Platform Admin | `admin@pharmacycentral.vn` | All sites |
+| Platform Admin | `admin@pharmacycentral.vn` | All sites (no site list needed) |
 | Pharmacy Manager | `manager@pharmacycentral.vn` | `SITE-RTL` |
 | Pharmacist | `pharmacist@pharmacycentral.vn` | `SITE-RTL` |
 | Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH` |
-| Customer | `khachhang@pharmacycentral.vn` | Customer portal |
+| Customer (Customer Web only) | `khachhang@pharmacycentral.vn` | None; customer account |
 
-Site access comes from the imported sites (`data/import-samples/sites.csv`). Before that import, the seed creates the accounts without site access and names the missing sites; `dev:data` seeds again right after the import. Re-running the seed also resets these accounts' roles and site access to the table above.
+Site access uses the site codes from `data/import-samples/sites.csv`. If the sites have not been imported when the seed runs, the seed still creates the accounts, warns which sites are missing, and `dev:data` seeds again after the import. Each run resets the demo accounts' roles and site access to the table above.
 
 Seed accounts are for local development and demonstration only.
 
-## Role-based workspaces
+## Roles and workspaces
 
-Pharmacy Central provides four business roles. Platform administrators manage the system rather than pharmacy counter operations. Pharmacists process counter sales and dispense medications. Dispensing needs a licensed pharmacist, so the permission belongs to the Pharmacist role and never to a job title: a manager who is also a pharmacist holds both roles.
+Staff Web has four business roles. Access is decided by role, and non-admin users are limited to their assigned sites.
 
-| Role | Primary Workspaces |
+| Role | Sidebar workspaces |
 | --- | --- |
-| Platform Admin | Users, roles, audit logs, system monitoring |
-| Pharmacy Manager | Sites, catalog, suppliers, pricing, procurement, reporting, finance; counter oversight (view prescriptions, counter transactions, invoices, and consultation requests without changing them) |
-| Pharmacist | Pharmacy counter, payments, dispensing, consultation replies, replenishment requests |
-| Warehouse Staff | Receiving, quality, transfers, replenishment requests, returns, stocktake, adjustments |
+| Platform Admin | Every sidebar workspace, including Governance (Users, Audit, AI integrations) |
+| Pharmacy Manager | Dashboard, Pharmacist overview, Prescriptions, Online orders, Procurement, Reporting, Finance, Sites, Storage locations, Catalog, Search synonyms, Units, Pricing, Suppliers, Data import |
+| Pharmacist | Pharmacist overview, Prescriptions, Online orders, Replenishment, Search synonyms |
+| Warehouse Staff | Dashboard, Transfers, Replenishment, Receiving, Stocktake, Inventory, Adjustments, Returns and removals, Quality, Reporting, Data import |
 
-Users who are not Platform Admins are scoped to their assigned sites. They can only view and manage data within their assigned site scope.
+Points to note:
 
-Site scoping reaches the lists the operations dashboard reads, so a Pharmacy Manager's dashboard counts only their own sites' storage locations, stock, transfers, stocktakes, adjustments, goods receipts, and prescriptions. Payment finance entries and report rows are recorded without a site, so the money figures on **Finance** and the rows on **Reporting** are network-wide for every reader; only the live stock, receipt, and dispense figures shown beside them are limited to the reader's sites.
+- Dispensing, taking payment, refunding, and replying to consultations are pharmacist work. Platform Admins can also do them; a Pharmacy Manager sees the same prescription, counter and consultation records as a read-only view with the notice "View only: dispensing, payments and consultation replies need the Pharmacist role."
+- Pharmacy Managers do not see Inventory, Transfers, Stocktake, Adjustments, Returns, Receiving or Quality in the sidebar; those belong to Warehouse Staff.
+- A user who holds only the Pharmacist role lands on **Pharmacist overview** after sign-in. Dashboard is the landing page for Platform Admins, Pharmacy Managers and Warehouse Staff.
+- A page's tab bar is the same for everyone who can open that page. Where a tab is marked "Dispense", "Refund" or "Confirm cash" in the sections below, the button only appears for the roles stated.
 
-When signing in, users with only the Pharmacist role navigate directly to **Pharmacy Counter**. The operational overview dashboard is intended for administrators, operations managers, and warehouse staff.
+## Dashboard and Reporting
 
-## Product lifecycle
+**Dashboard** (Platform Admin, Pharmacy Manager, Warehouse Staff) shows summary cards: active sites and storage locations, product and supplier counts, quantity on hand and reserved, low-stock batches, expiring batches, pending transfers, open prescriptions, open stocktakes, pending adjustments, and a list of recent activity.
 
-## Overview and reporting
+**Reporting** (Platform Admin, Pharmacy Manager, Warehouse Staff) opens the Reports tab of the finance service:
 
-Use **Dashboard** to review operational summaries, alerts, and recent activities. The dashboard serves Platform Admins, Pharmacy Managers, and Warehouse Staff. Counter pharmacists work directly in **Pharmacy Counter**.
+1. Enter a **Report type** (the default is `sales`).
+2. Choose **Run report**.
+3. Review the rows: type, subject, value, occurred time and details.
 
-Use **Reporting** for broader operational visibility:
-
-- Inventory risk summaries
-- Low stock and expiring stock warnings
-- Recent activities
-- Activity breakdown
-
-Low-stock and expiring-stock thresholds align with the backend dashboard rules.
+Reporting does not show stock-risk summaries; low-stock and expiring batch counts are on the Dashboard.
 
 ## Master data
 
 ### Sites and storage locations
 
-Use **Sites** to manage pharmacies, warehouses, and associated storage locations.
-
-### Product catalog
-
-Use **Catalog** to manage product codes, names, manufacturers, statuses, units of measure, and conversion factors. Units of measure are strictly defined. Each medication has a base unit for inventory deduction and optional sale units such as blister packs, boxes, or bottles.
+- **Sites** (Platform Admin, Pharmacy Manager) lists sites with code, name, type and address. Use **Create site** to add one.
+- **Storage locations** (Platform Admin, Pharmacy Manager) lists storage locations per site. Use **Create location** to add one.
 
 ### Suppliers
 
-Use **Suppliers** to manage approved vendors.
+**Suppliers** (Platform Admin, Pharmacy Manager) lists approved vendors. Use **Create supplier** to add one.
+
+### Catalog, units and pricing
+
+The catalog is split across three sidebar pages, each for Platform Admin and Pharmacy Manager.
+
+- **Catalog** lists products (SKU, name, category, manufacturer). **Create product** and the edit action take SKU, barcode, name, category, manufacturer, generic name, active ingredient, indications, strength, dosage form, package description, registration number, prescription-required flag (`true`/`false`), image URL or uploaded image, status, notes and active flag. A product can be deleted after confirmation.
+- **Units** lists the units of a selected product. **Add product unit** sets the unit name, barcode, conversion factor to the base unit, and the base, default sale and default purchase flags (`true`/`false`).
+- **Pricing** lists price records with **Publish** and **Archive** actions. **Create price draft** takes the product and product unit, unit price, currency, effective-from date, optional effective-to date and notes. The form has no site field. Publishing is refused when the price window overlaps another published price.
+
+Prices are recorded per product unit in the catalog service.
 
 ### Search synonyms
 
-Use **Search synonyms** to manage groups of words that shoppers may use for the same symptom, such as "tiêu chảy" and "đi ngoài". Platform Admins, Pharmacy Managers, and Pharmacists can use this screen.
+**Search synonyms** (Platform Admin, Pharmacy Manager, Pharmacist) manages groups of words that shoppers may use for the same symptom, such as "tiêu chảy" and "đi ngoài".
 
-- A group goes live in shopper search only after another staff member approves it. You cannot approve a group that you created or last edited. The button shows why when it is unavailable.
-- Add a group in the **Terms** box, one term per line or separated by commas. A group needs 2 to 20 terms, and each term can be up to 60 characters. Terms that differ only in accents or capitals count as the same term.
-- The **Pending review** list shows groups waiting for approval. The **In use** list shows groups that shoppers' searches already use. Each row shows who proposed the group and when.
-- **Edit** sends a group back to **Pending review**, so it leaves search until another staff member approves the new terms.
-- **Delete** removes a group from search at once. No review is needed.
-- If the group changed while you were viewing it, the screen shows a message and reloads the list. Check the group again before you approve it.
+- Enter the **Terms** in the box, one per line or separated by commas. A group needs 2 to 20 terms, each up to 60 characters. Terms that differ only in accents or capitals count as the same term.
+- Choose **Submit for review**. The group appears under **Pending review** and does not affect shopper search until another staff member approves it.
+- **Approve** is disabled on a group you submitted or last edited, and its tooltip explains why. Approval by the submitter is refused by the service.
+- **In use** lists approved groups that shopper searches already use.
+- Each row shows its version, when it was submitted, and whether you or another staff member proposed it.
+- **Edit** saves a version change and sends the group back to **Pending review**; it leaves search until someone approves the new terms.
+- **Delete** removes a group from search at once; no review is needed.
+- If the group changed since you opened it, the screen shows a message and reloads the list. Check the group again before approving it.
 
-### Importing master data
+### Data import
 
-Use **Data import** to load sites, storage locations, suppliers, products with units and prices, and opening
-stock balances from a CSV file.
+**Data import** (Platform Admin, Pharmacy Manager, Warehouse Staff) has one sidebar entry per dataset, in this dependency order:
 
-1. Pick the dataset tab.
-2. Download the CSV template. The template contains column headers only; it never ships sample records.
-3. Fill the file with the actual data from the supplier, distributor, or internal system.
-4. Upload the CSV file and confirm the summary.
+1. **Sites**
+2. **Storage locations**
+3. **Suppliers**
+4. **Products and prices**
+5. **Stock** (opening balances; needs products first)
 
-Import order matters: sites before storage locations, and products before opening balances. The uploaded file is
-the only copy of the source data inside the browser. Master data lives in the owning service database afterwards,
-and product images live in object storage, so the file does not need to be kept inside the application. Imports
-are repeatable: matching codes, SKUs, and batch numbers update the existing rows instead of duplicating them.
+For each dataset:
 
-## Catalog pricing
+1. Choose **Download CSV template**. The template contains column headers only; it never ships sample records.
+2. Fill the file with the real data from the supplier, distributor or internal system.
+3. Choose the file, review the preview, then choose **Import now**.
+4. Review the summary. The screen then reads the stored records back so you can confirm what the service saved.
 
-Product prices are configured within the catalog. The system manages prices per sale unit (tablet, blister, or box) rather than in a separate pricing module.
-
-Basic flow:
-
-1. Create a draft price for a product.
-2. Scope the price to a specific site, or leave it applicable to all sites.
-3. Specify the unit price, currency, and effective dates.
-4. Publish the price.
-5. Archive expired or replaced prices.
-
-The application prevents overlapping published prices for the same product, site, and effective period.
+Imports are repeatable: matching codes, SKUs and batch numbers update existing rows instead of duplicating them. Product images live in object storage, so the CSV is not the long-term store of the data.
 
 ## Purchasing and receiving
 
-### Purchase orders
+### Procurement (purchase orders)
 
-Use **Procurement** to create and manage purchase orders.
+**Procurement** (Platform Admin, Pharmacy Manager) opens on **Purchase orders**.
 
-Basic flow:
+1. **Create order**: enter a purchase order number, supplier, site, and order lines, then choose **Create order**.
+2. **Approve** a Draft purchase order from the list. Only Draft orders can be approved. **Cancel** is available until the order is received or cancelled.
+3. Goods arriving against the order are recorded in Receiving (below). The order moves to partially received or received as quantities arrive.
 
-1. Create a purchase order with supplier, destination site, expected delivery date, and order lines.
-2. Approve the purchase order.
-3. Receive shipments against the approved purchase order from the Receiving page.
-4. Purchase order statuses update automatically as quantities arrive.
+### Receiving (goods receipts)
 
-### Receiving
+**Receiving** (Warehouse Staff) opens on **Goods receipts**.
 
-Use **Receiving** to record supplier deliveries.
+1. Choose **Receive goods** (the form is titled "Create goods receipt").
+2. Select the supplier, site, storage location, and receipt number. Optionally link an approved purchase order.
+3. Enter each line's product, batch, expiry date and received quantity, then submit.
+4. New batches await quality review before they can be used for sales.
 
-Basic flow:
+## Quality
 
-1. Select the supplier, site, storage location, and delivery receipt number.
-2. Optionally link the shipment to an approved purchase order.
-3. Enter the product, batch number, expiration date, and received quantity.
-4. Submit the receipt.
-5. Newly received batches await quality review before operational use.
+**Quality** (Warehouse Staff) opens the Batches list.
 
-## Quality control
+- **Release** approves a batch for operational use.
+- **Reject** fails a batch.
+- Both actions ask for review notes, which are stored with the decision.
 
-Use **Quality** to review newly received batches.
+Only released batches that have not passed their expiry date count as sellable. Shopper availability and reservations use those batches only, and an hourly sweep updates availability for batches that expire while nothing else changes.
 
-- Release approved batches for operational use.
-- Reject batches that fail inspection.
-- Add review notes for traceability.
+## Inventory operations
 
-Only released batches that have not passed their expiry date count as sellable. Sales reserve stock only from those batches, and the storefront shows a product in stock at a site only while such batches there still have free stock. Releasing or rejecting a batch updates that availability right away. Holding stock for a sale and giving a reservation back update it as well, and a sweep repeats it every hour for batches that cross their expiry date while nothing else moves.
+**Inventory** (Warehouse Staff) is a tabbed workspace. The sidebar items **Inventory**, **Adjustments**, **Transfers**, **Stocktake**, **Returns and removals** and **Replenishment** each open it on the matching tab.
 
-## Inventory management
+| Tab | What it does |
+| --- | --- |
+| Balances | Quantity on hand and reserved per product batch, with expiry dates |
+| Batches | Product batches and their quality status; Release and Reject live on the Quality page |
+| Create batch | Add a product batch: product, supplier, batch number, manufactured and expiry dates, manufacturer, quality notes |
+| Movements | Stock movement ledger, and **Record stock movement** |
+| Adjustments | **Submit stock adjustment**; pending adjustments can be approved or rejected |
+| Transfers | Transfer orders between sites and storage locations; create with **Create transfer** |
+| Stocktake | Stocktake sessions, the **Create stocktake** form, and **Post adjustments** for pending sessions |
+| Count line | **Record stocktake count** for counted quantities |
+| Returns | Returns and removals with reasons: Return to supplier, Damaged stock, Expired stock, Inventory removal |
+| Replenishment | Replenishment requests with Approve, Reject, Fulfill and Cancel |
 
-Use **Inventory** to view batch quantities, storage locations, and movement history. This workspace serves Warehouse Staff and Platform Admins.
+**Transfers** workflow: create a transfer with its lines; approve it (`PendingApproval` to `Approved`); ship it (`InTransit`); receive it at the destination. A pending or approved transfer can be cancelled.
 
-Pharmacists view available quantities directly inside **Pharmacy Counter** based on the counter's assigned stock source. Pharmacists do not need warehouse location details and cannot adjust inventory balances directly.
+**Replenishment** workflow: a pharmacist or warehouse user creates a request; warehouse staff approve or reject it, then fulfill it or cancel it.
 
-## Pharmacy counter and dispensing
+**Stocktake** workflow: create a session for a site and location; record counted quantities per line; post adjustments for the session.
 
-**Pharmacy Counter** is dedicated to **Pharmacist** users. Administrators and managers do not operate the counter or create customer sales transactions. Each pharmacist serves one customer at a time at the counter terminal.
+**Adjustments** workflow: submit an adjustment with its type, quantity and reason; a reviewer approves or rejects it with optional approval notes.
 
-Basic flow:
+Pharmacists do not have Inventory in the sidebar and cannot adjust balances.
 
-1. The system determines the site and sales location from the assigned user or terminal.
-2. The pharmacist searches for products by name or code.
-3. The pharmacist adds products to the active prescription or sales draft, verifying batch, expiration date, available stock, and price.
-4. Customer details are optional. The default customer is a walk-in retail customer.
-5. Create the sales order. The system reserves stock for the transaction.
-6. Generate a payment invoice, display payment instructions, and print a receipt if requested.
-7. Confirm dispensing after payment verification. Dispensing takes the quantity off the batch the pharmacist hands over and records a **Dispense** movement in the stock ledger; an expired, unreleased, or short batch is refused and nothing is recorded. A partial dispense keeps the rest of the reservation for the next one.
-8. Cancel the transaction if the customer declines. Canceling releases whatever stock the transaction still holds.
+## Online orders
 
-## Payments and invoicing
+**Online orders** (Pharmacist, Pharmacy Manager) lists shopper orders with status tabs: All, Pending, Confirmed, Preparing, Ready, Delivering, Completed and Cancelled. Each row shows the order number, store, fulfillment (Pickup or Delivery), status, payment status, total and placed time. The screen is view-only.
 
-The payment panel lives directly inside **Pharmacy Counter** to process the current transaction.
+## Prescriptions and counter
 
-Basic flow:
+**Prescriptions** (Pharmacist, Pharmacy Manager) is titled **Prescriptions and counter sales**. The sidebar item **Pharmacist overview** opens the same page on the **Counter transactions** tab.
 
-1. Create the counter transaction.
-2. Generate an invoice for the transaction.
-3. Display the VietQR code, transfer description, and total amount to the customer.
-4. Confirm payment status once the customer completes the transfer.
-5. Print a receipt if the customer requests one.
-6. Dispense medications on the counter screen.
+Tabs:
 
-Receipts printed from the browser display site details, timestamp, payment code, line items, quantities, unit prices, total amount, and payment status. Browser printing provides demonstration receipts without dedicated hardware printers.
+| Tab | Who | What it does |
+| --- | --- | --- |
+| Prescriptions | Both | Prescriptions with patient, status, site and created time. Pharmacists also see **Cancel** and **Dispense** on each row |
+| Create | Pharmacist, Platform Admin | Create a prescription: patient name and phone, optional customer account (found by exact phone or email), site and storage location, doctor name and license, lines (product, unit, quantity, dosage, frequency, duration, notes), and notes. Submitting requests the stock reservation |
+| Dispense | Pharmacist, Platform Admin | Pick a prescription, then for each line pick the product batch and dispensed quantity, and choose **Dispense** |
+| Counter transactions | Both (actions for Pharmacist, Platform Admin) | Invoices and counter transactions with payment status and amount. **Create invoice**, **Confirm cash** (pending payments) and **Refund** (paid payments) |
+| Consultations | Both (replies for Pharmacist, Platform Admin) | Shopper requests from the intake page, filtered Open or Answered, showing the prescription, its lines and any shopper note. Pharmacists type a reply and choose **Send reply** |
 
-SePay test mode enables payment testing in local development without real bank transfers.
+Counter flow for a pharmacist:
 
-## Stock transfers
+1. Create the prescription for the patient, linking a customer account if the patient has one. This reserves stock.
+2. Open **Dispense**, choose the prescription, and for each line select the batch and quantity handed over. Dispense records the movement; the service refuses a batch that cannot supply the quantity.
+3. In **Counter transactions**, create the invoice and confirm cash when the customer pays. Refund a paid invoice with a reason if the sale is reversed.
+4. Cancel a prescription from its row if the customer declines.
 
-Use **Transfers** to move inventory between sites and storage locations.
+## Finance
 
-Basic flow:
+**Finance** (Platform Admin, Pharmacy Manager) has three tabs.
 
-1. Create a transfer request from a source location to a destination location.
-2. Approve the transfer with an eligible second staff account.
-3. Dispatch the shipment.
-4. Confirm receipt at the destination site.
+- **Summary**: paid, refunded and net amounts; inventory value and reserved value; the count of products missing a published price (**Missing prices**); receipt, dispensed and return quantities; an inventory activity table; and an inventory valuation table with each batch's price status. Stock is valued at the current published price per base unit, so a stocked product without a published price adds nothing to the value.
+- **Invoices**: payment invoices with payment code, prescription or order, status, amount and created time. Pharmacists and Platform Admins can **Confirm cash** on pending invoices and **Refund** paid ones; Pharmacy Managers read the list only.
+- **Reports**: the reporting tab described under Dashboard and Reporting.
 
-Self-approval is blocked on transfer requests.
-
-## Returns and removals
-
-Use **Returns** to handle supplier returns, damaged products, expired stock, and inventory write-offs. This workflow belongs to warehouse staff rather than retail counter returns.
-
-## Stocktakes and adjustments
-
-Use **Stocktake** to create count sessions, record physical counts, and post resulting reconciliation adjustments.
-
-Use **Adjustments** to prepare and approve standalone stock adjustments. Approvals require an authorized user and record an audit entry.
-
-## Financial reconciliation
-
-Use **Finance** to review inventory valuation and operational reconciliation by site and date range. Stock on hand is valued at today's published selling price per base unit, because the catalog records no purchase cost; a stocked product without a published price is counted under **Missing prices** and adds nothing to the value. Returns, adjustments, and transfers are the stock ledger movements of the period.
-
-External accounting ledger posting is outside the scope of this workspace.
+External accounting ledger posting is outside the scope of these screens.
 
 ## Audit log
 
-Use **Audit** to review business activity logs. Audit records provide operational traceability and supervisory oversight.
+**Audit** (Platform Admin) is the Audit tab of **Governance**. Filter by user ID, site, entity type, entity ID, action and row limit, then choose **Apply filters**. Each record shows action, entity, actor, site, time and details.
 
-## User management
+## Users and access
 
-Platform Admins use **Users** to:
+**Users** (Platform Admin) is the Users tab of **Governance**. It lists employee accounts with email, name and roles, and per row:
 
-- View user accounts
-- Create internal staff accounts
-- Assign roles
-- Assign site access scopes
-- Update account permissions
-- Reset user passwords
-- Revoke active user sessions after security updates
+- **Access**: edit roles and site access, then choose **Save access**.
+- **Reset password**: enter a new password of at least 12 characters.
+- **Revoke sessions**: sign the account out everywhere, for example after a security incident.
+
+**Create user** opens the form "Create employee account": email, password, display name, roles and site access, then choose **Create employee**.
 
 ## AI integrations
 
-Platform Admins use **AI integrations** to manage the provider, model, base URL and API key of each AI feature. The features are the shopping assistant, question screening, prescription photo reading, and semantic product search.
+**AI integrations** (Platform Admin) has four cards, one per AI feature:
 
-- Each card shows a source badge. The badge reads **Saved key**, **Environment key**, or **Not configured** when neither exists. It also shows the provider, the model, the base URL, and the last four characters of the key. For saved settings, it shows who saved them and when.
-- The form has **Provider**, **Model**, **Base URL** and **API key** fields. Choose **Save settings** to save them. The key is encrypted and cannot be read back.
-- Leave **API key** empty to keep the saved key when the provider is unchanged.
-- Saved settings always win over the server environment settings, as a whole, for that feature.
-- Choose **Remove key** to delete the saved settings. The feature goes back to the environment settings when the server has them. Otherwise the shopping assistant and photo reading answer with an error, and product search matches keywords only. QR intake is unaffected.
-- **Question screening** is optional. Without a key every question goes straight to the shopping assistant.
+| Feature | What it does | Without a key |
+| --- | --- | --- |
+| Shopping assistant | Answers shopper questions on Customer Web | The assistant cannot answer |
+| Prescription photo reading | Reads medicines from a photo of a printed prescription | Photo reading is off; QR intake still works |
+| Semantic product search | Finds products by meaning, not only the words typed | Search matches keywords only |
+| Question screening | Checks each shopper question first; greetings, off-topic questions, emergencies and prompt-injection attempts get a fixed reply | Every question goes straight to the assistant |
 
-When the shopping assistant cannot answer, the customer sees "Trợ lý tư vấn đang gặp sự cố. Vui lòng thử lại sau ít phút." in the chat widget.
+Each card shows a source badge: **Saved key**, **Environment key**, or **Not configured**. For a saved key it also shows the provider, model, base URL, the last four characters of the key, and when and by whom it was updated. Otherwise it explains that the value comes from the server environment.
 
-Saving product search settings starts a background reindex that creates embeddings for existing products, so semantic results appear shortly afterwards. A change of model embeds the products again.
+- Set **Provider**, **Model**, **Base URL** and **API key**, then choose **Save settings**. The base URL must start with `https://`. The key is encrypted and never shown again.
+- Leave **API key** empty to keep the saved key when the provider has not changed.
+- **Remove key** deletes the saved settings. If the server environment has settings, the feature falls back to them; otherwise the feature stops working as described above.
+- Saving or removing a key starts a background reindex, so semantic search results update shortly afterwards.
+
+When the shopping assistant cannot answer, shoppers see "Trợ lý tư vấn đang gặp sự cố. Vui lòng thử lại sau ít phút." in the chat widget.
+
+## Customer Web
+
+### Browsing and search
+
+- **Home** (`/`): a search box ("Tìm kiếm sản phẩm, tên thuốc, mã SKU..."), product categories in the header, and sorting by default, price (low to high or high to low) or name.
+- **Category** (`/danh-muc/...`): products in one category.
+- **Product** (`/san-pham/...`): name, manufacturer, badges for prescription-required products and stock status ("Còn hàng" or "Hết hàng"), and **Thêm vào giỏ hàng**.
+- **Pharmacies** (the store finder on Home, `/#nha-thuoc`): choose a pharmacy to see its stock and collect orders there; **Tìm nhà thuốc gần bạn** uses your location.
+
+Stock shown for a product is for the selected pharmacy only.
+
+### Cart and checkout
+
+**Đặt hàng & thanh toán** (`/don-hang`) requires a signed-in customer.
+
+1. Review the cart. Products without a price cannot be checked out; remove them or use **Nhờ dược sĩ tư vấn** from the intake results.
+2. Choose the fulfillment: **Giao tận nơi** (delivery, with the fee calculated from the pharmacy to your delivery point) or **Nhận tại nhà thuốc** (pickup at the selected pharmacy).
+3. Choose the payment: **Chuyển khoản SePay QR** (scan the VietQR code with your banking app; the order is confirmed automatically) or **Thanh toán khi nhận hàng** (cash on delivery).
+4. Choose **Đặt hàng**.
+
+After an order is placed, the payment panel shows the order number, payment code, amount and status, and the SePay QR code and transfer description when QR payment is chosen. It reads "Đã nhận thanh toán" once payment is received.
+
+### Orders
+
+**Đơn hàng của tôi** (`/don-hang-cua-toi`) lists the signed-in customer's orders with status (Chờ xác nhận, Đã xác nhận, Đang soạn, Sẵn sàng giao, Đang giao, Hoàn tất, Đã huỷ) and payment status.
+
+### Account
+
+**Tài khoản** (`/tai-khoan`) requires sign-in and has six sections:
+
+- **Tổng quan**: greeting, number of saved addresses, prescriptions on the account, and recent orders.
+- **Đơn hàng**: order list, linking to the full orders page.
+- **Đơn thuốc**: consultation requests and prescriptions the pharmacy has recorded to the account.
+- **Địa chỉ giao hàng**: add, edit, delete and set the default delivery address (with a map picker).
+- **Thông tin cá nhân**: display name and contact details.
+- **Đổi mật khẩu**: change the password; you sign in again afterwards.
+
+**Đăng xuất** signs out and clears the cached account data.
+
+### Prescription intake
+
+**Gửi đơn thuốc** (`/gui-don-thuoc`) requires sign-in.
+
+1. Upload a clear photo of the printed prescription.
+2. If the page has a QR code, it is read on your device first. Without a readable QR code the photo is sent to the AI provider configured by Platform Admin, which reads the medicine list only; the page states that Pharmacy Central does not keep the photo.
+3. Review the results: each line is matched to catalog products, with badges for prescription-only and availability.
+4. For lines with no suitable product at the selected pharmacy, choose **Nhờ dược sĩ tìm giúp**, add an optional note, and send. A pharmacist replies in Staff Web under **Consultations**, and the answer appears in your account under **Đơn thuốc**.
+
+Prescription-only products show "Liên hệ báo giá" in the assistant and cannot be added to the cart without a price.
+
+### Shopping assistant
+
+The **Trợ lý tư vấn** button floats on every Customer Web page and keeps its conversation as you navigate. Ask about products or how to send a prescription. Product answers show product cards with the prescription-only badge and price or "Liên hệ báo giá".
+
+- **Cuộc trò chuyện mới** starts a new conversation.
+- If the assistant is unavailable, you see "Trợ lý tư vấn đang gặp sự cố. Vui lòng thử lại sau ít phút."
+- If you ask too fast, you see a request to wait a moment; if the conversation is too long, you are asked to start a new one.
 
 ## Demo walkthrough
 
-Follow these steps for a complete local demonstration:
+Use the demo accounts above, with `pnpm run dev:data` already run.
 
-1. Sign in with the local admin account to review user administration, audit logs, and system data.
-2. Open **Dashboard** to review summaries, alerts, and navigation.
-3. Open **Sites**, **Catalog**, and **Suppliers** to review master data.
-4. Open **Catalog** to inspect products, sale units, and unit pricing.
-5. Open **Procurement** to create and approve a purchase order.
-6. Open **Receiving** to record incoming goods against the purchase order.
-7. Open **Quality** to inspect and release the received batch.
-8. Open **Inventory** to inspect available balances and movement history.
-9. Sign in with a **Pharmacist** account, open **Pharmacy Counter**, create a sale, complete payment, print a receipt, and dispense medication.
-10. Sign in with a **Warehouse Staff** account, open **Transfers**, and demonstrate creating and dispatching a transfer.
-11. Open **Returns** to demonstrate inventory removals and supplier returns.
-12. Open **Stocktake** and **Adjustments** to demonstrate physical counting and approval.
-13. Open **Reporting**, **Finance**, and **Audit** to demonstrate operational visibility and traceability.
-14. Open **Users** to demonstrate role and site access controls.
+1. **Platform Admin**: sign in to Staff Web. Open **Users** to review accounts and access, **Audit** for the activity log, and **AI integrations** for the four AI feature cards.
+2. **Platform Admin or Pharmacy Manager**: open **Sites**, **Storage locations**, **Suppliers** and **Catalog**, then **Units** and **Pricing** to see sale units and price drafts.
+3. **Pharmacy Manager**: open **Procurement**, create a purchase order and approve it.
+4. **Warehouse Staff**: open **Receiving**, record the goods receipt against that order, then open **Quality** and release the new batch.
+5. **Warehouse Staff**: open **Inventory** to see balances and movements; open **Transfers** to create and ship a transfer; open **Returns and removals** and **Stocktake**; open **Adjustments** to submit and approve an adjustment.
+6. **Pharmacist**: sign in, open **Pharmacist overview**, then **Prescriptions**, create a prescription, open **Dispense**, and dispense it. In **Counter transactions**, create the invoice and confirm cash.
+7. **Pharmacy Manager**: open **Finance** and **Reporting** to review the summary, invoices and report rows.
+8. **Pharmacist**: open **Search synonyms**, submit a group, then sign in as another staff member to approve it.
+9. **Customer**: open Customer Web at `http://localhost:5173/`, search for a product, add it to the cart, sign in, and check out with pickup or delivery. Open **Đơn hàng của tôi** to track it, and try **Gửi đơn thuốc** and the shopping assistant.
 
 ## Demonstration guidelines
 
 - Use local development data only.
 - Do not enter real patient, supplier, or employee personal information.
 - Do not reuse development credentials in production environments.
-- When a workflow requires dual approval, sign in with a second authorized demo user.
+- Where a change needs another staff member's approval (search synonyms), sign in with a second employee account to approve it.
 
 ## Operational best practices
 
 - Assign individual named accounts to staff rather than shared accounts.
-- Restrict site access scopes to the specific locations where staff members work.
-- Review quality inspection records, stock adjustments, and audit logs regularly.
+- Restrict site access to the specific locations where staff members work.
+- Review quality decisions, stock adjustments and the audit log regularly.
 - Keep development seed credentials restricted to development environments.

@@ -109,11 +109,9 @@ coverage/
 *.tfstate.*
 docs/*
 !docs/
-!docs/Architecture.md
-!docs/ProjectInfo.md
-!docs/Baseline.md
+!docs/ApiGuide.md
+!docs/UserGuide.md
 !docs/Runbooks.md
-!docs/ProjectSummary.md
 !docs/diagrams/
 !docs/diagrams/**
 docs/diagrams/png/
@@ -128,3 +126,4 @@ AGENTS.md
 credentials.json
 plans/
 .omp/
+TODO.md
