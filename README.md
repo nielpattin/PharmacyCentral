@@ -41,8 +41,9 @@ The Compose web containers proxy `/api` requests through the local Nginx gateway
 
 The default endpoints are:
 
-- Customer web: `http://localhost:5173`
-- Staff web: `http://localhost:5174`
+- Customer web: `http://localhost:5301`
+- Staff web: `http://localhost:5302`
+- Architecture diagrams (`pnpm diagrams:serve`): `http://localhost:5303`
 - RabbitMQ management: `http://localhost:15672`
 - Mailpit: `http://localhost:8025`
 

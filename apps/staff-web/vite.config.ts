@@ -12,14 +12,20 @@ const apiProxy = apiBaseUrl
     }
   : undefined;
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  server: {
-    port: 5174,
-    ...(apiProxy ? { proxy: apiProxy } : {}),
-  },
-  preview: {
-    port: 5174,
-    ...(apiProxy ? { proxy: apiProxy } : {}),
-  },
+// The dev server and `vite preview` need the port; `vite build` (CI and the container image) does not.
+// A busy port stops the server instead of moving to another one, because URLs such as PUBLIC_APP_URL assume it.
+const servePort = (): number => {
+  const value = process.env.STAFF_WEB_PORT ?? rootEnv.STAFF_WEB_PORT;
+  if (!value)
+    throw new Error("Missing required environment variable: STAFF_WEB_PORT. Please set it in your .env file.");
+  return Number.parseInt(value, 10);
+};
+
+export default defineConfig(({ command }) => {
+  const server = command === "serve" ? { port: servePort(), strictPort: true } : {};
+  return {
+    plugins: [react(), tailwindcss()],
+    server: { ...server, ...(apiProxy ? { proxy: apiProxy } : {}) },
+    preview: { ...server, ...(apiProxy ? { proxy: apiProxy } : {}) },
+  };
 });

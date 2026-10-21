@@ -20,7 +20,7 @@
     "test": "nx run-many -t test --all",
     "typecheck": "nx run-many -t typecheck --all",
     "db:migrate": "node --env-file=.env tools/migrate-all.mjs",
-    "diagrams:serve": "node tools/likec4.mjs serve docs/diagrams",
+    "diagrams:serve": "node --env-file=.env tools/likec4.mjs serve docs/diagrams",
     "diagrams:validate": "node tools/likec4.mjs validate --json --no-layout docs/diagrams",
     "diagrams:export": "node tools/likec4.mjs export png -o docs/diagrams/png docs/diagrams"
   },

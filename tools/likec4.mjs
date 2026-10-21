@@ -31,6 +31,16 @@ if (args.length === 0) {
 }
 
 const childEnv = { ...process.env };
+// The preview listens on LikeC4's default port (5173) unless told otherwise, and that is the port Vite apps like to
+// take. DIAGRAMS_PORT in the root .env keeps it on a port of its own.
+if (args[0] === "serve" && !args.includes("--port")) {
+  const port = process.env.DIAGRAMS_PORT;
+  if (!port) {
+    console.error("Missing required environment variable: DIAGRAMS_PORT. Please set it in your .env file.");
+    process.exit(2);
+  }
+  args.push("--port", port);
+}
 for (const key of aiProviderEnv) delete childEnv[key];
 
 const likec4Args = ["dlx", "--allow-build", "esbuild", "likec4@1.60.0", ...args];

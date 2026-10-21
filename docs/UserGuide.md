@@ -4,8 +4,8 @@
 
 This document describes how internal teams and shoppers use the two Pharmacy Central web apps as they exist today:
 
-- **Staff Web** (`http://localhost:5174/`) for employees: pharmacists, pharmacy managers, warehouse staff and platform administrators.
-- **Customer Web** (`http://localhost:5173/`) for shoppers: product search, cart, checkout, orders, prescriptions, account and the shopping assistant.
+- **Staff Web** (`http://localhost:5302/`) for employees: pharmacists, pharmacy managers, warehouse staff and platform administrators.
+- **Customer Web** (`http://localhost:5301/`) for shoppers: product search, cart, checkout, orders, prescriptions, account and the shopping assistant.
 
 Screens are described as the code renders them. A sidebar item lists only for roles that may open it; the labels are the ones shown on screen.
 
@@ -14,7 +14,7 @@ Screens are described as the code renders them. A sidebar item lists only for ro
 ### Staff Web
 
 1. Start the local system with Docker Compose (`docker compose up -d`) or start the development servers.
-2. Open `http://localhost:5174/`.
+2. Open `http://localhost:5302/`.
 3. Enter your employee email and password, then choose **Sign in**.
 4. The sidebar shows only the workspaces permitted for your roles.
 
@@ -22,7 +22,7 @@ Customer accounts cannot sign in to Staff Web (it answers "Employee account requ
 
 ### Customer Web
 
-1. Open `http://localhost:5173/`.
+1. Open `http://localhost:5301/`.
 2. Choose **Tài khoản** (Account) in the header. Signed-out visitors see the sign-in form there.
 3. Sign in with **Đăng nhập**, or choose **Tạo tài khoản mới** to register with a display name, an email and a password of at least 8 characters.
 
@@ -322,7 +322,7 @@ Use the demo accounts above, with `pnpm run dev:data` already run.
 6. **Pharmacist**: sign in, open **Pharmacist overview**, then **Prescriptions**, create a prescription, open **Dispense**, and dispense it. In **Counter transactions**, create the invoice and confirm cash.
 7. **Pharmacy Manager**: open **Finance** and **Reporting** to review the summary, invoices and report rows.
 8. **Pharmacist**: open **Search synonyms**, submit a group, then sign in as another staff member to approve it.
-9. **Customer**: open Customer Web at `http://localhost:5173/`, search for a product, add it to the cart, sign in, and check out with pickup or delivery. Open **Đơn hàng của tôi** to track it, and try **Gửi đơn thuốc** and the shopping assistant.
+9. **Customer**: open Customer Web at `http://localhost:5301/`, search for a product, add it to the cart, sign in, and check out with pickup or delivery. Open **Đơn hàng của tôi** to track it, and try **Gửi đơn thuốc** and the shopping assistant.
 
 ## Demonstration guidelines
 
