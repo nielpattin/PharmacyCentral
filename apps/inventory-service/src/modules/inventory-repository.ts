@@ -4,7 +4,6 @@ import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import {
   idempotencyRecords,
   inventoryBalances,
-  outboxMessages,
   productBatches,
   replenishmentRequestLines,
   replenishmentRequests,
@@ -22,7 +21,7 @@ import {
 import { allocateFefo } from "./stock/application/fefo-allocate.ts";
 import { transitionReplenishment, type ReplenishmentStatus } from "./replenishment/domain/replenishment-request.ts";
 import { transitionTransfer, type TransferStatus } from "./transfers/domain/transfer-order.ts";
-import { recordSiteAvailability, sellableBatch, today, type Availability } from "./site-availability.ts";
+import { recordSiteAvailability, sellableBatch, today } from "./site-availability.ts";
 
 /** A dispense the stock cannot honour: the batch is wrong for the product, not releasable, or not on the shelf. */
 export class StockDispenseError extends Error {}
@@ -52,19 +51,7 @@ export type StockDispenseResult = {
 const DISPENSE_SCOPE = "inventory.dispense";
 
 export class InventoryRepository {
-  public constructor(
-    private readonly database: InventoryDatabase,
-    private readonly publishAvailability?: (input: Availability) => Promise<void>,
-  ) {}
-
-  private async publishAvailabilitySafely({ productId, siteId, inStock }: Availability): Promise<void> {
-    if (!this.publishAvailability) return;
-    try {
-      await this.publishAvailability({ productId, siteId, inStock });
-    } catch {
-      // The local stock transaction remains authoritative. The outbox retry handles broker recovery.
-    }
-  }
+  public constructor(private readonly database: InventoryDatabase) {}
 
   public async listBalances(
     productId?: string,
@@ -201,7 +188,7 @@ export class InventoryRepository {
           .set({ status: "Rejected", approvedBy: actorId, approvalNotes: approvalNotes ?? null, updatedAt: new Date() })
           .where(eq(stockAdjustments.id, id))
           .returning();
-        return { adjustment: rejected, availability: undefined };
+        return rejected;
       }
       const batch = (
         await transaction.select().from(productBatches).where(eq(productBatches.id, adjustment.productBatchId)).limit(1)
@@ -264,17 +251,15 @@ export class InventoryRepository {
         movementType: "StockAdjustment",
         reason: adjustment.reason,
       });
-      const availability = await recordSiteAvailability(transaction, adjustment.productId, adjustment.siteId);
+      await recordSiteAvailability(transaction, adjustment.productId, adjustment.siteId);
       const [approved] = await transaction
         .update(stockAdjustments)
         .set({ status: "Approved", approvedBy: actorId, approvalNotes: approvalNotes ?? null, updatedAt: new Date() })
         .where(eq(stockAdjustments.id, id))
         .returning();
-      return { adjustment: approved, availability };
+      return approved;
     });
-    if (!result) return undefined;
-    if (result.availability) await this.publishAvailabilitySafely(result.availability);
-    return result.adjustment;
+    return result;
   }
 
   public async createBatch(input: typeof productBatches.$inferInsert) {
@@ -309,14 +294,10 @@ export class InventoryRepository {
         .selectDistinct({ siteId: inventoryBalances.siteId })
         .from(inventoryBalances)
         .where(eq(inventoryBalances.productBatchId, id));
-      const availability: Availability[] = [];
-      for (const { siteId } of sites)
-        availability.push(await recordSiteAvailability(transaction, batch.productId, siteId));
-      return { batch, availability };
+      for (const { siteId } of sites) await recordSiteAvailability(transaction, batch.productId, siteId);
+      return batch;
     });
-    if (!result) return undefined;
-    for (const item of result.availability) await this.publishAvailabilitySafely(item);
-    return result.batch;
+    return result;
   }
 
   public async fefoAllocate(input: { productId: string; siteId: string; quantityNeeded: number }) {
@@ -435,11 +416,10 @@ export class InventoryRepository {
           createdBy: input.createdBy ?? null,
         })
         .returning();
-      const availability = await recordSiteAvailability(transaction, input.productId, input.siteId);
-      return { balance, ledger, availability };
+      await recordSiteAvailability(transaction, input.productId, input.siteId);
+      return { balance, ledger };
     });
-    await this.publishAvailabilitySafely(result.availability);
-    return { balance: result.balance, ledger: result.ledger };
+    return result;
   }
 
   public async reserve(input: {
@@ -514,13 +494,11 @@ export class InventoryRepository {
         }
       }
       // A hold is a change in what a shopper may buy, so every product it touched is answered again once committed.
-      const availability: Availability[] = [];
       for (const productId of new Set(input.lines.map((line) => line.productId)))
-        availability.push(await recordSiteAvailability(transaction, productId, input.siteId));
-      return { allocations, availability };
+        await recordSiteAvailability(transaction, productId, input.siteId);
+      return allocations;
     });
-    for (const item of result.availability) await this.publishAvailabilitySafely(item);
-    return result.allocations;
+    return result;
   }
 
   /**
@@ -529,20 +507,19 @@ export class InventoryRepository {
    * as it is, which keeps a repeated cancel from releasing another sale's hold.
    */
   public async releaseReservation(id: string) {
-    const { reservation, availability } = await this.database.db.transaction(async (transaction) => {
+    const reservation = await this.database.db.transaction(async (transaction) => {
       const [current] = await transaction
         .select()
         .from(stockReservations)
         .where(eq(stockReservations.id, id))
         .for("update");
-      if (!current || current.status !== "active") return { reservation: current, availability: [] as Availability[] };
+      if (!current || current.status !== "active") return current;
       const lines = await transaction
         .select()
         .from(stockReservationLines)
         .where(eq(stockReservationLines.reservationId, id));
       // A line carries no site, so the balance row that gave the hold back is what names the site to answer for.
       const answered = new Set<string>();
-      const availability: Availability[] = [];
       for (const line of lines) {
         const released = await transaction
           .update(inventoryBalances)
@@ -562,7 +539,7 @@ export class InventoryRepository {
           const pair = `${line.productId}:${siteId}`;
           if (answered.has(pair)) continue;
           answered.add(pair);
-          availability.push(await recordSiteAvailability(transaction, line.productId, siteId));
+          await recordSiteAvailability(transaction, line.productId, siteId);
         }
       }
       await transaction
@@ -574,9 +551,8 @@ export class InventoryRepository {
         .set({ status: "released", updatedAt: new Date() })
         .where(eq(stockReservations.id, id))
         .returning();
-      return { reservation: released, availability };
+      return released;
     });
-    for (const item of availability) await this.publishAvailabilitySafely(item);
     return reservation;
   }
 
@@ -587,7 +563,7 @@ export class InventoryRepository {
    * `expiredOnOrAfter` gives the sweeper a lower bound so an expiry is not answered again on every run.
    */
   public async refreshAvailabilityForExpiredStock(expiredOnOrAfter?: string): Promise<number> {
-    const { availability } = await this.database.db.transaction(async (transaction) => {
+    return this.database.db.transaction(async (transaction) => {
       const pairs = await transaction
         .selectDistinct({ productId: productBatches.productId, siteId: inventoryBalances.siteId })
         .from(inventoryBalances)
@@ -600,13 +576,9 @@ export class InventoryRepository {
             expiredOnOrAfter ? gte(productBatches.expiryDate, expiredOnOrAfter) : undefined,
           ),
         );
-      const availability: Availability[] = [];
-      for (const pair of pairs)
-        availability.push(await recordSiteAvailability(transaction, pair.productId, pair.siteId));
-      return { availability };
+      for (const pair of pairs) await recordSiteAvailability(transaction, pair.productId, pair.siteId);
+      return pairs.length;
     });
-    for (const item of availability) await this.publishAvailabilitySafely(item);
-    return availability.length;
   }
 
   /**
@@ -617,7 +589,7 @@ export class InventoryRepository {
    */
   public async dispense(input: StockDispense): Promise<StockDispenseResult> {
     const dispensedOn = today();
-    const { result, availability } = await this.database.db.transaction(async (transaction) => {
+    const result = await this.database.db.transaction(async (transaction) => {
       // Claiming the key first makes a concurrent duplicate wait for this transaction, then answer its result.
       const [claimed] = await transaction
         .insert(idempotencyRecords)
@@ -636,7 +608,7 @@ export class InventoryRepository {
             ),
           )
           .limit(1);
-        return { result: JSON.parse(existing?.response ?? "null") as StockDispenseResult, availability: [] };
+        return JSON.parse(existing?.response ?? "null") as StockDispenseResult;
       }
       if (input.reservationId) {
         const [reservation] = await transaction
@@ -757,9 +729,7 @@ export class InventoryRepository {
           .set({ status: reservationStatus, updatedAt: new Date() })
           .where(eq(stockReservations.id, input.reservationId));
       }
-      const availability: Availability[] = [];
-      for (const productId of touchedProducts)
-        availability.push(await recordSiteAvailability(transaction, productId, input.siteId));
+      for (const productId of touchedProducts) await recordSiteAvailability(transaction, productId, input.siteId);
       const result: StockDispenseResult = { dispenseId: input.dispenseId, reservationStatus, entries };
       await transaction
         .update(idempotencyRecords)
@@ -771,9 +741,8 @@ export class InventoryRepository {
             eq(idempotencyRecords.actorId, input.actorId),
           ),
         );
-      return { result, availability };
+      return result;
     });
-    for (const item of availability) await this.publishAvailabilitySafely(item);
     return result;
   }
 
@@ -890,7 +859,7 @@ export class InventoryRepository {
           })
           .where(eq(replenishmentRequests.id, id))
           .returning();
-        return { updated, availability: [] as Availability[] };
+        return updated;
       }
       if (!current.storageLocationId) throw new Error("Fulfillment requires a storage location");
       const effectiveLines = await transaction
@@ -898,7 +867,6 @@ export class InventoryRepository {
         .from(replenishmentRequestLines)
         .where(eq(replenishmentRequestLines.replenishmentRequestId, id));
       if (effectiveLines.length === 0) throw new Error("Fulfillment requires replenishment lines");
-      const availability: Availability[] = [];
       for (const line of effectiveLines) {
         const batchId = line.productBatchId;
         if (!batchId) throw new Error("Fulfillment requires a product batch");
@@ -958,7 +926,7 @@ export class InventoryRepository {
           movementType: "Replenishment",
           reason: line.reason ?? `Replenishment request ${id}`,
         });
-        availability.push(await recordSiteAvailability(transaction, line.productId, current.siteId));
+        await recordSiteAvailability(transaction, line.productId, current.siteId);
       }
       const [updated] = await transaction
         .update(replenishmentRequests)
@@ -969,11 +937,9 @@ export class InventoryRepository {
         })
         .where(eq(replenishmentRequests.id, id))
         .returning();
-      return { updated, availability };
+      return updated;
     });
-    if (!result) return undefined;
-    for (const item of result.availability) await this.publishAvailabilitySafely(item);
-    return result.updated;
+    return result;
   }
 
   public async listStocktakes(siteIds?: string[], status?: string, limit = 100) {
@@ -1101,7 +1067,6 @@ export class InventoryRepository {
         .from(transferOrderLines)
         .innerJoin(productBatches, eq(productBatches.id, transferOrderLines.productBatchId))
         .where(eq(transferOrderLines.transferOrderId, id));
-      const availability: Availability[] = [];
       if (action === "ship") {
         for (const { line, batch } of lines) {
           if (!line.sourceStorageLocationId || !line.productBatchId)
@@ -1153,7 +1118,7 @@ export class InventoryRepository {
             movementType: "TransferOut",
             reason: `Transfer ${current.transferNumber}`,
           });
-          availability.push(await recordSiteAvailability(transaction, line.productId, current.sourceSiteId));
+          await recordSiteAvailability(transaction, line.productId, current.sourceSiteId);
         }
       }
       if (action === "receive") {
@@ -1221,7 +1186,7 @@ export class InventoryRepository {
             movementType: "TransferIn",
             reason: `Transfer ${current.transferNumber}`,
           });
-          availability.push(await recordSiteAvailability(transaction, line.productId, current.destinationSiteId));
+          await recordSiteAvailability(transaction, line.productId, current.destinationSiteId);
         }
       }
       if (action === "receive") {
@@ -1253,11 +1218,9 @@ export class InventoryRepository {
               .where(eq(transferOrderLines.transferOrderId, id)),
           }
         : undefined;
-      return { transfer: detailedTransfer, availability };
+      return detailedTransfer;
     });
-    if (!result) return undefined;
-    for (const item of result.availability) await this.publishAvailabilitySafely(item);
-    return result.transfer;
+    return result;
   }
 
   public async createStocktake(input: {
@@ -1330,7 +1293,6 @@ export class InventoryRepository {
         .where(eq(stocktakeLines.stocktakeId, id));
       if (lines.length === 0 || lines.some(({ line }) => line.countedQuantity === null))
         throw new Error("All stocktake lines must be counted before posting");
-      const availability: Availability[] = [];
       for (const { line, batch } of lines) {
         const countedQuantity = Number(line.countedQuantity);
         const variance = countedQuantity - Number(line.systemQuantity);
@@ -1391,7 +1353,7 @@ export class InventoryRepository {
             movementType: "StocktakeAdjustment",
             reason: `Stocktake ${id}`,
           });
-          availability.push(await recordSiteAvailability(transaction, batch.productId, session.siteId));
+          await recordSiteAvailability(transaction, batch.productId, session.siteId);
         }
         await transaction.update(stocktakeLines).set({ status: "Approved" }).where(eq(stocktakeLines.id, line.id));
       }
@@ -1400,11 +1362,9 @@ export class InventoryRepository {
         .set({ status: "Completed", completedAt: new Date(), updatedAt: new Date() })
         .where(eq(stocktakes.id, id))
         .returning();
-      return { session: updatedSession, availability };
+      return updatedSession;
     });
-    if (!result) return undefined;
-    for (const item of result.availability) await this.publishAvailabilitySafely(item);
-    return result.session;
+    return result;
   }
 
   public async createReturn(input: {
@@ -1426,7 +1386,6 @@ export class InventoryRepository {
         .values({ siteId: input.siteId, reason: input.reason, status: "Completed", createdBy: input.createdBy })
         .returning();
       if (!request) throw new Error("Return request insert did not return a row");
-      const availability: Availability[] = [];
       for (const line of input.lines) {
         const batch = (
           await transaction.select().from(productBatches).where(eq(productBatches.id, line.productBatchId)).limit(1)
@@ -1482,12 +1441,11 @@ export class InventoryRepository {
           notes: line.notes ?? line.destination ?? null,
           occurredAt: line.occurredAtUtc ? new Date(line.occurredAtUtc) : new Date(),
         });
-        availability.push(await recordSiteAvailability(transaction, batch.productId, input.siteId));
+        await recordSiteAvailability(transaction, batch.productId, input.siteId);
       }
-      return { request, availability };
+      return request;
     });
-    for (const item of result.availability) await this.publishAvailabilitySafely(item);
-    return result.request;
+    return result;
   }
 
   public async createReplenishment(input: {

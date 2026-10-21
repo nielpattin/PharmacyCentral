@@ -28,7 +28,7 @@ model {
   pharmacyCentral.services.inventoryService.reservations -> pharmacyCentral.services.inventoryService.stock "Hold and hand over the FEFO batches" {
     technology "in-process"
   }
-  pharmacyCentral.services.inventoryService.availabilityPublisher -> pharmacyCentral.services.inventoryService.stock "Read the availability after the commit" {
+  pharmacyCentral.services.inventoryService.stock -> pharmacyCentral.services.inventoryService.outbox "Write the availability event to the outbox" {
     technology "in-process"
   }
   pharmacyCentral.services.inventoryService.quality -> pharmacyCentral.services.inventoryService.stock "Expiry and quality of a batch" {

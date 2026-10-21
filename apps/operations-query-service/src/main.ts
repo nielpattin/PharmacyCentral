@@ -29,9 +29,11 @@ if (!process.env.INTERNAL_SERVICE_SECRET)
   throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
 const database = createOperationsDatabase();
 const repository = database ? new OperationsRepository(database, { catalogUrl, inventoryUrl, salesUrl }) : undefined;
-const eventConsumer = repository ? new RabbitMqEventConsumer(repository) : undefined;
-if (eventConsumer)
-  void eventConsumer.start().catch((error: unknown) => logger.warn({ error }, "operations event consumer unavailable"));
+const rabbitmqUrl = process.env.RABBITMQ_URL;
+if (!rabbitmqUrl)
+  throw new Error("Missing required environment variable: RABBITMQ_URL. Please set it in your .env file.");
+const eventConsumer = repository ? new RabbitMqEventConsumer(repository, logger, rabbitmqUrl) : undefined;
+eventConsumer?.start();
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));

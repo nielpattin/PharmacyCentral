@@ -362,7 +362,22 @@ Never use `drizzle-kit push` in shared, staging, or production environments.
 Local development uses a single RabbitMQ node.
 
 - Producers publish events using confirmation channels and the transactional outbox pattern.
+  The outbox publisher of `inventory`, `sales` and `payment` marks a row published only after the broker confirmed it,
+  so a row stays unpublished while the broker is down and goes out when it is back. An advisory lock lets one
+  publisher per database send at a time. Delivery is at least once.
 - Consumers process messages idempotently using inbox deduplication keys.
+- Consumers read durable quorum queues named `<owner>.<topic>.v2` (`sales.payment-events.v2`,
+  `catalog.availability.v2`, `operations-query.events.v2`), one message at a time. All of them reconnect on their own
+  when the broker drops them.
+- A message that keeps failing is retried five times with a growing delay, then rejected. The broker moves it through
+  the exchange `pharmacy.events.dead` to the parking queue `<queue>.dead`. A payload that is not JSON, or that is not a
+  well-formed event, is parked at once. A non-empty `.dead` queue always means an event nobody applied: find the cause
+  in the service log (`failed for good, dead-lettering it`), fix it, then publish the message again to
+  `pharmacy.events` with its original routing key.
+- Queue arguments cannot be changed on an existing queue, so a change of arguments ships as a new queue name. After
+  such a release delete the abandoned queue (for the move to `.v2`:
+  `rabbitmqctl delete_queue sales.payment-events.v1`, `catalog.availability.v1`, `operations-query.events.v1`),
+  otherwise it keeps collecting copies of every event that nobody reads.
 - Inspect the `pharmacy.events` exchange and consumer queues via RabbitMQ Management UI (`http://localhost:15672`, guest/guest).
 
 ## Cache policy

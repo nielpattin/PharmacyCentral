@@ -30,11 +30,11 @@ if (!process.env.INTERNAL_SERVICE_SECRET)
   throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
 const database = createPaymentDatabase();
 const repository = database ? new PaymentRepository(database) : undefined;
-const outboxPublisher = database ? new PaymentOutboxPublisher(database) : undefined;
-if (outboxPublisher)
-  await outboxPublisher
-    .start()
-    .catch((error: unknown) => logger.warn({ error }, "payment outbox publisher unavailable"));
+const rabbitmqUrl = process.env.RABBITMQ_URL;
+if (!rabbitmqUrl)
+  throw new Error("Missing required environment variable: RABBITMQ_URL. Please set it in your .env file.");
+const outboxPublisher = database ? new PaymentOutboxPublisher(database, logger, rabbitmqUrl) : undefined;
+outboxPublisher?.start();
 
 app.disable("x-powered-by");
 app.post(

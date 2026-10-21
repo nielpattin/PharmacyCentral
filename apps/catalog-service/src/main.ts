@@ -42,6 +42,7 @@ const requireEnv = (name: string): string => {
   return value;
 };
 
+const rabbitmqUrl = requireEnv("RABBITMQ_URL");
 const database = createCatalogDatabase();
 const storeRepository = database ? new DrizzleStoreRepository(database) : undefined;
 const catalogImportService = database ? new CatalogImportService(database) : undefined;
@@ -81,12 +82,9 @@ const searchIndexer = database
   : undefined;
 void searchIndexer?.requestSweep();
 const availabilityConsumer = database
-  ? new RabbitMqAvailabilityConsumer(new AvailabilityProjection(database))
+  ? new RabbitMqAvailabilityConsumer(new AvailabilityProjection(database), logger, rabbitmqUrl)
   : undefined;
-if (availabilityConsumer)
-  void availabilityConsumer
-    .start()
-    .catch((error: unknown) => logger.warn({ error }, "availability consumer unavailable"));
+availabilityConsumer?.start();
 
 app.disable("x-powered-by");
 app.use("/products", express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "5mb" }));

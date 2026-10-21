@@ -58,14 +58,13 @@ requireEnv("INTERNAL_SERVICE_SECRET");
 const openRouteServiceKey = process.env.OPENROUTESERVICE_API_KEY;
 const database = createSalesDatabase();
 const salesRepository = database ? new SalesRepository(database) : undefined;
-const outboxPublisher = database ? new SalesOutboxPublisher(database) : undefined;
-if (outboxPublisher)
-  await outboxPublisher.start().catch((error: unknown) => logger.warn({ error }, "sales outbox publisher unavailable"));
-const paymentEventConsumer = salesRepository ? new SalesPaymentEventConsumer(salesRepository) : undefined;
-if (paymentEventConsumer)
-  await paymentEventConsumer
-    .start()
-    .catch((error: unknown) => logger.warn({ error }, "sales payment consumer unavailable"));
+const rabbitmqUrl = requireEnv("RABBITMQ_URL");
+const outboxPublisher = database ? new SalesOutboxPublisher(database, logger, rabbitmqUrl) : undefined;
+outboxPublisher?.start();
+const paymentEventConsumer = salesRepository
+  ? new SalesPaymentEventConsumer(salesRepository, logger, rabbitmqUrl)
+  : undefined;
+paymentEventConsumer?.start();
 const redisClient = await createRedisClient();
 const deliveryCache = redisClient ? new RedisDeliveryCache(redisClient) : new InMemoryDeliveryCache();
 /**

@@ -4,13 +4,13 @@ import { createServer } from "node:http";
 import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware } from "./middleware/trusted-request.ts";
 
-import { AvailabilityPublisher } from "./modules/availability-publisher.ts";
 import { CatalogServiceReferenceResolver } from "./modules/catalog-reference-resolver.ts";
 import { ExpiryAvailabilitySweeper } from "./modules/expiry-availability-sweeper.ts";
 import { createInventoryImportRouter } from "./modules/inventory-import-routes.ts";
 import { InventoryImportService } from "./modules/inventory-import-service.ts";
 import { createInventoryRouter } from "./modules/inventory-routes.ts";
 import { InventoryRepository } from "./modules/inventory-repository.ts";
+import { InventoryOutboxPublisher } from "./modules/outbox-publisher.ts";
 import { createProcurementRouter } from "./modules/procurement-routes.ts";
 import { ProcurementRepository } from "./modules/procurement-repository.ts";
 import { createInventoryDatabase } from "./shared/infrastructure/database.ts";
@@ -28,20 +28,17 @@ if (!catalogServiceUrl)
 if (!process.env.INTERNAL_SERVICE_SECRET)
   throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
 const database = createInventoryDatabase();
-const availabilityPublisher = new AvailabilityPublisher();
-await availabilityPublisher
-  .start()
-  .catch((error: unknown) => logger.warn({ error }, "availability publisher unavailable"));
-const repository = database
-  ? new InventoryRepository(database, (input) => availabilityPublisher.publish(input))
-  : undefined;
+const rabbitmqUrl = process.env.RABBITMQ_URL;
+if (!rabbitmqUrl)
+  throw new Error("Missing required environment variable: RABBITMQ_URL. Please set it in your .env file.");
+const outboxPublisher = database ? new InventoryOutboxPublisher(database, logger, rabbitmqUrl) : undefined;
+outboxPublisher?.start();
+const repository = database ? new InventoryRepository(database) : undefined;
 // Expiry changes what a site can sell with no movement on the shelf, so it needs its own periodic recompute.
 const expiryAvailabilitySweeper = repository ? new ExpiryAvailabilitySweeper(repository, logger) : undefined;
 expiryAvailabilitySweeper?.start();
 const inventoryImportService = database
-  ? new InventoryImportService(database, new CatalogServiceReferenceResolver(catalogServiceUrl), (input) =>
-      availabilityPublisher.publish(input),
-    )
+  ? new InventoryImportService(database, new CatalogServiceReferenceResolver(catalogServiceUrl))
   : undefined;
 const procurementRepository = database
   ? new ProcurementRepository(database, async (input) => {
@@ -96,7 +93,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 const server = createServer(app);
 server.on("close", () => {
   expiryAvailabilitySweeper?.close();
-  void availabilityPublisher.close();
+  void outboxPublisher?.close();
   void database?.pool.end();
 });
 const shutdown = (signal: string): void => {

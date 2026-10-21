@@ -33,8 +33,8 @@ model {
         summary "The purchase order, its approval and the goods receipt that creates the batches."
       }
 
-      availabilityPublisher = component "Availability publisher" {
-        summary "Publishes inventory.availability.changed.v1 after the stock transaction commits."
+      outbox = component "Outbox publisher" {
+        summary "Publishes the availability events from the outbox rows of the inventory database."
       }
     }
   }

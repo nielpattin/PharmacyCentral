@@ -8,7 +8,7 @@ import type {
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import { inventoryBalances, productBatches, stockLedgerEntries } from "../shared/infrastructure/schema.ts";
 
-import { recordSiteAvailability, type Availability } from "./site-availability.ts";
+import { recordSiteAvailability } from "./site-availability.ts";
 
 export type OpeningBalanceReference = {
   productId: string;
@@ -26,7 +26,6 @@ export class InventoryImportService {
   public constructor(
     private readonly database: InventoryDatabase,
     private readonly resolver: OpeningBalanceReferenceResolver,
-    private readonly publishAvailability?: (input: Availability) => Promise<void>,
   ) {}
 
   public async importOpeningBalances(input: OpeningBalanceImport): Promise<OpeningBalanceImportResult> {
@@ -143,21 +142,10 @@ export class InventoryImportService {
           quantity: row.quantityOnHand,
         });
       }
-      const availability: Availability[] = [];
       for (const { productId, siteId } of touched.values())
-        availability.push(await recordSiteAvailability(transaction, productId, siteId));
-      return { summary: { created, unchanged, batchesCreated, balances }, availability };
+        await recordSiteAvailability(transaction, productId, siteId);
+      return { created, unchanged, batchesCreated, balances };
     });
-
-    if (this.publishAvailability) {
-      for (const entry of result.availability) {
-        try {
-          await this.publishAvailability(entry);
-        } catch {
-          // The local stock transaction remains authoritative. The outbox retry handles broker recovery.
-        }
-      }
-    }
-    return result.summary;
+    return result;
   }
 }

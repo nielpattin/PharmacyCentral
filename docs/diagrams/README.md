@@ -77,6 +77,8 @@ two things in 1.60.0:
 | `chatbotToolCalling` | The Jev gate and the three model calls of the shopping assistant. |
 | `staffDataImport` | The import of the master data and of the opening balances. |
 | `operationsReadModel` | How the staff dashboards get their figures. |
+| `outboxDelivery` | How a stock change becomes an event: the outbox row, the relay, the durable queue. |
+| `asyncReliability` | What the relay and the consumer do when the broker is down, a payload is bad, or a handler keeps failing. |
 | `localCompose` | The local stack: the gateway, the seven services, the infrastructure. |
 | `awsEcs` | The production stack: the API Gateway, the authorizer, the ALB, the Fargate tasks. |
 
@@ -90,6 +92,14 @@ two things in 1.60.0:
   through the HTTP API of the owning service.
 - **The events are versioned.** The exchange is `pharmacy.events`; a consumer binds its own durable
   queue and stays idempotent through its inbox or projection keys.
+- **Publishing goes through a transactional outbox.** `inventory-service`, `sales-service` and
+  `payment-service` write the event row in the same transaction as the change, and an outbox
+  publisher relays the unpublished rows every second over a confirm channel, and marks a row
+  published only after the broker confirmed the message, so delivery is at least once. An advisory
+  lock lets one relay per database publish at a time, which keeps the order. A consumer reads a
+  durable quorum queue one message at a time; a message that keeps failing is retried five times and
+  then parked on `<queue>.dead` through the exchange `pharmacy.events.dead`, and a payload that can
+  never be applied is parked at once.
 - **The browser is never authoritative.** Prices, stock quantities, delivery fees, distances and
   the identity of the caller are recalculated by the service that owns them.
 - **The AWS stack is configuration only.** `deploy/aws` defines the resources, but no AWS resource

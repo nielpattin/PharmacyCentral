@@ -1,37 +1,116 @@
 import amqp from "amqplib";
-import type { Channel, ChannelModel } from "amqplib";
+import { setTimeout as sleep } from "node:timers/promises";
+import type { Channel, ChannelModel, ConsumeMessage } from "amqplib";
 
+import type { Logger } from "../logger.ts";
 import type { SalesRepository } from "./sales-repository.ts";
 
+const EXCHANGE = "pharmacy.events";
+const DEAD_LETTER_EXCHANGE = "pharmacy.events.dead";
+const QUEUE = "sales.payment-events.v2";
+/** The delivery a failing message is parked on `${QUEUE}.dead` at; each earlier failure waits longer. */
+const MAX_ATTEMPTS = 5;
+const RETRY_DELAY_MS = 1_000;
+const RECONNECT_DELAY_MS = 5_000;
+
+/**
+ * Moves an order to paid or refunded from the payment events. One message is handled at a time, so the events of an
+ * order are applied in the order they were published. A failed handler waits and returns the message to the queue;
+ * on its `MAX_ATTEMPTS`th failure, and at once for a payload that is not JSON, the message is rejected and the
+ * broker dead-letters it to `${QUEUE}.dead` instead of dropping it or looping on it forever. The attempts are
+ * counted by the app from `x-acquired-count`, because RabbitMQ 4 does not apply `x-delivery-limit` to a requeueing
+ * `basic.nack`. The connection is rebuilt after it drops.
+ */
 export class SalesPaymentEventConsumer {
-  private connection?: ChannelModel;
-  private channel?: Channel;
+  private connection: ChannelModel | undefined;
+  private channel: Channel | undefined;
+  private reconnectTimer: NodeJS.Timeout | undefined;
+  private closing = false;
 
   public constructor(
     private readonly repository: SalesRepository,
-    private readonly url = process.env.RABBITMQ_URL,
+    private readonly logger: Logger,
+    private readonly url: string,
   ) {}
 
-  public async start(): Promise<void> {
-    if (!this.url) return;
-    this.connection = await amqp.connect(this.url);
-    this.channel = await this.connection.createChannel();
-    await this.channel.assertExchange("pharmacy.events", "topic", { durable: true });
-    const queue = await this.channel.assertQueue("sales.payment-events.v1", { durable: true });
-    await this.channel.bindQueue(queue.queue, "pharmacy.events", "payment.invoice.*.v1");
-    await this.channel.consume(queue.queue, (message) => {
-      if (message) void this.handle(message);
-    });
+  public start(): void {
+    void this.connect();
   }
 
   public async close(): Promise<void> {
-    await this.channel?.close();
-    await this.connection?.close();
+    this.closing = true;
+    clearTimeout(this.reconnectTimer);
+    const connection = this.connection;
+    this.connection = undefined;
+    this.channel = undefined;
+    await connection?.close().catch(() => undefined);
   }
 
-  private async handle(message: amqp.ConsumeMessage): Promise<void> {
+  private async connect(): Promise<void> {
+    this.reconnectTimer = undefined;
+    if (this.closing) return;
     try {
-      const event = JSON.parse(message.content.toString()) as { eventType?: string; payload?: { orderId?: unknown } };
+      const connection = await amqp.connect(this.url);
+      this.connection = connection;
+      connection.on("error", (error: unknown) => this.logger.warn({ error }, "payment consumer connection error"));
+      connection.on("close", () => {
+        if (this.connection === connection) this.restart();
+      });
+      const channel = await connection.createChannel();
+      channel.on("error", (error: unknown) => this.logger.warn({ error }, "payment consumer channel error"));
+      channel.on("close", () => {
+        if (this.channel === channel) this.restart();
+      });
+      this.channel = channel;
+      await this.declareTopology(channel);
+      await channel.prefetch(1);
+      await channel.consume(QUEUE, (message) => {
+        // The broker cancelled the consumer, for instance because the queue was deleted.
+        if (!message) return this.restart();
+        void this.handle(channel, message).catch((error: unknown) =>
+          this.logger.warn({ error }, "payment event could not be settled"),
+        );
+      });
+    } catch (error) {
+      this.logger.warn({ error }, "payment consumer could not start, retrying");
+      this.restart();
+    }
+  }
+
+  private async declareTopology(channel: Channel): Promise<void> {
+    await channel.assertExchange(EXCHANGE, "topic", { durable: true });
+    await channel.assertExchange(DEAD_LETTER_EXCHANGE, "direct", { durable: true });
+    await channel.assertQueue(`${QUEUE}.dead`, { durable: true });
+    await channel.bindQueue(`${QUEUE}.dead`, DEAD_LETTER_EXCHANGE, QUEUE);
+    await channel.assertQueue(QUEUE, {
+      durable: true,
+      arguments: {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": DEAD_LETTER_EXCHANGE,
+        "x-dead-letter-routing-key": QUEUE,
+      },
+    });
+    await channel.bindQueue(QUEUE, EXCHANGE, "payment.invoice.*.v1");
+  }
+
+  private restart(): void {
+    const connection = this.connection;
+    this.connection = undefined;
+    this.channel = undefined;
+    void connection?.close().catch(() => undefined);
+    if (this.closing || this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => void this.connect(), RECONNECT_DELAY_MS);
+  }
+
+  private async handle(channel: Channel, message: ConsumeMessage): Promise<void> {
+    let event: { eventType?: string; payload?: { orderId?: unknown } };
+    try {
+      event = JSON.parse(message.content.toString()) as typeof event;
+    } catch {
+      channel.nack(message, false, false);
+      return;
+    }
+    try {
       const orderId = event.payload?.orderId;
       if (
         typeof orderId === "string" &&
@@ -42,9 +121,17 @@ export class SalesPaymentEventConsumer {
           event.eventType === "payment.invoice.refunded.v1" ? "Refunded" : "Paid",
         );
       }
-      this.channel?.ack(message);
-    } catch {
-      this.channel?.nack(message, false, false);
+      channel.ack(message);
+    } catch (error) {
+      const attempt = Number(message.properties.headers?.["x-acquired-count"] ?? 0) + 1;
+      if (attempt >= MAX_ATTEMPTS) {
+        this.logger.error({ error, attempt }, "payment event failed for good, dead-lettering it");
+        channel.nack(message, false, false);
+        return;
+      }
+      this.logger.warn({ error, attempt }, "payment event failed, returning it to the queue");
+      await sleep(RETRY_DELAY_MS * attempt);
+      channel.nack(message, false, true);
     }
   }
 }

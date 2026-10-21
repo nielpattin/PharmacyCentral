@@ -99,7 +99,7 @@ views {
     pharmacyCentral.services.catalogService -> pharmacyCentral.data.postgres.catalogDb "the products, the prices and the suppliers"
     pharmacyCentral.web.staffWeb -> pharmacyCentral.services.inventoryService "POST /api/inventory/imports/opening-balances"
     pharmacyCentral.services.inventoryService -> pharmacyCentral.data.postgres.inventoryDb "the batches and the balances"
-    pharmacyCentral.services.inventoryService -> pharmacyCentral.data.rabbitmq "publish inventory.availability.changed.v1"
+    pharmacyCentral.services.inventoryService -> pharmacyCentral.data.rabbitmq "relay inventory.availability.changed.v1 from the outbox"
     pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.catalogService "the availability of the imported stock"
   }
 
@@ -118,5 +118,62 @@ views {
     pharmacyCentral.services.operationsService -> pharmacyCentral.services.inventoryService "GET the balances of the reader sites"
     pharmacyCentral.services.inventoryService -> pharmacyCentral.services.operationsService "the balances"
     pharmacyCentral.services.operationsService -> pharmacyCentral.web.staffWeb "the dashboard"
+  }
+
+  dynamic view outboxDelivery {
+    variant sequence
+    title "A stock change reaches the storefront, through the outbox"
+    description """
+      The stock change and its event commit in one transaction, so a crash or a broker outage after
+      the commit only delays the event: the row stays unpublished and the next tick sends it. The row
+      is marked published only after the broker confirmed the message, so the delivery is at least
+      once and the consumer has to tolerate a repeated event. A message the consumer keeps failing is
+      retried five times, then parked on the dead-letter queue catalog.availability.v2.dead.
+    """
+
+    pharmacyCentral.services.inventoryService.stock -> pharmacyCentral.data.postgres.inventoryDb "one transaction: the balance, the ledger entry and the availability outbox row"
+    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.postgres.inventoryDb "every second: read the unpublished rows, oldest first"
+    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.rabbitmq "publish inventory.availability.changed.v1, persistent, wait for the broker confirm"
+    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.postgres.inventoryDb "mark the row published"
+    pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.catalogService "deliver to the durable queue catalog.availability.v2"
+    pharmacyCentral.services.catalogService -> pharmacyCentral.data.rabbitmq "ack after the in stock flag is applied"
+  }
+
+  dynamic view asyncReliability {
+    variant sequence
+    title "What the messaging layer does when something fails"
+    description """
+      The example is payment.invoice.paid.v1 on its way to sales-service. Inventory, sales and payment
+      relay the same way, and catalog and operations consume the same way.
+
+      Two relays of one database never publish together: a Postgres advisory lock lets one of them
+      read the unpublished rows, which keeps the order and prevents a duplicate. A consumer rebuilds
+      its connection five seconds after it drops, so a broker restart does not leave a silent service.
+
+      Nothing raises an alert yet. What to look at by hand: the number of outbox rows with a null
+      published_at is the lag of a relay, and a message on a queue named *.dead needs a person.
+    """
+
+    pharmacyCentral.services.paymentService.outbox -> pharmacyCentral.data.rabbitmq "publish payment.invoice.paid.v1, persistent, wait for the broker confirm"
+    alt {
+      when 'the broker is down, or the connection drops before the confirm' {
+        pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.paymentService.outbox "no confirm: the row stays unpublished and the next tick rebuilds the connection and sends it again"
+      }
+      else 'the broker confirms' {
+        pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.paymentService.outbox "confirm: only now is the row marked published"
+      }
+    }
+    pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.salesService.paymentEvents "deliver from the quorum queue sales.payment-events.v2, one message at a time"
+    alt {
+      when 'the payload is not JSON' {
+        pharmacyCentral.services.salesService.paymentEvents -> pharmacyCentral.data.rabbitmq "reject: parked at once on sales.payment-events.v2.dead"
+      }
+      when 'the handler fails' {
+        pharmacyCentral.services.salesService.paymentEvents -> pharmacyCentral.data.rabbitmq "requeue after a growing wait; the fifth failure is rejected and parked on sales.payment-events.v2.dead"
+      }
+      else 'the order is updated' {
+        pharmacyCentral.services.salesService.paymentEvents -> pharmacyCentral.data.rabbitmq "ack"
+      }
+    }
   }
 }

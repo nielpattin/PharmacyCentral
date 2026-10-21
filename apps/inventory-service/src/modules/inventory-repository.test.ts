@@ -335,10 +335,12 @@ describe("InventoryRepository dispense", () => {
 describe("InventoryRepository sellable stock", () => {
   const client = new PGlite();
   const db = drizzle({ client, schema });
-  const published: Array<{ productId: string; siteId: string; inStock: boolean }> = [];
-  const repository = new InventoryRepository({ db, pool: undefined } as unknown as InventoryDatabase, async (input) => {
-    published.push(input);
-  });
+  const repository = new InventoryRepository({ db, pool: undefined } as unknown as InventoryDatabase);
+  /** The availability answers the stock changes left in the outbox, oldest first. */
+  const published = async (): Promise<unknown[]> =>
+    (await db.select().from(schema.outboxMessages).orderBy(schema.outboxMessages.occurredAt)).map((message) =>
+      JSON.parse(message.payload),
+    );
 
   const site = "00000000-0000-4000-8000-00000000000a";
   const location = "00000000-0000-4000-8000-00000000001a";
@@ -384,7 +386,6 @@ describe("InventoryRepository sellable stock", () => {
   });
 
   beforeEach(async () => {
-    published.length = 0;
     await client.exec(`
       TRUNCATE product_batches, inventory_balances, stock_reservations, stock_reservation_lines,
         stock_ledger_entries, outbox_messages;
@@ -420,7 +421,7 @@ describe("InventoryRepository sellable stock", () => {
 
     await takeAll(sellableA, 5);
 
-    expect(published).toEqual([{ productId: product, siteId: site, inStock: true }]);
+    expect(await published()).toEqual([{ productId: product, siteId: site, inStock: true }]);
   });
 
   it("shows a product out of stock when only expired or unreleased goods remain", async () => {
@@ -432,9 +433,7 @@ describe("InventoryRepository sellable stock", () => {
 
     await takeAll(sellableA, 5);
 
-    expect(published).toEqual([{ productId: product, siteId: site, inStock: false }]);
-    const [event] = await db.select().from(schema.outboxMessages);
-    expect(JSON.parse(event?.payload ?? "null")).toEqual({ productId: product, siteId: site, inStock: false });
+    expect(await published()).toEqual([{ productId: product, siteId: site, inStock: false }]);
   });
 
   it("puts a product in stock when quality control releases its batch", async () => {
@@ -442,7 +441,7 @@ describe("InventoryRepository sellable stock", () => {
 
     await repository.reviewBatch(pendingBatch, "Released");
 
-    expect(published).toEqual([{ productId: product, siteId: site, inStock: true }]);
+    expect(await published()).toEqual([{ productId: product, siteId: site, inStock: true }]);
   });
 
   it("shows a product out of stock once a sale holds its last free unit", async () => {
@@ -456,7 +455,7 @@ describe("InventoryRepository sellable stock", () => {
       lines: [{ productId: product, quantity: 3 }],
     });
 
-    expect(published).toEqual([{ productId: product, siteId: site, inStock: false }]);
+    expect(await published()).toEqual([{ productId: product, siteId: site, inStock: false }]);
   });
 
   it("shows a product in stock again when the sale gives its hold back", async () => {
@@ -469,11 +468,11 @@ describe("InventoryRepository sellable stock", () => {
       storageLocationId: location,
       lines: [{ productId: product, quantity: 3 }],
     });
-    published.length = 0;
+    await db.delete(schema.outboxMessages);
 
     await repository.releaseReservation(reservationId);
 
-    expect(published).toEqual([{ productId: product, siteId: site, inStock: true }]);
+    expect(await published()).toEqual([{ productId: product, siteId: site, inStock: true }]);
   });
 
   it("takes a product out of stock when its only batch expires while nothing moves", async () => {
@@ -481,7 +480,7 @@ describe("InventoryRepository sellable stock", () => {
 
     await expect(repository.refreshAvailabilityForExpiredStock()).resolves.toBe(1);
 
-    expect(published).toEqual([{ productId: product, siteId: site, inStock: false }]);
+    expect(await published()).toEqual([{ productId: product, siteId: site, inStock: false }]);
   });
 
   it("leaves an expiry already answered alone when the sweep is bounded to later dates", async () => {
@@ -489,6 +488,6 @@ describe("InventoryRepository sellable stock", () => {
 
     await expect(repository.refreshAvailabilityForExpiredStock("2001-01-01")).resolves.toBe(0);
 
-    expect(published).toEqual([]);
+    expect(await published()).toEqual([]);
   });
 });
