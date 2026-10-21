@@ -236,24 +236,57 @@ export const createPaymentRouter = (
   return router;
 };
 
-export const applyWebhook = async (repository: PaymentRepository | undefined, payload: unknown) => {
-  if (!repository || typeof payload !== "object" || payload === null) return undefined;
+export const applyWebhook = async (
+  repository: PaymentRepository | undefined,
+  payload: unknown,
+): Promise<SePayWebhookResult> => {
+  if (!repository) return undefined;
+  const transaction = readSePayTransaction(payload);
+  if (transaction === undefined) return undefined;
+  if (transaction === "outbound_transfer") return { accepted: false, reason: "outbound_transfer" };
+  return repository.applyProviderTransaction({ provider: "sepay", ...transaction });
+};
+
+export type SePayTransaction = {
+  paymentCodes: string[];
+  providerTransactionId: string;
+  amount: number;
+  metadata: Record<string, unknown>;
+};
+
+/** Returns `undefined` for a payload that cannot be applied at all (not an object, no code, id, or positive amount). */
+export const readSePayTransaction = (payload: unknown): SePayTransaction | "outbound_transfer" | undefined => {
+  if (typeof payload !== "object" || payload === null) return undefined;
   const value = payload as Record<string, unknown>;
   const transferType = typeof value.transferType === "string" ? value.transferType.toLowerCase() : "in";
-  if (transferType !== "in") return { accepted: false, reason: "outbound_transfer" };
+  if (transferType !== "in") return "outbound_transfer";
   const paymentCodes = extractPaymentCodes(value);
   const rawTransactionId = value.id ?? value.transactionId;
   const providerTransactionId =
     typeof rawTransactionId === "string" || typeof rawTransactionId === "number" ? String(rawTransactionId) : "";
   const amount = Number(value.transferAmount ?? value.amount ?? 0);
   if (paymentCodes.length === 0 || !providerTransactionId || !Number.isFinite(amount) || amount <= 0) return undefined;
-  return repository.applyProviderTransaction({
+  return {
     paymentCodes,
-    provider: "sepay",
     providerTransactionId,
     amount,
     metadata: { gateway: value.gateway, description: value.description, accountNumber: value.accountNumber },
-  });
+  };
+};
+
+export type SePayWebhookOutcome = "accepted" | "duplicate" | "invalid_payload" | "unmatched";
+
+/** `undefined` when no invoice was matched or the payload was unusable; the repository reports the rest. */
+export type SePayWebhookResult =
+  | { accepted: false; reason: "outbound_transfer" }
+  | { invoiceId: string; duplicate: boolean; status: string; reason: string }
+  | undefined;
+
+/** Classifies the result of `applyWebhook` for a payload that was already handled; `result` is never a thrown error. */
+export const sePayWebhookOutcome = (result: SePayWebhookResult, payload: unknown): SePayWebhookOutcome => {
+  if (result === undefined) return readSePayTransaction(payload) === undefined ? "invalid_payload" : "unmatched";
+  if ("accepted" in result) return "unmatched";
+  return result.duplicate ? "duplicate" : "accepted";
 };
 
 // Our payment codes are `PC-` plus 16 hex characters. Banks may drop the hyphen and may append further

@@ -8,6 +8,7 @@ import type {
   ChatUsage,
 } from "../domain/chat-model.ts";
 import { ChatModelError } from "../domain/chat-model.ts";
+import { timeChatStep } from "./chat-step-metrics.ts";
 
 export type OpenAiCompatibleSettings = { baseUrl: string; model: string; apiKey: string };
 
@@ -71,12 +72,14 @@ export class OpenAiCompatibleChatModel implements ChatModel {
     // Only tool_choice changes, to "none" on the final round.
     for (let round = 0; ; round++) {
       const toolsEnabled = round < input.maxToolRounds;
-      const response = await this.post({
-        model: this.options.model,
-        messages,
-        ...(hasTools ? { tools, tool_choice: toolsEnabled ? "auto" : "none" } : {}),
-        temperature: 0.3,
-      });
+      const response = await timeChatStep("model", () =>
+        this.post({
+          model: this.options.model,
+          messages,
+          ...(hasTools ? { tools, tool_choice: toolsEnabled ? "auto" : "none" } : {}),
+          temperature: 0.3,
+        }),
+      );
       modelCalls += 1;
       const callUsage = toUsage(response.usage);
       usage =

@@ -5,6 +5,7 @@ import type { ChannelModel, ConfirmChannel } from "amqplib";
 import type { Logger } from "../logger.ts";
 import type { PaymentDatabase } from "../shared/infrastructure/database.ts";
 import { withTraceparent } from "../shared/infrastructure/trace-context.ts";
+import { recordOutboxPublished, registerOutboxBacklogGauges } from "./outbox-metrics.ts";
 import { outboxMessages } from "./payments/infrastructure/schema.ts";
 
 const EXCHANGE = "pharmacy.events";
@@ -27,6 +28,7 @@ export class PaymentOutboxPublisher {
   private timer: NodeJS.Timeout | undefined;
   private inFlight = false;
   private degraded = false;
+  private unregisterBacklogGauges: (() => void) | undefined;
 
   public constructor(
     private readonly database: PaymentDatabase,
@@ -35,12 +37,15 @@ export class PaymentOutboxPublisher {
   ) {}
 
   public start(): void {
+    this.unregisterBacklogGauges = registerOutboxBacklogGauges(this.database);
     this.timer = setInterval(() => void this.publishPending(), TICK_MS);
     void this.publishPending();
   }
 
   public async close(): Promise<void> {
     clearInterval(this.timer);
+    this.unregisterBacklogGauges?.();
+    this.unregisterBacklogGauges = undefined;
     await this.disconnect();
   }
 
@@ -82,6 +87,7 @@ export class PaymentOutboxPublisher {
           failure = error;
           return;
         }
+        recordOutboxPublished(message.occurredAt);
         await transaction
           .update(outboxMessages)
           .set({ publishedAt: new Date(), attempts: String(Number(message.attempts) + 1) })

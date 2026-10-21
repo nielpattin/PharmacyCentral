@@ -1,3 +1,9 @@
+import {
+  recordDeliveryCacheLookup,
+  recordDeliveryCalculation,
+  type DeliveryCalculationOutcome,
+} from "./delivery-metrics.ts";
+
 export type DeliveryPoint = { latitude: number; longitude: number };
 export type StoreOrigin = { id: string; latitude: number; longitude: number };
 export type RouteResult = {
@@ -95,39 +101,51 @@ export class DeliveryCalculator {
   }): Promise<DeliveryCalculation> {
     assertPoint(input.destination);
     const cacheKey = this.cacheKey(input.store, input.destination, input.addressNote);
-    let cached: DeliveryCalculation | undefined;
+    const startedAt = performance.now();
+    let outcome: DeliveryCalculationOutcome = "ok";
     try {
-      cached = await this.cache.get(cacheKey);
-    } catch {
-      cached = undefined;
-    }
-    if (cached) return cached;
+      let cached: DeliveryCalculation | undefined;
+      try {
+        cached = await this.cache.get(cacheKey);
+      } catch {
+        cached = undefined;
+      }
+      recordDeliveryCacheLookup(cached ? "hit" : "miss");
+      if (cached) return cached;
 
-    const [providerResolvedAddress, route] = await Promise.all([
-      this.geocoder.resolveAddress(input.destination),
-      this.router.route(input.store, input.destination),
-    ]);
-    if (route.distanceMeters >= this.pricing.maxDistanceMeters)
-      throw new DeliveryOutOfRangeError(route.distanceMeters, this.pricing.maxDistanceMeters);
-    const fee = this.priceRoute(route.distanceMeters);
-    const calculation: DeliveryCalculation = {
-      selectedStoreId: input.store.id,
-      origin: input.store,
-      destination: input.destination,
-      providerResolvedAddress,
-      addressNote: input.addressNote?.trim() || null,
-      distanceMeters: route.distanceMeters,
-      durationSeconds: route.durationSeconds,
-      fee,
-      currency: "VND",
-      route: route.geometry,
-    };
-    try {
-      await this.cache.set(cacheKey, calculation, this.pricing.cacheTtlSeconds);
-    } catch {
-      // Provider output remains usable when the optional distributed cache is unavailable.
+      const [providerResolvedAddress, route] = await Promise.all([
+        this.geocoder.resolveAddress(input.destination),
+        this.router.route(input.store, input.destination),
+      ]).catch((error: unknown) => {
+        outcome = "provider_error";
+        throw error;
+      });
+      if (route.distanceMeters >= this.pricing.maxDistanceMeters) {
+        outcome = "out_of_range";
+        throw new DeliveryOutOfRangeError(route.distanceMeters, this.pricing.maxDistanceMeters);
+      }
+      const fee = this.priceRoute(route.distanceMeters);
+      const calculation: DeliveryCalculation = {
+        selectedStoreId: input.store.id,
+        origin: input.store,
+        destination: input.destination,
+        providerResolvedAddress,
+        addressNote: input.addressNote?.trim() || null,
+        distanceMeters: route.distanceMeters,
+        durationSeconds: route.durationSeconds,
+        fee,
+        currency: "VND",
+        route: route.geometry,
+      };
+      try {
+        await this.cache.set(cacheKey, calculation, this.pricing.cacheTtlSeconds);
+      } catch {
+        // Provider output remains usable when the optional distributed cache is unavailable.
+      }
+      return calculation;
+    } finally {
+      recordDeliveryCalculation(outcome, (performance.now() - startedAt) / 1000);
     }
-    return calculation;
   }
 
   private priceRoute(distanceMeters: number): number {

@@ -1,5 +1,6 @@
 import type { IntentClassifier, IntentGate, IntentGateInput, IntentVerdict } from "../domain/intent-gate.ts";
 import { IntentGateError } from "../domain/intent-gate.ts";
+import { timeChatStep } from "./chat-step-metrics.ts";
 
 /** Reads the classifier settings on every question, so a settings change applies without a restart. */
 export class ConfiguredIntentGate implements IntentGate {
@@ -13,6 +14,6 @@ export class ConfiguredIntentGate implements IntentGate {
       throw new IntentGateError("The AI provider settings could not be read", { cause });
     }
     if (!classifier) return undefined;
-    return classifier.classify(input);
+    return timeChatStep("intent_gate", () => classifier.classify(input));
   }
 }

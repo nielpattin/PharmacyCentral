@@ -4,6 +4,7 @@ import type { Channel, ChannelModel, ConsumeMessage } from "amqplib";
 
 import type { Logger } from "../logger.ts";
 import type { OperationsRepository, IntegrationEvent } from "./operations-repository.ts";
+import { initConsumerOutcomes, recordConsumerDelivery } from "./event-consumer-metrics.ts";
 
 const EXCHANGE = "pharmacy.events";
 const DEAD_LETTER_EXCHANGE = "pharmacy.events.dead";
@@ -65,6 +66,7 @@ export class RabbitMqEventConsumer {
       this.channel = channel;
       await this.declareTopology(channel);
       await channel.prefetch(1);
+      initConsumerOutcomes(QUEUE);
       await channel.consume(QUEUE, (message) => {
         // The broker cancelled the consumer, for instance because the queue was deleted.
         if (!message) return this.restart();
@@ -104,30 +106,36 @@ export class RabbitMqEventConsumer {
   }
 
   private async handle(channel: Channel, message: ConsumeMessage): Promise<void> {
+    const startedAt = performance.now();
     let event: IntegrationEvent;
     try {
       event = JSON.parse(message.content.toString()) as IntegrationEvent;
     } catch {
       channel.nack(message, false, false);
+      recordConsumerDelivery(QUEUE, "dead_lettered", startedAt);
       return;
     }
     if (!event.eventId || !event.eventType || !event.occurredAt || !event.payload) {
       channel.nack(message, false, false);
+      recordConsumerDelivery(QUEUE, "dead_lettered", startedAt);
       return;
     }
     try {
-      await this.repository.apply(event);
+      const applied = await this.repository.apply(event);
       channel.ack(message);
+      recordConsumerDelivery(QUEUE, applied ? "processed" : "duplicate", startedAt);
     } catch (error) {
       const attempt = Number(message.properties.headers?.["x-acquired-count"] ?? 0) + 1;
       if (attempt >= MAX_ATTEMPTS) {
         this.logger.error({ error, attempt }, "event failed for good, dead-lettering it");
         channel.nack(message, false, false);
+        recordConsumerDelivery(QUEUE, "dead_lettered", startedAt);
         return;
       }
       this.logger.warn({ error, attempt }, "event failed, returning it to the queue");
       await sleep(RETRY_DELAY_MS * attempt);
       channel.nack(message, false, true);
+      recordConsumerDelivery(QUEUE, "retried", startedAt);
     }
   }
 }

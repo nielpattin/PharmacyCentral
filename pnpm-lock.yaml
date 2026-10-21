@@ -310,6 +310,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 'catalog:'
         version: 3.1146.0
+      '@opentelemetry/api':
+        specifier: 'catalog:'
+        version: 1.9.1
       '@opentelemetry/exporter-logs-otlp-http':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)
@@ -386,6 +389,9 @@ importers:
 
   apps/chatbot-service:
     dependencies:
+      '@opentelemetry/api':
+        specifier: 'catalog:'
+        version: 1.9.1
       '@opentelemetry/exporter-logs-otlp-http':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)
@@ -678,6 +684,9 @@ importers:
 
   apps/operations-query-service:
     dependencies:
+      '@opentelemetry/api':
+        specifier: 'catalog:'
+        version: 1.9.1
       '@opentelemetry/exporter-logs-otlp-http':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)

@@ -17,6 +17,7 @@ import type {
   ToolProductDetails,
 } from "../../domain/chat-model.ts";
 import type { IntentGate, IntentVerdict } from "../../domain/intent-gate.ts";
+import { timeChatStep } from "../../infrastructure/chat-step-metrics.ts";
 import {
   ChatRateLimitedError,
   ChatSessionFullError,
@@ -178,19 +179,27 @@ const createToolRunner = (lookup: ProductLookup, history: StoredTurn[]) => {
     return { product: toolDetails(product) };
   };
 
-  const runTool = async (call: ChatToolCall): Promise<ChatToolResult> => {
-    if (toolCalls >= MAX_TOOL_CALLS_PER_QUESTION) {
-      return { error: "tool_limit", message: "Đã đạt giới hạn số lần gọi công cụ cho câu hỏi này." };
-    }
-    toolCalls += 1;
+  const dispatch = (call: ChatToolCall): Promise<ChatToolResult> => {
     switch (call.name) {
       case "search_products":
         return search(call.args);
       case "get_product_details":
         return details(call.args);
       default:
-        return { error: "unknown_tool" };
+        return Promise.resolve({ error: "unknown_tool" });
     }
+  };
+
+  const runTool = async (call: ChatToolCall): Promise<ChatToolResult> => {
+    if (toolCalls >= MAX_TOOL_CALLS_PER_QUESTION) {
+      return { error: "tool_limit", message: "Đã đạt giới hạn số lần gọi công cụ cho câu hỏi này." };
+    }
+    toolCalls += 1;
+    return timeChatStep(
+      "tool",
+      () => dispatch(call),
+      (result) => "error" in result,
+    );
   };
 
   return { runTool, surfaced };

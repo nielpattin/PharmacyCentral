@@ -8,6 +8,7 @@ import type {
   ChatUsage,
 } from "../domain/chat-model.ts";
 import { ChatModelError } from "../domain/chat-model.ts";
+import { timeChatStep } from "./chat-step-metrics.ts";
 
 export type GeminiSettings = { baseUrl: string; model: string; apiKey: string };
 
@@ -81,17 +82,19 @@ export class GeminiChatModel implements ChatModel {
     // Gemini's implicit cache needs an identical request prefix. The final round keeps the tools declared, with mode NONE.
     for (let round = 0; ; round++) {
       const toolsEnabled = round < input.maxToolRounds;
-      const response = await this.post({
-        systemInstruction: { parts: [{ text: input.systemInstruction }] },
-        contents,
-        ...(hasTools
-          ? {
-              tools: [{ functionDeclarations: declarations }],
-              toolConfig: { functionCallingConfig: { mode: toolsEnabled ? "AUTO" : "NONE" } },
-            }
-          : {}),
-        generationConfig: { temperature: 0.3 },
-      });
+      const response = await timeChatStep("model", () =>
+        this.post({
+          systemInstruction: { parts: [{ text: input.systemInstruction }] },
+          contents,
+          ...(hasTools
+            ? {
+                tools: [{ functionDeclarations: declarations }],
+                toolConfig: { functionCallingConfig: { mode: toolsEnabled ? "AUTO" : "NONE" } },
+              }
+            : {}),
+          generationConfig: { temperature: 0.3 },
+        }),
+      );
       modelCalls += 1;
       const callUsage = toUsage(response.usageMetadata);
       usage =

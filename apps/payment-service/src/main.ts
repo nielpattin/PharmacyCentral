@@ -8,9 +8,15 @@ import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware } from "./middleware/trusted-request.ts";
 
 import { PaymentOutboxPublisher } from "./modules/outbox-publisher.ts";
-import { applyWebhook, createPaymentRouter } from "./modules/payment-routes.ts";
+import {
+  applyWebhook,
+  createPaymentRouter,
+  sePayWebhookOutcome,
+  type SePayWebhookResult,
+} from "./modules/payment-routes.ts";
 import { PaymentRepository } from "./modules/payment-repository.ts";
 import { SePayWebhookVerifier } from "./modules/sepay/sepay-webhook-verifier.ts";
+import { sePayWebhookRequests } from "./modules/sepay/sepay-webhook-metrics.ts";
 import { createPaymentDatabase } from "./shared/infrastructure/database.ts";
 
 const serviceName = "payment-service";
@@ -49,19 +55,32 @@ app.post(
     const timestamp =
       typeof request.headers["x-sepay-timestamp"] === "string" ? request.headers["x-sepay-timestamp"] : undefined;
     if (!sePayVerifier.verify(request.body as Buffer, signature, timestamp)) {
+      sePayWebhookRequests.add(1, { outcome: "invalid_signature" });
       response.status(401).json({ title: "Invalid webhook signature", status: 401, code: "invalid_signature" });
       return;
     }
+    let payload: unknown;
     try {
-      const payload: unknown = JSON.parse((request.body as Buffer).toString("utf8"));
-      const result = await applyWebhook(repository, payload);
-      // SePay only records a delivery as successful for HTTP 200 with a body of exactly {"success": true}.
-      if (result) logger.info({ result }, "sepay webhook applied");
-      else logger.warn({ payload }, "sepay webhook did not identify an invoice");
-      response.status(200).json({ success: true });
+      payload = JSON.parse((request.body as Buffer).toString("utf8"));
     } catch (error) {
+      sePayWebhookRequests.add(1, { outcome: "invalid_payload" });
       next(error);
+      return;
     }
+    let result: SePayWebhookResult;
+    try {
+      result = await applyWebhook(repository, payload);
+    } catch (error) {
+      sePayWebhookRequests.add(1, { outcome: "error" });
+      next(error);
+      return;
+    }
+    const outcome = sePayWebhookOutcome(result, payload);
+    sePayWebhookRequests.add(1, { outcome });
+    // SePay only records a delivery as successful for HTTP 200 with a body of exactly {"success": true}.
+    if (result) logger.info({ result }, "sepay webhook applied");
+    else logger.warn({ payload }, "sepay webhook did not identify an invoice");
+    response.status(200).json({ success: true });
   },
 );
 app.use(express.json({ limit: "1mb" }));

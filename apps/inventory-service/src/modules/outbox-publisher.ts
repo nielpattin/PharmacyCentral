@@ -6,6 +6,7 @@ import type { Logger } from "../logger.ts";
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import { outboxMessages } from "../shared/infrastructure/schema.ts";
 import { withTraceparent } from "../shared/infrastructure/trace-context.ts";
+import { recordOutboxPublished, registerOutboxBacklogGauges } from "./outbox-metrics.ts";
 
 const EXCHANGE = "pharmacy.events";
 const TICK_MS = 1_000;
@@ -25,6 +26,7 @@ export class InventoryOutboxPublisher {
   private connection: ChannelModel | undefined;
   private channel: ConfirmChannel | undefined;
   private timer: NodeJS.Timeout | undefined;
+  private unregisterBacklogGauges: (() => void) | undefined;
   private inFlight = false;
   private degraded = false;
 
@@ -36,11 +38,14 @@ export class InventoryOutboxPublisher {
 
   public start(): void {
     this.timer = setInterval(() => void this.publishPending(), TICK_MS);
+    this.unregisterBacklogGauges = registerOutboxBacklogGauges(this.database);
     void this.publishPending();
   }
 
   public async close(): Promise<void> {
     clearInterval(this.timer);
+    this.unregisterBacklogGauges?.();
+    this.unregisterBacklogGauges = undefined;
     await this.disconnect();
   }
 
@@ -82,6 +87,7 @@ export class InventoryOutboxPublisher {
           failure = error;
           return;
         }
+        recordOutboxPublished(message.occurredAt);
         await transaction
           .update(outboxMessages)
           .set({ publishedAt: new Date(), attempts: message.attempts + 1 })

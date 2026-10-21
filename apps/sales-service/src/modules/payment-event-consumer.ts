@@ -4,6 +4,7 @@ import type { Channel, ChannelModel, ConsumeMessage } from "amqplib";
 
 import type { Logger } from "../logger.ts";
 import type { OrderStock } from "./orders/application/order-stock.ts";
+import { type ConsumerOutcome, initConsumerOutcomes, recordConsumerDelivery } from "./payment-event-metrics.ts";
 import type { SalesRepository } from "./sales-repository.ts";
 
 const EXCHANGE = "pharmacy.events";
@@ -66,6 +67,7 @@ export class SalesPaymentEventConsumer {
       this.channel = channel;
       await this.declareTopology(channel);
       await channel.prefetch(1);
+      initConsumerOutcomes(QUEUE);
       await channel.consume(QUEUE, (message) => {
         // The broker cancelled the consumer, for instance because the queue was deleted.
         if (!message) return this.restart();
@@ -105,10 +107,27 @@ export class SalesPaymentEventConsumer {
   }
 
   private async handle(channel: Channel, message: ConsumeMessage): Promise<void> {
+    const started = performance.now();
+    let outcome: ConsumerOutcome = "processed";
+    try {
+      await this.settle(channel, message, (next) => {
+        outcome = next;
+      });
+    } finally {
+      recordConsumerDelivery(QUEUE, outcome, (performance.now() - started) / 1000);
+    }
+  }
+
+  private async settle(
+    channel: Channel,
+    message: ConsumeMessage,
+    setOutcome: (outcome: ConsumerOutcome) => void,
+  ): Promise<void> {
     let event: { eventType?: string; payload?: { orderId?: unknown } };
     try {
       event = JSON.parse(message.content.toString()) as typeof event;
     } catch {
+      setOutcome("dead_lettered");
       channel.nack(message, false, false);
       return;
     }
@@ -131,10 +150,12 @@ export class SalesPaymentEventConsumer {
       const attempt = Number(message.properties.headers?.["x-acquired-count"] ?? 0) + 1;
       if (attempt >= MAX_ATTEMPTS) {
         this.logger.error({ error, attempt }, "payment event failed for good, dead-lettering it");
+        setOutcome("dead_lettered");
         channel.nack(message, false, false);
         return;
       }
       this.logger.warn({ error, attempt }, "payment event failed, returning it to the queue");
+      setOutcome("retried");
       await sleep(RETRY_DELAY_MS * attempt);
       channel.nack(message, false, true);
     }

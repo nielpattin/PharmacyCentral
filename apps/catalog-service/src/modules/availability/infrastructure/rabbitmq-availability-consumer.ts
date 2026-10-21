@@ -4,6 +4,7 @@ import type { Channel, ChannelModel, ConsumeMessage } from "amqplib";
 
 import type { Logger } from "../../../logger.ts";
 import type { AvailabilityProjection } from "../application/availability-projection.ts";
+import { initConsumerOutcomes, recordConsumerDelivery } from "./availability-consumer-metrics.ts";
 
 const EXCHANGE = "pharmacy.events";
 const DEAD_LETTER_EXCHANGE = "pharmacy.events.dead";
@@ -65,6 +66,7 @@ export class RabbitMqAvailabilityConsumer {
       this.channel = channel;
       await this.declareTopology(channel);
       await channel.prefetch(1);
+      initConsumerOutcomes(QUEUE);
       await channel.consume(QUEUE, (message) => {
         // The broker cancelled the consumer, for instance because the queue was deleted.
         if (!message) return this.restart();
@@ -104,31 +106,37 @@ export class RabbitMqAvailabilityConsumer {
   }
 
   private async handle(channel: Channel, message: ConsumeMessage): Promise<void> {
+    const startedAt = performance.now();
     let envelope: { eventId?: string; payload?: { productId?: string; siteId?: string; inStock?: boolean } };
     try {
       envelope = JSON.parse(message.content.toString()) as typeof envelope;
     } catch {
       channel.nack(message, false, false);
+      recordConsumerDelivery(QUEUE, "dead_lettered", startedAt);
       return;
     }
     const payload = envelope.payload;
     if (!envelope.eventId || !payload?.productId || !payload.siteId || typeof payload.inStock !== "boolean") {
       channel.nack(message, false, false);
+      recordConsumerDelivery(QUEUE, "dead_lettered", startedAt);
       return;
     }
     try {
       await this.projection.apply({ productId: payload.productId, siteId: payload.siteId, inStock: payload.inStock });
       channel.ack(message);
+      recordConsumerDelivery(QUEUE, "processed", startedAt);
     } catch (error) {
       const attempt = Number(message.properties.headers?.["x-acquired-count"] ?? 0) + 1;
       if (attempt >= MAX_ATTEMPTS) {
         this.logger.error({ error, attempt }, "availability event failed for good, dead-lettering it");
         channel.nack(message, false, false);
+        recordConsumerDelivery(QUEUE, "dead_lettered", startedAt);
         return;
       }
       this.logger.warn({ error, attempt }, "availability event failed, returning it to the queue");
       await sleep(RETRY_DELAY_MS * attempt);
       channel.nack(message, false, true);
+      recordConsumerDelivery(QUEUE, "retried", startedAt);
     }
   }
 }
