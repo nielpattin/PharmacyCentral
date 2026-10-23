@@ -175,6 +175,14 @@ pnpm run db:migrate
 
 In containers, each service executes its compiled `node dist/migrate.js` on startup.
 
+### Database roles
+
+Every service connects as its own Postgres role, named after its database (`sales_service`, `payment_service`, and so on). The role owns that database and has no `CONNECT` privilege on the others, so a leaked `DATABASE_URL` exposes one service's data, not all of them. `POSTGRES_USER` is the admin account; only role setup and the chaos tooling use it.
+
+The `postgres-roles` Compose service runs `deploy/local/postgres/roles.sh` after Postgres is healthy and before any backend service starts (`pnpm run infra:up` includes it). The script reads the passwords from `IDENTITY_DB_PASSWORD`, `CATALOG_DB_PASSWORD`, `INVENTORY_DB_PASSWORD`, `SALES_DB_PASSWORD`, `PAYMENT_DB_PASSWORD`, `OPERATIONS_QUERY_DB_PASSWORD` and `CHATBOT_DB_PASSWORD` in `.env`. It is safe to run again: it creates missing roles, resets passwords, and moves tables that an older run created as the admin user to the owning role. A stack that already holds data needs only `docker compose up -d postgres-roles`, then the services.
+
+Migrations run as the owning role (`pnpm run db:migrate` builds each URL from the same passwords), so the tables belong to the role that uses them. On RDS, create the same roles by hand with the equivalent SQL, one secret per service as in `deploy/aws`; Terraform does not create the database tier.
+
 ### Seed demo accounts
 
 Only `identity-service` seeds data, and it seeds local login accounts only. Business master data is imported through the staff import center or the catalog/inventory import APIs.
@@ -362,7 +370,11 @@ Local development uses a single RabbitMQ node.
 - Producers publish events using confirmation channels and the transactional outbox pattern.
   The outbox publisher of `inventory`, `sales` and `payment` marks a row published only after the broker confirmed it,
   so a row stays unpublished while the broker is down and goes out when it is back. An advisory lock lets one
-  publisher per database send at a time. Delivery is at least once.
+  publisher per database send at a time. Delivery is at least once. A tick reads up to 500 rows, sends them all, waits
+  for the confirms together and marks them published with one UPDATE, then reads the next batch at once while rows
+  remain. If the broker refuses a row, only the rows before it are marked, so the order holds and later rows go out again.
+  A partial index on `occurred_at` where `published_at` is null serves the read, and once an hour a publisher deletes
+  rows published more than 7 days ago.
 - Consumers process messages idempotently using inbox deduplication keys.
 - Consumers read durable quorum queues named `<owner>.<topic>.v2` (`sales.payment-events.v2`,
   `catalog.availability.v2`, `operations-query.events.v2`), one message at a time. All of them reconnect on their own
@@ -585,7 +597,7 @@ The two AI scenarios never call a real provider. `ai-provider-outage` starts two
 
 ### Capacity on an ECS-sized stack
 
-`pnpm run stack:aws-like` layers `docker-compose.aws-like.yml` over the container stack and sizes it like `deploy/aws`: every backend service runs 2 replicas of 0.5 vCPU and 1 GiB (the `task_cpu`, `task_memory` and `desired_count` defaults), and the gateway balances between them. Terraform defines no data tier, so PostgreSQL (2 CPUs, 4 GB), Redis (1, 1 GB), RabbitMQ (1, 2 GB) and Typesense (2, 4 GB) are assumptions you should replace with the sizes you choose. Autoscaling is not modelled: this is the floor of two tasks. Host ports of the services are closed in this mode; everything goes through the gateway. Return to the plain stack with `pnpm run stack:down`.
+`pnpm run stack:aws-like` layers `docker-compose.aws-like.yml` over the container stack and sizes it like `deploy/aws`: every backend service runs 2 replicas of 0.5 vCPU and 1 GiB (the `task_cpu`, `task_memory` and `desired_count` defaults), except `sales-service`, which runs 1 vCPU and 2 GiB (`sales_task_cpu`, `sales_task_memory`: it takes every order and runs its outbox relay, and was the first container at its CPU cap in the checkout test), and the gateway balances between them. Terraform defines no data tier, so PostgreSQL (2 CPUs, 4 GB), Redis (1, 1 GB), RabbitMQ (1, 2 GB) and Typesense (2, 4 GB) are assumptions you should replace with the sizes you choose. Autoscaling is not modelled: this is the floor of two tasks. Host ports of the services are closed in this mode; everything goes through the gateway. Return to the plain stack with `pnpm run stack:down`.
 
 ```bash
 node --env-file=.env tools/bulk-products.mjs add 10000     # synthetic BULK-nnnnnn products; waits until the search index holds them
@@ -605,6 +617,33 @@ The `breakpoint` profile stops itself when more than 5% of requests fail or the 
 | Checkout breakpoint, run 2 | stopped at 275 VUs by the 3 s gate (`POST /orders` p95 3.0 s) |
 
 Throughput stopped growing at about 60 VUs: 199 req/s there against 218 req/s at 300 VUs, about 14 completed checkouts a second. Past that point extra VUs only add waiting. Sampled during the second run, the containers at their limits were `sales-service` (both replicas at about 50% of one core, the 0.5 vCPU cap), PostgreSQL (113% to 160% of its 200%), and RabbitMQ in bursts (100% of its 1 CPU). In run 1, 35% of the orders were not marked paid within the script's wait, so the payment-to-order path fails first, long before requests fail: order to paid p95 was 14 s over the run. These percentiles are for the whole run, not per step. Adding tasks (autoscaling) helps `sales-service`, but the data tier then limits next.
+
+**Outbox relay and sales-service size, measured.** The same breakpoint ramp again after the relay sent 500 rows per batch with one confirm wait and one UPDATE (it sent one row at a time, 50 a tick), an index on the unpublished rows, and `sales-service` at 1 vCPU and 2 GiB. One run each, same stack:
+
+| Measurement | Before | After |
+| --- | --- | --- |
+| Oldest unpublished outbox row (payment / sales) | 28 s / 208 s | 1 s / 1 s |
+| Unpublished rows at the peak (payment / sales) | 725 / 6,347 | 29 / 16 |
+| Order to paid p95 | 13.8 s | 14.7 s |
+| `POST /orders` p95 | 2.2 s | 3.0 s (the 3 s gate stopped the run at 8 min 40 s; the first run finished all 300 VUs) |
+| PostgreSQL CPU | 160% to 205% of 200% | 196% to 208% of 200%, from about 100 VUs on |
+
+The relay backlog is gone, but the checkout did not get faster, so the relay was not what limited the order to paid time. With `sales-service` no longer capped, more work reached PostgreSQL, which sat at its 2 CPU limit, and `POST /orders` got slower.
+
+**Missing indexes, found with `pg_stat_statements` and fixed.** One ramp with `pg_stat_statements` on showed two statements using 87% of all query time: `select ... from order_lines where order_id = $1` in sales (999 s, 27 ms each, 68%) and `select ... from payment_invoice_lines where payment_invoice_id = $1` in payment (285 s, 29 ms each, 19%). Neither column had an index, so each call read all 83,000 rows (`order_lines`: 413,223 sequential scans, 20 billion rows read, no index scan). `stock_reservation_lines.reservation_id` had the same gap. The three indexes bring the sales query from 5.9 ms to 0.16 ms in `EXPLAIN ANALYZE`. The same ramp after the indexes and the per-service database roles, one run each:
+
+| Measurement | After relay and sizing change, before indexes | After indexes |
+| --- | --- | --- |
+| Run | stopped at 8 min 40 s by the 3 s gate | all 300 VUs, 10 min |
+| Checkouts per second | 12.6 | 26.0 (15,929 done) |
+| `POST /orders` p95 | 3.01 s | 1.03 s |
+| Order to paid, average / p95 | 5.2 s / 14.7 s | 4.3 s / 11.5 s |
+| Orders not paid within the 15 s wait | 25% (1,302 of 5,125) | 1.3% (164 of 12,717) |
+| Failed HTTP requests | 0.20% | 0.00% (3 of 183,813) |
+| PostgreSQL CPU, average / peak (200% limit) | 160 to 205% | 134% / 188% |
+| `sales-service` CPU per replica (1 vCPU) | not recorded | 86 to 88% average, 101% peak |
+
+The checkout is no longer limited by PostgreSQL. `sales-service` is back at its 1 vCPU limit, which is the next likely limit; that was not measured further. Order to paid still takes 11.5 s at p95 at the top of the ramp. Not yet explained. The PostgreSQL here runs with its stock settings (`shared_buffers` 128 MB), so the figures are for an untuned database.
 
 **Search capacity** (`search.js`, `limit=60` as customer-web asks, 10,120 products, same ECS-sized stack, each rate run after the previous backlog had drained). The first measurement found an N+1: after the search, `catalog-routes.ts` read the units of each result with its own query, about one PostgreSQL query per result. `DrizzleStoreRepository.listUnitsByProductIds` now reads them for the whole page in one query, in `GET /products` and `POST /products/match`. Ten searches at `limit=60` went from about 500 PostgreSQL transactions to about 20, and the median search at `limit=60` from 91 ms to 26 ms.
 

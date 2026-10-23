@@ -80,7 +80,7 @@ deployment {
         instanceOf pharmacyCentral.data.typesense
       }
       secrets = managed "Secrets Manager" {
-        summary "Holds DATABASE_URL, RABBITMQ_URL, REDIS_URL, TYPESENSE_* and the internal secrets."
+        summary "Holds DATABASE_URL (one secret per service, each with its own database role), RABBITMQ_URL, REDIS_URL, TYPESENSE_* and the internal secrets."
       }
       cloudwatch = managed "CloudWatch Logs" {
         summary "Receives the logs of the tasks, of the Lambdas and of the API Gateway."

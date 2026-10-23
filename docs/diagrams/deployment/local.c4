@@ -46,6 +46,7 @@ deployment {
 
     infra = zone "Infrastructure" {
       postgresNode = workload "postgis/postgis 18" {
+        summary "A one-shot postgres-roles container creates one role per service before the services start."
         instanceOf pharmacyCentral.data.postgres
       }
       rabbitNode = workload "rabbitmq 4.3" {

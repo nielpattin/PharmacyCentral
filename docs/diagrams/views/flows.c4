@@ -132,7 +132,7 @@ views {
     title "A stock change reaches the storefront, through the outbox"
     description """
       The stock change and its event commit in one transaction, so a crash or a broker outage after
-      the commit only delays the event: the row stays unpublished and the next tick sends it. The row
+      the commit only delays the event: the row stays unpublished and the next batch sends it. The row
       is marked published only after the broker confirmed the message, so the delivery is at least
       once and the consumer has to tolerate a repeated event. A message the consumer keeps failing is
       retried five times, then parked on the dead-letter queue catalog.availability.v2.dead.
@@ -140,9 +140,9 @@ views {
     """
 
     pharmacyCentral.services.inventoryService.stock -> pharmacyCentral.data.postgres.inventoryDb "one transaction: the balance, the ledger entry and the availability outbox row"
-    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.postgres.inventoryDb "every second: read the unpublished rows, oldest first"
-    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.rabbitmq "publish inventory.availability.changed.v1, persistent, wait for the broker confirm"
-    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.postgres.inventoryDb "mark the row published"
+    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.postgres.inventoryDb "read up to 500 unpublished rows, oldest first, and keep reading while rows remain"
+    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.rabbitmq "publish the batch, inventory.availability.changed.v1, persistent, wait for the broker confirms together"
+    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.postgres.inventoryDb "mark the confirmed rows published, one UPDATE"
     pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.catalogService "deliver to the durable queue catalog.availability.v2"
     pharmacyCentral.services.catalogService -> pharmacyCentral.data.rabbitmq "ack after the in stock flag is applied"
   }
@@ -161,7 +161,7 @@ views {
     platformAdmin -> pharmacyCentral.web.staffWeb "imports the opening balances"
     pharmacyCentral.web.staffWeb -> pharmacyCentral.services.inventoryService "POST /api/inventory/imports/opening-balances, the HTTP server span"
     pharmacyCentral.services.inventoryService.stock -> pharmacyCentral.data.postgres.inventoryDb "one transaction: the balances, the ledger entry and the outbox row with its traceparent"
-    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.postgres.inventoryDb "every second: read the unpublished rows and their traceparent"
+    pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.postgres.inventoryDb "read the next batch of unpublished rows and their traceparent"
     pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.rabbitmq "publish inventory.availability.changed.v1 under the stored context, traceparent header, wait for the broker confirm"
     pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.postgres.inventoryDb "mark the row published"
     pharmacyCentral.data.rabbitmq -> pharmacyCentral.services.catalogService "deliver to catalog.availability.v2, the process span joins the trace"

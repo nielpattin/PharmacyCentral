@@ -41,7 +41,7 @@ model {
       summary "The infrastructure owned by the platform, not by a single service."
 
       postgres = database "PostgreSQL 18 + PostGIS" {
-        summary "One database per service. Each service owns its schema, its migrations and its write model."
+        summary "One database per service, and one Postgres role per service that owns only that database. Each service owns its schema, its migrations and its write model."
 
         identityDb = database "identity_service" {
           summary "Accounts, sessions, verification tokens, employee roles and site access."

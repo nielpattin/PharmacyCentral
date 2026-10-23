@@ -70,7 +70,7 @@ two things in 1.60.0:
 | --- | --- |
 | `index` | Who uses the system, and which third party it talks to. |
 | `containers` | The four tiers, with the path routing map between the web tier and the services. |
-| `dataOwnership` | Which service owns which database. |
+| `dataOwnership` | Which service owns which database, and the role that owns it. |
 | `eventFlow` | Who publishes on `pharmacy.events`, and who consumes what. |
 | `aiFeatures` | The three AI features, their owner and their provider. |
 | `securityModel` | The trust boundary: the session, the roles, the site scope, the CSRF. |
@@ -99,7 +99,7 @@ two things in 1.60.0:
   queue and stays idempotent through its inbox or projection keys.
 - **Publishing goes through a transactional outbox.** `inventory-service`, `sales-service` and
   `payment-service` write the event row in the same transaction as the change, and an outbox
-  publisher relays the unpublished rows every second over a confirm channel, and marks a row
+  publisher relays the unpublished rows over a confirm channel, a batch of up to 500 at a time, and marks a row
   published only after the broker confirmed the message, so delivery is at least once. An advisory
   lock lets one relay per database publish at a time, which keeps the order. Each row also stores
   the `traceparent` of the request that wrote it, so the trace continues across the broker. A consumer
