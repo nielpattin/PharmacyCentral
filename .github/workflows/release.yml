@@ -101,6 +101,9 @@ jobs:
           - name: operations-query-service
             app: "@pharmacy/operations-query-service"
             dockerfile: Dockerfile.service
+          - name: search-service
+            app: "@pharmacy/search-service"
+            dockerfile: search-service/Dockerfile
           - name: customer-web
             app: "@pharmacy/customer-web"
             dockerfile: Dockerfile.web

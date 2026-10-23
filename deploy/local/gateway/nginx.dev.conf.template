@@ -6,11 +6,17 @@
 # A service that is not running only fails its own routes with 502.
 upstream identity_dev { server 127.0.0.1:${IDENTITY_PORT}; }
 upstream catalog_dev { server 127.0.0.1:${CATALOG_PORT}; }
+upstream search_dev { server 127.0.0.1:${SEARCH_PORT}; }
 upstream inventory_dev { server 127.0.0.1:${INVENTORY_PORT}; }
 upstream sales_dev { server 127.0.0.1:${SALES_PORT}; }
 upstream chatbot_dev { server 127.0.0.1:${CHATBOT_PORT}; }
 upstream payment_dev { server 127.0.0.1:${PAYMENT_PORT}; }
 upstream query_dev { server 127.0.0.1:${OPERATIONS_QUERY_PORT}; }
+
+map $request_method $products_upstream {
+    GET $search;
+    default $catalog;
+}
 
 server {
     listen 127.0.0.1:${GATEWAY_PORT};
@@ -18,6 +24,7 @@ server {
 
     set $identity http://identity_dev;
     set $catalog http://catalog_dev;
+    set $search http://search_dev;
     set $inventory http://inventory_dev;
     set $sales http://sales_dev;
     set $payment http://payment_dev;

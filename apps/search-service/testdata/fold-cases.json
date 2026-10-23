@@ -1,0 +1,166 @@
+[
+  {
+    "input": "",
+    "folded": ""
+  },
+  {
+    "input": " ",
+    "folded": ""
+  },
+  {
+    "input": "ho",
+    "folded": "ho"
+  },
+  {
+    "input": "Đau đầu",
+    "folded": "dau dau"
+  },
+  {
+    "input": "ĐAU ĐẦU",
+    "folded": "dau dau"
+  },
+  {
+    "input": "đau   đầu",
+    "folded": "dau dau"
+  },
+  {
+    "input": "  thuốc hạ sốt cho trẻ em  ",
+    "folded": "thuoc ha sot cho tre em"
+  },
+  {
+    "input": "Paracetamol 500mg",
+    "folded": "paracetamol 500mg"
+  },
+  {
+    "input": "THU-003",
+    "folded": "thu-003"
+  },
+  {
+    "input": "thu-003",
+    "folded": "thu-003"
+  },
+  {
+    "input": "Vitamin C 1000mg/ viên",
+    "folded": "vitamin c 1000mg/ vien"
+  },
+  {
+    "input": "Bổ sung canxi + D3",
+    "folded": "bo sung canxi + d3"
+  },
+  {
+    "input": "Nước muối sinh lý 0,9%",
+    "folded": "nuoc muoi sinh ly 0,9%"
+  },
+  {
+    "input": "Ibuprofen (Advil)",
+    "folded": "ibuprofen (advil)"
+  },
+  {
+    "input": "Amoxicillin 250 mg/5ml",
+    "folded": "amoxicillin 250 mg/5ml"
+  },
+  {
+    "input": "Cảm cúm, ho có đờm",
+    "folded": "cam cum, ho co dom"
+  },
+  {
+    "input": "mề đay",
+    "folded": "me day"
+  },
+  {
+    "input": "Thuốc nhỏ mắt Natri Clorid",
+    "folded": "thuoc nho mat natri clorid"
+  },
+  {
+    "input": "ÔNG",
+    "folded": "ong"
+  },
+  {
+    "input": "ơ ư ă â ê ô",
+    "folded": "o u a a e o"
+  },
+  {
+    "input": "Ơ Ư Ă Â Ê Ô",
+    "folded": "o u a a e o"
+  },
+  {
+    "input": "Đ đ",
+    "folded": "d d"
+  },
+  {
+    "input": "Dị ứng!!!",
+    "folded": "di ung!!!"
+  },
+  {
+    "input": "hộp 10 vỉ x 10 viên",
+    "folded": "hop 10 vi x 10 vien"
+  },
+  {
+    "input": "tuýp 15g",
+    "folded": "tuyp 15g"
+  },
+  {
+    "input": "Siro ho Prospan",
+    "folded": "siro ho prospan"
+  },
+  {
+    "input": "é à",
+    "folded": "e a"
+  },
+  {
+    "input": "Café",
+    "folded": "cafe"
+  },
+  {
+    "input": "naïve",
+    "folded": "naive"
+  },
+  {
+    "input": "ﬁ ligature",
+    "folded": "ﬁ ligature"
+  },
+  {
+    "input": "Ａｂｃ１２３",
+    "folded": "ａｂｃ１２３"
+  },
+  {
+    "input": "tab\tseparated\nlines",
+    "folded": "tab separated lines"
+  },
+  {
+    "input": "a  b   c",
+    "folded": "a b c"
+  },
+  {
+    "input": "--dash--",
+    "folded": "--dash--"
+  },
+  {
+    "input": "_under_score_",
+    "folded": "_under_score_"
+  },
+  {
+    "input": "x/y",
+    "folded": "x/y"
+  },
+  {
+    "input": "50%",
+    "folded": "50%"
+  },
+  {
+    "input": "#hash",
+    "folded": "#hash"
+  },
+  {
+    "input": "C++",
+    "folded": "c++"
+  },
+  {
+    "input": "MỘT HAI BA",
+    "folded": "mot hai ba"
+  },
+  {
+    "input": "đ̃",
+    "folded": "d"
+  }
+]

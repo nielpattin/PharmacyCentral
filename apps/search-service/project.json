@@ -1,0 +1,80 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "@pharmacy/search-service",
+  "projectType": "application",
+  "sourceRoot": "apps/search-service",
+  "tags": ["type:application", "scope:search-service"],
+  "implicitDependencies": ["@pharmacy/catalog-service"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": [],
+      "inputs": ["{projectRoot}/**/*.go", "{projectRoot}/go.mod", "{projectRoot}/go.sum"],
+      "outputs": ["{projectRoot}/dist"],
+      "cache": true,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "go build -trimpath -o dist/search-service ./cmd/search-service",
+        "env": {
+          "CGO_ENABLED": "0"
+        }
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "dependsOn": [],
+      "inputs": ["{projectRoot}/**/*.go", "{projectRoot}/go.mod", "{projectRoot}/go.sum"],
+      "cache": true,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "go build ./...",
+        "env": {
+          "CGO_ENABLED": "0"
+        }
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "dependsOn": [],
+      "inputs": [
+        "{projectRoot}/**/*.go",
+        "{projectRoot}/go.mod",
+        "{projectRoot}/go.sum",
+        "{workspaceRoot}/tools/gofmt-check.mjs"
+      ],
+      "cache": true,
+      "options": {
+        "cwd": "{projectRoot}",
+        "commands": ["go vet ./...", "node ../../tools/gofmt-check.mjs"],
+        "parallel": false
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "dependsOn": [],
+      "inputs": [
+        "{projectRoot}/**/*.go",
+        "{projectRoot}/go.mod",
+        "{projectRoot}/go.sum",
+        "{projectRoot}/testdata/**/*"
+      ],
+      "cache": true,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "go test ./...",
+        "env": {
+          "CGO_ENABLED": "0"
+        }
+      }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "cache": false,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node ../../tools/go-run.mjs"
+      }
+    }
+  }
+}
