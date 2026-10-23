@@ -3,8 +3,8 @@ name: pharmacy-central
 x-backend-defaults: &backend-defaults
   restart: unless-stopped
   depends_on:
-    postgres:
-      condition: service_healthy
+    postgres-roles:
+      condition: service_completed_successfully
     rabbitmq:
       condition: service_healthy
     redis:
@@ -34,7 +34,7 @@ x-backend-environment: &backend-environment
 
 services:
   postgres:
-    image: postgis/postgis:18-3.6@sha256:db8c151a4e1f4686b1a985a3490cf96f9f8c8c2725f58a46ef7a57e52f167cc3
+    image: &postgres-image postgis/postgis:18-3.6@sha256:db8c151a4e1f4686b1a985a3490cf96f9f8c8c2725f58a46ef7a57e52f167cc3
     restart: unless-stopped
     environment:
       POSTGRES_DB: identity_service
@@ -50,6 +50,26 @@ services:
       - ./deploy/local/postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "${POSTGRES_PORT}:5432"
+
+  postgres-roles:
+    image: *postgres-image
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      IDENTITY_DB_PASSWORD: ${IDENTITY_DB_PASSWORD}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD}
+      INVENTORY_DB_PASSWORD: ${INVENTORY_DB_PASSWORD}
+      SALES_DB_PASSWORD: ${SALES_DB_PASSWORD}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD}
+      OPERATIONS_QUERY_DB_PASSWORD: ${OPERATIONS_QUERY_DB_PASSWORD}
+      CHATBOT_DB_PASSWORD: ${CHATBOT_DB_PASSWORD}
+    volumes:
+      - ./deploy/local/postgres/roles.sh:/roles.sh:ro
+    entrypoint: ["sh", "/roles.sh"]
 
   rabbitmq:
     image: rabbitmq:4.3.5-management@sha256:397fde82bc04522d88680b57cbf5d70caae715a76c957404e52e3f0fa056b8f3
@@ -336,7 +356,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3001
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/identity_service
+      DATABASE_URL: postgres://identity_service:${IDENTITY_DB_PASSWORD}@postgres:5432/identity_service
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       PUBLIC_APP_URL: ${PUBLIC_APP_URL}
@@ -356,8 +376,8 @@ services:
         APP_NAME: "@pharmacy/catalog-service"
         APP_DIR: apps/catalog-service
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres-roles:
+        condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
       redis:
@@ -371,7 +391,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3002
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/catalog_service
+      DATABASE_URL: postgres://catalog_service:${CATALOG_DB_PASSWORD}@postgres:5432/catalog_service
       SEAWEEDFS_ENDPOINT: http://seaweedfs:9000
       SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY}
       SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY}
@@ -434,7 +454,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3004
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/inventory_service
+      DATABASE_URL: postgres://inventory_service:${INVENTORY_DB_PASSWORD}@postgres:5432/inventory_service
       CATALOG_SERVICE_URL: http://catalog-service:3002
     ports:
       - "${INVENTORY_PORT}:3004"
@@ -450,7 +470,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3005
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/sales_service
+      DATABASE_URL: postgres://sales_service:${SALES_DB_PASSWORD}@postgres:5432/sales_service
       CATALOG_SERVICE_URL: http://catalog-service:3002
       INVENTORY_SERVICE_URL: http://inventory-service:3004
       IDENTITY_SERVICE_URL: http://identity-service:3001
@@ -479,8 +499,8 @@ services:
         APP_NAME: "@pharmacy/chatbot-service"
         APP_DIR: apps/chatbot-service
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres-roles:
+        condition: service_completed_successfully
       catalog-service:
         condition: service_healthy
     environment:
@@ -488,7 +508,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       INTERNAL_IDENTITY_SECRET: ${INTERNAL_IDENTITY_SECRET}
       CATALOG_SERVICE_URL: http://catalog-service:3002
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/chatbot_service
+      DATABASE_URL: postgres://chatbot_service:${CHATBOT_DB_PASSWORD}@postgres:5432/chatbot_service
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY}
       AI_CHATBOT_PROVIDER: ${AI_CHATBOT_PROVIDER}
       AI_CHATBOT_BASE_URL: ${AI_CHATBOT_BASE_URL}
@@ -512,7 +532,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3006
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/payment_service
+      DATABASE_URL: postgres://payment_service:${PAYMENT_DB_PASSWORD}@postgres:5432/payment_service
       CATALOG_SERVICE_URL: http://catalog-service:3002
       SALES_SERVICE_URL: http://sales-service:3005
       SEPAY_WEBHOOK_SECRET: ${SEPAY_WEBHOOK_SECRET}
@@ -533,7 +553,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3007
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/operations_query_service
+      DATABASE_URL: postgres://operations_query_service:${OPERATIONS_QUERY_DB_PASSWORD}@postgres:5432/operations_query_service
       CATALOG_SERVICE_URL: http://catalog-service:3002
       INVENTORY_SERVICE_URL: http://inventory-service:3004
       SALES_SERVICE_URL: http://sales-service:3005

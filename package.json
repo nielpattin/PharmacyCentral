@@ -11,7 +11,7 @@
     "fmt:check": "oxfmt --check -c oxfmt.config.ts",
     "graph": "nx graph",
     "infra:down": "docker compose --profile dev down",
-    "infra:up": "docker compose up -d postgres rabbitmq redis typesense embedder mailpit otel-collector tempo prometheus loki grafana seaweedfs seaweedfs-init gateway-dev",
+    "infra:up": "docker compose up -d postgres postgres-roles rabbitmq redis typesense embedder mailpit otel-collector tempo prometheus loki grafana seaweedfs seaweedfs-init gateway-dev",
     "load": "docker compose --profile loadtest run --rm k6 run --out experimental-prometheus-rw",
     "dev:data": "node --experimental-transform-types --env-file=.env tools/dev-import-samples.mjs",
     "prescriptions:samples": "pnpm --dir apps/sales-service prescriptions:samples",
