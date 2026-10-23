@@ -240,7 +240,7 @@ External accounting ledger posting is outside the scope of these screens.
 | --- | --- | --- |
 | Shopping assistant | Answers shopper questions on Customer Web | The assistant cannot answer |
 | Prescription photo reading | Reads medicines from a photo of a printed prescription | Photo reading is off; QR intake still works |
-| Semantic product search | Finds products by meaning, not only the words typed | Search matches keywords only |
+| Semantic product search | Finds products by meaning, not only the words typed. Searches of fewer than three words always match keywords only | Search matches keywords only |
 | Question screening | Checks each shopper question first; greetings, off-topic questions, emergencies and prompt-injection attempts get a fixed reply | Every question goes straight to the assistant |
 
 Each card shows a source badge: **Saved key**, **Environment key**, or **Not configured**. For a saved key it also shows the provider, model, base URL, the last four characters of the key, and when and by whom it was updated. Otherwise it explains that the value comes from the server environment.
