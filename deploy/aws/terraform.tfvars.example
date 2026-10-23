@@ -39,6 +39,11 @@ embedder_api_key_secret_arn = "arn:aws:secretsmanager:ap-southeast-1:00000000000
 # embedder_task_cpu         = 2048
 # embedder_task_memory      = 4096
 
+# Optional. sales-service takes every order and runs its outbox relay, so it gets more than task_cpu / task_memory.
+# 1024 CPU takes 2048 to 8192 MiB.
+# sales_task_cpu    = 1024
+# sales_task_memory = 2048
+
 # Non-secret environment variables. Service URLs should use Cloud Map names, for example:
 # http://catalog-service.staging.pharmacy.internal:3002
 service_environment = {

@@ -127,6 +127,12 @@ locals {
 
   # search-service is a Go binary: no node entrypoint, no Drizzle migration, and its own health endpoint.
   go_services = ["search-service"]
+
+  # Services that need more than the shared task size. sales-service writes every order and runs its outbox relay
+  # in the same process; at 0.5 vCPU it was the first container to hit its CPU cap under the checkout load test.
+  task_sizes = {
+    sales-service = { cpu = var.sales_task_cpu, memory = var.sales_task_memory }
+  }
   health_check_paths = {
     search-service = "/healthz"
   }
@@ -523,8 +529,8 @@ resource "aws_ecs_task_definition" "service" {
   for_each = local.backend_services
 
   family                   = "${local.environment_name}-${each.key}"
-  cpu                      = var.task_cpu
-  memory                   = var.task_memory
+  cpu                      = try(local.task_sizes[each.key].cpu, var.task_cpu)
+  memory                   = try(local.task_sizes[each.key].memory, var.task_memory)
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   execution_role_arn       = aws_iam_role.task_execution.arn
@@ -541,8 +547,8 @@ resource "aws_ecs_task_definition" "service" {
         name      = each.key
         image     = each.value.image
         essential = true
-        cpu       = var.task_cpu
-        memory    = var.task_memory
+        cpu       = try(local.task_sizes[each.key].cpu, var.task_cpu)
+        memory    = try(local.task_sizes[each.key].memory, var.task_memory)
         portMappings = [{
           containerPort = each.value.port
           hostPort      = each.value.port

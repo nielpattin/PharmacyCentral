@@ -1,5 +1,6 @@
 # Sizes the container stack like the ECS Fargate services of deploy/aws: every backend service gets the task size of
-# `task_cpu` / `task_memory` (0.5 vCPU, 1 GiB) and runs `desired_count` tasks (2). Layer it over the main file:
+# `task_cpu` / `task_memory` (0.5 vCPU, 1 GiB) and runs `desired_count` tasks (2), except sales-service, which gets
+# `sales_task_cpu` / `sales_task_memory` (1 vCPU, 2 GiB). Layer it over the main file:
 #
 #   pnpm run stack:aws-like
 #
@@ -23,7 +24,14 @@ services:
   catalog-service: *ecs-task
   search-service: *ecs-task
   inventory-service: *ecs-task
-  sales-service: *ecs-task
+  sales-service:
+    <<: *ecs-task
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
   payment-service: *ecs-task
   operations-query-service: *ecs-task
   chatbot-service: *ecs-task

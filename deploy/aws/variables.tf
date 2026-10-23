@@ -96,6 +96,18 @@ variable "task_memory" {
   default     = 1024
 }
 
+variable "sales_task_cpu" {
+  description = "Fargate task CPU units for sales-service, which overrides task_cpu. 1024 takes 2048 to 8192 MiB in 1024 steps."
+  type        = number
+  default     = 1024
+}
+
+variable "sales_task_memory" {
+  description = "Fargate task memory in MiB for sales-service. Must be a valid Fargate pair with sales_task_cpu."
+  type        = number
+  default     = 2048
+}
+
 variable "desired_count" {
   description = "Minimum number of tasks per backend service."
   type        = number
