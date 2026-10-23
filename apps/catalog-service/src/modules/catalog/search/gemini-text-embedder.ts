@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { normalizeVector } from "./normalize-vector.ts";
 import { EMBEDDING_DIMENSIONS, type TextEmbedder } from "./text-embedder.ts";
 
 type GeminiTextEmbedderOptions = { baseUrl: string; model: string; apiKey: string };
@@ -16,16 +17,12 @@ const singleEmbeddingResponseSchema = z.object({
   embedding: z.object({ values: embeddingValuesSchema }),
 });
 
-/** gemini-embedding-001 returns unit vectors only at 3072 dimensions, so smaller outputs are normalized here. */
-const normalize = (values: number[]): number[] => {
-  const norm = Math.sqrt(values.reduce((sum, value) => sum + value * value, 0));
-  // Huge finite components overflow to Infinity when squared, so the norm check catches them.
-  if (!Number.isFinite(norm) || norm === 0) throw new Error("Embedding has a zero or non-finite norm");
-  return values.map((value) => value / norm);
-};
+/** On the seeded catalog, relevant vector-only hits measured 0.30 to 0.32 and unrelated ones 0.35 and up. */
+const MAX_VECTOR_DISTANCE = 0.35;
 
 export class GeminiTextEmbedder implements TextEmbedder {
   public readonly model: string;
+  public readonly maxVectorDistance = MAX_VECTOR_DISTANCE;
   private readonly baseUrl: string;
   private readonly apiKey: string;
 
@@ -57,7 +54,7 @@ export class GeminiTextEmbedder implements TextEmbedder {
       if (embeddings.length !== batch.length) {
         throw new Error(`Gemini returned ${embeddings.length} embeddings for ${batch.length} documents`);
       }
-      for (const embedding of embeddings) vectors.push(normalize(embedding.values));
+      for (const embedding of embeddings) vectors.push(normalizeVector(embedding.values));
     }
     return vectors;
   }
@@ -74,7 +71,7 @@ export class GeminiTextEmbedder implements TextEmbedder {
       singleEmbeddingResponseSchema,
       "query embedding",
     );
-    return normalize(body.embedding.values);
+    return normalizeVector(body.embedding.values);
   }
 
   /**

@@ -14,12 +14,14 @@ import { CatalogImportService } from "./modules/catalog-import-service.ts";
 import { createCatalogRouter } from "./modules/catalog-routes.ts";
 import { ProductMediaStore } from "./modules/catalog/product-media-store.ts";
 import { GeminiTextEmbedder } from "./modules/catalog/search/gemini-text-embedder.ts";
+import { withQueryEmbeddingCache } from "./modules/catalog/search/query-embedding-cache.ts";
+import { OpenAiCompatibleTextEmbedder } from "./modules/catalog/search/openai-compatible-text-embedder.ts";
 import { ProductSearchIndexer } from "./modules/catalog/search/product-search-indexer.ts";
 import { DrizzleSearchSynonymStore } from "./modules/catalog/search/synonyms/infrastructure/drizzle-search-synonym-store.ts";
 import { SearchSynonymService } from "./modules/catalog/search/synonyms/search-synonym-service.ts";
 import { createSearchSynonymRouter } from "./modules/catalog/search/synonyms/search-synonym-routes.ts";
 import { TypesenseProductSearchIndex } from "./modules/catalog/search/typesense-product-search-index.ts";
-import type { TextEmbedderSource } from "./modules/catalog/search/text-embedder.ts";
+import type { TextEmbedder, TextEmbedderSource } from "./modules/catalog/search/text-embedder.ts";
 import { DrizzleCredentialStore } from "./infrastructure/drizzle-credential-store.ts";
 import { readAiProviderSettings } from "./infrastructure/ai-provider-config.ts";
 import { SecretBox } from "./infrastructure/secret-box.ts";
@@ -76,9 +78,13 @@ const vault = database
       cacheMs: 60_000,
     })
   : undefined;
-const embedders: TextEmbedderSource = createAdapterSource(async () => (vault ? vault.current() : undefined), {
-  gemini: (settings) => new GeminiTextEmbedder(settings),
-});
+const embedders: TextEmbedderSource = createAdapterSource<TextEmbedder>(
+  async () => (vault ? vault.current() : undefined),
+  {
+    gemini: (settings) => new GeminiTextEmbedder(settings),
+    "openai-compatible": (settings) => new OpenAiCompatibleTextEmbedder(settings),
+  },
+);
 const searchIndexer = database
   ? new ProductSearchIndexer({ database, index: searchIndex, embedders, logger })
   : undefined;
@@ -142,7 +148,7 @@ app.use(
 app.use(
   "/",
   createCatalogRouter(storeRepository, mediaStore, {
-    search: { index: searchIndex, embedders },
+    search: { index: searchIndex, embedders: withQueryEmbeddingCache(embedders) },
     onProductsChanged: requestSearchSweep,
     warn: (error) => logger.warn({ error }, "product search degraded"),
   }),

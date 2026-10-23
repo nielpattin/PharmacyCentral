@@ -7,8 +7,10 @@ import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import { ProductMediaStore } from "./catalog/product-media-store.ts";
 import { rankCandidates } from "./catalog/product-matching.ts";
-import { searchCatalogProducts } from "./catalog/search/hybrid-search.ts";
+import { databaseProductPage, searchCatalogProducts } from "./catalog/search/hybrid-search.ts";
+import { decodeCursor, encodeCursor } from "./catalog/search/page-cursor.ts";
 import type { ProductSearchIndex } from "./catalog/search/product-search-index.ts";
+import { createSearchResponseCache } from "./catalog/search/search-response-cache.ts";
 import type { TextEmbedderSource } from "./catalog/search/text-embedder.ts";
 import type { DrizzleStoreRepository } from "./stores/infrastructure/drizzle-store-repository.ts";
 
@@ -127,6 +129,12 @@ export const createCatalogRouter = (
   } = {},
 ): Router => {
   const router = Router();
+  const searchCache = createSearchResponseCache();
+  // Whatever changes a product also drops the remembered list answers of this replica.
+  const productsChanged = (): void => {
+    searchCache.clear();
+    options.onProductsChanged?.();
+  };
 
   router.get("/sites", async (_request, response) => {
     if (!repository) return databaseUnavailable(response);
@@ -273,22 +281,37 @@ export const createCatalogRouter = (
     if (!repository) return databaseUnavailable(response);
     const parsed = productSearchQuerySchema.safeParse(request.query);
     if (!parsed.success) return invalidRequest(response);
-    const products = options.search
-      ? await searchCatalogProducts(
-          {
-            repository,
-            index: options.search.index,
-            embedders: options.search.embedders,
-            warn: options.warn,
-            onIndexMissing: options.onProductsChanged,
-          },
-          parsed.data,
-        )
-      : await repository.searchProducts(parsed.data);
-    response.json(await Promise.all(products.map((product) => withProductUnits(repository, product))));
+    const offset = parsed.data.cursor === undefined ? 0 : decodeCursor(parsed.data.cursor);
+    if (offset === undefined) return invalidRequest(response);
+    const { search, category, prescriptionRequired, limit } = parsed.data;
+    // Case and spacing do not change the answer, so they must not split the cache.
+    const normalizedSearch = search?.toLowerCase().replace(/\s+/g, " ");
+    const query = { search: normalizedSearch, category, prescriptionRequired, limit, offset };
+    const answer = await searchCache.load(JSON.stringify(query), async () => {
+      const page = options.search
+        ? await searchCatalogProducts(
+            {
+              repository,
+              index: options.search.index,
+              embedders: options.search.embedders,
+              warn: options.warn,
+              onIndexMissing: options.onProductsChanged,
+            },
+            query,
+          )
+        : await databaseProductPage(repository, query);
+      return {
+        body: JSON.stringify(await withUnits(repository, page.products)),
+        nextCursor: page.hasMore ? encodeCursor(offset + limit) : undefined,
+      };
+    });
+    // The body stays a plain array; the cursor of the next page travels in a header.
+    if (answer.nextCursor !== undefined) response.set("X-Next-Cursor", answer.nextCursor);
+    response.type("application/json").send(answer.body);
   });
 
-  // Answers one entry per requested item, in request order, so a caller can pair each prescription line with its suggestions.
+  // Answers one entry per requested item, in request order, so a caller can pair each prescription line with its
+  // suggestions.
   router.post("/products/match", async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = productMatchRequestSchema.safeParse(request.body);
@@ -297,11 +320,11 @@ export const createCatalogRouter = (
       parsed.data.items.map(async (item) => {
         const candidates = await repository.matchProducts(item, parsed.data.limit);
         const ranked = rankCandidates(item, candidates, parsed.data.limit);
-        return {
-          matches: await Promise.all(
-            ranked.map(async (match) => ({ ...match, product: await withProductUnits(repository, match.product) })),
-          ),
-        };
+        const products = await withUnits(
+          repository,
+          ranked.map((match) => match.product),
+        );
+        return { matches: ranked.map((match, index) => ({ ...match, product: products[index] })) };
       }),
     );
     response.json(results);
@@ -407,7 +430,7 @@ export const createCatalogRouter = (
           )
         : [];
       response.status(201).json({ ...created, units: savedUnits });
-      options.onProductsChanged?.();
+      productsChanged();
     } catch (error) {
       writeError(response, error);
     }
@@ -437,7 +460,7 @@ export const createCatalogRouter = (
           )
         : await repository.listProductUnits(id.data.id);
       response.json({ ...product, units: savedUnits });
-      options.onProductsChanged?.();
+      productsChanged();
     } catch (error) {
       writeError(response, error);
     }
@@ -449,7 +472,7 @@ export const createCatalogRouter = (
     if (!id.success) return invalidRequest(response);
     await repository.deleteProduct(id.data.id);
     response.status(204).end();
-    options.onProductsChanged?.();
+    productsChanged();
   });
 
   router.get("/pricing/prices", async (request, response) => {
@@ -545,6 +568,14 @@ export const createCatalogRouter = (
 
 const databaseUnavailable = (response: import("express").Response) =>
   response.status(503).json({ title: "Catalog database is not configured", status: 503 });
+/** Attaches the units to every product with one query for the whole list, in the order of `products`. */
+const withUnits = async (
+  repository: DrizzleStoreRepository,
+  products: Array<typeof import("../shared/infrastructure/schema.ts").products.$inferSelect>,
+) => {
+  const units = await repository.listUnitsByProductIds(products.map((product) => product.id));
+  return products.map((product) => ({ ...product, units: units.get(product.id) ?? [] }));
+};
 const withProductUnits = async (
   repository: DrizzleStoreRepository,
   product: typeof import("../shared/infrastructure/schema.ts").products.$inferSelect,

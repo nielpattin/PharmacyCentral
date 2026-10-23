@@ -65,6 +65,17 @@ describe("DrizzleStoreRepository product matching", () => {
 
   beforeAll(async () => {
     await client.exec(`
+      CREATE TABLE product_units (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id uuid NOT NULL,
+        unit_name varchar(100) NOT NULL,
+        conversion_factor_to_base_unit numeric(18, 6) NOT NULL,
+        is_base_unit boolean DEFAULT false NOT NULL,
+        is_default_sale_unit boolean DEFAULT false NOT NULL,
+        is_default_purchase_unit boolean DEFAULT false NOT NULL,
+        barcode varchar(100),
+        sort_order integer DEFAULT 0 NOT NULL
+      );
       CREATE TABLE products (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         sku varchar(100) NOT NULL,
@@ -100,6 +111,38 @@ describe("DrizzleStoreRepository product matching", () => {
 
   afterAll(async () => {
     await client.close();
+  });
+
+  it("lists the units of several products in sort order with one entry per product, empty when it has none", async () => {
+    const rows = await db.select().from(schema.products);
+    const [first, second, third] = rows;
+    if (!first || !second || !third) throw new Error("Expected three fixture products");
+    await client.exec("DELETE FROM product_units");
+    await db.insert(schema.productUnits).values([
+      { productId: first.id, unitName: "Hộp", conversionFactorToBaseUnit: "100", sortOrder: 1 },
+      { productId: first.id, unitName: "Viên", conversionFactorToBaseUnit: "1", isBaseUnit: true, sortOrder: 0 },
+      { productId: second.id, unitName: "Gói", conversionFactorToBaseUnit: "1", isBaseUnit: true },
+    ]);
+
+    const units = await repository.listUnitsByProductIds([first.id, second.id, third.id]);
+
+    expect(units.get(first.id)?.map((unit) => unit.unitName)).toEqual(["Viên", "Hộp"]);
+    expect(units.get(second.id)?.map((unit) => unit.unitName)).toEqual(["Gói"]);
+    expect(units.get(third.id)).toEqual([]);
+    expect([...units.keys()]).toEqual([first.id, second.id, third.id]);
+    expect((await repository.listUnitsByProductIds([])).size).toBe(0);
+  });
+
+  it("walks the active products in SKU order page by page, and a page past the end is empty", async () => {
+    const all = (await repository.searchProducts({ limit: 100 })).map((product) => product.sku);
+
+    const firstPage = await repository.searchProducts({ limit: 2, offset: 0 });
+    const secondPage = await repository.searchProducts({ limit: 2, offset: 2 });
+    const pastEnd = await repository.searchProducts({ limit: 2, offset: all.length });
+
+    expect(firstPage.map((product) => product.sku)).toEqual(all.slice(0, 2));
+    expect(secondPage.map((product) => product.sku)).toEqual(all.slice(2, 4));
+    expect(pastEnd).toEqual([]);
   });
 
   it("suggests a product for a line that only names it", async () => {

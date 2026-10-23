@@ -71,10 +71,12 @@ export class DrizzleStoreRepository {
   public async searchProducts(query: {
     search?: string | undefined;
     limit?: number | undefined;
+    offset?: number | undefined;
     category?: string | undefined;
     prescriptionRequired?: boolean | undefined;
   }): Promise<Array<typeof products.$inferSelect>> {
-    const boundedLimit = Math.min(Math.max(query.limit ?? 20, 1), 100);
+    // 101 is the largest page plus one row, which lets a caller tell whether another page follows.
+    const boundedLimit = Math.min(Math.max(query.limit ?? 20, 1), 101);
     const pattern = query.search ? `%${escapeLike(query.search)}%` : undefined;
     const filters = [
       eq(products.isActive, true),
@@ -91,7 +93,8 @@ export class DrizzleStoreRepository {
       .from(products)
       .where(and(...filters))
       .orderBy(asc(products.sku))
-      .limit(boundedLimit);
+      .limit(boundedLimit)
+      .offset(Math.max(query.offset ?? 0, 0));
   }
 
   public async listActiveProductsByIds(ids: string[]): Promise<Array<typeof products.$inferSelect>> {
@@ -204,6 +207,24 @@ export class DrizzleStoreRepository {
       .from(productUnits)
       .where(eq(productUnits.productId, productId))
       .orderBy(asc(productUnits.sortOrder));
+  }
+
+  /**
+   * The units of many products in one query, each list in sort order. A product without units maps to an empty list.
+   * Listing a page of results by calling `listProductUnits` per product costs one round trip per result.
+   */
+  public async listUnitsByProductIds(
+    productIds: readonly string[],
+  ): Promise<Map<string, Array<typeof productUnits.$inferSelect>>> {
+    const byProduct = new Map<string, Array<typeof productUnits.$inferSelect>>(productIds.map((id) => [id, []]));
+    if (productIds.length === 0) return byProduct;
+    const rows = await this.database.db
+      .select()
+      .from(productUnits)
+      .where(inArray(productUnits.productId, [...productIds]))
+      .orderBy(asc(productUnits.sortOrder));
+    for (const row of rows) byProduct.get(row.productId)?.push(row);
+    return byProduct;
   }
 
   public async createProductUnit(input: typeof productUnits.$inferInsert): Promise<typeof productUnits.$inferSelect> {

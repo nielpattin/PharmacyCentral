@@ -31,7 +31,10 @@ const SETTINGS: Omit<AiProviderSettings, "apiKey"> = {
   baseUrl: "https://provider.example.test",
 };
 const ENVIRONMENT: AiProviderSettings = { ...SETTINGS, apiKey: "environment-key-value-ABCD" };
-const PROVIDERS = [{ id: "gemini", ...aiProviderCatalog.gemini }];
+const PROVIDERS = [
+  { id: "gemini", ...aiProviderCatalog.gemini },
+  { id: "openai-compatible", ...aiProviderCatalog["openai-compatible"] },
+];
 const PUBLIC_CATALOG_PATHS = [
   "/sites",
   "/storage-locations",

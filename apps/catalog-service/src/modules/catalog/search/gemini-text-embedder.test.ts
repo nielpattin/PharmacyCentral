@@ -39,7 +39,10 @@ describe("GeminiTextEmbedder", () => {
     const [url, init] = call;
     expect(url).toEqual(new URL("https://gemini.test/v1beta/models/gemini-test:embedContent"));
     expect(new Headers(init?.headers).get("x-goog-api-key")).toBe("bound-key-value-1");
-    expect(JSON.parse(bodyOf(init))).toMatchObject({ taskType: "RETRIEVAL_QUERY", outputDimensionality: 768 });
+    expect(JSON.parse(bodyOf(init))).toMatchObject({
+      taskType: "RETRIEVAL_QUERY",
+      outputDimensionality: EMBEDDING_DIMENSIONS,
+    });
   });
 
   it("exposes the bound model name for the search index's content hash", () => {

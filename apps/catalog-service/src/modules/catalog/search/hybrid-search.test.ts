@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { EMBEDDING_DIMENSIONS, type TextEmbedder } from "./text-embedder.ts";
 
-import { embedSearchQuery } from "./hybrid-search.ts";
+import { embedSearchQuery, searchCatalogProducts, SEMANTIC_MIN_WORDS } from "./hybrid-search.ts";
+import type { ProductSearchIndex } from "./product-search-index.ts";
 
 const vector = (): number[] => Array.from({ length: EMBEDDING_DIMENSIONS }, () => 1 / EMBEDDING_DIMENSIONS);
 
 const embedder = (overrides: Partial<TextEmbedder>): TextEmbedder => ({
   model: "test-embedding-model",
+  maxVectorDistance: 0.4,
   embedDocuments: async () => [],
   embedQuery: async () => vector(),
   ...overrides,
@@ -28,7 +30,7 @@ describe("embedSearchQuery", () => {
     const resolved = embedder({ embedQuery });
     const source = vi.fn(async () => resolved);
 
-    expect(await embedSearchQuery(source, "viên hạ sốt")).toEqual(vector());
+    expect(await embedSearchQuery(source, "viên hạ sốt")).toEqual({ embedding: vector(), maxDistance: 0.4 });
     expect(source).toHaveBeenCalledTimes(1);
     expect(embedQuery).toHaveBeenCalledWith("viên hạ sốt");
   });
@@ -52,5 +54,34 @@ describe("embedSearchQuery", () => {
 
     await expect(embedSearchQuery(source, "viên hạ sốt", warn)).rejects.toThrow("cannot be decrypted");
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("searchCatalogProducts semantic branch", () => {
+  const searchWith = async (search: string) => {
+    const embedQuery = vi.fn(async () => vector());
+    const indexSearch = vi.fn<ProductSearchIndex["search"]>(async () => ({ ids: [], hasMore: false }));
+    const index = { search: indexSearch } as unknown as ProductSearchIndex;
+    const repository = { searchProducts: vi.fn(), listActiveProductsByIds: vi.fn(async () => []) };
+    await searchCatalogProducts(
+      { repository, index, embedders: async () => embedder({ embedQuery }) },
+      { search, limit: 20, offset: 0 },
+    );
+    return { embedQuery, indexSearch };
+  };
+
+  it("embeds a query of at least SEMANTIC_MIN_WORDS words and hands the vector to the index", async () => {
+    const { embedQuery, indexSearch } = await searchWith("thuốc cho bé bị sốt");
+
+    expect(SEMANTIC_MIN_WORDS).toBeLessThanOrEqual(5);
+    expect(embedQuery).toHaveBeenCalledTimes(1);
+    expect(indexSearch.mock.calls[0]?.[0].semantic).toBeDefined();
+  });
+
+  it("searches a shorter query by keywords alone, without calling the embedder", async () => {
+    const { embedQuery, indexSearch } = await searchWith("đau   đầu");
+
+    expect(embedQuery).not.toHaveBeenCalled();
+    expect(indexSearch.mock.calls[0]?.[0].semantic).toBeUndefined();
   });
 });

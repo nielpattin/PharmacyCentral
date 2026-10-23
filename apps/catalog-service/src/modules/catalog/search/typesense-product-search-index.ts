@@ -1,24 +1,27 @@
 import { z } from "zod";
 
 import { foldSearchText } from "./search-text.ts";
-import { SEMANTIC_ALPHA, SEMANTIC_MAX_DISTANCE } from "./hybrid-search.ts";
+import { SEMANTIC_ALPHA } from "./hybrid-search.ts";
 import {
   SearchIndexMissingError,
   type ProductSearchDocument,
   type ProductSearchIndex,
   type ProductSearchRequest,
+  type ProductSearchResult,
   type SynonymSetItem,
 } from "./product-search-index.ts";
 import { EMBEDDING_DIMENSIONS } from "./text-embedder.ts";
 
 /** Bump the suffix when the schema changes. The next sweep creates a fresh collection and reloads every product. */
-export const PRODUCT_SEARCH_COLLECTION = "catalog_products_v1";
+export const PRODUCT_SEARCH_COLLECTION = "catalog_products_v3";
 /** The live collection links this set, so the name must stay the same. */
 export const SYMPTOM_SYNONYM_SET = "catalog-vi-symptoms";
 
 const SEARCH_TIMEOUT_MS = 2_000;
 const ADMIN_TIMEOUT_MS = 30_000;
 const REMOVE_BATCH_SIZE = 100;
+/** How many nearest vectors the hybrid query ranks; a deep page asks for more. */
+const VECTOR_CANDIDATES = 100;
 const QUERY_BY = "sku,barcode,name_folded,active_ingredient_folded,generic_name_folded,indications_folded";
 const QUERY_BY_WEIGHTS = "4,4,4,3,3,1";
 
@@ -28,7 +31,7 @@ const COLLECTION_SCHEMA = {
   token_separators: ["-"],
   synonym_sets: [SYMPTOM_SYNONYM_SET],
   fields: [
-    { name: "sku", type: "string" },
+    { name: "sku", type: "string", sort: true },
     { name: "barcode", type: "string", optional: true },
     { name: "name_folded", type: "string" },
     { name: "generic_name_folded", type: "string", optional: true },
@@ -37,6 +40,7 @@ const COLLECTION_SCHEMA = {
     { name: "category", type: "string", optional: true },
     { name: "prescription_required", type: "bool" },
     { name: "content_hash", type: "string", index: false, optional: true },
+    { name: "payload", type: "string", index: false, optional: true },
     { name: "embedding", type: "float[]", num_dim: EMBEDDING_DIMENSIONS, optional: true },
   ],
 };
@@ -103,6 +107,7 @@ const toTypesenseDocument = (document: ProductSearchDocument): Record<string, un
     active_ingredient_folded: document.activeIngredientFolded,
     indications_folded: document.indicationsFolded,
     category: document.category,
+    payload: document.payload,
     embedding: document.embedding,
   };
   // Drop absent optional fields instead of sending null. Typesense stores them as missing.
@@ -201,14 +206,14 @@ export class TypesenseProductSearchIndex implements ProductSearchIndex {
     }
   }
 
-  public async search(request: ProductSearchRequest): Promise<string[]> {
+  public async search(request: ProductSearchRequest): Promise<ProductSearchResult> {
     const filters: string[] = [];
     if (request.prescriptionRequired !== undefined) {
       filters.push(`prescription_required:=${request.prescriptionRequired}`);
     }
     if (request.category !== undefined && request.category !== "") {
       // Typesense ends a backtick-quoted filter value at the next backtick, so such a query returns no hits.
-      if (request.category.includes("`")) return [];
+      if (request.category.includes("`")) return { ids: [], hasMore: false };
       filters.push(`category:=\`${request.category}\``);
     }
     const folded = foldSearchText(request.text);
@@ -222,12 +227,15 @@ export class TypesenseProductSearchIndex implements ProductSearchIndex {
       // Without prefix: false, "ho" also matches every word that starts with it ("hoá", "hoạt").
       prefix: false,
       include_fields: "id",
-      per_page: request.limit,
+      // One hit more than the page, only to learn whether another page follows.
+      limit: request.limit + 1,
+      offset: request.offset,
     };
     if (filters.length > 0) search.filter_by = filters.join(" && ");
-    if (request.queryEmbedding) {
+    if (request.semantic) {
       // distance_threshold is ignored in hybrid mode, so the distance cut-off is applied to the hits below.
-      search.vector_query = `embedding:([${request.queryEmbedding.join(",")}], k:100, alpha:${SEMANTIC_ALPHA})`;
+      const k = Math.max(VECTOR_CANDIDATES, request.offset + request.limit + 1);
+      search.vector_query = `embedding:([${request.semantic.embedding.join(",")}], k:${k}, alpha:${SEMANTIC_ALPHA})`;
     }
     const response = await this.send("POST", "/multi_search", {
       body: { searches: [search] },
@@ -241,14 +249,17 @@ export class TypesenseProductSearchIndex implements ProductSearchIndex {
         throw new SearchIndexMissingError(`Typesense collection ${PRODUCT_SEARCH_COLLECTION} is missing`);
       throw new Error(`Typesense search failed with code ${result.code ?? "unknown"}`);
     }
-    return (result.hits ?? [])
+    const hits = result.hits ?? [];
+    const ids = hits
+      .slice(0, request.limit)
       .filter(
         (hit) =>
-          request.queryEmbedding === undefined ||
+          request.semantic === undefined ||
           (hit.text_match ?? 0) > 0 ||
-          (hit.vector_distance ?? Number.POSITIVE_INFINITY) <= SEMANTIC_MAX_DISTANCE,
+          (hit.vector_distance ?? Number.POSITIVE_INFINITY) <= request.semantic.maxDistance,
       )
       .map((hit) => hit.document.id);
+    return { ids, hasMore: hits.length > request.limit };
   }
 
   private send(

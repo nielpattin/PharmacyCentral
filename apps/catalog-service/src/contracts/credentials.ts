@@ -1,12 +1,13 @@
 import { z } from "zod";
 
-export const aiProviders = ["gemini"] as const;
+export const aiProviders = ["gemini", "openai-compatible"] as const;
 export type AiProviderId = (typeof aiProviders)[number];
 
 export type AiProviderOption = { id: AiProviderId; label: string; defaultBaseUrl: string };
 
 export const aiProviderCatalog: Readonly<Record<AiProviderId, Omit<AiProviderOption, "id">>> = {
   gemini: { label: "Google Gemini", defaultBaseUrl: "https://generativelanguage.googleapis.com" },
+  "openai-compatible": { label: "OpenAI-compatible", defaultBaseUrl: "https://api.openai.com/v1" },
 };
 
 export const replaceCredentialRequestSchema = z.object({

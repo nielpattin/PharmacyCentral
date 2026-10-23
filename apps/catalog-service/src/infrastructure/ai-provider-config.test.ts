@@ -111,7 +111,7 @@ describe("readAiProviderSettings", () => {
     };
 
     expect(() => readAiProviderSettings("feature", env)).toThrow(
-      'AI_FEATURE_PROVIDER is "openai", which has no adapter. Supported: gemini.',
+      'AI_FEATURE_PROVIDER is "openai", which has no adapter. Supported: gemini, openai-compatible.',
     );
   });
 });

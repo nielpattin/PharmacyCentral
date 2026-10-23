@@ -12,15 +12,26 @@ export type ProductSearchDocument = {
   category?: string | undefined;
   prescriptionRequired: boolean;
   contentHash: string;
+  /** `JSON.stringify({ ...productRow, units })`, the body `GET /products` returns for this product. */
+  payload?: string | undefined;
   embedding?: number[] | undefined;
 };
 
 export type ProductSearchRequest = {
   text: string;
-  queryEmbedding?: number[] | undefined;
+  /** The embedded query and the farthest vector-only hit worth keeping. Absent when no vector branch runs. */
+  semantic?: { embedding: number[]; maxDistance: number } | undefined;
   category?: string | undefined;
   prescriptionRequired?: boolean | undefined;
   limit: number;
+  offset: number;
+};
+
+export type ProductSearchResult = {
+  /** At most `limit` ids, best first. */
+  ids: string[];
+  /** True when the index ranks results beyond this page. */
+  hasMore: boolean;
 };
 
 export interface ProductSearchIndex {
@@ -28,7 +39,7 @@ export interface ProductSearchIndex {
   listContentHashes(): Promise<Map<string, string>>;
   upsert(documents: ProductSearchDocument[]): Promise<void>;
   remove(ids: string[]): Promise<void>;
-  search(request: ProductSearchRequest): Promise<string[]>;
+  search(request: ProductSearchRequest): Promise<ProductSearchResult>;
 }
 
 export class SearchIndexMissingError extends Error {}

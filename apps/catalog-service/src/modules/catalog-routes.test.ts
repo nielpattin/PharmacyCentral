@@ -215,4 +215,28 @@ describe("catalog API", () => {
       imageUrl: "http://localhost:9000/product-media/products/product/image.jpg",
     });
   });
+
+  it("pages the product list with an opaque cursor and answers a repeated page from memory", async () => {
+    const rows = [1, 2, 3].map((n) => ({ id: `product-${n}`, sku: `SKU-${n}` }));
+    const searchProducts = vi
+      .fn<(query: { limit: number; offset: number }) => Promise<unknown[]>>()
+      .mockImplementation(async ({ limit, offset }) => rows.slice(offset, offset + limit));
+    const listUnitsByProductIds = vi.fn().mockResolvedValue(new Map());
+    const repository = { searchProducts, listUnitsByProductIds } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const first = await fetch(`${testServer.url}/products?limit=2`);
+    const cursor = first.headers.get("x-next-cursor");
+    const second = await fetch(`${testServer.url}/products?limit=2&cursor=${cursor}`);
+    await fetch(`${testServer.url}/products?limit=2`);
+    const invalid = await fetch(`${testServer.url}/products?limit=2&cursor=0`);
+
+    expect(((await first.json()) as Array<{ sku: string }>).map((p) => p.sku)).toEqual(["SKU-1", "SKU-2"]);
+    expect(cursor).not.toBeNull();
+    expect(((await second.json()) as Array<{ sku: string }>).map((p) => p.sku)).toEqual(["SKU-3"]);
+    expect(second.headers.get("x-next-cursor")).toBeNull();
+    expect(invalid.status).toBe(400);
+    expect(searchProducts).toHaveBeenCalledTimes(2);
+  });
 });
