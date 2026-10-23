@@ -87,3 +87,28 @@ output "authorizer_lambda_security_group_id" {
   description = "Security group ID for authorizer Lambda."
   value       = aws_security_group.lambda.id
 }
+
+output "embedder_service_name" {
+  description = "Name of the embedder ECS service (populated when services_enabled = true)."
+  value       = one(aws_ecs_service.embedder[*].name)
+}
+
+output "embedder_task_definition_arn" {
+  description = "Task definition ARN of the self-hosted product search embedder."
+  value       = aws_ecs_task_definition.embedder.arn
+}
+
+output "embedder_internal_url" {
+  description = "Private OpenAI-compatible base URL that catalog-service and search-service call (Cloud Map name, port 80, /v1)."
+  value       = local.embedder_url
+}
+
+output "embedder_security_group_id" {
+  description = "Security group ID for the embedder task. Accepts traffic on port 80 from embedder_client_security_group_id only."
+  value       = aws_security_group.embedder.id
+}
+
+output "embedder_client_security_group_id" {
+  description = "Security group ID attached to catalog-service and search-service tasks, the only clients allowed to reach the embedder."
+  value       = aws_security_group.embedder_client.id
+}

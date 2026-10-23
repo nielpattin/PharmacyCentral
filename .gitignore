@@ -127,3 +127,6 @@ credentials.json
 plans/
 .omp/
 TODO.md
+
+# Scratch files for local experiments (load-test logs, profiles, helper scripts)
+tmp/

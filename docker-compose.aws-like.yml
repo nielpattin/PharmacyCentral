@@ -1,0 +1,54 @@
+# Sizes the container stack like the ECS Fargate services of deploy/aws: every backend service gets the task size of
+# `task_cpu` / `task_memory` (0.5 vCPU, 1 GiB) and runs `desired_count` tasks (2). Layer it over the main file:
+#
+#   pnpm run stack:aws-like
+#
+# Its purpose is load testing. Numbers measured on the plain stack are not what ECS gives. Two caveats:
+# - The data tier (PostgreSQL, Redis, RabbitMQ, Typesense) is not defined in deploy/aws, so its limits below are an
+#   assumption, not a mirror of production. Change them to match the managed services you pick.
+# - Autoscaling to `max_count` is not modelled: this is the floor of two tasks, which is the case that matters when
+#   asking where a deployment starts to fail.
+x-ecs-task:
+  &ecs-task # The host ports of the plain stack would collide between replicas. Everything goes through the gateway here.
+  ports: !reset []
+  deploy:
+    replicas: 2
+    resources:
+      limits:
+        cpus: "0.5"
+        memory: 1g
+
+services:
+  identity-service: *ecs-task
+  catalog-service: *ecs-task
+  search-service: *ecs-task
+  inventory-service: *ecs-task
+  sales-service: *ecs-task
+  payment-service: *ecs-task
+  operations-query-service: *ecs-task
+  chatbot-service: *ecs-task
+
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4g
+  redis:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1g
+  rabbitmq:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2g
+  typesense:
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4g

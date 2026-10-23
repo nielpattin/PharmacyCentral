@@ -24,7 +24,20 @@ images = {
   payment-service = "ghcr.io/example/pharmacy-central/payment-service@sha256:replace-me"
   operations-query-service = "ghcr.io/example/pharmacy-central/operations-query-service@sha256:replace-me"
   chatbot-service = "ghcr.io/example/pharmacy-central/chatbot-service@sha256:replace-me"
+  search-service = "ghcr.io/example/pharmacy-central/search-service@sha256:replace-me"
 }
+
+# The self-hosted product search embedder (deploy/embedder). Build the image with its model baked in, push it, and pin
+# the digest. The service is internal: catalog-service reaches it at http://embedder.<environment>.pharmacy.internal:80/v1.
+embedder_image = "ghcr.io/example/pharmacy-central/embedder@sha256:replace-me"
+
+# Secrets Manager ARN of the embedder API key. The embedder reads it as API_KEY, and catalog-service and search-service
+# read the same secret as AI_EMBEDDING_API_KEY.
+embedder_api_key_secret_arn = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/embedder-api-key"
+
+# Optional. 2 vCPU and 4 GiB handle about 200 new queries a second, and 4 vCPU added little in the same test.
+# embedder_task_cpu         = 2048
+# embedder_task_memory      = 4096
 
 # Non-secret environment variables. Service URLs should use Cloud Map names, for example:
 # http://catalog-service.staging.pharmacy.internal:3002
@@ -49,6 +62,10 @@ service_environment = {
     CATALOG_SERVICE_URL   = "http://catalog-service.staging.pharmacy.internal:3002"
     INVENTORY_SERVICE_URL = "http://inventory-service.staging.pharmacy.internal:3004"
     SALES_SERVICE_URL     = "http://sales-service.staging.pharmacy.internal:3005"
+  }
+  search-service = {
+    CATALOG_SERVICE_URL        = "http://catalog-service.staging.pharmacy.internal:3002"
+    OTEL_EXPORTER_OTLP_ENDPOINT = "http://otel-collector.staging.pharmacy.internal:4318"
   }
 }
 
@@ -87,6 +104,10 @@ service_secrets = {
   }
   operations-query-service = {
     DATABASE_URL = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/operations-query-db"
+  }
+  search-service = {
+    TYPESENSE_API_KEY = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/typesense-api-key"
+    TYPESENSE_URL     = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/typesense-url"
   }
 }
 

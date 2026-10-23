@@ -30,6 +30,10 @@ locals {
       port  = 3008
       image = var.images["chatbot-service"]
     }
+    search-service = {
+      port  = 3009
+      image = var.images["search-service"]
+    }
   }
 
   path_rules = {
@@ -87,6 +91,7 @@ locals {
 
   execution_secret_arns = distinct(compact(concat(
     local.service_secret_arns,
+    [var.embedder_api_key_secret_arn],
     var.repository_credentials_secret_arn != null && var.repository_credentials_secret_arn != "" ? [var.repository_credentials_secret_arn] : []
   )))
 
@@ -94,11 +99,56 @@ locals {
     values(local.authorizer_secret_env),
     values(var.authorizer_secrets)
   )))
-}
 
-# ---------------------------------------------------------
-# Managed Security Groups and East-West / Outbound Rules
-# ---------------------------------------------------------
+  embedder_name     = "embedder"
+  embedder_port     = 80
+  embedder_model_id = "intfloat/multilingual-e5-small"
+  embedder_url      = "http://${aws_service_discovery_service.embedder.name}.${aws_service_discovery_private_dns_namespace.this.name}:${local.embedder_port}/v1"
+
+  # Keys are Fargate CPU units; values are [min, max] task memory in MiB.
+  fargate_memory_bounds = {
+    "1024" = [2048, 8192]
+    "2048" = [4096, 16384]
+    "4096" = [8192, 30720]
+  }
+
+  embedder_clients = ["catalog-service", "search-service"]
+
+  # The clients' four AI_EMBEDDING_* settings are set together here, and the key is the secret the embedder reads, so
+  # the two sides cannot drift apart.
+  embedder_client_environment = {
+    AI_EMBEDDING_PROVIDER = "openai-compatible"
+    AI_EMBEDDING_BASE_URL = local.embedder_url
+    AI_EMBEDDING_MODEL    = local.embedder_model_id
+  }
+  embedder_client_secrets = {
+    AI_EMBEDDING_API_KEY = var.embedder_api_key_secret_arn
+  }
+
+  # search-service is a Go binary: no node entrypoint, no Drizzle migration, and its own health endpoint.
+  go_services = ["search-service"]
+  health_check_paths = {
+    search-service = "/healthz"
+  }
+  migrating_services = { for name, service in local.backend_services : name => service if !contains(local.go_services, name) }
+
+  # Container environment and secrets per backend service. The service and the migration task definitions both use these.
+  task_environment = {
+    for name in keys(local.backend_services) :
+    name => merge(
+      lookup(var.service_environment, name, {}),
+      contains(local.embedder_clients, name) ? local.embedder_client_environment : {}
+    )
+  }
+  task_secrets = {
+    for name in keys(local.backend_services) :
+    name => merge(
+      var.shared_secrets,
+      lookup(var.service_secrets, name, {}),
+      contains(local.embedder_clients, name) ? local.embedder_client_secrets : {}
+    )
+  }
+}
 
 resource "aws_security_group" "vpc_link" {
   name        = "${local.environment_name}-vpc-link"
@@ -140,7 +190,6 @@ resource "aws_security_group" "lambda" {
   }
 }
 
-# VPC Link -> ALB on HTTP port 80
 resource "aws_security_group_rule" "vpc_link_egress_alb" {
   type                     = "egress"
   description              = "Allow outbound HTTP traffic from VPC link to internal ALB"
@@ -151,7 +200,6 @@ resource "aws_security_group_rule" "vpc_link_egress_alb" {
   source_security_group_id = aws_security_group.alb.id
 }
 
-# ALB Ingress: Port 80 from VPC Link & Authorizer Lambda
 resource "aws_security_group_rule" "alb_ingress_vpc_link" {
   type                     = "ingress"
   description              = "Allow inbound HTTP traffic from API Gateway VPC link"
@@ -172,23 +220,21 @@ resource "aws_security_group_rule" "alb_ingress_lambda" {
   source_security_group_id = aws_security_group.lambda.id
 }
 
-# ALB Egress: Service ports 3001-3007 to ECS tasks
 resource "aws_security_group_rule" "alb_egress_tasks" {
   type                     = "egress"
   description              = "Allow outbound HTTP traffic from ALB to backend ECS tasks"
   from_port                = 3001
-  to_port                  = 3007
+  to_port                  = 3009
   protocol                 = "tcp"
   security_group_id        = aws_security_group.alb.id
   source_security_group_id = aws_security_group.ecs_tasks.id
 }
 
-# ECS Tasks Ingress: From ALB & East-West Cloud Map (task-to-task)
 resource "aws_security_group_rule" "tasks_ingress_alb" {
   type                     = "ingress"
   description              = "Allow inbound traffic from internal ALB on backend service ports"
   from_port                = 3001
-  to_port                  = 3007
+  to_port                  = 3009
   protocol                 = "tcp"
   security_group_id        = aws_security_group.ecs_tasks.id
   source_security_group_id = aws_security_group.alb.id
@@ -198,13 +244,12 @@ resource "aws_security_group_rule" "tasks_ingress_self" {
   type              = "ingress"
   description       = "Allow service-to-service Cloud Map communication between ECS tasks"
   from_port         = 3001
-  to_port           = 3007
+  to_port           = 3009
   protocol          = "tcp"
   security_group_id = aws_security_group.ecs_tasks.id
   self              = true
 }
 
-# ECS Tasks Egress: Outbound for third-party APIs (e.g. SePay), data stores, and NAT
 resource "aws_security_group_rule" "tasks_egress_all" {
   type              = "egress"
   description       = "Allow outbound traffic for third-party APIs, data stores, and NAT gateway"
@@ -215,7 +260,6 @@ resource "aws_security_group_rule" "tasks_egress_all" {
   cidr_blocks       = ["0.0.0.0/0"]
 }
 
-# Authorizer Lambda Egress: Outbound for ALB access and AWS APIs via NAT
 resource "aws_security_group_rule" "lambda_egress_all" {
   type              = "egress"
   description       = "Allow outbound traffic for internal ALB calls and NAT/AWS service access"
@@ -226,9 +270,47 @@ resource "aws_security_group_rule" "lambda_egress_all" {
   cidr_blocks       = ["0.0.0.0/0"]
 }
 
-# ---------------------------------------------------------
-# ECS Cluster, Logging, and Task Execution IAM Roles
-# ---------------------------------------------------------
+resource "aws_security_group" "embedder" {
+  name        = "${local.environment_name}-embedder"
+  description = "Security group for the embedder ECS Fargate task"
+  vpc_id      = var.vpc_id
+
+  tags = {
+    Name = "${local.environment_name}-embedder"
+  }
+}
+
+# Attached to the catalog-service and search-service tasks only. The embedder group allows traffic from this group, not
+# from the shared ECS tasks group, so no other backend service can reach the embedder.
+resource "aws_security_group" "embedder_client" {
+  name        = "${local.environment_name}-embedder-client"
+  description = "Attached to catalog-service and search-service ECS tasks, the only clients allowed to reach the embedder"
+  vpc_id      = var.vpc_id
+
+  tags = {
+    Name = "${local.environment_name}-embedder-client"
+  }
+}
+
+resource "aws_security_group_rule" "embedder_ingress_clients" {
+  type                     = "ingress"
+  description              = "Allow inbound HTTP on port 80 from catalog-service and search-service tasks only"
+  from_port                = 80
+  to_port                  = 80
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.embedder.id
+  source_security_group_id = aws_security_group.embedder_client.id
+}
+
+resource "aws_security_group_rule" "embedder_egress_all" {
+  type              = "egress"
+  description       = "Allow outbound traffic for ECR image pulls, CloudWatch Logs, Secrets Manager, and NAT gateway"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  security_group_id = aws_security_group.embedder.id
+  cidr_blocks       = ["0.0.0.0/0"]
+}
 
 resource "aws_ecs_cluster" "this" {
   name = local.environment_name
@@ -242,6 +324,11 @@ resource "aws_ecs_cluster" "this" {
 resource "aws_cloudwatch_log_group" "service" {
   for_each          = local.backend_services
   name              = "/ecs/${local.environment_name}/${each.key}"
+  retention_in_days = var.log_retention_in_days
+}
+
+resource "aws_cloudwatch_log_group" "embedder" {
+  name              = "/ecs/${local.environment_name}/${local.embedder_name}"
   retention_in_days = var.log_retention_in_days
 }
 
@@ -303,10 +390,6 @@ resource "aws_iam_role" "task" {
   })
 }
 
-# ---------------------------------------------------------
-# Internal Application Load Balancer
-# ---------------------------------------------------------
-
 resource "aws_lb" "internal" {
   name               = substr("${local.environment_name}-internal", 0, 32)
   internal           = true
@@ -326,7 +409,7 @@ resource "aws_lb_target_group" "service" {
 
   health_check {
     enabled             = true
-    path                = "/health/ready"
+    path                = lookup(local.health_check_paths, each.key, "/health/ready")
     protocol            = "HTTP"
     matcher             = "200-399"
     interval            = 30
@@ -370,9 +453,30 @@ resource "aws_lb_listener_rule" "service" {
   }
 }
 
-# ---------------------------------------------------------
-# Service Discovery (Cloud Map)
-# ---------------------------------------------------------
+# GET /api/products is the only route search-service owns. The API Gateway strips /api, so the ALB sees exactly
+# /products. The exact path (no wildcard) keeps /products/{id} and every other method on catalog-service, whose rule
+# (priority 20) is evaluated after this one and so takes everything this one does not match.
+resource "aws_lb_listener_rule" "search_products" {
+  listener_arn = aws_lb_listener.internal.arn
+  priority     = 15
+
+  condition {
+    path_pattern {
+      values = ["/products"]
+    }
+  }
+
+  condition {
+    http_request_method {
+      values = ["GET"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.service["search-service"].arn
+  }
+}
 
 resource "aws_service_discovery_private_dns_namespace" "this" {
   name = "${var.environment}.pharmacy.internal"
@@ -398,9 +502,22 @@ resource "aws_service_discovery_service" "service" {
   }
 }
 
-# ---------------------------------------------------------
-# ECS Fargate Task Definitions and Services with Autoscaling
-# ---------------------------------------------------------
+resource "aws_service_discovery_service" "embedder" {
+  name = local.embedder_name
+
+  dns_config {
+    namespace_id = aws_service_discovery_private_dns_namespace.this.id
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
+  }
+}
 
 resource "aws_ecs_task_definition" "service" {
   for_each = local.backend_services
@@ -426,39 +543,28 @@ resource "aws_ecs_task_definition" "service" {
         essential = true
         cpu       = var.task_cpu
         memory    = var.task_memory
-        user      = "node"
-        command   = ["node", "dist/main.js"]
         portMappings = [{
           containerPort = each.value.port
           hostPort      = each.value.port
           protocol      = "tcp"
         }]
         environment = concat(
+          contains(local.go_services, each.key) ? [] : [{ name = "NODE_ENV", value = "production" }],
+          [{ name = "PORT", value = tostring(each.value.port) }],
           [
-            { name = "NODE_ENV", value = "production" },
-            { name = "PORT", value = tostring(each.value.port) },
-          ],
-          [
-            for name, value in lookup(var.service_environment, each.key, {}) : {
+            for name, value in local.task_environment[each.key] : {
               name  = name
               value = value
             }
           ],
         )
         secrets = [
-          for name, value_from in merge(var.shared_secrets, lookup(var.service_secrets, each.key, {})) : {
+          for name, value_from in local.task_secrets[each.key] : {
             name      = name
             valueFrom = value_from
           }
         ]
         readonlyRootFilesystem = true
-        healthCheck = {
-          command     = ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:' + process.env.PORT + '/health/ready').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
-          interval    = 30
-          timeout     = 5
-          retries     = 3
-          startPeriod = 30
-        }
         logConfiguration = {
           logDriver = "awslogs"
           options = {
@@ -466,6 +572,21 @@ resource "aws_ecs_task_definition" "service" {
             "awslogs-region"        = var.aws_region
             "awslogs-stream-prefix" = "ecs"
           }
+        }
+      },
+      # Node services run `node dist/main.js` as the node user with a node health probe. The Go image keeps its own
+      # entrypoint and user, and its health is checked by the ALB target group alone.
+      # merge() skips null arguments, so the Go branch is null, not {}: an object with these attributes and {} have no
+      # common type, and Terraform rejects that conditional.
+      contains(local.go_services, each.key) ? null : {
+        user    = "node"
+        command = ["node", "dist/main.js"]
+        healthCheck = {
+          command     = ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:' + process.env.PORT + '/health/ready').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+          interval    = 30
+          timeout     = 5
+          retries     = 3
+          startPeriod = 30
         }
       },
       var.repository_credentials_secret_arn != null && var.repository_credentials_secret_arn != "" ? {
@@ -478,7 +599,7 @@ resource "aws_ecs_task_definition" "service" {
 }
 
 resource "aws_ecs_task_definition" "migration" {
-  for_each = local.backend_services
+  for_each = local.migrating_services
 
   family                   = "${local.environment_name}-${each.key}-migration"
   cpu                      = var.task_cpu
@@ -509,14 +630,14 @@ resource "aws_ecs_task_definition" "migration" {
             { name = "PORT", value = tostring(each.value.port) },
           ],
           [
-            for name, value in lookup(var.service_environment, each.key, {}) : {
+            for name, value in local.task_environment[each.key] : {
               name  = name
               value = value
             }
           ],
         )
         secrets = [
-          for name, value_from in merge(var.shared_secrets, lookup(var.service_secrets, each.key, {})) : {
+          for name, value_from in local.task_secrets[each.key] : {
             name      = name
             valueFrom = value_from
           }
@@ -557,7 +678,7 @@ resource "aws_ecs_service" "service" {
 
   network_configuration {
     subnets          = var.private_subnet_ids
-    security_groups  = [aws_security_group.ecs_tasks.id]
+    security_groups  = contains(local.embedder_clients, each.key) ? [aws_security_group.ecs_tasks.id, aws_security_group.embedder_client.id] : [aws_security_group.ecs_tasks.id]
     assign_public_ip = false
   }
 
@@ -575,7 +696,7 @@ resource "aws_ecs_service" "service" {
     ignore_changes = [desired_count]
   }
 
-  depends_on = [aws_lb_listener_rule.service]
+  depends_on = [aws_lb_listener_rule.service, aws_lb_listener_rule.search_products]
 }
 
 resource "aws_appautoscaling_target" "service" {
@@ -626,9 +747,110 @@ resource "aws_appautoscaling_policy" "service_memory" {
   }
 }
 
-# ---------------------------------------------------------
-# Lambda Functions (Authorizer & CSRF) and IAM
-# ---------------------------------------------------------
+resource "aws_ecs_task_definition" "embedder" {
+  family                   = "${local.environment_name}-${local.embedder_name}"
+  cpu                      = var.embedder_task_cpu
+  memory                   = var.embedder_task_memory
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  execution_role_arn       = aws_iam_role.task_execution.arn
+  task_role_arn            = aws_iam_role.task.arn
+
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "X86_64"
+  }
+
+  lifecycle {
+    precondition {
+      condition = (
+        var.embedder_task_memory % 1024 == 0 &&
+        var.embedder_task_memory >= local.fargate_memory_bounds[tostring(var.embedder_task_cpu)][0] &&
+        var.embedder_task_memory <= local.fargate_memory_bounds[tostring(var.embedder_task_cpu)][1]
+      )
+      error_message = "embedder_task_memory is not a valid Fargate memory size for embedder_task_cpu."
+    }
+  }
+
+  container_definitions = jsonencode([
+    merge(
+      {
+        name      = local.embedder_name
+        image     = var.embedder_image
+        essential = true
+        cpu       = var.embedder_task_cpu
+        memory    = var.embedder_task_memory
+        user      = "10001"
+        # The image's entrypoint is text-embeddings-router. The shell only expands API_KEY, which ECS injects from
+        # Secrets Manager, so the key never appears in Terraform state or in this file. The :? guard stops the container
+        # if the secret is empty.
+        entryPoint = ["/bin/sh", "-c"]
+        command = [
+          ": \"$${API_KEY:?API_KEY is not set}\"; exec text-embeddings-router --model-id ${local.embedder_model_id} --api-key \"$API_KEY\""
+        ]
+        portMappings = [{
+          containerPort = local.embedder_port
+          hostPort      = local.embedder_port
+          protocol      = "tcp"
+        }]
+        secrets = [{
+          name      = "API_KEY"
+          valueFrom = var.embedder_api_key_secret_arn
+        }]
+        readonlyRootFilesystem = true
+        healthCheck = {
+          command  = ["CMD-SHELL", "curl -fsS http://127.0.0.1:${local.embedder_port}/health || exit 1"]
+          interval = 30
+          timeout  = 10
+          retries  = 3
+          # Loading the ONNX model takes minutes on 2 vCPU. Failures inside this window do not count against the task.
+          startPeriod = 300
+        }
+        logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            "awslogs-group"         = aws_cloudwatch_log_group.embedder.name
+            "awslogs-region"        = var.aws_region
+            "awslogs-stream-prefix" = "ecs"
+          }
+        }
+      },
+      var.repository_credentials_secret_arn != null && var.repository_credentials_secret_arn != "" ? {
+        repositoryCredentials = {
+          credentialsParameter = var.repository_credentials_secret_arn
+        }
+      } : {}
+    )
+  ])
+}
+
+# One task, deliberately, with no autoscaling. While the embedder is down, catalog search falls back to keywords, so a
+# second replica buys little. Deployments start the new task before stopping the old one, so search keeps its
+# embeddings through a release.
+resource "aws_ecs_service" "embedder" {
+  count = var.services_enabled ? 1 : 0
+
+  name                               = "${local.environment_name}-${local.embedder_name}"
+  cluster                            = aws_ecs_cluster.this.id
+  task_definition                    = aws_ecs_task_definition.embedder.arn
+  desired_count                      = 1
+  launch_type                        = "FARGATE"
+  platform_version                   = "1.4.0"
+  deployment_minimum_healthy_percent = 100
+  deployment_maximum_percent         = 200
+  enable_ecs_managed_tags            = true
+  propagate_tags                     = "SERVICE"
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [aws_security_group.embedder.id]
+    assign_public_ip = false
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.embedder.arn
+  }
+}
 
 data "archive_file" "lambda_package" {
   type        = "zip"
@@ -767,10 +989,6 @@ resource "aws_lambda_function" "csrf" {
   ]
 }
 
-# ---------------------------------------------------------
-# AWS API Gateway HTTP API, VPC Link, and Access Logs
-# ---------------------------------------------------------
-
 resource "aws_apigatewayv2_api" "public" {
   name          = "${local.environment_name}-public"
   protocol_type = "HTTP"
@@ -827,10 +1045,6 @@ resource "aws_apigatewayv2_stage" "default" {
   }
 }
 
-# ---------------------------------------------------------
-# API Gateway Authorizer and Lambda Permissions
-# ---------------------------------------------------------
-
 resource "aws_apigatewayv2_authorizer" "request" {
   api_id                            = aws_apigatewayv2_api.public.id
   authorizer_type                   = "REQUEST"
@@ -857,11 +1071,6 @@ resource "aws_lambda_permission" "csrf" {
   source_arn    = "${aws_apigatewayv2_api.public.execution_arn}/*/*/api/auth/csrf"
 }
 
-# ---------------------------------------------------------
-# API Gateway Integrations and Routes
-# ---------------------------------------------------------
-
-# 1. Main API Proxy Route -> internal ALB with Authorizer context
 resource "aws_apigatewayv2_integration" "services" {
   api_id                 = aws_apigatewayv2_api.public.id
   integration_type       = "HTTP_PROXY"
@@ -888,7 +1097,6 @@ resource "aws_apigatewayv2_route" "api" {
   authorizer_id      = aws_apigatewayv2_authorizer.request.id
 }
 
-# 2. CSRF Token Route -> Direct CSRF Lambda
 resource "aws_apigatewayv2_integration" "csrf" {
   api_id                 = aws_apigatewayv2_api.public.id
   integration_type       = "AWS_PROXY"
@@ -904,7 +1112,6 @@ resource "aws_apigatewayv2_route" "csrf" {
   authorization_type = "NONE"
 }
 
-# 3. SePay Webhook Route -> Passthrough to Payment Service via internal ALB
 resource "aws_apigatewayv2_integration" "sepay_webhook" {
   api_id                 = aws_apigatewayv2_api.public.id
   integration_type       = "HTTP_PROXY"

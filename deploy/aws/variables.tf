@@ -53,7 +53,7 @@ variable "images" {
 
   validation {
     condition = alltrue([
-      for service in ["identity-service", "catalog-service", "inventory-service", "sales-service", "payment-service", "operations-query-service", "chatbot-service"] :
+      for service in ["identity-service", "catalog-service", "inventory-service", "sales-service", "payment-service", "operations-query-service", "chatbot-service", "search-service"] :
       contains(keys(var.images), service) && strcontains(var.images[service], "@sha256:")
     ])
     error_message = "Every backend service image must be provided as an immutable image@sha256:digest reference."
@@ -168,4 +168,41 @@ variable "log_retention_in_days" {
   description = "CloudWatch log retention in days for ECS services, Lambda functions, and API Gateway access logs."
   type        = number
   default     = 30
+}
+
+variable "embedder_image" {
+  description = "Immutable image@sha256:digest reference for the self-hosted product search embedder (deploy/embedder). The model is baked into the image."
+  type        = string
+
+  validation {
+    condition     = strcontains(var.embedder_image, "@sha256:")
+    error_message = "The embedder image must be an immutable image@sha256:digest reference."
+  }
+}
+
+variable "embedder_api_key_secret_arn" {
+  description = "Secrets Manager ARN of the API key that the embedder requires. The embedder task reads it as API_KEY, and catalog-service and search-service read the same secret as AI_EMBEDDING_API_KEY."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws[a-zA-Z-]*:secretsmanager:", var.embedder_api_key_secret_arn))
+    error_message = "The embedder API key must be supplied as a Secrets Manager ARN, never as a value."
+  }
+}
+
+variable "embedder_task_cpu" {
+  description = "Fargate task CPU units for the embedder: 1024, 2048 or 4096. embedder_task_memory must be a valid Fargate size for this value. multilingual-e5-small measured about 210 new queries a second on 2 vCPU, 97 on 1 and 226 on 4, on an otherwise idle machine."
+  type        = number
+  default     = 2048
+
+  validation {
+    condition     = contains([1024, 2048, 4096], var.embedder_task_cpu)
+    error_message = "embedder_task_cpu must be 1024, 2048 or 4096."
+  }
+}
+
+variable "embedder_task_memory" {
+  description = "Fargate task memory in MiB for the embedder. Must be a valid Fargate pair with embedder_task_cpu: 2048 CPU takes 4096 to 16384 MiB in 1024 steps, 4096 CPU takes 8192 to 30720. The model measured about 1.7 GiB (multilingual-e5-base; e5-small is smaller)."
+  type        = number
+  default     = 4096
 }
