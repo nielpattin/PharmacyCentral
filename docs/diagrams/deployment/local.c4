@@ -23,6 +23,10 @@ deployment {
       catalogTask = workload "catalog-service :3002" {
         instanceOf pharmacyCentral.services.catalogService
       }
+      searchTask = workload "search-service :3009" {
+        summary "Product list only, a Go service on the Compose network. Internal, the gateway routes GET /api/products to it."
+        instanceOf pharmacyCentral.services.searchService
+      }
       inventoryTask = workload "inventory-service :3004" {
         instanceOf pharmacyCentral.services.inventoryService
       }
@@ -52,6 +56,9 @@ deployment {
       }
       typesenseNode = workload "typesense 30.2" {
         instanceOf pharmacyCentral.data.typesense
+      }
+      embedderNode = workload "embedder, text-embeddings-inference" {
+        instanceOf pharmacyCentral.data.embedder
       }
       seaweedNode = workload "seaweedfs 4.48" {
         instanceOf pharmacyCentral.data.seaweedfs

@@ -86,7 +86,7 @@ views {
   view serviceDependencies {
     title "Service dependencies"
     description """
-      The seven services, the event bus and the third parties, without the databases and without the
+      The eight services, the event bus and the third parties, without the databases and without the
       people. This is the view that reads best in the Graph mode of the app, where the hierarchy is
       dropped and only the relations are drawn.
     """

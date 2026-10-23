@@ -17,8 +17,18 @@ views {
     include pharmacyCentral.services.catalogService.*
     include pharmacyCentral.data.postgres.catalogDb
     include pharmacyCentral.data.typesense
+    include pharmacyCentral.data.embedder
     include pharmacyCentral.data.seaweedfs
     include geminiApi
+  }
+
+  view searchDetail {
+    title "search-service"
+    description "The read path of GET /api/products: the Typesense index, the query embedding and the fallback to catalog-service."
+    include pharmacyCentral.services.searchService
+    include pharmacyCentral.services.catalogService
+    include pharmacyCentral.data.typesense
+    include pharmacyCentral.data.embedder
   }
 
   view inventoryDetail {

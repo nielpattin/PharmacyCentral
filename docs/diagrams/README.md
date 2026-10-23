@@ -62,7 +62,7 @@ two things in 1.60.0:
 | `views/domain.c4` | One diagram per service, with its modules and its dependencies. |
 | `views/flows.c4` | The sequence diagrams: checkout, prescription intake, chatbot tool calling, import, read model. |
 | `views/deployment.c4` | The two deployment diagrams. |
-| `views/observability.c4` | The telemetry: the seven services, the collector, Tempo, Prometheus, Loki and Grafana. |
+| `views/observability.c4` | The telemetry: the eight services, the collector, Tempo, Prometheus, Loki and Grafana. |
 
 ## The views
 
@@ -74,7 +74,7 @@ two things in 1.60.0:
 | `eventFlow` | Who publishes on `pharmacy.events`, and who consumes what. |
 | `aiFeatures` | The three AI features, their owner and their provider. |
 | `securityModel` | The trust boundary: the session, the roles, the site scope, the CSRF. |
-| `identityDetail`, `catalogDetail`, `inventoryDetail`, `salesDetail`, `paymentDetail`, `operationsDetail`, `chatbotDetail` | The modules of a service and the services it depends on. |
+| `identityDetail`, `catalogDetail`, `searchDetail`, `inventoryDetail`, `salesDetail`, `paymentDetail`, `operationsDetail`, `chatbotDetail` | The modules of a service and the services it depends on. |
 | `checkoutFlow` | From the cart to the paid invoice. |
 | `prescriptionIntake` | From the photo of a prescription to the consultation. |
 | `chatbotToolCalling` | The Jev gate and the three model calls of the shopping assistant. |
@@ -83,7 +83,7 @@ two things in 1.60.0:
 | `outboxDelivery` | How a stock change becomes an event: the outbox row, the relay, the durable queue. |
 | `traceThroughOutbox` | One trace from the request, through the outbox and the broker, to the consumers and Tempo. |
 | `asyncReliability` | What the relay and the consumer do when the broker is down, a payload is bad, or a handler keeps failing. |
-| `localCompose` | The local stack: the gateway, the seven services, the infrastructure. |
+| `localCompose` | The local stack: the gateway, the eight services, the infrastructure. |
 | `awsEcs` | The production stack: the API Gateway, the authorizer, the ALB, the Fargate tasks. |
 | `observability` | The telemetry: the OTLP edges of the services, the collector and its backends, Grafana. |
 

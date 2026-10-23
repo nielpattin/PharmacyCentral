@@ -6,7 +6,8 @@ Pharmacy Central is a Node.js 24 pharmacy platform split into an Express 5 micro
 
 - AWS API Gateway HTTP API + Lambda authorizer manages public `/api` routes, sessions, CSRF, CORS, signed internal identity context forwarding, and routing through VPC Link and an internal Application Load Balancer to ECS Fargate backend services. The AWS configuration under `deploy/aws` is configuration-only. Local Compose retains a development-only Nginx gateway for the same path map.
 - `apps/identity-service`: customer and employee accounts, opaque sessions, password security, verification, and Google OIDC.
-- `apps/catalog-service`: products, units, suppliers, prices, retail sites, PostGIS coordinates, and availability projections.
+- `apps/catalog-service`: products, units, suppliers, prices, retail sites, PostGIS coordinates, and availability projections. It also owns the product search index that `search-service` reads.
+- `apps/search-service`: Go read path of `GET /api/products` (the product list only). It answers from the Typesense index, falls back to `catalog-service` when Typesense is unavailable, and never reads PostgreSQL.
 - `apps/inventory-service`: batches, quality, FEFO reservations, movements, transfers, returns, replenishment, stocktakes, purchase orders, goods receipts, and availability events.
 - `apps/sales-service`: guest and customer carts, orders, prescriptions, counter transactions, delivery calculation, and order events.
 - `apps/payment-service`: provider-neutral invoices, QR attempts, cash payments, SePay webhooks, refunds, and reconciliation.
@@ -20,6 +21,7 @@ PostgreSQL/PostGIS stores are service-owned databases. RabbitMQ carries integrat
 
 - Node.js `24.19.0`, within `>=24.16.0 <25`.
 - pnpm `12.3.4`.
+- Go `1.26` or newer, for building, testing, and running `apps/search-service` locally. Docker builds need no local Go.
 - Docker Desktop with the Linux engine enabled for local infrastructure and image builds.
 
 Install dependencies without changing the lockfile:
@@ -86,6 +88,13 @@ pnpm run build
 pnpm test
 ```
 
+Load and chaos tests run against the container stack (`pnpm run stack:up`) and are described in `docs/Runbooks.md`:
+
+```bash
+pnpm run load -e PROFILE=smoke /scripts/scenarios/checkout.js   # k6 in Docker, results in Grafana
+pnpm run chaos rabbitmq-outage                                  # one fault under load; "all" runs every scenario
+pnpm run stack:aws-like                                         # container stack sized like the ECS tasks, for capacity tests
+```
 
 ## Configuration and deployment
 

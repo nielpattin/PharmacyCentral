@@ -28,7 +28,13 @@ model {
     }
 
     services = container "Application services" {
-      summary "Seven business services. They never import each other, they talk over HTTP and over events."
+      summary "Eight business services. They never import each other, they talk over HTTP and over events."
+
+      searchService = service "search-service" {
+        technology "Go + Typesense"
+        summary "The read path of GET /api/products only. It answers from the Typesense index and falls back to catalog-service when the index is down. It never reads PostgreSQL."
+        metadata { port "3009"; package "@pharmacy/search-service" }
+      }
     }
 
     data = container "Data tier" {
@@ -72,6 +78,10 @@ model {
         summary "Derived product search index, rebuilt from PostgreSQL by the catalogue."
       }
 
+      embedder = searchIndex "Embedder (TEI)" {
+        summary "Optional self-hosted text embeddings for the product search: HuggingFace text-embeddings-inference running multilingual-e5-small on CPU. Started with the compose profile embedder. An alternative to Gemini that needs no quota."
+      }
+
       seaweedfs = objectStorage "SeaweedFS (S3)" {
         summary "Object storage of the product images, S3 compatible."
       }
@@ -103,6 +113,11 @@ model {
       grafana = observability "Grafana" {
         #obs
         summary "Dashboards and Explore over Tempo, Prometheus and Loki. The local UI of the telemetry."
+      }
+
+      k6 = observability "k6" {
+        #obs
+        summary "Load generator, started on demand with pnpm run load. It drives the customer and staff journeys through the gateway and pushes its results to Prometheus. The chaos runner reuses it as its background load."
       }
     }
   }

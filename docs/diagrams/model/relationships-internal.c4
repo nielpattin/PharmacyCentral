@@ -125,6 +125,9 @@ model {
   pharmacyCentral.services.chatbotService -> pharmacyCentral.data.telemetry "OTLP traces, metrics and logs" {
     technology "OTLP"
   }
+  pharmacyCentral.services.searchService -> pharmacyCentral.data.telemetry "OTLP traces, metrics and logs" {
+    technology "OTLP"
+  }
 
   pharmacyCentral.data.telemetry -> pharmacyCentral.data.tempo "OTLP traces" {
     technology "OTLP HTTP"
@@ -137,6 +140,10 @@ model {
   }
   pharmacyCentral.data.telemetry -> pharmacyCentral.data.rabbitmq "Scrapes queue depth from the management API" {
     technology "HTTP"
+  }
+
+  pharmacyCentral.data.k6 -> pharmacyCentral.data.prometheus "Remote write of the load test results" {
+    technology "Prometheus remote write"
   }
 
   pharmacyCentral.data.grafana -> pharmacyCentral.data.tempo "Query traces" {

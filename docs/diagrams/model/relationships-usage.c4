@@ -23,6 +23,9 @@ model {
   pharmacyCentral.web.customerWeb -> pharmacyCentral.services.catalogService "Products, stores, prices (/api/products, /api/stores, /api/pricing)" {
     technology "HTTPS"
   }
+  pharmacyCentral.web.customerWeb -> pharmacyCentral.services.searchService "Product list (GET /api/products)" {
+    technology "HTTPS"
+  }
   pharmacyCentral.web.customerWeb -> pharmacyCentral.services.salesService "Cart, order, delivery, prescription (/api/carts, /api/orders, /api/delivery)" {
     technology "HTTPS"
   }
@@ -36,7 +39,10 @@ model {
   pharmacyCentral.web.staffWeb -> pharmacyCentral.services.identityService "Employee accounts, site access (/api/admin)" {
     technology "HTTPS"
   }
-  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.catalogService "Master data and prices (/api/sites, /api/products, /api/pricing)" {
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.catalogService "Master data and prices (/api/sites, /api/products/{id}, /api/products/imports, /api/pricing)" {
+    technology "HTTPS"
+  }
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.searchService "Product list (GET /api/products)" {
     technology "HTTPS"
   }
   pharmacyCentral.web.staffWeb -> pharmacyCentral.services.inventoryService "Stock, quality, procurement (/api/inventory, /api/quality)" {
@@ -88,6 +94,9 @@ model {
   pharmacyCentral.services.chatbotService -> pharmacyCentral.services.catalogService "search_products, get_product_details" {
     technology "HTTP"
   }
+  pharmacyCentral.services.searchService -> pharmacyCentral.services.catalogService "Fallback: the same GET /api/products request, when Typesense is down, times out or lacks the collection" {
+    technology "HTTP"
+  }
 
   // ── Own data ─────────────────────────────────────────────────────────────────────
   pharmacyCentral.services.identityService -> pharmacyCentral.data.postgres.identityDb "Accounts, sessions, tokens, employee access" {
@@ -112,7 +121,10 @@ model {
     technology "SQL"
   }
 
-  pharmacyCentral.services.catalogService -> pharmacyCentral.data.typesense "Product search index, keyword and vector score" {
+  pharmacyCentral.services.catalogService -> pharmacyCentral.data.typesense "Writes the product index catalog_products_v3, with the payload of every product" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.searchService -> pharmacyCentral.data.typesense "Product search index, keyword and vector score, payload field only" {
     technology "HTTP"
   }
   pharmacyCentral.services.catalogService -> pharmacyCentral.data.seaweedfs "Product images in the S3 media bucket" {
@@ -154,6 +166,12 @@ model {
   }
   pharmacyCentral.services.catalogService -> geminiApi "Embeddings of the product text for the semantic search" {
     technology "HTTPS"
+  }
+  pharmacyCentral.services.catalogService -> pharmacyCentral.data.embedder "Embeddings of the product text, instead of Gemini when the provider is openai-compatible" {
+    technology "HTTP, POST /v1/embeddings"
+  }
+  pharmacyCentral.services.searchService -> pharmacyCentral.data.embedder "Embedding of the query, only for queries of three words or more" {
+    technology "HTTP, POST /v1/embeddings"
   }
   pharmacyCentral.services.salesService -> geminiApi "One vision call reads the photo of the prescription" {
     technology "HTTPS"

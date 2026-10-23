@@ -44,6 +44,11 @@ Admin routes require a signed-in account with the `Platform Admin` role. A reque
 ## Customer catalog and sales
 
 - `GET /api/products`, `GET /api/products/{id}`, `GET /api/products/{id}/units`
+
+`GET /api/products` takes `search`, `category`, `prescriptionRequired`, `limit` (1 to 100, default 20) and `cursor`. The body is the plain array of one page. When another page follows, the answer carries its cursor in the `X-Next-Cursor` header; send it back as `cursor` with the same other parameters. The last page has no header. A cursor is opaque and a malformed one answers `400`. Answers are kept for up to 30 seconds per query and page, so a product change made through another replica can take that long to show.
+
+`GET /api/products` is served by `search-service`, a Go service that reads only the Typesense product index. Its path, query parameters, cursor, `X-Next-Cursor` header, product objects and `400` problem body are the same as before. When the index is unavailable, the request is passed on to `catalog-service`, which answers it from PostgreSQL. Every other `/api/products` route is served by `catalog-service`.
+
 - `GET /api/stores`, `GET /api/stores/nearest`
 - `GET /api/pricing/active`
 - `GET /api/carts`
@@ -232,7 +237,7 @@ A Platform Admin sets the provider, model, base URL and API key of each AI featu
 - `GET|PUT|DELETE /api/prescriptions/intake-credential` (prescription photo reading)
 - `GET|PUT|DELETE /api/products/search-credential` (semantic product search)
 
-The shopping assistant route accepts the `gemini` and `openai-compatible` providers. `openai-compatible` calls the chat completions API at `POST {baseUrl}/chat/completions` with `Authorization: Bearer <key>` and tool calling, so its base URL carries the version path, for example `https://llm.example.com/v1`. The question screening route accepts only `typesafe`. The prescription photo and product search routes accept only `gemini`. Each `GET` lists only the providers of its own route.
+The shopping assistant route accepts the `gemini` and `openai-compatible` providers. `openai-compatible` calls the chat completions API at `POST {baseUrl}/chat/completions` with `Authorization: Bearer <key>` and tool calling, so its base URL carries the version path, for example `https://llm.example.com/v1`. The question screening route accepts only `typesafe`. The prescription photo route accepts only `gemini`. The product search route accepts `gemini` and `openai-compatible`; `openai-compatible` calls the embeddings API at `POST {baseUrl}/embeddings` with `Authorization: Bearer <key>`, so its base URL carries the version path (for example `https://api.openai.com/v1`), and the model must return 384-dimension vectors or accept the `dimensions` parameter. Each `GET` lists only the providers of its own route.
 
 `GET` answers `{ providers, current }`. Each provider is `{ id, label, defaultBaseUrl }`. `current` is one of three shapes. `{ "configured": false }` means no settings are available. `{ "configured": true, "source": "stored", "provider", "model", "baseUrl", "last4", "updatedAt", "updatedBy", "environmentFallback" }` is a set of settings an admin saved, and `environmentFallback` says whether the feature's `AI_<FEATURE>_*` group would take over if they were removed. `{ "configured": true, "source": "environment", "provider", "model", "baseUrl", "last4" }` is the deployment's own settings, in use because none are saved. The key is never returned, only its last four characters.
 
@@ -240,7 +245,7 @@ The shopping assistant route accepts the `gemini` and `openai-compatible` provid
 
 Only a Platform Admin may call these routes: `403` for any other signed-in account. A service reads its settings at most once a minute, so settings saved through one replica can take up to a minute to apply on another.
 
-Saving the product search settings also starts a background reindex that creates embeddings for existing products. A change of model embeds them again. The `PUT` does not wait for the reindex, and it does not fail if the reindex cannot start. Until the reindex finishes, search matches keywords only.
+Saving the product search settings also starts a background reindex that creates embeddings for existing products. A change of model embeds them again. The `PUT` does not wait for the reindex, and it does not fail if the reindex cannot start. Until the reindex finishes, search matches keywords only. When the provider fails during a reindex (quota, timeout, a bad answer), the changed products are still indexed for keywords, and the service tries again after 30 seconds, doubling the wait up to 15 minutes, until every product has its vector.
 
 ## Query projections
 

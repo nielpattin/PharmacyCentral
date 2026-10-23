@@ -9,7 +9,10 @@ deployment {
   local.edge.gateway -> local.apps.identityTask "route /api/auth, /api/admin, /api/customers" {
     technology "HTTP"
   }
-  local.edge.gateway -> local.apps.catalogTask "route /api/sites, /api/products, /api/pricing, /api/stores, /api/availability" {
+  local.edge.gateway -> local.apps.catalogTask "route /api/sites, /api/products/*, /api/pricing, /api/stores, /api/availability" {
+    technology "HTTP"
+  }
+  local.edge.gateway -> local.apps.searchTask "route GET /api/products, the list only" {
     technology "HTTP"
   }
   local.edge.gateway -> local.apps.inventoryTask "route /api/procurement, /api/inventory" {
@@ -33,6 +36,18 @@ deployment {
   }
   local.apps.catalogTask -> local.external.geminiNode "Product embeddings" {
     technology "HTTPS"
+  }
+  local.apps.catalogTask -> local.infra.typesenseNode "Writes the product index catalog_products_v3" {
+    technology "HTTP"
+  }
+  local.apps.searchTask -> local.infra.typesenseNode "Product search, payload field only" {
+    technology "HTTP"
+  }
+  local.apps.searchTask -> local.apps.catalogTask "Fallback: the same request, when Typesense is down" {
+    technology "HTTP"
+  }
+  local.apps.searchTask -> local.infra.embedderNode "Query embedding, queries of three words or more, POST /v1/embeddings" {
+    technology "HTTP"
   }
   local.apps.salesTask -> local.external.geminiNode "Prescription vision call" {
     technology "HTTPS"

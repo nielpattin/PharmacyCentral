@@ -30,7 +30,7 @@ deployment {
 
     compute = zone "Private subnets" {
       ecs = cluster "ECS Fargate cluster" {
-        summary "One long running task per service, and one shot migration tasks that never run on start."
+        summary "One long running task per service and one for the embedder, and one shot migration tasks that never run on start."
 
         identityTask = workload "identity-service :3001" {
           instanceOf pharmacyCentral.services.identityService
@@ -52,6 +52,14 @@ deployment {
         }
         chatbotTask = workload "chatbot-service :3008" {
           instanceOf pharmacyCentral.services.chatbotService
+        }
+        searchTask = workload "search-service :3009" {
+          summary "Product list only. Behind the internal ALB, with no Cloud Map name of its own."
+          instanceOf pharmacyCentral.services.searchService
+        }
+        embedderTask = workload "embedder :80" {
+          summary "Self-hosted text embeddings. The model is baked into the image, one task, no autoscaling, internal only."
+          instanceOf pharmacyCentral.data.embedder
         }
       }
     }

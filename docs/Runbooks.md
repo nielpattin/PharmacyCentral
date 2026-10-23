@@ -101,7 +101,8 @@ Mutations also send the CSRF token from the `pharmacy_csrf` cookie as `X-CSRF-TO
 Both local gateways forward paths with identical patterns: `gateway` (container mode) sends them to the app containers, and `gateway-dev` (dev mode) forwards the same paths to the host processes. The rules live once in `deploy/local/gateway/routes.conf`, included by both server blocks.
 
 - `/api/auth*`, `/api/admin*`, `/api/customers*` -> `identity-service:3001`
-- `/api/sites*`, `/api/storage-locations*`, `/api/products*`, `/api/suppliers*`, `/api/pricing*`, `/api/stores*`, `/api/availability*` -> `catalog-service:3002`
+- `GET /api/products` exactly (the product list) -> `search-service:3009`
+- `/api/sites*`, `/api/storage-locations*`, `/api/products*` (every other method and path under it), `/api/suppliers*`, `/api/pricing*`, `/api/stores*`, `/api/availability*` -> `catalog-service:3002`
 - `/api/procurement*`, `/api/inventory*`, `/api/quality*` -> `inventory-service:3004`
 - `/api/carts*`, `/api/orders*`, `/api/delivery*`, `/api/prescriptions*`, `/api/counter-transactions*` -> `sales-service:3005`
 - `/api/payments*` -> `payment-service:3006`
@@ -413,6 +414,328 @@ Daily workflow:
 - To find a trace, open Explore in Grafana, choose the `Tempo` datasource, and search by `service.name` (for example `sales-service`).
 - To go from a log line to its trace, open Explore with the `Loki` datasource and select the `TraceID` link on a line that carries a `trace_id`. Tempo opens on that trace.
 - To follow an event across services, search Tempo with `{span.messaging.system="rabbitmq"}`. The outbox row stores the `traceparent` of the request that wrote it (`outbox_messages.traceparent`, in inventory, sales and payment), and the relay publishes under it. One trace therefore runs from the request, through `publish pharmacy.events`, to every consumer's `process` span.
+
+## Self-hosted product search embeddings
+
+Semantic product search needs a text-embedding model. The default is the `embedder` service of Compose: HuggingFace text-embeddings-inference on CPU, model `intfloat/multilingual-e5-small` (384 dimensions), ONNX weights. `pnpm run infra:up` and `pnpm run stack:up` start it with the rest of the infrastructure, so search needs no quota and no key from a provider. The first start downloads the model into a volume (about 2 minutes here), and until it is healthy search matches keywords only.
+
+`.env` holds the settings that `catalog-service` reads (`.env.example` has them ready): `AI_EMBEDDING_PROVIDER=openai-compatible`, `AI_EMBEDDING_BASE_URL=http://localhost:8109/v1`, and `AI_EMBEDDING_MODEL` and `AI_EMBEDDING_API_KEY` equal to `EMBEDDER_MODEL` and `EMBEDDER_API_KEY`. The container stack ignores the base URL and calls `http://embedder:80/v1`, like it does for Typesense. A Platform Admin can still save other settings in staff-web (AI integrations); saved settings win over `.env`, and a saved base URL must be https. `search-service` reads the same four variables and cannot see the saved settings, so its values must match those of `catalog-service` (see the search service section).
+
+To use Gemini instead, set the provider to `gemini`, the base URL to `https://generativelanguage.googleapis.com`, the model to `gemini-embedding-001` and your key, and change the `AI_EMBEDDING_BASE_URL` of `catalog-service` in `docker-compose.yml` back to `${AI_EMBEDDING_BASE_URL}`. Restart `catalog-service`: it reindexes every product, because the model name is part of the content hash.
+
+- E5 models need a role prefix on every text. The adapter adds `query: ` and `passage: ` when the model name contains `e5`.
+- Queries of fewer than three words (`SEMANTIC_MIN_WORDS`) are searched by keywords only and never embedded: they are the queries shoppers repeat, and the keyword fields cover them. Vector-only hits are cut at a cosine distance that depends on the model: 0.15 for E5 (measured on multilingual-e5-small: relevant hits 0.09 to 0.16, unrelated queries 0.17 and up) and 0.35 for Gemini. A model without a measurement gets 0.35, which is uncalibrated for it. Measure the distances of relevant and nonsense queries before trusting a new model.
+- Measured on multilingual-e5-base, container limited to 2 CPUs and 2 GB: a warm query took 26 to 41 ms (the first one 295 ms), 32 documents 1.1 s, and memory 1.6 GB. multilingual-e5-small, on an otherwise idle machine, 16 concurrent new queries with the image's default settings: 97 requests a second on 1 CPU, about 210 on 2 and 226 on 4 (the 4-CPU figure may be capped by the single-process benchmark client), one query alone 10 ms. The same container started with `--max-batch-tokens 4096 --tokenization-workers 2` measured 54, 105 and 224: those two flags halved the throughput at 2 CPUs and were removed. `catalog-service` also keeps the last 5,000 query vectors in memory.
+- Do not mix models. Vectors from two models are not comparable, so wait for the reindex to finish after a model change. Until then search can return odd hits.
+- If the embedding provider fails, products are still indexed for keyword search and the sweep retries with a growing delay (30 s up to 15 minutes). Search itself falls back to keywords when the query cannot be embedded.
+
+### On AWS
+
+`deploy/aws` runs the same embedder as its own ECS Fargate service, `embedder`. It is internal: catalog-service and search-service reach it through Cloud Map at `http://embedder.<environment>.pharmacy.internal:80/v1`. No ALB rule and no API Gateway route exposes it, and its security group accepts port 80 only from the catalog-service and search-service tasks. Terraform sets the four `AI_EMBEDDING_*` variables on catalog-service and search-service; a setting saved in staff-web still overrides them on catalog-service only. The `https` rule for base URLs applies to URLs saved in staff-web, so it does not block the internal `http` URL.
+
+1. **Build and push the image.** `deploy/embedder/Dockerfile` builds on the pinned text-embeddings-inference CPU image and copies in `intfloat/multilingual-e5-small` at the pinned revision. Push it to the registry the backend images use, and take the digest:
+
+   ```bash
+   docker build -t <registry>/pharmacy-central/embedder:<tag> deploy/embedder
+   docker push <registry>/pharmacy-central/embedder:<tag>
+   docker inspect --format '{{index .RepoDigests 0}}' <registry>/pharmacy-central/embedder:<tag>
+   ```
+
+   Set the digest reference as `embedder_image`. Rebuild when the model revision changes, and not otherwise.
+2. **Create the secret.** Store the API key in Secrets Manager and pass its ARN as `embedder_api_key_secret_arn`. The embedder task reads it as `API_KEY`, and catalog-service reads the same secret as `AI_EMBEDDING_API_KEY`. The value never goes into tfvars or code:
+
+   ```bash
+   aws secretsmanager create-secret --name pharmacy-central/staging/embedder-api-key --secret-string "$(openssl rand -hex 32)"
+   ```
+
+3. **Variables.** `embedder_image` and `embedder_api_key_secret_arn` are required. `embedder_task_cpu` (2048) and `embedder_task_memory` (4096 MiB) are a valid Fargate pair; the model measured about 1.7 GiB.
+4. **Why one task, without autoscaling.** When the embedder is down, catalog search falls back to keywords, so a second replica adds little, and each task costs 2 vCPU and 4 GiB. A deployment starts the new task before it stops the old one, so the old task keeps answering until the new one is healthy.
+5. **Why the model is baked in.** A Fargate task has no persistent volume. With the Compose volume, every start, and every replacement task, would download about 1.1 GB from Hugging Face before it could answer. The image carries the model, and the task runs with `HF_HUB_OFFLINE=1`, so it never reaches the network for the model.
+6. **Check it.** The first start takes minutes while the ONNX model loads, so give the task about five minutes after a deployment:
+
+   ```bash
+   aws ecs describe-services --cluster pharmacy-central-staging --services pharmacy-central-staging-embedder \
+     --query 'services[0].{desired:desiredCount,running:runningCount}'
+   aws ecs describe-tasks --cluster pharmacy-central-staging --tasks <task-arn> --query 'tasks[0].healthStatus'
+   aws logs tail /ecs/pharmacy-central-staging/embedder --since 15m
+   ```
+
+   The health status must be `HEALTHY`, and the log must end with `Ready`. The container health check calls `GET /health` on port 80, so an unhealthy state in the logs is the first place to look.
+8. **Check the fallback.** Stop the embedder and confirm that search still answers from keywords:
+
+   ```bash
+   aws ecs update-service --cluster pharmacy-central-staging --service pharmacy-central-staging-embedder --desired-count 0
+   ```
+
+   Run a storefront product search and expect a normal answer, with keyword matches only. Then restore the task with `--desired-count 1`. The next `terraform apply` also restores it, because the Terraform value is `1`.
+
+## Product search service (Go)
+
+`search-service` is the read path of `GET /api/products`, the product list and browse route. It is a Go service (`apps/search-service`, port 3009) that answers only that route. Every other `/api/products*` path, such as `GET /api/products/{id}`, `POST /api/products/imports` and the unit routes, stays on `catalog-service`. The answers are the ones `catalog-service` gives for the same request: the same query parameters (`search`, `category`, `prescriptionRequired`, `limit`, `cursor`), the same product objects with `units`, the same `X-Next-Cursor` header, and the same `400` problem body for an invalid query. `GET /healthz` answers `200 ok`.
+
+What it does for a list request:
+
+- It reads only Typesense, never PostgreSQL. Each Typesense document carries a `payload` field with the JSON that `catalog-service` would return for that product. The service asks Typesense for that field only and joins the payloads into the response array without decoding or re-encoding them.
+- A query of fewer than three words is answered by keywords only and is never embedded. A longer query is embedded through `AI_EMBEDDING_BASE_URL` with the `query: ` prefix when the model name contains `e5`. Vector hits are cut at a cosine distance of 0.15 for E5 models and 0.35 otherwise, as in `catalog-service`.
+- The whole answer is cached for 30 seconds, up to 5,000 entries, per normalised search (lower-cased, whitespace collapsed), category, `prescriptionRequired`, limit and offset. Concurrent identical requests share one load. The last 5,000 query vectors are kept in memory.
+
+Fallback chain:
+
+1. The embedder fails or times out (3 s): the query is answered from keywords only, and the request succeeds.
+2. Typesense fails, times out (2 s), or the collection is missing: the original request is proxied to `CATALOG_SERVICE_URL`, and `catalog-service` answers it, falling back to PostgreSQL itself. The service logs a warning.
+
+Typesense index:
+
+- The collection is `catalog_products_v3`. Its documents keep every field of the previous collection and add `payload` (a string, not indexed for search). The `sku` field is sortable. Only active products are indexed, which is the set `GET /products` may return.
+- Deploying this change triggers one full reindex and re-embedding of the products. Until the new collection is complete, a missing collection sends requests to `catalog-service`.
+- The display data lags the database by one sweep, plus the 30 second response cache. A product that the sweep removes, because it was deactivated, leaves the results at that sweep.
+- `catalog_products_v2` is no longer used. Once `catalog_products_v3` answers, delete it with the Typesense API:
+
+  ```bash
+  curl -X DELETE "$TYPESENSE_URL/collections/catalog_products_v2" -H "X-TYPESENSE-API-KEY: $TYPESENSE_API_KEY"
+  ```
+
+Environment variables. The service reads each one without a default, and it exits at startup with an error that names the missing variable:
+
+| Variable | Meaning |
+| --- | --- |
+| `PORT` | The listen port, 3009 in Compose. |
+| `TYPESENSE_URL` | The Typesense base URL, `http://typesense:8108` in Compose. |
+| `TYPESENSE_API_KEY` | The Typesense API key. |
+| `CATALOG_SERVICE_URL` | The fallback upstream, `http://catalog-service:3002` in Compose. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | The OTLP HTTP endpoint of the collector. The standard `OTEL_EXPORTER_OTLP_*` variables apply too. |
+| `AI_EMBEDDING_PROVIDER`, `AI_EMBEDDING_BASE_URL`, `AI_EMBEDDING_MODEL`, `AI_EMBEDDING_API_KEY` | All or none. `openai-compatible` is the only provider. With none set, search is keyword only. A partial group, or another provider, stops the service at startup. |
+
+The embedding group must equal the one `catalog-service` uses. Settings saved in staff-web (AI integrations) live only in the database of `catalog-service`, and `search-service` cannot read them. If a Platform Admin saves different embedding settings in staff-web, give `search-service` the same four values and restart it. Otherwise the query vectors and the product vectors come from different models.
+
+Local run: `pnpm dev` starts `search-service` through Nx, with the `dev` target of its `project.json`, on the port of `SEARCH_PORT` (3009). The `go` command must be on the `PATH`, and the Go toolchain must be 1.26 or newer. Without it, the `dev` target fails. The local gateways send `GET /api/products` to it, like the AWS ALB.
+
+Metrics, exported over OTLP with the service name `search-service`:
+
+- `pharmacy.search.cache`, with `outcome` `hit`, `miss` or `shared`, counts the response cache. In Prometheus it appears as `pharmacy_search_cache_total{outcome}`.
+- `pharmacy.search.embedding_cache`, with the same `outcome` values, counts the query-vector cache. In Prometheus it appears as `pharmacy_search_embedding_cache_total{outcome}`.
+
+Measured capacity: see below.
+
+### Measured capacity of search-service
+
+Test: `search-users.js`, 1,000 users, no think time, 2m25s, container stack on one workstation. `search-service` ran as one replica limited to 1 vCPU and 1 GiB (the container could use two host cores, but the quota was 1 vCPU, same CPU time as the Node baseline). Embedder 2 vCPU, Typesense 4 vCPU, k6 on its own cores. One run per row.
+
+| | catalog-service (Node), run A | catalog-service (Node), run B | search-service (Go) |
+| --- | --- | --- | --- |
+| Requests per second | 387 | 296 | 1,505 |
+| p95 | 4.54 s | 5.38 s | 3.28 s |
+| p99 | not recorded | not recorded | 3.54 s |
+| Median | not recorded | not recorded | 183 ms |
+| Failed requests | 0 | 0 | 0 of 219,610 |
+| CPU of the service | 92–97% of 1 vCPU | 92–97% of 1 vCPU | 100% of 1 vCPU |
+| Memory | not recorded | not recorded | 192 MiB at most |
+
+Other containers during the Go run: embedder 199% of its 200% limit, Typesense 64% on average (90% at most), catalog-service 2% (fallback upstream, not used). The service logged no fallback to catalog-service.
+
+Reading: on the same 1 vCPU the Go service answers about 4 to 5 times more requests per second than the Node service. It still does not meet the target `p(95)<500 ms` at 1,000 users with no think time: that load is about 1,500 req/s, above what one vCPU serves. The embedder is also saturated, so it limits queries that need a vector. To meet the target at this load, add `search-service` replicas (the CPU is the limit) and size the embedder. The 1,000-user rows with think time 15 s and 30 s were not re-run on `search-service`.
+
+Caveats: single runs, run-to-run spread about 25%; k6, Prometheus and the other containers share one workstation; the Node runs were measured before the Go container was pinned to two host cores; the Node runs used the embedder at 2 vCPU too, which was near its limit in run B.
+
+## Load and chaos testing
+
+Load tests run with k6, chaos tests with a Node runner that injects one fault at a time under a steady checkout load. Both are local tools, never part of a container image. Run them against the **container stack** (`pnpm run stack:up`): under `pnpm dev`, `node --watch` restarts services and leaves stale keepalive connections in the gateway, which shows up as 60 s stalls that are not application problems.
+
+k6 runs as the Compose service `k6` (profile `loadtest`, image pinned by digest), so nothing is installed on the host. It pushes its results to Prometheus remote write; Grafana shows them in the dashboard `Pharmacy Central - Load Test` (uid `pc-load-test`), next to the server-side latency, outbox, queue and database panels. Set `LOAD_TARGET_URL` in `.env`: `http://gateway:8080` for the container stack, `http://host.docker.internal:8080` when the services run under `pnpm dev`.
+
+```bash
+# k6 flags go before the script path. PROFILE is smoke (one iteration), load (10 VUs, 2 minutes) or stress (50 VUs, 3 minutes).
+pnpm run load -e PROFILE=smoke /scripts/scenarios/checkout.js
+pnpm run load -e PROFILE=load /scripts/scenarios/checkout.js
+```
+
+| Script (`tools/k6/scenarios/`) | What it checks |
+| --- | --- |
+| `checkout.js` | Browse, order, invoice, SePay webhook, paid. Thresholds: failed requests under 1%, `POST /orders` p95 under 1.5 s, order to paid p95 under 8 s. Setup adds opening stock under a unique batch number, only for products the search index resolves. |
+| `browse.js` | Storefront reads and Vietnamese search (typos, synonyms, empty result). Search p95 under 400 ms. |
+| `search.js` | Product search capacity at one fixed request rate (`-e RATE=<req/s>`), with `-e QUERIES=cached` or `mixed` (most queries need a new embedding). Thresholds: search p95 under 500 ms, under 1% failed, no dropped iterations. A 40 s warm-up runs first and is not measured. |
+| `oversell.js` | 60 orders from 30 VUs for 20 units of stock. Stock never goes negative or oversold, prices come from the server, absurd and negative quantities are refused. |
+| `chatbot.js` | Product question, out-of-scope refusal by the intent gate, follow-up, and the per-customer rate limit (10 questions a minute). It calls the real AI provider, so the calls per profile are capped. |
+| `prescription-intake.js` | Photo upload limits (8 MB, MIME mismatch), clean 429 with `Retry-After`. Calls the real reader, capped. |
+| `imports.js` | Product and opening-balance imports through the API, and the time until a new SKU is searchable. |
+
+The AI scripts spend provider quota. A customer may send 30 prescription photos in a rolling 24 hours, so keep the `smoke` profile for those two scripts. Product imports also call the embedding provider once per changed product.
+
+Chaos scenarios (`tools/chaos/scenarios/`) each start a checkout load, inject the fault, restore everything in a `finally` block (and on Ctrl-C), and then assert data invariants through PostgreSQL, the RabbitMQ management API, Prometheus and the Grafana alert states.
+
+```bash
+pnpm run chaos rabbitmq-outage          # one scenario; "all" runs every one, about 25 minutes
+pnpm run chaos all --dry-run            # reads only: checks the helpers and queries, injects nothing
+```
+
+| Scenario | Fault | Expected outcome |
+| --- | --- | --- |
+| `rabbitmq-outage` | RabbitMQ stopped for 60 s | Orders and reads keep answering; the outbox backlog grows and drains; every event is published and applied exactly once; `.dead` queues stay empty. |
+| `poison-message` | Three malformed events published to `pharmacy.events` | They land in the bound `.dead` queues and nowhere else; consumers carry on; `Dead-letter queue not empty` fires. The runner purges only its own messages. |
+| `redis-outage` | Redis stopped for 45 s | Pickup checkout is unaffected; photo intake answers `503 rate_limit_unavailable`; no 5xx storm. |
+| `typesense-outage` | Typesense stopped | Search answers within its budget; detail, availability and orders stay 200; search works again after the restart. |
+| `payment-outage` | payment-service stopped | The webhook is refused while down; replaying it after the restart creates exactly one transaction and one paid invoice. |
+| `sales-kill` | `SIGKILL` on sales-service under load | No order without lines, no reservation drift, no stranded outbox row, checkout recovers. |
+| `ai-provider-outage` | Chat model and intent gate fail (slow, hung, 500, 429, malformed, truncated) | A clean `503 assistant_unavailable` inside the provider timeout (30 s model, about 12 s gate), unrelated endpoints stay fast, the question is answered again after recovery. |
+| `ai-reader-outage` | Prescription reader fails the same ways | A clean `502 reader_failed` inside the 45 s timeout, then the photo is read again. |
+
+The two AI scenarios never call a real provider. `ai-provider-outage` starts two copies of `tools/mock-ai-server.mjs` (needs `MOCK_AI_PORT`; modes `ok`, `slow`, `hang`, `error500`, `error429`, `malformed`, `truncated`, switched with `POST /__mode`) on ports 5390 and 5391, and recreates `chatbot-service` with `AI_CHATBOT_*` and `AI_INTENT_GATE_*` pointed at them; `ai-reader-outage` does the same on port 5392 for `sales-service` and `AI_PRESCRIPTION_READER_*`. Compose reads process variables before `.env`, so `.env` and the saved credentials stay untouched; the runner recreates the service with the real settings at the end. The containers must reach `host.docker.internal`; if a firewall blocks it, the first check fails and the run stops before injecting anything.
+
+`ai-reader-outage` sends 8 photos as the demo customer. The intake limiter allows 5 a minute and 30 a day, and it counts photos that reach the reader even when the read fails. When the scenario stops at its first check with `429`, wait, or clear the day counter of the demo customer: `docker compose exec redis redis-cli DEL sales:prescription-intake:day:<customer id>`.
+
+### Capacity on an ECS-sized stack
+
+`pnpm run stack:aws-like` layers `docker-compose.aws-like.yml` over the container stack and sizes it like `deploy/aws`: every backend service runs 2 replicas of 0.5 vCPU and 1 GiB (the `task_cpu`, `task_memory` and `desired_count` defaults), and the gateway balances between them. Terraform defines no data tier, so PostgreSQL (2 CPUs, 4 GB), Redis (1, 1 GB), RabbitMQ (1, 2 GB) and Typesense (2, 4 GB) are assumptions you should replace with the sizes you choose. Autoscaling is not modelled: this is the floor of two tasks. Host ports of the services are closed in this mode; everything goes through the gateway. Return to the plain stack with `pnpm run stack:down`.
+
+```bash
+node --env-file=.env tools/bulk-products.mjs add 10000     # synthetic BULK-nnnnnn products; waits until the search index holds them
+pnpm run load -e PROFILE=breakpoint /scripts/scenarios/checkout.js   # steps 20 to 300 VUs, a minute each
+node --env-file=.env tools/bulk-products.mjs remove 10000  # deactivates them again
+```
+
+The `breakpoint` profile stops itself when more than 5% of requests fail or the `POST /orders` p95 passes 3 s (checked after 40 s). Measured on one 16 GB workstation with k6 and the observability stack on the same machine, 10,120 products in the index:
+
+| Measurement | Result |
+| --- | --- |
+| Import of 10,000 products | 102 s through the API (40 requests of 250, median 2.6 s) |
+| Search index complete | 17 minutes after the first import, about 11 documents a second; the cause was not isolated (catalog-service at 0.5 vCPU, or the embedder) |
+| Search, warm / first time a query is seen | 12 to 72 ms / 500 to 630 ms (the embedding call) |
+| Browse load, 10 iterations/s for 2 minutes | 0 failures in 5,499 checks, search p95 68 ms, list p95 17.7 ms |
+| Checkout breakpoint, run 1 | all 300 VUs reached; 117,717 requests at 186 req/s, 0.04% failed, `POST /orders` p95 2.43 s |
+| Checkout breakpoint, run 2 | stopped at 275 VUs by the 3 s gate (`POST /orders` p95 3.0 s) |
+
+Throughput stopped growing at about 60 VUs: 199 req/s there against 218 req/s at 300 VUs, about 14 completed checkouts a second. Past that point extra VUs only add waiting. Sampled during the second run, the containers at their limits were `sales-service` (both replicas at about 50% of one core, the 0.5 vCPU cap), PostgreSQL (113% to 160% of its 200%), and RabbitMQ in bursts (100% of its 1 CPU). In run 1, 35% of the orders were not marked paid within the script's wait, so the payment-to-order path fails first, long before requests fail: order to paid p95 was 14 s over the run. These percentiles are for the whole run, not per step. Adding tasks (autoscaling) helps `sales-service`, but the data tier then limits next.
+
+**Search capacity** (`search.js`, `limit=60` as customer-web asks, 10,120 products, same ECS-sized stack, each rate run after the previous backlog had drained). The first measurement found an N+1: after the search, `catalog-routes.ts` read the units of each result with its own query, about one PostgreSQL query per result. `DrizzleStoreRepository.listUnitsByProductIds` now reads them for the whole page in one query, in `GET /products` and `POST /products/match`. Ten searches at `limit=60` went from about 500 PostgreSQL transactions to about 20, and the median search at `limit=60` from 91 ms to 26 ms.
+
+| Rate | p95 before, cached queries | p95 after, cached queries | p95 after, mixed queries |
+| --- | --- | --- | --- |
+| 20 req/s | 140 ms | 34 ms | 71 ms |
+| 25 req/s | 1.2 s (fails) | not run | not run |
+| 30 req/s | 4.1 s (fails) | 35 ms | 90 ms |
+| 40 req/s | not run | 70 ms | 292 ms |
+| 50 req/s | not run | 101 ms | 447 ms |
+| 60 req/s | not run | 150 ms | 623 ms (fails) |
+| 80 req/s | not run | 787 ms (fails) | 7.3 s (fails) |
+| 100 req/s | not run | 2.25 s (fails) | not run |
+
+Search now holds about 60 requests a second when the query vectors are cached and about 50 when most queries need a new embedding, three times and two and a half times the 20 before the fix, with the p95 under 500 ms. The mixed runs fail earlier because every new query costs one embedder call. If a visitor searches once every 10 seconds, 50 requests a second is about 500 people at the same moment; that ratio is an assumption, not a measurement. The limit that remains was not isolated: the replicas of `catalog-service` are capped at 0.5 vCPU, so more or larger tasks raise it.
+
+A virtual user here checks out continuously. A shopper checks out once in many minutes, so read the result as throughput (about 14 checkouts a second at the floor size), not as a number of people.
+
+**Search on one container (1 vCPU, 1 GiB), 1,000 users.** One `catalog-service` container limited with `docker update --cpus 1` (memory 1 GiB), the other services at 2 × 0.5 vCPU, mixed queries, `limit=60`, 5,120, 10,120 and 15,120 products in the index. `search.js` holds a fixed rate; `search-users.js` holds 1,000 concurrent shoppers who search, then wait `THINK` seconds (±50%), so the request rate is about 1,000 / `THINK`. The p95 gate is 500 ms and no run had failed requests: a run fails by getting slow.
+
+| Test | 5,120 products | 10,120 products | 15,120 products |
+| --- | --- | --- | --- |
+| 20 req/s, p95 | 119 ms | 96 ms | 71 ms |
+| 30 req/s, p95 | 167 ms | 160 ms | 71 ms |
+| 40 req/s, p95 | 285 ms | 250 ms | 100 ms |
+| 50 req/s, p95 | 1.86 s (fails) | 1.08 s (fails) | 263 ms |
+| 60 req/s, p95 | not run | not run | 604 ms (fails) |
+| 80 req/s, p95 | not run | not run | 5.03 s (fails) |
+| 1,000 users, think 30 s (about 33 req/s), p95 | 223 ms | 273 ms | 418 ms |
+| 1,000 users, think 15 s (about 67 req/s), p95 | 2.15 s (fails) | 1.97 s (fails) | 5.17 s (fails) |
+
+One container holds 40 to 50 req/s, so 1,000 users fit when they search about every 30 seconds and do not fit when they search every 15 seconds. The ceiling in users is about 40 to 50 req/s times the seconds between searches (1,200 to 1,500 users at 30 s, 600 to 750 at 15 s). Where it fails, the catalog container is at 80% of its core on average and touches 100%, and Typesense (2 CPUs) is at 120% to 160%; memory never passed 225 MiB of 1 GiB. Each rate was run once on a workstation that also runs k6, Prometheus, Grafana and the embedder, and the p95 at 20 to 50 req/s is lower at 15,120 products than at 5,120: run-to-run variation is larger than the effect of catalog size here, so these runs do not show how latency grows with the catalog. They show that memory is not the limit. These runs did not sample the embedder; the next run, below, found it saturated.
+
+**What changed after that, and one more run at 50 req/s.** `GET /products` now pages with `cursor` (see the API guide), the catalog keeps whole list answers for 30 seconds (an LRU of 5,000 pages, concurrent identical requests share one load, and a product change through the replica clears it), and the local container got more CPU: `catalog-service` 2 vCPU and 1 GiB, Typesense 4 CPUs, set with `docker update --cpus` on the running containers (Terraform is unchanged). The run: 10,120 products, one catalog container, `search.js` at 50 req/s with pages of 20, one request in five for the second page, and 30% one-off queries that no cache has seen.
+
+| Measurement during the 60 s | Result |
+| --- | --- |
+| Search p95 / median / p99 | 1.19 s (fails) / 338 ms / 1.42 s; no failed request, no dropped iteration |
+| `catalog-service` CPU | 57% of its 2 vCPU on average, 81% at most; memory 385 MiB |
+| Typesense CPU | 42% of its 4 CPUs on average |
+| **Embedder CPU** | **194% of its 2 CPUs on average**: saturated |
+| Response cache | about one lookup in five was a hit (counter `pharmacy.search.cache`, taken over a window that included a second run): the 1,200 popular queries and 2 pages are too many to repeat within 100 s |
+
+The search failed because of the embedder, not the catalog or Typesense. Every query that is not in a cache is embedded, 40 or so a second here, and the embedder's two CPUs are at their limit. The earlier sweeps did not sample the embedder, so their conclusion that the catalog container's CPU was the limit is not proven.
+
+**Embedder at 4 CPUs, vector cache of 5,000.** The same run again with the embedder limited to 4 CPUs and 4 GB and the query-vector cache raised from 500 to 5,000 entries (about 30 MB for 768 dimensions):
+
+| Measurement | Embedder 2 CPUs, cache 500 | Embedder 4 CPUs, cache 5,000 |
+| --- | --- | --- |
+| Search p95 | 1.19 s (fails) | 602 ms (still over 500 ms) |
+| Median / p99 | 338 ms / 1.42 s | 73 ms / 1.30 s |
+| Embedder CPU | 194% of 200% | 373% of 400%, peaks at 403% |
+| Query-vector cache (`pharmacy_search_embedding_cache_total`) | not counted | 537 hits, 1,941 misses |
+| Response cache (`pharmacy_search_cache_total`) | about 1 in 5 hits | 563 hits, 2,478 misses |
+
+**multilingual-e5-small, queries of fewer than three words not embedded, Zipf traffic.** The index was rebuilt with multilingual-e5-small (384 dimensions, collection `catalog_products_v2`), queries under `SEMANTIC_MIN_WORDS` (3) went keyword-only, and `search.js` was changed to draw its 1,200 popular queries by a Zipf law (shorter ones more often) with 15% one-off queries. The run: 50 req/s, 10,120 products, one catalog container (2 vCPU), embedder 4 CPUs.
+
+| Measurement | Result |
+| --- | --- |
+| Search p95 / p99 / median | 1.45 s (fails) / 1.85 s / **10.7 ms** |
+| Failed requests / dropped iterations | none / none |
+| `catalog-service` CPU / event loop busy | 43% of 2 vCPU / 29% |
+| Response cache | 1,129 hits, 1,120 misses (50%), 4 shared |
+| Query-vector cache | 62 hits, 698 misses |
+| Embedder, per request in the window | inference p50 113 ms, **queue wait p50 916 ms (p95 1.53 s)**, 14 requests a second |
+
+Half of the requests are answered without the embedder and take milliseconds; the rest, the new queries of three words or more, wait about a second in the embedder's queue. The embedder alone does far better than it did under load: on the same machine with nothing else running it served about 210 new queries a second at 2 CPUs and 226 at 4 (see Self-hosted product search embeddings; the figures of this run used the removed `--max-batch-tokens 4096 --tokenization-workers 2` flags, with which the same machine gave 105 and 224), and a single query takes 10 ms, against an inference time of 113 ms in the run. The run was therefore limited by the workstation, which runs k6, 13 service containers, Typesense (4 CPUs), the embedder (4 CPUs), Postgres, the observability stack and the browser on 16 logical cores, with CPU limits that add up to more than the machine has. ONNX threads that cannot get a core wait in the queue. Treat the 1.45 s as a floor for this machine, not as a capacity of the design; a faithful number needs the load generator and the embedder on separate hosts, or at least the embedder pinned to its own cores.
+
+**Same run with each container pinned to its own cores.** No second machine is needed: on the 16 logical cores of the workstation the embedder got cores 0 to 3, Typesense 4 to 7, `catalog-service` 8 and 9 and every other container 12 to 15, with `docker update --cpuset-cpus <cores> <container>` on the running containers (`--cpus` kept as before; the pinning is lost when a container is recreated). The embedder then sees 4 CPUs instead of 16 and stops fighting the rest of the stack for cores. Same traffic, 50 req/s, 10,120 products, multilingual-e5-small:
+
+| Measurement | Unpinned | Pinned |
+| --- | --- | --- |
+| Search p95 / p99 | 1.45 s (fails) / 1.85 s | **406 ms (passes)** / 477 ms |
+| Median | 10.7 ms | 5.6 ms |
+| Failed requests / dropped iterations | none / none | none / none |
+| `catalog-service` CPU / event loop busy | 43% of 2 vCPU / 29% | 21% of 2 vCPU / 15% |
+| Embedder CPU | 390% of 400% | 198% of 400% |
+| Embedder inference p50 / queue wait p50 | 113 ms / 916 ms | **21 ms / 190 ms** |
+| Response cache | 50% hits | 53% hits (1,952 hits, 1,712 misses) |
+| Query-vector cache | 62 hits, 698 misses | 176 hits, 1,070 misses (14%) |
+
+So 50 requests a second with mostly new three-word queries fit: the embedder used half of its 4 CPUs. The pinned run is the number to quote for this machine. It is one run; the margin to the 500 ms gate is 94 ms.
+
+**1,000 users on one container (1 vCPU, 1 GiB), after all of this.** `catalog-service` limited with `docker update --cpus 1 --memory 1g` and pinned to one core, the embedder (4 cores), Typesense (4 cores) and the rest pinned as above, 10,120 products, `search-users.js` with pages of 20, Zipf-drawn popular queries, 15% one-off queries, one request in five on the second page. One run each, back to back:
+
+| Test | p95 | Median | p99 | Failed | Catalog CPU avg / max | Catalog memory max | Embedder CPU avg |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1,000 users, think 30 s (about 33 req/s), caches cold | **456 ms** (passes) | 8 ms | 593 ms | 0% | 13% / 36% | 263 MiB | 116% of 400% |
+| 1,000 users, think 15 s (about 67 req/s), caches warm | **30 ms** (passes) | 5 ms | 45 ms | 0% | 19% / 37% | 283 MiB | 52% of 400% |
+
+The two rows are not like for like. The 15 s run came second and found the caches filled by the first (the 30 s response cache and the 5,000-entry query-vector cache), so its 30 ms is the warm case; the 456 ms of the first run is the cold case and the number to plan on. Before these changes the same 1,000 users failed at think 15 s (p95 1.97 s at 10,120 products). The earlier tables used pages of 60 and uniformly random queries, so they are a harsher traffic mix than this one. Only 10,120 products were measured this time; the 5,000 and 15,000 rows above were not repeated.
+
+**1,000 concurrent users with no think time.** The same container (1 vCPU, 1 GiB), the same pinning and traffic, `search-users.js` with `-e USERS=1000 -e THINK=0`: every user sends the next search the moment the last answer arrives, so the rate is whatever the service can answer. Caches cold, one run.
+
+| Measurement | Result |
+| --- | --- |
+| Requests answered | 61,913 in the whole run, 387 a second on average (the ramp and ramp-down included) |
+| Search p95 / p99 / median | **4.54 s (fails)** / 13.5 s / 1.18 s; slowest 60 s (the k6 timeout) |
+| Failed requests | 0.20% (129): timeouts |
+| `catalog-service` CPU | **97% of its 1 vCPU on average**, 98% at most; memory 415 MiB |
+| Typesense / embedder CPU | 58% of 4 / 193% of 4 |
+| Response cache / query-vector cache | 76% hits (37,916 of 50,182) / 32% hits (3,524 of 11,053) |
+
+With 1,000 users in flight and about 390 answers a second, each one waits 1,000 / 390 = 2.6 s on average: a closed loop of 1,000 users cannot do better than the service's throughput allows, and here that is the catalog container's one core. Memory is not the limit. By the same arithmetic a p95 under 500 ms with 1,000 users who never pause needs at least 2,000 answers a second, about five to six times what one core did, so five to six cores of `catalog-service` (Node runs one thread per process: replicas or `node:cluster`). A rerun of the same test on a cleaner machine (Grafana, Loki, Tempo, Mailpit, both web apps and every service but `catalog-service` stopped; k6 pinned to its own cores 10 and 11; the embedder at 2 CPUs instead of 4) did not do better: 296 requests a second, p95 5.38 s, median 1.59 s, 0.33% failed, `catalog-service` at 92% of its core and the embedder at 196% of its 2 CPUs. The other containers were therefore not what held the first run back; the run-to-run spread is about a quarter, and with the embedder at 2 CPUs it is a second limit at this load. That is an estimate from this run, not a measurement. 1,000 users who read for 15 to 30 seconds between searches is the case the previous table measured.
+
+**Where the saturated thread goes.** A CPU profile of the `catalog-service` process for 30 s of that run (inspector, 1 ms sampling; the event loop was busy 94.6% of the window), each sample counted against the closest application or package frame on its stack:
+
+| Share of busy time | Who |
+| --- | --- |
+| 24% | Node's own HTTP server and sockets (parsing requests, `writev` of responses), with no application frame above |
+| 18% | our code (the routes, hybrid search, the Typesense call and its response parsing, about 8% in all) |
+| 14% | Express and its router, 1.6% of it computing an ETag for every response |
+| 13% | PostgreSQL: drizzle-orm 7.5%, pg 3.4%, pg-protocol 1.7% (two queries for each page that missed the response cache) |
+| 12% | OpenTelemetry: HTTP instrumentation 5.4%, context propagation 2.2%, trace SDK 2.1%, metrics SDK 1.8% |
+| 6.5% | garbage collection |
+
+No single function stands out: about 40% is the cost of serving an HTTP request at all (Node, Express, ETag), 12% is tracing, 13% is the database lookups behind cache misses, and 18% is ours. One core therefore answers about 2.5 ms of CPU per request, whatever the request is. The levers, from cheapest: more processes (replicas, `node:cluster`); turning off Express's ETag and `x-powered-by`; sampling or narrowing the OpenTelemetry HTTP instrumentation; returning the display fields from Typesense so a miss does not query PostgreSQL (price and stock must still come from PostgreSQL, so this needs a decision); a faster HTTP layer than Express.
+
+
+A CPU profile of the catalog's Node process for 30 s of the first of these runs (embedder 2 CPUs; the last run's profile shows the same shape, with the event loop busy 29%) (inspector, `Profiler.start`, 1 ms sampling): the event loop was busy 13.3 s of 30.2 s (44%), so the catalog itself had headroom of about two. The busy time: Node internals 26% (mostly socket writes, 6.8% in `writev`), native and anonymous frames 16%, the application's own code 12%, drizzle-orm 8%, garbage collection 4% and 6% for the runtime, OpenTelemetry (trace, HTTP and metrics) about 6%, zod 1.6%. The biggest single functions of ours are the Typesense `search` call and its response parsing (about 5%). Nothing in the catalog stands out. A Node process runs its JavaScript on one thread, so the second vCPU helps only with GC and I/O threads; more throughput from the catalog needs more replicas.
+
+Where to look to raise it, in order of what the measurements support:
+
+- Run the load test with the embedder on its own cores (`cpuset`) or on another host, to get a capacity number that is not the workstation's. On an idle machine, with default settings, the embedder does 97, about 210 and 226 requests a second on 1, 2 and 4 CPUs, so 2 CPUs are enough; size it from that, not from this run.
+- Warm the query-vector cache with the popular queries.
+- Add catalog replicas to use more than one core, and keep the response cache: it helps as soon as shoppers repeat queries, which this test hardly does.
+
+Two gaps the runs exposed were fixed afterwards: a failed embedding call no longer fails the whole search index sweep, which now retries by itself, and error logs show the cause (see Self-hosted product search embeddings). The others are reported, not fixed:
+
+- Every order refused for stock leaves a `Cancelled` order row, because the order commits before the stock hold.
+- Product and opening-balance imports are all or nothing: one bad row returns 400 for the whole payload.
 
 ## Online order stock
 
