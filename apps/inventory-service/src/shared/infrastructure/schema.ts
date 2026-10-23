@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
@@ -117,14 +118,18 @@ export const idempotencyRecords = pgTable(
   (table) => [uniqueIndex("idempotency_scope_key_actor_unique").on(table.scope, table.key, table.actorId)],
 );
 
-export const stockReservationLines = pgTable("stock_reservation_lines", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  reservationId: uuid("reservation_id").notNull(),
-  productId: uuid("product_id").notNull(),
-  productBatchId: uuid("product_batch_id").notNull(),
-  storageLocationId: uuid("storage_location_id").notNull(),
-  quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
-});
+export const stockReservationLines = pgTable(
+  "stock_reservation_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    reservationId: uuid("reservation_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    productBatchId: uuid("product_batch_id").notNull(),
+    storageLocationId: uuid("storage_location_id").notNull(),
+    quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
+  },
+  (table) => [index("stock_reservation_lines_reservation_id_idx").on(table.reservationId)],
+);
 
 export const transferOrders = pgTable(
   "transfer_orders",
@@ -228,16 +233,24 @@ export const returnLines = pgTable("return_lines", {
   notes: text("notes"),
 });
 
-export const outboxMessages = pgTable("outbox_messages", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  eventType: varchar("event_type", { length: 200 }).notNull(),
-  schemaVersion: varchar("schema_version", { length: 20 }).notNull(),
-  payload: text("payload").notNull(),
-  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
-  publishedAt: timestamp("published_at", { withTimezone: true }),
-  attempts: integer("attempts").notNull().default(0),
-  traceparent: varchar("traceparent", { length: 200 }).$type<string | null>().$defaultFn(currentTraceparent),
-});
+export const outboxMessages = pgTable(
+  "outbox_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventType: varchar("event_type", { length: 200 }).notNull(),
+    schemaVersion: varchar("schema_version", { length: 20 }).notNull(),
+    payload: text("payload").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+    traceparent: varchar("traceparent", { length: 200 }).$type<string | null>().$defaultFn(currentTraceparent),
+  },
+  (table) => [
+    index("outbox_messages_unpublished_idx")
+      .on(table.occurredAt)
+      .where(sql`${table.publishedAt} is null`),
+  ],
+);
 
 export const inboxMessages = pgTable("inbox_messages", {
   eventId: uuid("event_id").primaryKey(),

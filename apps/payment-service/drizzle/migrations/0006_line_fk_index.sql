@@ -1,0 +1,1 @@
+CREATE INDEX "payment_invoice_lines_invoice_id_idx" ON "payment_invoice_lines" USING btree ("payment_invoice_id");

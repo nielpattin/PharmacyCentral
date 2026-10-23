@@ -82,15 +82,19 @@ export const orders = pgTable(
   ],
 );
 
-export const orderLines = pgTable("order_lines", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  orderId: uuid("order_id").notNull(),
-  productId: uuid("product_id").notNull(),
-  productUnitId: uuid("product_unit_id").notNull(),
-  productNameSnapshot: text("product_name_snapshot").notNull(),
-  unitPriceSnapshot: numeric("unit_price_snapshot", { precision: 18, scale: 2 }).notNull(),
-  quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
-});
+export const orderLines = pgTable(
+  "order_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orderId: uuid("order_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    productUnitId: uuid("product_unit_id").notNull(),
+    productNameSnapshot: text("product_name_snapshot").notNull(),
+    unitPriceSnapshot: numeric("unit_price_snapshot", { precision: 18, scale: 2 }).notNull(),
+    quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
+  },
+  (table) => [index("order_lines_order_id_idx").on(table.orderId)],
+);
 
 export const deliveryAddresses = pgTable(
   "delivery_addresses",
@@ -214,14 +218,22 @@ export const idempotencyRecords = pgTable(
   (table) => [uniqueIndex("sales_idempotency_scope_key_actor_unique").on(table.scope, table.key, table.actorId)],
 );
 
-export const outboxMessages = pgTable("outbox_messages", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  eventType: varchar("event_type", { length: 200 }).notNull(),
-  aggregateId: uuid("aggregate_id").notNull(),
-  payload: text("payload").notNull(),
-  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
-  publishedAt: timestamp("published_at", { withTimezone: true }),
-  attempts: integer("attempts").notNull().default(0),
-  /** The request's W3C trace context, captured at insert so the relay can publish under it. */
-  traceparent: varchar("traceparent", { length: 200 }).$type<string | null>().$defaultFn(currentTraceparent),
-});
+export const outboxMessages = pgTable(
+  "outbox_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventType: varchar("event_type", { length: 200 }).notNull(),
+    aggregateId: uuid("aggregate_id").notNull(),
+    payload: text("payload").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+    /** The request's W3C trace context, captured at insert so the relay can publish under it. */
+    traceparent: varchar("traceparent", { length: 200 }).$type<string | null>().$defaultFn(currentTraceparent),
+  },
+  (table) => [
+    index("outbox_messages_unpublished_idx")
+      .on(table.occurredAt)
+      .where(sql`${table.publishedAt} is null`),
+  ],
+);

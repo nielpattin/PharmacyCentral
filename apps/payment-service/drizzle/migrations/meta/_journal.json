@@ -36,6 +36,20 @@
       "when": 1792590502808,
       "tag": "0004_tidy_golden_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792762353612,
+      "tag": "0005_outbox_unpublished_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792764855255,
+      "tag": "0006_line_fk_index",
+      "breakpoints": true
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, numeric, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 import { currentTraceparent } from "../../../shared/infrastructure/trace-context.ts";
@@ -24,16 +25,20 @@ export const paymentInvoices = pgTable(
   ],
 );
 
-export const paymentInvoiceLines = pgTable("payment_invoice_lines", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  paymentInvoiceId: uuid("payment_invoice_id").notNull(),
-  productId: uuid("product_id").notNull(),
-  productUnitId: uuid("product_unit_id").notNull(),
-  description: varchar("description", { length: 500 }).notNull(),
-  quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
-  unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),
-  currency: varchar("currency", { length: 3 }).notNull(),
-});
+export const paymentInvoiceLines = pgTable(
+  "payment_invoice_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    paymentInvoiceId: uuid("payment_invoice_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    productUnitId: uuid("product_unit_id").notNull(),
+    description: varchar("description", { length: 500 }).notNull(),
+    quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
+    unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+  },
+  (table) => [index("payment_invoice_lines_invoice_id_idx").on(table.paymentInvoiceId)],
+);
 
 export const paymentAttempts = pgTable(
   "payment_attempts",
@@ -85,14 +90,22 @@ export const reconciliationRecords = pgTable("payment_reconciliation", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const outboxMessages = pgTable("outbox_messages", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  eventType: varchar("event_type", { length: 200 }).notNull(),
-  aggregateId: uuid("aggregate_id").notNull(),
-  payload: text("payload").notNull(),
-  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
-  publishedAt: timestamp("published_at", { withTimezone: true }),
-  attempts: numeric("attempts", { precision: 10, scale: 0 }).notNull().default("0"),
-  /** Captured from the request's active span on insert, so the relay can publish under that trace. */
-  traceparent: varchar("traceparent", { length: 200 }).$type<string | null>().$defaultFn(currentTraceparent),
-});
+export const outboxMessages = pgTable(
+  "outbox_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventType: varchar("event_type", { length: 200 }).notNull(),
+    aggregateId: uuid("aggregate_id").notNull(),
+    payload: text("payload").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    attempts: numeric("attempts", { precision: 10, scale: 0 }).notNull().default("0"),
+    /** Captured from the request's active span on insert, so the relay can publish under that trace. */
+    traceparent: varchar("traceparent", { length: 200 }).$type<string | null>().$defaultFn(currentTraceparent),
+  },
+  (table) => [
+    index("outbox_messages_unpublished_idx")
+      .on(table.occurredAt)
+      .where(sql`${table.publishedAt} is null`),
+  ],
+);

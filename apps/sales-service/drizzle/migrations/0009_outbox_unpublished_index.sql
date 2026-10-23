@@ -1,0 +1,1 @@
+CREATE INDEX "outbox_messages_unpublished_idx" ON "outbox_messages" USING btree ("occurred_at") WHERE "outbox_messages"."published_at" is null;

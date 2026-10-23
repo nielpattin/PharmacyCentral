@@ -1,0 +1,1 @@
+CREATE INDEX "stock_reservation_lines_reservation_id_idx" ON "stock_reservation_lines" USING btree ("reservation_id");
