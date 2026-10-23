@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { context, trace } from "@opentelemetry/api";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
-import { asc, isNotNull } from "drizzle-orm";
+import { asc, isNotNull, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { fileURLToPath } from "node:url";
@@ -94,13 +94,89 @@ describe("SalesOutboxPublisher", () => {
     );
     await publisher.close();
 
-    // The refusal ended the first batch after the first row, so the third row waited behind the second.
+    // The batch went out together. The refusal ended the confirmed prefix after the first row, so the third row, though
+    // the broker took it, was not recorded as published and goes out again behind the second.
     expect(broker.seen).toEqual([
       { eventId: first.id, confirmed: true },
       { eventId: second.id, confirmed: false },
+      { eventId: third.id, confirmed: true },
       { eventId: second.id, confirmed: true },
       { eventId: third.id, confirmed: true },
     ]);
+  });
+
+  it("drains a backlog of several batches at once instead of one batch per tick", async () => {
+    const row = {
+      eventType: "sales.order.created.v1",
+      aggregateId: crypto.randomUUID(),
+      payload: JSON.stringify({ orderId: "x" }),
+    };
+    await db
+      .insert(schema.outboxMessages)
+      .values(Array.from({ length: 1_200 }, (_, n) => ({ ...row, occurredAt: new Date(2026, 1, 1, 0, 0, 0, n) })));
+    const publisher = new SalesOutboxPublisher(
+      { db, pool: undefined } as unknown as SalesDatabase,
+      createLogger({ level: "silent" }),
+      "amqp://broker.test",
+    );
+
+    publisher.start();
+    // One batch a second would need more than twenty seconds for 1,200 rows.
+    await vi.waitFor(
+      async () => {
+        const unpublished = await db
+          .select({ id: schema.outboxMessages.id })
+          .from(schema.outboxMessages)
+          .where(isNull(schema.outboxMessages.publishedAt));
+        expect(unpublished).toHaveLength(0);
+      },
+      { timeout: 3_000, interval: 100 },
+    );
+    await publisher.close();
+  });
+
+  it("deletes rows published more than a week ago and keeps newer ones", async () => {
+    const day = 24 * 60 * 60 * 1_000;
+    const [old, recent] = await db
+      .insert(schema.outboxMessages)
+      .values([
+        {
+          ...{
+            eventType: "sales.order.created.v1",
+            aggregateId: crypto.randomUUID(),
+            payload: JSON.stringify({ orderId: "x" }),
+          },
+          publishedAt: new Date(Date.now() - 8 * day),
+        },
+        {
+          ...{
+            eventType: "sales.order.created.v1",
+            aggregateId: crypto.randomUUID(),
+            payload: JSON.stringify({ orderId: "x" }),
+          },
+          publishedAt: new Date(Date.now() - 1 * day),
+        },
+      ])
+      .returning();
+    if (!old || !recent) throw new Error("outbox rows were not created");
+    const publisher = new SalesOutboxPublisher(
+      { db, pool: undefined } as unknown as SalesDatabase,
+      createLogger({ level: "silent" }),
+      "amqp://broker.test",
+    );
+
+    publisher.start();
+    await vi.waitFor(
+      async () => {
+        const ids = (await db.select({ id: schema.outboxMessages.id }).from(schema.outboxMessages)).map((r) => r.id);
+        expect(ids).not.toContain(old.id);
+      },
+      { timeout: 5_000, interval: 100 },
+    );
+    await publisher.close();
+
+    const ids = (await db.select({ id: schema.outboxMessages.id }).from(schema.outboxMessages)).map((r) => r.id);
+    expect(ids).toContain(recent.id);
   });
 
   it("publishes under the span captured on the row, and without a parent when the row has none", async () => {

@@ -1,5 +1,5 @@
 import amqp from "amqplib";
-import { asc, eq, isNull, sql } from "drizzle-orm";
+import { asc, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { ChannelModel, ConfirmChannel } from "amqplib";
 
 import type { Logger } from "../logger.ts";
@@ -10,7 +10,9 @@ import { recordOutboxPublished, registerOutboxBacklogGauges } from "./outbox-met
 
 const EXCHANGE = "pharmacy.events";
 const TICK_MS = 1_000;
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 500;
+const PUBLISHED_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
+const PURGE_INTERVAL_MS = 60 * 60 * 1_000;
 /** One relay per database publishes at a time, so replicas never send the same row twice and the order holds. */
 const RELAY_LOCK_NAME = "inventory.outbox";
 
@@ -29,6 +31,7 @@ export class InventoryOutboxPublisher {
   private unregisterBacklogGauges: (() => void) | undefined;
   private inFlight = false;
   private degraded = false;
+  private lastPurgeAt = 0;
 
   public constructor(
     private readonly database: InventoryDatabase,
@@ -54,7 +57,7 @@ export class InventoryOutboxPublisher {
     this.inFlight = true;
     try {
       this.channel ??= await this.connect();
-      await this.relayBatch(this.channel);
+      while ((await this.relayBatch(this.channel)) === BATCH_SIZE);
       if (this.degraded) this.logger.info("inventory outbox publisher recovered");
       this.degraded = false;
     } catch (error) {
@@ -64,11 +67,18 @@ export class InventoryOutboxPublisher {
     } finally {
       this.inFlight = false;
     }
+    await this.purgePublished();
   }
 
-  /** Sends the oldest unpublished rows. A failed send ends the batch but keeps the rows already confirmed. */
-  private async relayBatch(channel: ConfirmChannel): Promise<void> {
+  /**
+   * Sends the oldest unpublished rows in one go and waits for the broker's confirms together, then marks the confirmed
+   * rows published with one UPDATE. Rows are marked in order: the first refused row ends the confirmed prefix, so a
+   * later row is never recorded before an earlier one, and a row sent after the refused one is simply sent again.
+   * Returns how many rows it read, so a full batch means more rows are probably waiting.
+   */
+  private async relayBatch(channel: ConfirmChannel): Promise<number> {
     let failure: unknown;
+    let read = 0;
     await this.database.db.transaction(async (transaction) => {
       const locked = await transaction.execute(
         sql`select pg_try_advisory_xact_lock(hashtext(${RELAY_LOCK_NAME})) as locked`,
@@ -80,24 +90,41 @@ export class InventoryOutboxPublisher {
         .where(isNull(outboxMessages.publishedAt))
         .orderBy(asc(outboxMessages.occurredAt))
         .limit(BATCH_SIZE);
-      for (const message of pending) {
-        try {
-          await this.publishConfirmed(channel, message);
-        } catch (error) {
-          failure = error;
-          return;
-        }
-        recordOutboxPublished(message.occurredAt);
-        await transaction
-          .update(outboxMessages)
-          .set({ publishedAt: new Date(), attempts: message.attempts + 1 })
-          .where(eq(outboxMessages.id, message.id));
-      }
+      read = pending.length;
+      const results = await Promise.allSettled(pending.map((message) => this.publishConfirmed(channel, message)));
+      const refused = results.findIndex((result) => result.status === "rejected");
+      const confirmed = refused === -1 ? pending : pending.slice(0, refused);
+      if (refused !== -1) failure = (results[refused] as PromiseRejectedResult).reason;
+      if (confirmed.length === 0) return;
+      await transaction
+        .update(outboxMessages)
+        .set({ publishedAt: new Date(), attempts: sql`${outboxMessages.attempts} + 1` })
+        .where(
+          inArray(
+            outboxMessages.id,
+            confirmed.map((message) => message.id),
+          ),
+        );
+      for (const message of confirmed) recordOutboxPublished(message.occurredAt);
     });
     if (failure) throw failure;
+    return read;
   }
 
-  private publishConfirmed(channel: ConfirmChannel, message: typeof outboxMessages.$inferSelect): Promise<void> {
+  /** Deletes rows that were published long ago, at most once an hour. A failure only delays the next attempt. */
+  private async purgePublished(): Promise<void> {
+    if (Date.now() - this.lastPurgeAt < PURGE_INTERVAL_MS) return;
+    this.lastPurgeAt = Date.now();
+    try {
+      await this.database.db
+        .delete(outboxMessages)
+        .where(lt(outboxMessages.publishedAt, new Date(Date.now() - PUBLISHED_RETENTION_MS)));
+    } catch (error) {
+      this.logger.warn({ error }, "inventory outbox purge failed");
+    }
+  }
+
+  private async publishConfirmed(channel: ConfirmChannel, message: typeof outboxMessages.$inferSelect): Promise<void> {
     const { promise, resolve, reject } = Promise.withResolvers<void>();
     const envelope = {
       eventId: message.id,
