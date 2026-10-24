@@ -19,6 +19,8 @@
   --color-success-soft: oklch(0.96 0.04 150);
   --color-warning: oklch(0.5 0.13 70);
   --color-warning-soft: oklch(0.96 0.06 85);
+  /* Fill-only amber for edges and bars. `warning` is the dark text-safe shade and reads brown when painted as a fill. */
+  --color-warning-edge: oklch(0.78 0.15 80);
   --color-sidebar: oklch(0.19 0.025 247);
   --color-sidebar-text: oklch(0.93 0.005 271);
   --color-sidebar-muted: oklch(0.76 0.02 247);

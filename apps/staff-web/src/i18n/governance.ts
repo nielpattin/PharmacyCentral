@@ -370,7 +370,7 @@ export const governanceLiterals: Record<string, string> = {
   "No employees match this search.": "Không có nhân viên nào khớp với tìm kiếm.",
   "Search name or email": "Tìm theo tên hoặc email",
   "Employee actions": "Thao tác với nhân viên",
-  "Active sites": "Cơ sở đang hoạt động",
+  "Active sites": "Cơ sở hoạt động",
   "Quantity on hand": "Số lượng tồn kho",
   "Reserved quantity": "Số lượng đã giữ",
   "Low stock batches": "Lô tồn thấp",

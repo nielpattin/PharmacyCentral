@@ -17,7 +17,25 @@ export const DashboardSection = (): React.JSX.Element => {
   const recent = Array.isArray(dashboard?.recentActivity)
     ? dashboard.recentActivity.filter((item): item is JsonRecord => typeof item === "object" && item !== null)
     : [];
-  const kpis: Kpi[] = [
+  // A warning edge only while the count is above zero; on a zero it would be a false alarm.
+  const warnWhenPositive = (value: unknown): Kpi["tone"] => (Number(value) > 0 ? "warning" : undefined);
+  const attention: Kpi[] = [
+    {
+      label: "Low stock batches",
+      value: formatQuantity(dashboard?.lowStockBatchCount),
+      tone: warnWhenPositive(dashboard?.lowStockBatchCount),
+    },
+    {
+      label: "Expiring batches",
+      value: formatQuantity(dashboard?.expiringBatchCount),
+      tone: warnWhenPositive(dashboard?.expiringBatchCount),
+    },
+    { label: "Pending transfers", value: formatQuantity(dashboard?.pendingTransferCount) },
+    { label: "Open prescriptions", value: formatQuantity(dashboard?.openPrescriptionCount) },
+    { label: "Open stocktakes", value: formatQuantity(dashboard?.openStocktakeCount) },
+    { label: "Pending adjustments", value: formatQuantity(dashboard?.pendingAdjustmentCount) },
+  ];
+  const overview: Kpi[] = [
     {
       label: "Active sites",
       value: `${formatQuantity(dashboard?.activeSites)} / ${formatQuantity(dashboard?.totalSites)}`,
@@ -30,24 +48,27 @@ export const DashboardSection = (): React.JSX.Element => {
     { label: "Suppliers", value: formatQuantity(dashboard?.totalSuppliers) },
     { label: "Quantity on hand", value: formatQuantity(dashboard?.totalQuantityOnHand) },
     { label: "Reserved quantity", value: formatQuantity(dashboard?.totalQuantityReserved) },
-    { label: "Low stock batches", value: formatQuantity(dashboard?.lowStockBatchCount), tone: "warning" },
-    { label: "Expiring batches", value: formatQuantity(dashboard?.expiringBatchCount), tone: "warning" },
-    { label: "Pending transfers", value: formatQuantity(dashboard?.pendingTransferCount) },
-    { label: "Open prescriptions", value: formatQuantity(dashboard?.openPrescriptionCount) },
-    { label: "Open stocktakes", value: formatQuantity(dashboard?.openStocktakeCount) },
-    { label: "Pending adjustments", value: formatQuantity(dashboard?.pendingAdjustmentCount) },
+  ];
+  const groups: { title: string; kpis: Kpi[] }[] = [
+    { title: "Needs attention", kpis: attention },
+    { title: "Catalog and stock", kpis: overview },
   ];
 
   return (
     <div className="grid gap-6">
       {error ? <Alert variant="danger">{translateText(error)}</Alert> : null}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2.5">
-        {dashboardQuery.isPending
-          ? Array.from({ length: 12 }, (_, index) => <Skeleton key={index} className="h-[88px]" />)
-          : kpis.map((kpi) => (
-              <StatTile key={kpi.label} label={translateText(kpi.label)} value={kpi.value} tone={kpi.tone} />
-            ))}
-      </div>
+      {groups.map((group) => (
+        <section key={group.title} className="grid gap-2">
+          <h2 className="text-sm font-semibold text-ink">{translateText(group.title)}</h2>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2.5">
+            {dashboardQuery.isPending
+              ? group.kpis.map((kpi) => <Skeleton key={kpi.label} className="h-[78px]" />)
+              : group.kpis.map((kpi) => (
+                  <StatTile key={kpi.label} label={translateText(kpi.label)} value={kpi.value} tone={kpi.tone} />
+                ))}
+          </div>
+        </section>
+      ))}
       <Card>
         <CardHeader>
           <CardTitle>{translateText("Recent activity")}</CardTitle>

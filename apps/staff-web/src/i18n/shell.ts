@@ -38,6 +38,8 @@ export const shellLiterals: Record<string, string> = {
   "Staff login failed": "Đăng nhập nhân viên thất bại",
   "Operational overview and recent activity.": "Tổng quan vận hành và hoạt động gần đây.",
   "Recent activity": "Hoạt động gần đây",
+  "Needs attention": "Cần xử lý",
+  "Catalog and stock": "Danh mục và tồn kho",
   "Toggle sidebar": "Ẩn hoặc hiện thanh điều hướng",
   "Collapse navigation": "Thu gọn thanh điều hướng",
   "Expand navigation": "Mở rộng thanh điều hướng",
