@@ -4,6 +4,7 @@ import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import type { AccountService } from "../../application/account-service.ts";
+import { AuthRateLimiterError, type AuthRateLimiter } from "../../domain/auth-rate-limit.ts";
 
 import { createAccountRouter, createCustomerRouter, createInternalCustomerRouter } from "./account-routes.ts";
 
@@ -13,6 +14,10 @@ const startServer = async (app: express.Express): Promise<{ server: Server; url:
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Server failed to bind");
   return { server, url: `http://127.0.0.1:${address.port}` };
+};
+
+const unlimitedAttempts: AuthRateLimiter = {
+  admit: async () => ({ admitted: true, withdraw: async () => undefined }),
 };
 
 describe("account csrf route", () => {
@@ -27,7 +32,7 @@ describe("account csrf route", () => {
   it("issues a csrf token and readable cookie without credentials", async () => {
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter({} as unknown as AccountService));
+    app.use("/auth", createAccountRouter({} as unknown as AccountService, undefined, unlimitedAttempts));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -52,7 +57,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => ({ account, session: {} }) } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -74,7 +79,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => undefined } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -106,7 +111,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => ({ account, session: {} }), updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -142,7 +147,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => ({ account, session: {} }), updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -163,7 +168,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => undefined, updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -191,7 +196,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => ({ account, session: {} }), updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -202,6 +207,153 @@ describe("account csrf route", () => {
     });
     expect(response.status).toBe(400);
     expect(updateProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe("credential attempt limit", () => {
+  let activeServer: Server | undefined;
+
+  afterEach(async () => {
+    if (!activeServer) return;
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    activeServer.close((error) => (error ? reject(error) : resolve()));
+    await promise;
+  });
+
+  const startAuthServer = async (service: AccountService, limiter: AuthRateLimiter): Promise<string> => {
+    const app = express();
+    app.use(express.json());
+    app.use("/auth", createAccountRouter(service, undefined, limiter));
+    const { server, url } = await startServer(app);
+    activeServer = server;
+    return url;
+  };
+
+  const jsonPost = (url: string, path: string, body: unknown): Promise<Response> =>
+    fetch(`${url}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  const credentials = { email: "khach@example.com", password: "mat-khau-dai-12-ky-tu" };
+
+  const refusing = (retryAfterSeconds: number) => ({
+    admit: vi.fn(async () => ({ admitted: false as const, retryAfterSeconds })),
+  });
+  const admitting = (withdraw: () => Promise<void>) => ({
+    admit: vi.fn(async () => ({ admitted: true as const, withdraw })),
+  });
+
+  it("answers 429 with Retry-After and the error envelope before the password is checked", async () => {
+    const login = vi.fn();
+    const limiter = refusing(42);
+    const url = await startAuthServer({ login } as unknown as AccountService, limiter);
+
+    const response = await jsonPost(url, "/auth/login", credentials);
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("42");
+    expect(await response.json()).toEqual({ title: "Too many requests", status: 429, code: "rate_limited" });
+    expect(limiter.admit).toHaveBeenCalledWith("login", "khach@example.com", expect.any(String));
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  it("lets a successful login through under the limit with the unchanged session contract", async () => {
+    const account = {
+      id: "00000000-0000-4000-8000-000000000001",
+      actorType: "customer",
+      email: "khach@example.com",
+      displayName: "Khách",
+      roles: [] as string[],
+      siteIds: [] as string[],
+      emailVerifiedAt: new Date(),
+    };
+    const login = vi.fn(async () => ({ account, session: { rawToken: "raw-session-token" } }));
+    const withdraw = vi.fn(async () => undefined);
+    const url = await startAuthServer({ login } as unknown as AccountService, admitting(withdraw));
+
+    const response = await jsonPost(url, "/auth/login", credentials);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain("pharmacy_session=raw-session-token");
+    const body = (await response.json()) as { id: string; email: string; emailVerified: boolean };
+    expect(body).toMatchObject({ id: account.id, email: account.email, emailVerified: true });
+    expect(login).toHaveBeenCalledTimes(1);
+    // A successful sign-in gives its attempt back, so only failed sign-ins spend the budget.
+    expect(withdraw).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not withdraw a failed sign-in, so the failure keeps its place in the budget", async () => {
+    const withdraw = vi.fn(async () => undefined);
+    const login = vi.fn(async () => {
+      throw new Error("Invalid email or password");
+    });
+    const url = await startAuthServer({ login } as unknown as AccountService, admitting(withdraw));
+
+    const response = await jsonPost(url, "/auth/login", credentials);
+    expect(response.status).toBe(401);
+    expect(withdraw).not.toHaveBeenCalled();
+  });
+
+  it("still signs a shopper in when the counter cannot withdraw the admitted attempt", async () => {
+    const account = {
+      id: "00000000-0000-4000-8000-000000000001",
+      actorType: "customer",
+      email: "khach@example.com",
+      displayName: "Khách",
+      roles: [] as string[],
+      siteIds: [] as string[],
+      emailVerifiedAt: new Date(),
+    };
+    const login = vi.fn(async () => ({ account, session: { rawToken: "raw-session-token" } }));
+    const withdraw = vi.fn(async () => {
+      throw new AuthRateLimiterError("Auth rate limiter store is unavailable");
+    });
+    const url = await startAuthServer({ login } as unknown as AccountService, admitting(withdraw));
+
+    const response = await jsonPost(url, "/auth/login", credentials);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain("pharmacy_session=raw-session-token");
+  });
+
+  it("answers 503 without checking the password when the counter store is unavailable", async () => {
+    const login = vi.fn();
+    const limiter: AuthRateLimiter = {
+      admit: async () => {
+        throw new AuthRateLimiterError("Auth rate limiter store is unavailable");
+      },
+    };
+    const url = await startAuthServer({ login } as unknown as AccountService, limiter);
+
+    const response = await jsonPost(url, "/auth/login", credentials);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      title: "Rate limiter unavailable",
+      status: 503,
+      code: "rate_limit_unavailable",
+    });
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  it("limits the token routes by account id, not by any address", async () => {
+    const accountId = "00000000-0000-4000-8000-000000000009";
+    const resetPassword = vi.fn();
+    const verifyEmail = vi.fn();
+    const limiter = refusing(5);
+    const url = await startAuthServer({ resetPassword, verifyEmail } as unknown as AccountService, limiter);
+
+    const reset = await jsonPost(url, "/auth/reset-password", {
+      accountId,
+      token: "token-guess",
+      nextPassword: "mat-khau-moi-12-ky-tu",
+    });
+    const verify = await fetch(`${url}/auth/verify-email?accountId=${accountId}&token=token-guess`);
+
+    expect(reset.status).toBe(429);
+    expect(verify.status).toBe(429);
+    expect(limiter.admit).toHaveBeenNthCalledWith(1, "reset-password", accountId, expect.any(String));
+    expect(limiter.admit).toHaveBeenNthCalledWith(2, "verify-email", accountId, expect.any(String));
+    expect(resetPassword).not.toHaveBeenCalled();
+    expect(verifyEmail).not.toHaveBeenCalled();
   });
 });
 

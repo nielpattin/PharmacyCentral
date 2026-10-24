@@ -33,5 +33,11 @@ server {
     set $chatbot http://chatbot_dev;
     set $ops http://ops_dev;
 
+    # Any proxy_set_header here replaces nginx's defaults for every location below, so Host and Connection are restated.
+    # X-Forwarded-For is overwritten with the address this gateway saw, so a client cannot supply its own.
+    proxy_set_header Host $proxy_host;
+    proxy_set_header Connection close;
+    proxy_set_header X-Forwarded-For $remote_addr;
+
     include /etc/nginx/pharmacy-routes.conf;
 }

@@ -1,11 +1,14 @@
 import { createLogger } from "../logger.ts";
 
 import type { IdentityDatabase } from "../shared/infrastructure/database.ts";
+import { Redis } from "ioredis";
 import { DrizzleAccountRepository } from "../modules/accounts/infrastructure/drizzle-account-repository.ts";
 import { DrizzleSessionRepository } from "../modules/sessions/infrastructure/drizzle-session-repository.ts";
 import { AccountService } from "../modules/accounts/application/account-service.ts";
 import { VerificationTokenService } from "../modules/accounts/application/verification-token-service.ts";
 import { InMemoryAccountRepository } from "../modules/accounts/infrastructure/in-memory-account-repository.ts";
+import type { AuthRateLimiter } from "../modules/accounts/domain/auth-rate-limit.ts";
+import { RedisAuthRateLimiter } from "../modules/accounts/infrastructure/redis-auth-rate-limiter.ts";
 import {
   LoggingVerificationEmailSender,
   ResendVerificationEmailSender,
@@ -26,6 +29,31 @@ export const createGoogleSignIn = (): GoogleSignIn | undefined => {
     throw new Error("Missing required environment variable: GOOGLE_REDIRECT_URI. Please set it in your .env file.");
 
   return { client: new GoogleOidcClient({ clientId, clientSecret, redirectUri }), redirectUri };
+};
+
+/**
+ * The attempt limit for the credential routes, counted in Redis. The variables have no defaults: a missing or malformed
+ * value stops startup, so guessing is never left unlimited by accident.
+ */
+export const createAuthRateLimit = (): { limiter: AuthRateLimiter; redis: Redis } => {
+  const logger = createLogger({ name: "identity-service" });
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) throw new Error("Missing required environment variable: REDIS_URL. Please set it in your .env file.");
+  const maxAttempts = readPositiveIntegerEnv("AUTH_RATE_LIMIT_MAX_ATTEMPTS");
+  const windowSeconds = readPositiveIntegerEnv("AUTH_RATE_LIMIT_WINDOW_SECONDS");
+
+  const redis = new Redis(redisUrl, { commandTimeout: 500 });
+  redis.on("error", (error: unknown) => logger.warn({ error }, "Redis client error"));
+  return { limiter: new RedisAuthRateLimiter(redis, { maxAttempts, windowSeconds }), redis };
+};
+
+/** Reads a variable that must be a whole number of at least 1. A missing or malformed value stops startup. */
+export const readPositiveIntegerEnv = (name: string): number => {
+  const raw = process.env[name];
+  if (!raw) throw new Error(`Missing required environment variable: ${name}. Please set it in your .env file.`);
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer, got "${raw}".`);
+  return value;
 };
 
 export const createAccountService = (database?: IdentityDatabase): AccountService => {

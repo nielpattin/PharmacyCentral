@@ -32,6 +32,7 @@
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "express": "catalog:",
+    "ioredis": "catalog:",
     "nodemailer": "catalog:",
     "openid-client": "catalog:",
     "pg": "catalog:",

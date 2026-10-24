@@ -13,17 +13,26 @@ import {
   createCustomerRouter,
   createInternalCustomerRouter,
 } from "./modules/accounts/presentation/http/account-routes.ts";
-import { createAccountService, createGoogleSignIn } from "./bootstrap/dependencies.ts";
+import {
+  createAccountService,
+  createAuthRateLimit,
+  createGoogleSignIn,
+  readPositiveIntegerEnv,
+} from "./bootstrap/dependencies.ts";
 
 const serviceName = "identity-service";
 const logger = createLogger({ name: serviceName });
 const app = express();
+// The gateway in front forwards the client address in X-Forwarded-For. Only the hops this service sits behind are
+// trusted, so a client cannot write its own address into the rate limit key.
+app.set("trust proxy", readPositiveIntegerEnv("TRUST_PROXY_HOPS"));
 const portStr = process.env.PORT;
 if (!portStr) throw new Error("Missing required environment variable: PORT. Please set it in your .env file.");
 const port = Number.parseInt(portStr, 10);
 const database = createIdentityDatabase();
 const accountService = createAccountService(database);
 const googleSignIn = createGoogleSignIn();
+const authRateLimit = createAuthRateLimit();
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
@@ -38,7 +47,7 @@ app.get("/health/ready", (_request, response) =>
   response.status(database ? 200 : 503).json({ status: database ? "ok" : "degraded", service: serviceName }),
 );
 app.use(createCsrfMiddleware());
-app.use("/auth", createAccountRouter(accountService, googleSignIn));
+app.use("/auth", createAccountRouter(accountService, googleSignIn, authRateLimit.limiter));
 app.use("/admin", createAdminRouter(accountService));
 app.use("/customers", createCustomerRouter(accountService));
 app.use("/internal", createInternalCustomerRouter(accountService));
@@ -51,6 +60,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 const server = createServer(app);
 server.on("close", () => {
   void database?.pool.end();
+  authRateLimit.redis.disconnect();
 });
 const shutdown = (signal: string): void => {
   logger.info({ signal }, "shutting down");

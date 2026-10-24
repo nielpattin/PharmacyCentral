@@ -9,6 +9,12 @@ import {
 } from "../../../../contracts/identity.ts";
 
 import type { Account } from "../../domain/account.ts";
+import {
+  AuthRateLimiterError,
+  type AuthAdmission,
+  type AuthRateLimitAction,
+  type AuthRateLimiter,
+} from "../../domain/auth-rate-limit.ts";
 import type { AccountService } from "../../application/account-service.ts";
 import { signInternalIdentityContext } from "../../../../middleware/trusted-request.ts";
 import type { GoogleSignIn } from "../../infrastructure/security/google-oidc-client.ts";
@@ -40,7 +46,11 @@ const csrfCookieName = "pharmacy_csrf";
 /** The counter roles that may search the customer accounts a prescription can be linked to. */
 const customerLookupRoles = ["Pharmacist", "Platform Admin"];
 
-export const createAccountRouter = (service: AccountService, googleSignIn?: GoogleSignIn): Router => {
+export const createAccountRouter = (
+  service: AccountService,
+  googleSignIn: GoogleSignIn | undefined,
+  rateLimiter: AuthRateLimiter,
+): Router => {
   const router = Router();
 
   router.get("/setup-status", async (_request, response) => {
@@ -122,6 +132,7 @@ export const createAccountRouter = (service: AccountService, googleSignIn?: Goog
       response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
       return;
     }
+    if (!(await admitAuthAttempt(request, response, rateLimiter, "register", parsed.data.email))) return;
 
     try {
       const result = await service.registerCustomer(parsed.data);
@@ -137,6 +148,7 @@ export const createAccountRouter = (service: AccountService, googleSignIn?: Goog
       response.status(400).json({ title: "Invalid verification request", status: 400 });
       return;
     }
+    if (!(await admitAuthAttempt(request, response, rateLimiter, "verify-email", parsed.data.accountId))) return;
 
     try {
       const account = await service.verifyEmail(parsed.data.accountId, parsed.data.token);
@@ -198,9 +210,14 @@ export const createAccountRouter = (service: AccountService, googleSignIn?: Goog
       response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
       return;
     }
+    const attempt = await admitAuthAttempt(request, response, rateLimiter, "login", parsed.data.email);
+    if (!attempt) return;
 
     try {
       const result = await service.login(parsed.data);
+      // Only failed sign-ins spend the budget: the attempt admitted above is withdrawn once the password checks out.
+      // A counter that cannot withdraw leaves this success counted, and the sign-in itself must not fail over it.
+      await attempt.withdraw().catch(() => undefined);
       setSessionCookie(response, result.session.rawToken);
       response.json(toPublicAccount(result.account));
     } catch (error) {
@@ -255,6 +272,7 @@ export const createAccountRouter = (service: AccountService, googleSignIn?: Goog
       response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
       return;
     }
+    if (!(await admitAuthAttempt(request, response, rateLimiter, "request-password-reset", parsed.data.email))) return;
 
     await service.requestPasswordReset(parsed.data.email);
     response.status(202).json({ accepted: true });
@@ -266,6 +284,7 @@ export const createAccountRouter = (service: AccountService, googleSignIn?: Goog
       response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
       return;
     }
+    if (!(await admitAuthAttempt(request, response, rateLimiter, "reset-password", parsed.data.accountId))) return;
 
     try {
       await service.resetPassword(parsed.data.accountId, parsed.data.token, parsed.data.nextPassword);
@@ -470,6 +489,33 @@ const toPublicAccount = (account: Account) => ({
 });
 
 const getSessionToken = (request: Request): string | undefined => getCookie(request, sessionCookieName);
+
+/**
+ * Admits one attempt before any credential is checked, so a refused attempt answers the same whether or not the
+ * account exists. Returns the admitted attempt, or `undefined` once the response has been written.
+ */
+const admitAuthAttempt = async (
+  request: Request,
+  response: Response,
+  rateLimiter: AuthRateLimiter,
+  action: AuthRateLimitAction,
+  subject: string,
+): Promise<Extract<AuthAdmission, { admitted: true }> | undefined> => {
+  let admission: AuthAdmission;
+  try {
+    admission = await rateLimiter.admit(action, subject, request.ip ?? "unknown");
+  } catch (error) {
+    if (!(error instanceof AuthRateLimiterError)) throw error;
+    // A counter that cannot count cannot let the credential check run unmetered.
+    response.status(503).json({ title: "Rate limiter unavailable", status: 503, code: "rate_limit_unavailable" });
+    return undefined;
+  }
+  if (admission.admitted) return admission;
+
+  response.setHeader("Retry-After", String(admission.retryAfterSeconds));
+  response.status(429).json({ title: "Too many requests", status: 429, code: "rate_limited" });
+  return undefined;
+};
 
 const getCookie = (request: Request, name: string): string | undefined => {
   const cookieHeader = request.headers.cookie;
