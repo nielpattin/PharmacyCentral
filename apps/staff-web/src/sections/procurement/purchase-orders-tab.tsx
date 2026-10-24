@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { useConfirm } from "../../components/confirm.tsx";
 import { dataTableLabels } from "../../components/data-table-labels.ts";
+import { GatedButton } from "../../components/gated-button.tsx";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
@@ -11,6 +12,7 @@ import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffReferences } from "../../hooks/useStaffReferences.ts";
 import { translateText } from "../../i18n.ts";
+import { useCan } from "../../permissions/use-can.ts";
 import { formatDate, formatDateTime, idOf, text, writeJson, type JsonRecord } from "../../staff-api.ts";
 import { fillText, summarizeBulk, type BulkOutcome } from "./bulk-summary.ts";
 import { referenceName } from "./labels.ts";
@@ -32,6 +34,8 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
   const list = useListUrlState(LIST_DEFAULTS);
   const references = useStaffReferences();
   const actions = usePurchaseOrderActions();
+  const approveGate = useCan("purchaseOrder.approve");
+  const cancelGate = useCan("purchaseOrder.cancel");
   const confirm = useConfirm();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -142,12 +146,12 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
           <Button size="sm" variant="ghost" onClick={() => setOpenId(idOf(row))}>
             {translateText("View")}
           </Button>
-          {canApprovePurchaseOrder(row.status) ? (
+          {approveGate.allowed && canApprovePurchaseOrder(row.status) ? (
             <Button size="sm" onClick={() => void actions.approve(row)}>
               {translateText("Approve")}
             </Button>
           ) : null}
-          {canCancelPurchaseOrder(row.status) ? (
+          {cancelGate.allowed && canCancelPurchaseOrder(row.status) ? (
             <Button size="sm" variant="danger-soft" onClick={() => void actions.cancel(row)}>
               {translateText("Cancel")}
             </Button>
@@ -196,9 +200,9 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
           paging={{ hasMore: orders.hasMore, loadingMore: orders.isLoadingMore, onLoadMore: orders.loadMore }}
           selection={{ keys: selected, onChange: setSelected }}
           bulkActions={
-            <Button size="sm" disabled={bulkBusy} onClick={() => void approveSelected()}>
+            <GatedButton gate={approveGate} size="sm" disabled={bulkBusy} onClick={() => void approveSelected()}>
               {translateText("Approve selected")}
-            </Button>
+            </GatedButton>
           }
           exportCsv={{ filename: "purchase-orders.csv" }}
         />

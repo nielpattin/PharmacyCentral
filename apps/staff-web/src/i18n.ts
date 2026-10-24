@@ -8,6 +8,7 @@ import { salesLiterals } from "./i18n/sales.ts";
 import { governanceLiterals } from "./i18n/governance.ts";
 import { commonLiterals } from "./i18n/common.ts";
 import { adminLiterals } from "./i18n/admin.ts";
+import { permissionLiterals } from "./i18n/permissions.ts";
 
 export type Language = "en" | "vi";
 
@@ -2547,6 +2548,7 @@ const literalTranslations: Record<string, string> = {
   ...salesLiterals,
   ...governanceLiterals,
   ...adminLiterals,
+  ...permissionLiterals,
   ...commonLiterals,
 };
 

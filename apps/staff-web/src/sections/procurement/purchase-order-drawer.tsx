@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { Button, DataTable, Skeleton } from "@pharmacy/ui";
+import { DataTable, Skeleton } from "@pharmacy/ui";
 
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
 import { dataTableLabels } from "../../components/data-table-labels.ts";
+import { GatedButton } from "../../components/gated-button.tsx";
 import { useProductLookup, productLabel } from "../../hooks/useProductLookup.ts";
 import { useStaffReferences } from "../../hooks/useStaffReferences.ts";
 import { translateText } from "../../i18n.ts";
+import { useCan } from "../../permissions/use-can.ts";
 import { asRows, formatDate, formatQuantity, readOne, text, type JsonRecord } from "../../staff-api.ts";
 import { referenceName, shortId } from "./labels.ts";
 import {
@@ -32,6 +34,8 @@ export const PurchaseOrderDrawer = ({
 }): React.JSX.Element => {
   const references = useStaffReferences();
   const actions = usePurchaseOrderActions();
+  const approveGate = useCan("purchaseOrder.approve");
+  const cancelGate = useCan("purchaseOrder.cancel");
   const detail = useQuery({
     queryKey: [...PURCHASE_ORDERS_KEY, "detail", orderId],
     queryFn: () => readOne<JsonRecord>(`/api/procurement/purchase-orders/${encodeURIComponent(orderId ?? "")}`),
@@ -110,12 +114,14 @@ export const PurchaseOrderDrawer = ({
         order ? (
           <>
             {canApprovePurchaseOrder(order.status) ? (
-              <Button onClick={() => void actions.approve(order)}>{translateText("Approve")}</Button>
+              <GatedButton gate={approveGate} onClick={() => void actions.approve(order)}>
+                {translateText("Approve")}
+              </GatedButton>
             ) : null}
             {canCancelPurchaseOrder(order.status) ? (
-              <Button variant="danger-soft" onClick={() => void actions.cancel(order)}>
+              <GatedButton gate={cancelGate} variant="danger-soft" onClick={() => void actions.cancel(order)}>
                 {translateText("Cancel")}
-              </Button>
+              </GatedButton>
             ) : null}
           </>
         ) : undefined

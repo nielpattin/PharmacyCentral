@@ -5,6 +5,7 @@ import { catalogLiterals } from "./catalog.ts";
 import { commonLiterals } from "./common.ts";
 import { governanceLiterals } from "./governance.ts";
 import { inventoryLiterals } from "./inventory.ts";
+import { permissionLiterals } from "./permissions.ts";
 import { procurementLiterals } from "./procurement.ts";
 import { salesLiterals } from "./sales.ts";
 import { shellLiterals } from "./shell.ts";
@@ -20,6 +21,7 @@ const areas: Record<string, Record<string, string>> = {
   sales: salesLiterals,
   governance: governanceLiterals,
   common: commonLiterals,
+  permissions: permissionLiterals,
 };
 
 describe("literal translation areas", () => {

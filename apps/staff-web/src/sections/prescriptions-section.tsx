@@ -1,8 +1,8 @@
 import { Alert } from "@pharmacy/ui";
 
 import { SubTabs } from "../components/forms.tsx";
-import { useSession } from "../auth.ts";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
+import { useCan } from "../permissions/use-can.ts";
 import { translateText } from "../i18n.ts";
 import { ConsultationsTab } from "./prescriptions/consultations-tab.tsx";
 import { CounterTab } from "./prescriptions/counter-tab.tsx";
@@ -27,8 +27,7 @@ export const PrescriptionsSection = ({
 }): React.JSX.Element => {
   // Dispensing, taking payment and answering a consultation are a licensed pharmacist's work. A Pharmacy Manager
   // supervises the same records read-only, which is what the edge policy grants that role on these routes.
-  const roles = useSession().roles ?? [];
-  const canOperateCounter = roles.includes("Pharmacist") || roles.includes("Platform Admin");
+  const canOperateCounter = useCan("prescription.dispense").allowed;
   const { values, setValues } = useListUrlState({ tab: initialTab, prescription: "" } as const);
   const visibleTabs = canOperateCounter ? ALL_TABS : VIEW_ONLY_TABS;
   const tab: PrescriptionTab = (ALL_TABS as readonly string[]).includes(values.tab)

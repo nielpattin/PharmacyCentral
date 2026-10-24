@@ -13,11 +13,11 @@ import { useRef } from "react";
 import { useConfirm, usePrompt } from "../../components/confirm.tsx";
 import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
-import { useSession } from "../../auth.ts";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useRecordLabels } from "../../hooks/useRecordLabels.ts";
+import { useCan } from "../../permissions/use-can.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { translateText } from "../../i18n.ts";
@@ -41,14 +41,13 @@ const LINK_CLASS =
   "inline-flex h-8 items-center rounded-md px-3 text-xs font-medium text-primary outline-none hover:bg-surface-soft focus-visible:ring-2 focus-visible:ring-primary/50";
 
 /**
- * Payment invoices, newest first. Staff who may operate the counter (Pharmacist, Platform Admin) confirm cash and refund
- * here. Pharmacy Managers read the same list without those actions, as the payment routes allow.
+ * Payment invoices, newest first. A Pharmacist (or Platform Admin) confirms cash and refunds here. A Pharmacy Manager
+ * reads the same list without those actions, as the payment routes allow.
  */
 export const InvoicesTab = (): React.JSX.Element => {
-  // Confirming cash and refunding are a licensed pharmacist's work; a Pharmacy Manager reads the same invoices
-  // without the write actions, which is what the edge policy grants that role on the payment routes.
-  const roles = useSession().roles ?? [];
-  const canOperateCounter = roles.includes("Pharmacist") || roles.includes("Platform Admin");
+  const confirmGate = useCan("payment.confirmCash");
+  const refundGate = useCan("payment.refund");
+  const customerGate = useCan("customer.lookup");
   const list = useListUrlState(LIST_DEFAULTS);
   const run = useStaffAction();
   const confirm = useConfirm();
@@ -77,7 +76,7 @@ export const InvoicesTab = (): React.JSX.Element => {
   // Customer names come from identity-service, which answers the counter roles only; other roles see the short id.
   const customers = useRecordLabels(
     "/api/customers",
-    canOperateCounter ? invoices.rows.map((row) => text(row.customerId, "")) : [],
+    customerGate.allowed ? invoices.rows.map((row) => text(row.customerId, "")) : [],
     customerLabel,
   );
 
@@ -164,12 +163,12 @@ export const InvoicesTab = (): React.JSX.Element => {
           >
             {translateText("Reconciliation")}
           </a>
-          {canOperateCounter && text(row.status, "") === "Pending" ? (
+          {confirmGate.allowed && text(row.status, "") === "Pending" ? (
             <Button size="sm" onClick={() => void confirmCash(row)}>
               {translateText("Confirm cash")}
             </Button>
           ) : null}
-          {canOperateCounter && text(row.status, "") === "Paid" ? (
+          {refundGate.allowed && text(row.status, "") === "Paid" ? (
             <Button size="sm" variant="danger-soft" onClick={() => void refund(row)}>
               {translateText("Refund")}
             </Button>

@@ -7,11 +7,13 @@ import { useConfirm } from "../components/confirm.tsx";
 import { DataTable, type Column } from "../components/data-table.tsx";
 import { EntityDrawer } from "../components/entity-drawer.tsx";
 import { SubTabs } from "../components/forms.tsx";
+import { GatedButton } from "../components/gated-button.tsx";
 import { PageActions } from "../components/page-actions.tsx";
 import { useHotkey } from "../hooks/useHotkey.ts";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { useUnsavedChangesGuard } from "../hooks/useUnsavedChangesGuard.ts";
 import { translateText } from "../i18n.ts";
+import { can } from "../permissions/staff-permissions.ts";
 import { parseSearchSynonymTerms, searchSynonymTermsProblem } from "../search-synonym-terms.ts";
 import {
   approveSearchSynonymGroup,
@@ -186,7 +188,9 @@ export const SearchSynonymsSection = (): React.JSX.Element => {
   const queryClient = useQueryClient();
   const toast = useToast();
   const confirm = useConfirm();
-  const userId = useSession().userId;
+  const session = useSession();
+  const writeGate = can("synonym.write", session);
+  const approveRoleAllowed = can("synonym.approve", session).allowed;
   const { values, setValues } = useListUrlState(LIST_DEFAULTS);
   const tab = (TABS as readonly string[]).includes(values.tab) ? values.tab : LIST_DEFAULTS.tab;
   const groupsQuery = useQuery({ queryKey: searchSynonymsQueryKey, queryFn: listSearchSynonymGroups });
@@ -203,7 +207,7 @@ export const SearchSynonymsSection = (): React.JSX.Element => {
   });
   const busy = mutation.isPending;
 
-  useHotkey("n", () => setDrawer({}), { label: "Create new", when: drawer === undefined });
+  useHotkey("n", () => setDrawer({}), { label: "Create new", when: drawer === undefined && writeGate.allowed });
 
   const approve = async (group: SearchSynonymGroup): Promise<void> => {
     const accepted = await confirm({
@@ -267,25 +271,28 @@ export const SearchSynonymsSection = (): React.JSX.Element => {
       render: (row) => {
         const group = groupById.get(text(row.id, ""));
         if (!group) return null;
-        const ownChange = group.submittedBy === userId;
         return (
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <Button variant="ghost" size="sm" disabled={busy} onClick={() => setDrawer({ group })}>
-              {translateText("Edit")}
-            </Button>
-            {group.status === "pending" ? (
-              <Button
+            {writeGate.allowed ? (
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => setDrawer({ group })}>
+                {translateText("Edit")}
+              </Button>
+            ) : null}
+            {group.status === "pending" && approveRoleAllowed ? (
+              <GatedButton
+                gate={can("synonym.approve", session, { ownerId: group.submittedBy })}
                 size="sm"
-                disabled={busy || ownChange}
-                title={ownChange ? translateText("You cannot approve your own change") : undefined}
+                disabled={busy}
                 onClick={() => void approve(group)}
               >
                 {translateText("Approve")}
+              </GatedButton>
+            ) : null}
+            {writeGate.allowed ? (
+              <Button variant="danger-soft" size="sm" disabled={busy} onClick={() => void remove(group)}>
+                {translateText("Delete")}
               </Button>
             ) : null}
-            <Button variant="danger-soft" size="sm" disabled={busy} onClick={() => void remove(group)}>
-              {translateText("Delete")}
-            </Button>
           </div>
         );
       },
@@ -295,9 +302,9 @@ export const SearchSynonymsSection = (): React.JSX.Element => {
   return (
     <>
       <PageActions>
-        <Button size="sm" onClick={() => setDrawer({})}>
+        <GatedButton gate={writeGate} size="sm" onClick={() => setDrawer({})}>
           {translateText("New group")}
-        </Button>
+        </GatedButton>
       </PageActions>
       <Alert variant="info" className="mb-4">
         {translateText(

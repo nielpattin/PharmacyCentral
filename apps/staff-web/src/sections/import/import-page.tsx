@@ -2,13 +2,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Input, StatTile } from "@pharmacy/ui";
 import { useState } from "react";
 
+import { useSession } from "../../auth.ts";
 import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
+import { GatedButton } from "../../components/gated-button.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { referenceLabel, useStaffReferences, type StaffReferences } from "../../hooks/useStaffReferences.ts";
 import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard.ts";
 import { translateText, translateValidationMessage } from "../../i18n.ts";
 import { csvRows, csvTemplate, templateFileName, type CsvRow, type ImportDataset } from "../../import-datasets.ts";
+import { can } from "../../permissions/staff-permissions.ts";
 import {
   ApiProblemError,
   formatDate,
@@ -119,6 +122,10 @@ export const ImportPage = ({ dataset }: { dataset: ImportDataset }): React.JSX.E
   const queryClient = useQueryClient();
   const references = useStaffReferences();
   const confirm = useConfirm();
+  const session = useSession();
+  // Opening balances are open to any signed-in staff; products, sites, storage locations and suppliers are Pharmacy
+  // Manager writes on the edge (POST /api/products/imports), so the other roles see the file but not the import.
+  const importGate = can(dataset.id === "openingBalances" ? "stock.import" : "catalog.import", session);
 
   useUnsavedChangesGuard(selected !== undefined && !busy, "The selected file has not been imported.");
   useHotkey(
@@ -127,7 +134,7 @@ export const ImportPage = ({ dataset }: { dataset: ImportDataset }): React.JSX.E
       event.preventDefault();
       void submit();
     },
-    { label: "Import now", when: selected !== undefined && !busy },
+    { label: "Import now", when: selected !== undefined && !busy && importGate.allowed },
   );
 
   const readBackImported = async (keys: string[]): Promise<void> => {
@@ -276,9 +283,9 @@ export const ImportPage = ({ dataset }: { dataset: ImportDataset }): React.JSX.E
             <span className="text-sm text-ink">
               {translateText("Ready to import")}: <span className="font-medium">{selected.file.name}</span>
             </span>
-            <Button disabled={busy} onClick={() => void submit()}>
+            <GatedButton gate={importGate} disabled={busy} onClick={() => void submit()}>
               {busy ? translateText("Importing...") : translateText("Import now")}
-            </Button>
+            </GatedButton>
             <Button variant="ghost" size="sm" disabled={busy} onClick={() => setSelected(undefined)}>
               {translateText("Remove")}
             </Button>
