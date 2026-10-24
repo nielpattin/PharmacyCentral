@@ -1,9 +1,10 @@
 import { Router } from "express";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { z } from "zod";
 
 import { productMatchRequestSchema, productSearchQuerySchema } from "../contracts/catalog.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
+import { decodePageCursor, encodePageCursor } from "../shared/pagination/page-cursor.ts";
 
 import { ProductMediaStore } from "./catalog/product-media-store.ts";
 import { rankCandidates } from "./catalog/product-matching.ts";
@@ -111,8 +112,31 @@ const priceInputSchema = z.object({
 const priceQuerySchema = z.object({
   productId: z.string().uuid().optional(),
   status: z.string().trim().max(20).optional(),
+  /** Matches the SKU or the name of the product the price belongs to, case-insensitively. */
+  q: z.string().trim().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
+  cursor: z.string().optional(),
 });
+/** Matches the code or the name of the list's own rows, case-insensitively. */
+const searchQuerySchema = z.object({ q: z.string().trim().max(200).optional() });
+const cursorQuerySchema = z.object({ cursor: z.string().optional() });
+const priceCountQuerySchema = z.object({
+  productId: z.string().uuid().optional(),
+  status: z.string().trim().max(20).optional(),
+  q: z.string().trim().max(200).optional(),
+});
+const productCountQuerySchema = z.object({
+  search: z.string().trim().max(200).optional(),
+  category: z.string().trim().max(100).optional(),
+  prescriptionRequired: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
+});
+const basePricesQuerySchema = z.object({ day: z.iso.date().optional() });
+/** The sort values the keyset lists were ordered by: a price's effective date, a store's code. */
+const priceCursorSortValue = z.iso.date();
+const storeCursorSortValue = z.string().min(1).max(50);
 const activePriceQuerySchema = z.object({
   productId: z.string().uuid(),
   productUnitId: z.string().uuid(),
@@ -136,9 +160,11 @@ export const createCatalogRouter = (
     options.onProductsChanged?.();
   };
 
-  router.get("/sites", async (_request, response) => {
+  router.get("/sites", async (request, response) => {
     if (!repository) return databaseUnavailable(response);
-    response.json(await repository.listSites());
+    const parsed = searchQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalidRequest(response);
+    response.json(await repository.listSites(parsed.data.q));
   });
 
   router.get("/sites/:id", async (request, response) => {
@@ -185,7 +211,9 @@ export const createCatalogRouter = (
 
   router.get("/storage-locations", async (request, response) => {
     if (!repository) return databaseUnavailable(response);
-    response.json(await repository.listStorageLocations(publicListSiteIds(request)));
+    const parsed = searchQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalidRequest(response);
+    response.json(await repository.listStorageLocations(publicListSiteIds(request), parsed.data.q));
   });
 
   router.get("/storage-locations/:id", async (request, response) => {
@@ -230,9 +258,11 @@ export const createCatalogRouter = (
     response.status(204).end();
   });
 
-  router.get("/suppliers", async (_request, response) => {
+  router.get("/suppliers", async (request, response) => {
     if (!repository) return databaseUnavailable(response);
-    response.json(await repository.listSuppliers());
+    const parsed = searchQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalidRequest(response);
+    response.json(await repository.listSuppliers(parsed.data.q));
   });
 
   router.get("/suppliers/:id", async (request, response) => {
@@ -308,6 +338,14 @@ export const createCatalogRouter = (
     // The body stays a plain array; the cursor of the next page travels in a header.
     if (answer.nextCursor !== undefined) response.set("X-Next-Cursor", answer.nextCursor);
     response.type("application/json").send(answer.body);
+  });
+
+  // Registered before `/products/:id`, which would otherwise read "count" as a product id.
+  router.get("/products/count", async (request, response) => {
+    if (!repository) return databaseUnavailable(response);
+    const parsed = productCountQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalidRequest(response);
+    response.json({ count: await repository.countProducts(parsed.data) });
   });
 
   // Answers one entry per requested item, in request order, so a caller can pair each prescription line with its
@@ -479,7 +517,32 @@ export const createCatalogRouter = (
     if (!repository) return databaseUnavailable(response);
     const parsed = priceQuerySchema.safeParse(request.query);
     if (!parsed.success) return invalidRequest(response);
-    response.json(await repository.listPrices(parsed.data));
+    const { cursor, limit, ...filters } = parsed.data;
+    const after = cursor === undefined ? undefined : decodePageCursor(cursor, priceCursorSortValue);
+    if (cursor !== undefined && after === undefined) return invalidCursor(response);
+    const page = await repository.listPrices({ ...filters, after, limit });
+    const last = page.rows.at(-1);
+    if (page.hasMore && last) {
+      response.set("X-Next-Cursor", encodePageCursor({ sortValue: last.effectiveFrom, id: last.id }));
+    }
+    response.json(page.rows);
+  });
+
+  // Registered before the price actions, so the literal paths are never read as a price id.
+  router.get("/pricing/prices/count", async (request, response) => {
+    if (!repository) return databaseUnavailable(response);
+    const parsed = priceCountQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalidRequest(response);
+    response.json({ count: await repository.countPrices(parsed.data) });
+  });
+
+  // One row per active product with its base-unit price on `day` (today UTC by default), null where none qualifies.
+  router.get("/pricing/base-prices", async (request, response) => {
+    if (!repository) return databaseUnavailable(response);
+    const parsed = basePricesQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalidRequest(response);
+    const day = parsed.data.day ?? new Date().toISOString().slice(0, 10);
+    response.json(await repository.listBasePricesOn(day));
   });
 
   router.get("/pricing/active", async (request, response) => {
@@ -542,7 +605,15 @@ export const createCatalogRouter = (
   router.get("/stores", async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const limit = Number.parseInt(typeof request.query.limit === "string" ? request.query.limit : "50", 10);
-    response.json(await repository.listActiveStores(Number.isFinite(limit) ? limit : 50));
+    const parsed = cursorQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalidCursor(response);
+    const after =
+      parsed.data.cursor === undefined ? undefined : decodePageCursor(parsed.data.cursor, storeCursorSortValue);
+    if (parsed.data.cursor !== undefined && after === undefined) return invalidCursor(response);
+    const page = await repository.listActiveStores(Number.isFinite(limit) ? limit : 50, after);
+    const last = page.rows.at(-1);
+    if (page.hasMore && last) response.set("X-Next-Cursor", encodePageCursor({ sortValue: last.code, id: last.id }));
+    response.json(page.rows);
   });
 
   router.get("/stores/nearest", async (request, response) => {
@@ -582,6 +653,8 @@ const withProductUnits = async (
 ) => ({ ...product, units: await repository.listProductUnits(product.id) });
 const invalidRequest = (response: import("express").Response) =>
   response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+const invalidCursor = (response: Response) =>
+  response.status(400).json({ title: "Invalid cursor", status: 400, code: "invalid_cursor" });
 const writeError = (response: import("express").Response, error: unknown) =>
   response
     .status(409)

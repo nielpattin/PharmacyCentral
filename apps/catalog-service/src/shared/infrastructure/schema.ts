@@ -149,6 +149,7 @@ export const productPrices = pgTable(
       table.status,
       table.effectiveFrom,
     ),
+    index("product_prices_effective_from_idx").on(table.effectiveFrom.desc(), table.id.desc()),
     check("product_prices_global_scope_check", sql`${table.siteId} IS NULL`),
   ],
 );

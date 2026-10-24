@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 import {
   INGREDIENT_SIMILARITY_FLOOR,
@@ -18,11 +19,63 @@ import {
   storageLocations,
   suppliers,
 } from "../../../shared/infrastructure/schema.ts";
+import { takeKeysetPage, type KeysetPage, type KeysetPosition } from "../../../shared/pagination/page-cursor.ts";
 
 export type Coordinates = { latitude: number; longitude: number };
 
 /** Escape LIKE wildcards so "%" and "_" in a shopper's query match literally. */
 const escapeLike = (value: string): string => value.replace(/[\\%_]/g, (character) => `\\${character}`);
+
+/** Case-insensitive match of either column, so a search finds a row by its code or its name. Undefined without text. */
+const matchesCodeOrName = (code: AnyPgColumn, name: AnyPgColumn, search: string | undefined): SQL | undefined => {
+  if (!search) return undefined;
+  const pattern = `%${escapeLike(search)}%`;
+  return or(ilike(code, pattern), ilike(name, pattern));
+};
+
+export type ProductListFilters = {
+  search?: string | undefined;
+  category?: string | undefined;
+  prescriptionRequired?: boolean | undefined;
+};
+
+export type PriceListFilters = {
+  productId?: string | undefined;
+  status?: string | undefined;
+  /** Matches the SKU or the name of the product the price belongs to. */
+  q?: string | undefined;
+};
+
+/** The active products the product list shows for these filters. The list and its count share them. */
+const productListFilters = (query: ProductListFilters): SQL[] => {
+  const pattern = query.search ? `%${escapeLike(query.search)}%` : undefined;
+  return [
+    eq(products.isActive, true),
+    pattern
+      ? or(ilike(products.name, pattern), ilike(products.sku, pattern), ilike(products.barcode, pattern))
+      : undefined,
+    query.category ? eq(products.category, query.category) : undefined,
+    query.prescriptionRequired === undefined
+      ? undefined
+      : eq(products.prescriptionRequired, query.prescriptionRequired),
+  ].filter((filter): filter is NonNullable<typeof filter> => filter !== undefined);
+};
+
+/** The price filters the price list and its count share. */
+const priceFilters = (input: PriceListFilters): SQL[] => {
+  const pattern = input.q ? `%${escapeLike(input.q)}%` : undefined;
+  return [
+    input.productId ? eq(productPrices.productId, input.productId) : undefined,
+    input.status ? eq(productPrices.status, input.status) : undefined,
+    pattern
+      ? sql`EXISTS (
+          SELECT 1 FROM ${products}
+          WHERE ${products.id} = ${productPrices.productId}
+            AND (${ilike(products.sku, pattern)} OR ${ilike(products.name, pattern)})
+        )`
+      : undefined,
+  ].filter((filter): filter is NonNullable<typeof filter> => filter !== undefined);
+};
 
 export type StoreSummary = {
   id: string;
@@ -35,15 +88,26 @@ export type StoreSummary = {
 export class DrizzleStoreRepository {
   public constructor(private readonly database: CatalogDatabase) {}
 
-  public async listActiveStores(limit = 50): Promise<StoreSummary[]> {
+  /** One page of the customer-facing stores in code order, continuing after `after` when given. */
+  public async listActiveStores(limit = 50, after?: KeysetPosition | undefined): Promise<KeysetPage<StoreSummary>> {
+    const bounded = Math.min(Math.max(limit, 1), 100);
     const rows = await this.database.db
       .select({ id: sites.id, code: sites.code, name: sites.name, address: sites.address, location: sites.location })
       .from(sites)
-      .where(and(eq(sites.isActive, true), eq(sites.isCustomerFacing, true)))
-      .orderBy(asc(sites.code))
-      .limit(Math.min(Math.max(limit, 1), 100));
+      .where(
+        and(
+          eq(sites.isActive, true),
+          eq(sites.isCustomerFacing, true),
+          after ? sql`(${sites.code}, ${sites.id}) > (${after.sortValue}, ${after.id}::uuid)` : undefined,
+        ),
+      )
+      .orderBy(asc(sites.code), asc(sites.id))
+      .limit(bounded + 1);
 
-    return rows.map((row) => this.toSummary(row));
+    return takeKeysetPage(
+      rows.map((row) => this.toSummary(row)),
+      bounded,
+    );
   }
 
   public async findNearestStores(
@@ -77,24 +141,22 @@ export class DrizzleStoreRepository {
   }): Promise<Array<typeof products.$inferSelect>> {
     // 101 is the largest page plus one row, which lets a caller tell whether another page follows.
     const boundedLimit = Math.min(Math.max(query.limit ?? 20, 1), 101);
-    const pattern = query.search ? `%${escapeLike(query.search)}%` : undefined;
-    const filters = [
-      eq(products.isActive, true),
-      pattern
-        ? or(ilike(products.name, pattern), ilike(products.sku, pattern), ilike(products.barcode, pattern))
-        : undefined,
-      query.category ? eq(products.category, query.category) : undefined,
-      query.prescriptionRequired === undefined
-        ? undefined
-        : eq(products.prescriptionRequired, query.prescriptionRequired),
-    ].filter((filter): filter is NonNullable<typeof filter> => filter !== undefined);
     return this.database.db
       .select()
       .from(products)
-      .where(and(...filters))
+      .where(and(...productListFilters(query)))
       .orderBy(asc(products.sku))
       .limit(boundedLimit)
       .offset(Math.max(query.offset ?? 0, 0));
+  }
+
+  /** How many active products the product list shows for these filters, paging aside. */
+  public async countProducts(query: ProductListFilters): Promise<number> {
+    const [row] = await this.database.db
+      .select({ count: count() })
+      .from(products)
+      .where(and(...productListFilters(query)));
+    return Number(row?.count ?? 0);
   }
 
   public async listActiveProductsByIds(ids: string[]): Promise<Array<typeof products.$inferSelect>> {
@@ -281,8 +343,12 @@ export class DrizzleStoreRepository {
       .where(filters.length ? and(...filters) : undefined);
   }
 
-  public async listSites(): Promise<Array<typeof sites.$inferSelect>> {
-    return this.database.db.select().from(sites).orderBy(asc(sites.code));
+  public async listSites(search?: string | undefined): Promise<Array<typeof sites.$inferSelect>> {
+    return this.database.db
+      .select()
+      .from(sites)
+      .where(matchesCodeOrName(sites.code, sites.name, search))
+      .orderBy(asc(sites.code));
   }
 
   public async getSite(id: string): Promise<typeof sites.$inferSelect | undefined> {
@@ -368,11 +434,19 @@ export class DrizzleStoreRepository {
     await this.database.db.delete(sites).where(eq(sites.id, id));
   }
 
-  public async listStorageLocations(siteIds?: string[]): Promise<Array<typeof storageLocations.$inferSelect>> {
+  public async listStorageLocations(
+    siteIds?: string[],
+    search?: string | undefined,
+  ): Promise<Array<typeof storageLocations.$inferSelect>> {
     return this.database.db
       .select()
       .from(storageLocations)
-      .where(siteIds ? inArray(storageLocations.siteId, siteIds) : undefined)
+      .where(
+        and(
+          siteIds ? inArray(storageLocations.siteId, siteIds) : undefined,
+          matchesCodeOrName(storageLocations.code, storageLocations.name, search),
+        ),
+      )
       .orderBy(asc(storageLocations.code));
   }
 
@@ -436,8 +510,12 @@ export class DrizzleStoreRepository {
     await this.database.db.delete(storageLocations).where(eq(storageLocations.id, id));
   }
 
-  public async listSuppliers(): Promise<Array<typeof suppliers.$inferSelect>> {
-    return this.database.db.select().from(suppliers).orderBy(asc(suppliers.code));
+  public async listSuppliers(search?: string | undefined): Promise<Array<typeof suppliers.$inferSelect>> {
+    return this.database.db
+      .select()
+      .from(suppliers)
+      .where(matchesCodeOrName(suppliers.code, suppliers.name, search))
+      .orderBy(asc(suppliers.code));
   }
 
   public async getSupplier(id: string): Promise<typeof suppliers.$inferSelect | undefined> {
@@ -600,20 +678,86 @@ export class DrizzleStoreRepository {
     await this.database.db.delete(products).where(eq(products.id, id));
   }
 
-  public async listPrices(input: {
-    productId?: string | undefined;
-    status?: string | undefined;
-    limit?: number | undefined;
-  }): Promise<Array<typeof productPrices.$inferSelect>> {
-    const filters = [
-      input.productId ? eq(productPrices.productId, input.productId) : undefined,
-      input.status ? eq(productPrices.status, input.status) : undefined,
-    ].filter((filter): filter is NonNullable<typeof filter> => filter !== undefined);
-    const query = this.database.db.select().from(productPrices);
-    return query
-      .where(filters.length > 0 ? and(...filters) : undefined)
-      .orderBy(asc(productPrices.effectiveFrom))
-      .limit(Math.min(Math.max(input.limit ?? 100, 1), 500));
+  /**
+   * One page of prices, newest effective date first, ties broken by id. `after` continues where the previous page
+   * stopped, and the page is fetched one row over so the caller learns whether another page follows.
+   */
+  public async listPrices(
+    input: PriceListFilters & { after?: KeysetPosition | undefined; limit?: number | undefined },
+  ): Promise<KeysetPage<typeof productPrices.$inferSelect>> {
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
+    const rows = await this.database.db
+      .select()
+      .from(productPrices)
+      .where(
+        and(
+          ...priceFilters(input),
+          input.after
+            ? sql`(${productPrices.effectiveFrom}, ${productPrices.id}) < (${input.after.sortValue}::date, ${input.after.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(desc(productPrices.effectiveFrom), desc(productPrices.id))
+      .limit(limit + 1);
+    return takeKeysetPage(rows, limit);
+  }
+
+  public async countPrices(input: PriceListFilters): Promise<number> {
+    const [row] = await this.database.db
+      .select({ count: count() })
+      .from(productPrices)
+      .where(and(...priceFilters(input)));
+    return Number(row?.count ?? 0);
+  }
+
+  /**
+   * One row per active product with the price of one base unit effective on `day`, or null when no published price
+   * qualifies. A price on a larger sale unit is divided by that unit's conversion factor. Among the qualifying prices
+   * the base unit's own price wins over a larger unit's, and then the latest effective date wins. Only site-less prices
+   * count, and the query is bounded by the product count, not by the price history.
+   */
+  public async listBasePricesOn(
+    day: string,
+  ): Promise<Array<{ productId: string; productName: string; unitPrice: number | null }>> {
+    const qualifying = this.database.db
+      .selectDistinctOn([productUnits.productId], {
+        productId: productUnits.productId,
+        unitPrice: sql<string>`(${productPrices.unitPrice} / ${productUnits.conversionFactorToBaseUnit})`.as(
+          "unit_price",
+        ),
+      })
+      .from(productPrices)
+      .innerJoin(
+        productUnits,
+        and(eq(productUnits.id, productPrices.productUnitId), eq(productUnits.productId, productPrices.productId)),
+      )
+      .where(
+        and(
+          eq(productPrices.status, "Published"),
+          isNull(productPrices.siteId),
+          lte(productPrices.effectiveFrom, day),
+          or(isNull(productPrices.effectiveTo), gte(productPrices.effectiveTo, day)),
+          sql`${productUnits.conversionFactorToBaseUnit} > 0`,
+        ),
+      )
+      .orderBy(
+        asc(productUnits.productId),
+        desc(productUnits.isBaseUnit),
+        desc(productPrices.effectiveFrom),
+        desc(productPrices.id),
+      )
+      .as("qualifying_prices");
+    const rows = await this.database.db
+      .select({ productId: products.id, productName: products.name, unitPrice: qualifying.unitPrice })
+      .from(products)
+      .leftJoin(qualifying, eq(qualifying.productId, products.id))
+      .where(eq(products.isActive, true))
+      .orderBy(asc(products.sku));
+    return rows.map((row) => ({
+      productId: row.productId,
+      productName: row.productName,
+      unitPrice: row.unitPrice === null ? null : Number(row.unitPrice),
+    }));
   }
 
   public async createPrice(input: typeof productPrices.$inferInsert): Promise<typeof productPrices.$inferSelect> {

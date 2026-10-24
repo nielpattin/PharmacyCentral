@@ -1,0 +1,1 @@
+CREATE INDEX "product_prices_effective_from_idx" ON "product_prices" USING btree ("effective_from" DESC NULLS LAST,"id" DESC NULLS LAST);

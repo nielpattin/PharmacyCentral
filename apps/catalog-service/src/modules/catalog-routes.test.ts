@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProductMediaStore } from "./catalog/product-media-store.ts";
 import { createCatalogRouter } from "./catalog-routes.ts";
 import { DrizzleStoreRepository } from "./stores/infrastructure/drizzle-store-repository.ts";
+import { encodePageCursor } from "../shared/pagination/page-cursor.ts";
 
 const ids = {
   site: "00000000-0000-4000-8000-000000000001",
@@ -238,5 +239,188 @@ describe("catalog API", () => {
     expect(second.headers.get("x-next-cursor")).toBeNull();
     expect(invalid.status).toBe(400);
     expect(searchProducts).toHaveBeenCalledTimes(2);
+  });
+
+  it("pages the price list newest first, continuing each page after the last row it returned", async () => {
+    const priceIds = {
+      newest: "00000000-0000-4000-8000-0000000000a1",
+      middle: "00000000-0000-4000-8000-0000000000a2",
+      oldest: "00000000-0000-4000-8000-0000000000a3",
+    };
+    const listPrices = vi
+      .fn<(input: { after?: { sortValue: string; id: string } }) => Promise<unknown>>()
+      .mockResolvedValueOnce({
+        rows: [
+          { id: priceIds.newest, effectiveFrom: "2026-03-01" },
+          { id: priceIds.middle, effectiveFrom: "2026-03-01" },
+        ],
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: priceIds.oldest, effectiveFrom: "2026-01-01" }], hasMore: false });
+    const repository = { listPrices } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const first = await fetch(`${testServer.url}/pricing/prices?limit=2`);
+    const cursor = first.headers.get("x-next-cursor");
+    const second = await fetch(`${testServer.url}/pricing/prices?limit=2&cursor=${cursor}`);
+
+    expect(cursor).not.toBeNull();
+    expect(listPrices.mock.calls[0]?.[0]?.after).toBeUndefined();
+    expect(listPrices.mock.calls[1]?.[0]?.after).toEqual({ sortValue: "2026-03-01", id: priceIds.middle });
+    expect(((await first.json()) as Array<{ id: string }>).map((price) => price.id)).toEqual([
+      priceIds.newest,
+      priceIds.middle,
+    ]);
+    expect(((await second.json()) as Array<{ id: string }>).map((price) => price.id)).toEqual([priceIds.oldest]);
+    expect(second.headers.get("x-next-cursor")).toBeNull();
+  });
+
+  it("answers invalid_cursor for a cursor the price list did not issue, before reading any price", async () => {
+    const listPrices = vi.fn<(input: Record<string, unknown>) => Promise<unknown>>();
+    const repository = { listPrices } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const malformed = await fetch(`${testServer.url}/pricing/prices?cursor=not-a-cursor`);
+    const wrongSortValue = await fetch(
+      `${testServer.url}/pricing/prices?cursor=${encodePageCursor({ sortValue: "yesterday", id: ids.product })}`,
+    );
+
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual(expect.objectContaining({ code: "invalid_cursor" }));
+    expect(wrongSortValue.status).toBe(400);
+    expect(listPrices).not.toHaveBeenCalled();
+  });
+
+  it("passes the product, status, text and limit of the price list to the repository, with a default limit of 100", async () => {
+    const listPrices = vi
+      .fn<(input: Record<string, unknown>) => Promise<unknown>>()
+      .mockResolvedValue({ rows: [], hasMore: false });
+    const repository = { listPrices } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    await fetch(`${testServer.url}/pricing/prices?productId=${ids.product}&status=Published&q=para&limit=500`);
+    await fetch(`${testServer.url}/pricing/prices`);
+
+    expect(listPrices).toHaveBeenNthCalledWith(1, {
+      productId: ids.product,
+      status: "Published",
+      q: "para",
+      after: undefined,
+      limit: 500,
+    });
+    expect(listPrices).toHaveBeenNthCalledWith(2, { after: undefined, limit: 100 });
+  });
+
+  it("counts products and prices, and never reads the count paths as a product id", async () => {
+    const countProducts = vi.fn<(input: Record<string, unknown>) => Promise<number>>().mockResolvedValue(7);
+    const countPrices = vi.fn<(input: Record<string, unknown>) => Promise<number>>().mockResolvedValue(3);
+    const getProduct = vi.fn<(id: string) => Promise<unknown>>();
+    const repository = {
+      countProducts,
+      countPrices,
+      getProduct,
+    } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const products = await fetch(`${testServer.url}/products/count?search=para&prescriptionRequired=true`);
+    const prices = await fetch(`${testServer.url}/pricing/prices/count?status=Published&q=para`);
+
+    expect(await products.json()).toEqual({ count: 7 });
+    expect(await prices.json()).toEqual({ count: 3 });
+    expect(countProducts).toHaveBeenCalledWith({ search: "para", prescriptionRequired: true });
+    expect(countPrices).toHaveBeenCalledWith({ status: "Published", q: "para" });
+    expect(getProduct).not.toHaveBeenCalled();
+  });
+
+  it("answers one base-unit row per active product for the requested day, defaulting to today, and refuses a bad day", async () => {
+    const rows = [{ productId: ids.product, productName: "Paracetamol 500mg", unitPrice: null }];
+    const listBasePricesOn = vi.fn<(day: string) => Promise<unknown[]>>().mockResolvedValue(rows);
+    const repository = { listBasePricesOn } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const dated = await fetch(`${testServer.url}/pricing/base-prices?day=2026-10-20`);
+    const today = await fetch(`${testServer.url}/pricing/base-prices`);
+    const invalid = await fetch(`${testServer.url}/pricing/base-prices?day=2026-13-01`);
+
+    expect(await dated.json()).toEqual(rows);
+    expect(today.status).toBe(200);
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual(expect.objectContaining({ code: "invalid_request" }));
+    expect(listBasePricesOn).toHaveBeenCalledTimes(2);
+    expect(listBasePricesOn).toHaveBeenNthCalledWith(1, "2026-10-20");
+    expect(listBasePricesOn).toHaveBeenNthCalledWith(2, new Date().toISOString().slice(0, 10));
+  });
+
+  it("answers a product by its id with its units, as before the count routes", async () => {
+    const getProduct = vi.fn<(id: string) => Promise<unknown>>().mockResolvedValue({ id: ids.product, sku: "SKU-001" });
+    const listProductUnits = vi
+      .fn<(id: string) => Promise<unknown[]>>()
+      .mockResolvedValue([{ id: ids.unit, unitName: "Box" }]);
+    const repository = { getProduct, listProductUnits } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/products/${ids.product}`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      id: ids.product,
+      sku: "SKU-001",
+      units: [{ id: ids.unit, unitName: "Box" }],
+    });
+    expect(getProduct).toHaveBeenCalledWith(ids.product);
+  });
+
+  it("pages the stores by code and answers a cursor only while another store follows", async () => {
+    const firstStore = "00000000-0000-4000-8000-0000000000d1";
+    const listActiveStores = vi
+      .fn<(limit: number, after?: { sortValue: string; id: string }) => Promise<unknown>>()
+      .mockResolvedValueOnce({ rows: [{ id: firstStore, code: "SITE-001" }], hasMore: true })
+      .mockResolvedValueOnce({ rows: [{ id: ids.site, code: "SITE-002" }], hasMore: false });
+    const repository = { listActiveStores } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const first = await fetch(`${testServer.url}/stores?limit=1`);
+    const cursor = first.headers.get("x-next-cursor");
+    const second = await fetch(`${testServer.url}/stores?limit=1&cursor=${cursor}`);
+    const malformed = await fetch(`${testServer.url}/stores?cursor=not-a-cursor`);
+
+    expect(cursor).not.toBeNull();
+    expect(listActiveStores.mock.calls[0]).toEqual([1, undefined]);
+    expect(listActiveStores.mock.calls[1]).toEqual([1, { sortValue: "SITE-001", id: firstStore }]);
+    expect(second.headers.get("x-next-cursor")).toBeNull();
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual(expect.objectContaining({ code: "invalid_cursor" }));
+    expect(listActiveStores).toHaveBeenCalledTimes(2);
+  });
+
+  it("filters sites, storage locations and suppliers by code or name with q, and leaves them whole without it", async () => {
+    const listSites = vi.fn<(search?: string) => Promise<unknown[]>>().mockResolvedValue([]);
+    const listStorageLocations = vi
+      .fn<(siteIds?: string[], search?: string) => Promise<unknown[]>>()
+      .mockResolvedValue([]);
+    const listSuppliers = vi.fn<(search?: string) => Promise<unknown[]>>().mockResolvedValue([]);
+    const repository = { listSites, listStorageLocations, listSuppliers } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    await fetch(`${testServer.url}/sites?q=SITE`);
+    await fetch(`${testServer.url}/sites`);
+    await fetch(`${testServer.url}/storage-locations?siteId=${ids.site}&q=shelf`);
+    await fetch(`${testServer.url}/suppliers?q=%25`);
+    const tooLong = await fetch(`${testServer.url}/suppliers?q=${"a".repeat(201)}`);
+
+    expect(listSites).toHaveBeenNthCalledWith(1, "SITE");
+    expect(listSites).toHaveBeenNthCalledWith(2, undefined);
+    expect(listStorageLocations).toHaveBeenCalledWith([ids.site], "shelf");
+    expect(listSuppliers).toHaveBeenCalledWith("%");
+    expect(tooLong.status).toBe(400);
+    expect(listSuppliers).toHaveBeenCalledTimes(1);
   });
 });
