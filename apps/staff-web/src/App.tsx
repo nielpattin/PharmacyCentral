@@ -1,5 +1,7 @@
-import { Link as RouterLink, Navigate, useLocation, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { Link as RouterLink, Navigate, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { z } from "zod";
 import {
   BadgeDollarSign,
   BarChart3,
@@ -12,9 +14,13 @@ import {
   MapPin,
   Menu,
   Package,
+  PanelLeftClose,
+  PanelLeftOpen,
+  RefreshCw,
   Ruler,
   Server,
   Settings,
+  Keyboard,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
@@ -23,10 +29,16 @@ import {
   X,
 } from "lucide-react";
 
-import { Alert, Button, Field, Input } from "@pharmacy/ui";
+import { Alert, Breadcrumb, Button, Field, Input, PageHeader, ToastProvider, type BreadcrumbItem } from "@pharmacy/ui";
 
 import { setSessionSnapshot, useSession } from "./auth.ts";
+import { ConfirmProvider } from "./components/confirm.tsx";
+import { HotkeysListener } from "./components/hotkeys-listener.tsx";
+import { PageActionsContext } from "./components/page-actions.tsx";
+import { ShortcutsDialog } from "./components/shortcuts-dialog.tsx";
+import { useHotkey } from "./hooks/useHotkey.ts";
 import { useMountEffect } from "./hooks/useMountEffect.ts";
+import { useStoredState } from "./hooks/useStoredState.ts";
 import { StaffNotFoundPage } from "./pages/NotFoundPage.tsx";
 import { toggleLanguage, translateText, useLanguage } from "./i18n.ts";
 import { datasets } from "./import-datasets.ts";
@@ -44,11 +56,13 @@ import { ProcurementSection } from "./sections/procurement-section.tsx";
 import { SearchSynonymsSection } from "./sections/search-synonyms-section.tsx";
 import { SystemSection } from "./sections/system-section.tsx";
 import { request, setIdentityContextsEnabled } from "./staff-api.ts";
-import { governanceTabPaths, pathForSection, sectionFromPath, type Section } from "./router.ts";
+import { governanceTabPaths, pathForSection, sectionFromPath, type Section, type StaffPath } from "./router.ts";
 import "./styles.css";
 
 export type NavItem = { key: Section; label: string; icon: React.JSX.Element };
 type NavGroup = { id: string; label: string; items: NavItem[] };
+
+const sidebarCollapsedStorageKey = "pharmacy-central:sidebar-collapsed";
 
 const sectionRoles: Record<Section, readonly string[]> = {
   dashboard: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
@@ -165,11 +179,12 @@ const BrandBlock = (): React.JSX.Element => (
   </div>
 );
 
-export const App = (): React.JSX.Element => {
+const StaffApp = (): React.JSX.Element => {
   const session = useSession();
   const language = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const roles = session.roles ?? [];
   const visibleNavGroups = navGroups
     .map((group) => ({ ...group, items: group.items.filter((item) => canAccessSection(item.key, roles)) }))
@@ -192,6 +207,19 @@ export const App = (): React.JSX.Element => {
   const [error, setError] = useState<string>();
   const [authReady, setAuthReady] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useStoredState(sidebarCollapsedStorageKey, z.boolean(), false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [actionsTarget, setActionsTarget] = useState<HTMLElement | null>(null);
+  const search = useSearch({ strict: false }) as Record<string, unknown>;
+  const authenticated = session.authenticated;
+
+  useHotkey("[", () => setSidebarCollapsed(!sidebarCollapsed), { label: "Toggle sidebar", when: authenticated });
+  useHotkey("?", () => setShortcutsOpen(true), { label: "Show keyboard shortcuts", when: authenticated });
+  useHotkey("escape", () => setMobileNavOpen(false), {
+    label: "Close navigation",
+    when: mobileNavOpen,
+    allowWhileEditing: true,
+  });
 
   useMountEffect(() => {
     void request("/api/auth/csrf")
@@ -273,6 +301,17 @@ export const App = (): React.JSX.Element => {
   if (!requestedSection) return <StaffNotFoundPage />;
   if (requestedSection !== activeSection) return <Navigate to={pathForSection(activeSection)} replace />;
 
+  const activeGroup = visibleNavGroups.find((group) => group.items.some((item) => item.key === activeSection));
+  const activeLabel = activeGroup?.items.find((item) => item.key === activeSection)?.label ?? "Dashboard";
+  const governanceTabLabel = activeSection === "users" || activeSection === "audit" ? governanceTab : undefined;
+  const tabValue = typeof search.tab === "string" && search.tab !== "" ? search.tab : governanceTabLabel;
+  const currentTab = tabValue && tabValue !== activeLabel ? tabValue : undefined;
+  const breadcrumbItems: BreadcrumbItem[] = [
+    ...(activeGroup ? [{ label: translateText(activeGroup.label) }] : []),
+    { label: translateText(activeLabel), ...(currentTab ? { href: pathForSection(activeSection) } : {}) },
+    ...(currentTab ? [{ label: translateText(currentTab) }] : []),
+  ];
+
   const renderSection = (): React.JSX.Element => {
     switch (activeSection) {
       case "pharmacistOverview":
@@ -342,9 +381,26 @@ export const App = (): React.JSX.Element => {
 
   return (
     <div className="app-shell">
-      <div className="app">
+      <div className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
         <aside id="staff-navigation" className={`sidebar${mobileNavOpen ? " mobile-open" : ""}`}>
-          <BrandBlock />
+          <div className="sidebar-head">
+            <BrandBlock />
+            <button
+              type="button"
+              className="sidebar-collapse-toggle"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              aria-expanded={!sidebarCollapsed}
+              aria-controls="staff-navigation"
+              aria-label={translateText("Toggle sidebar")}
+              title={translateText(sidebarCollapsed ? "Expand navigation" : "Collapse navigation")}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen size={18} strokeWidth={2} aria-hidden="true" />
+              ) : (
+                <PanelLeftClose size={18} strokeWidth={2} aria-hidden="true" />
+              )}
+            </button>
+          </div>
           <button
             type="button"
             className="mobile-nav-close"
@@ -366,6 +422,7 @@ export const App = (): React.JSX.Element => {
                         key={item.key}
                         to={pathForSection(item.key)}
                         className={active ? "active" : undefined}
+                        title={sidebarCollapsed ? translateText(item.label) : undefined}
                         onClick={() => setMobileNavOpen(false)}
                         {...(active ? { "aria-current": "page" as const } : {})}
                       >
@@ -402,6 +459,15 @@ export const App = (): React.JSX.Element => {
             >
               <Menu size={19} strokeWidth={2} aria-hidden="true" />
             </button>
+            <button
+              type="button"
+              className="topbar-icon-button"
+              onClick={() => setShortcutsOpen(true)}
+              aria-label={translateText("Show keyboard shortcuts")}
+              title={translateText("Show keyboard shortcuts")}
+            >
+              <Keyboard size={17} strokeWidth={2} aria-hidden="true" />
+            </button>
             <details className="profile-menu">
               <summary className="profile-trigger">
                 <span className="profile-copy">
@@ -424,12 +490,54 @@ export const App = (): React.JSX.Element => {
               </div>
             </details>
           </div>
-          <div className="content-panel">
-            {error ? <Alert variant="danger">{translateText(error)}</Alert> : null}
-            {renderSection()}
-          </div>
+          <PageActionsContext.Provider value={actionsTarget}>
+            <div className="content-panel">
+              <PageHeader
+                title={translateText(activeLabel)}
+                breadcrumb={
+                  <Breadcrumb
+                    items={breadcrumbItems}
+                    label={translateText("Breadcrumb")}
+                    renderLink={({ href, className, children }) => (
+                      <RouterLink to={href as StaffPath} className={className}>
+                        {children}
+                      </RouterLink>
+                    )}
+                  />
+                }
+                actions={
+                  <>
+                    <div ref={setActionsTarget} className="flex flex-wrap items-center gap-2" />
+                    <Button variant="outline" size="sm" onClick={() => void queryClient.invalidateQueries()}>
+                      <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
+                      {translateText("Refresh")}
+                    </Button>
+                  </>
+                }
+              />
+              {error ? <Alert variant="danger">{translateText(error)}</Alert> : null}
+              {renderSection()}
+            </div>
+          </PageActionsContext.Provider>
         </main>
       </div>
+      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
+  );
+};
+
+export const App = (): React.JSX.Element => {
+  const language = useLanguage();
+  const toastLabels = useMemo(
+    () => ({ region: translateText("Notifications"), dismiss: translateText("Dismiss") }),
+    [language],
+  );
+  return (
+    <ToastProvider labels={toastLabels}>
+      <ConfirmProvider>
+        <HotkeysListener />
+        <StaffApp />
+      </ConfirmProvider>
+    </ToastProvider>
   );
 };

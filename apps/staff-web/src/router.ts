@@ -1,7 +1,9 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { App } from "./App.tsx";
 import { StaffNotFoundPage } from "./pages/NotFoundPage.tsx";
+
 export type Section =
   | "dashboard"
   | "pharmacistOverview"
@@ -125,40 +127,56 @@ const rootRoute = createRootRoute({
   notFoundComponent: StaffNotFoundPage,
 });
 
-const dashboardRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
-const pharmacistOverviewRoute = createRoute({ getParentRoute: () => rootRoute, path: "/pharmacist-overview" });
-const prescriptionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/prescriptions" });
-const ordersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/orders" });
-const transfersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/transfers" });
-const replenishmentRoute = createRoute({ getParentRoute: () => rootRoute, path: "/replenishment" });
-const sitesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/sites" });
-const storageLocationsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/storage-locations" });
-const catalogRoute = createRoute({ getParentRoute: () => rootRoute, path: "/catalog" });
-const searchSynonymsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/search-synonyms" });
-const unitsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/units" });
-const pricingRoute = createRoute({ getParentRoute: () => rootRoute, path: "/pricing" });
-const supplierRoute = createRoute({ getParentRoute: () => rootRoute, path: "/suppliers" });
-const importProductsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/imports/products" });
-const importSitesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/imports/sites" });
-const importLocationsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/imports/storage-locations" });
-const importSuppliersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/imports/suppliers" });
-const importStockRoute = createRoute({ getParentRoute: () => rootRoute, path: "/imports/stock" });
-const receivingRoute = createRoute({ getParentRoute: () => rootRoute, path: "/receiving" });
-const procurementRoute = createRoute({ getParentRoute: () => rootRoute, path: "/procurement" });
-const stocktakeRoute = createRoute({ getParentRoute: () => rootRoute, path: "/stocktake" });
-const inventoryRoute = createRoute({ getParentRoute: () => rootRoute, path: "/inventory" });
-const adjustmentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/adjustments" });
-const returnsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/returns" });
-const qualityRoute = createRoute({ getParentRoute: () => rootRoute, path: "/quality" });
-const reportingRoute = createRoute({ getParentRoute: () => rootRoute, path: "/reporting" });
-const financeRoute = createRoute({ getParentRoute: () => rootRoute, path: "/finance" });
-const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users" });
-const auditRoute = createRoute({ getParentRoute: () => rootRoute, path: "/audit" });
-const aiIntegrationsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/ai-integrations" });
-const systemRoute = createRoute({ getParentRoute: () => rootRoute, path: "/system" });
+/**
+ * Search params shared by every list screen. Each value is optional text; a value that fails its check is dropped
+ * instead of failing the route. Pages read their own keys through hooks/useListUrlState.ts.
+ */
+export const listSearchSchema = z.looseObject({
+  q: z.string().max(200).optional().catch(undefined),
+  status: z.string().max(64).optional().catch(undefined),
+  sort: z.string().max(64).optional().catch(undefined),
+  tab: z.string().max(64).optional().catch(undefined),
+});
 
-const createUserRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users/create" });
-const editAccessRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users/access" });
+export type ListSearch = z.infer<typeof listSearchSchema>;
+
+const sectionRoute = <const TPath extends string>(path: TPath) =>
+  createRoute({ getParentRoute: () => rootRoute, path, validateSearch: (search) => listSearchSchema.parse(search) });
+
+const dashboardRoute = sectionRoute("/");
+const pharmacistOverviewRoute = sectionRoute("/pharmacist-overview");
+const prescriptionsRoute = sectionRoute("/prescriptions");
+const ordersRoute = sectionRoute("/orders");
+const transfersRoute = sectionRoute("/transfers");
+const replenishmentRoute = sectionRoute("/replenishment");
+const sitesRoute = sectionRoute("/sites");
+const storageLocationsRoute = sectionRoute("/storage-locations");
+const catalogRoute = sectionRoute("/catalog");
+const searchSynonymsRoute = sectionRoute("/search-synonyms");
+const unitsRoute = sectionRoute("/units");
+const pricingRoute = sectionRoute("/pricing");
+const supplierRoute = sectionRoute("/suppliers");
+const importProductsRoute = sectionRoute("/imports/products");
+const importSitesRoute = sectionRoute("/imports/sites");
+const importLocationsRoute = sectionRoute("/imports/storage-locations");
+const importSuppliersRoute = sectionRoute("/imports/suppliers");
+const importStockRoute = sectionRoute("/imports/stock");
+const receivingRoute = sectionRoute("/receiving");
+const procurementRoute = sectionRoute("/procurement");
+const stocktakeRoute = sectionRoute("/stocktake");
+const inventoryRoute = sectionRoute("/inventory");
+const adjustmentsRoute = sectionRoute("/adjustments");
+const returnsRoute = sectionRoute("/returns");
+const qualityRoute = sectionRoute("/quality");
+const reportingRoute = sectionRoute("/reporting");
+const financeRoute = sectionRoute("/finance");
+const usersRoute = sectionRoute("/users");
+const auditRoute = sectionRoute("/audit");
+const aiIntegrationsRoute = sectionRoute("/ai-integrations");
+const systemRoute = sectionRoute("/system");
+
+const createUserRoute = sectionRoute("/users/create");
+const editAccessRoute = sectionRoute("/users/access");
 
 const routeTree = rootRoute.addChildren([
   dashboardRoute,

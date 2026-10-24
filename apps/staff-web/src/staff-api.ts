@@ -2,6 +2,7 @@ import { apiServiceForPath, createIdentityContextCache, type IdentityContexts } 
 import { z } from "zod";
 
 import { getLanguage, type Language } from "./i18n.ts";
+import { NEXT_CURSOR_HEADER, parseNextCursor } from "./lib/page-request.ts";
 
 export type ApiRequestOptions = RequestInit & {
   csrfToken?: string;
@@ -45,8 +46,10 @@ export const setIdentityContextsEnabled = (enabled: boolean): void => {
   if (!enabled) identityContextCache.invalidate();
 };
 
-export const request = async <T>(url: string, options: ApiRequestOptions = {}): Promise<T> => {
-  const attempt = async (retried: boolean): Promise<T> => {
+type SentResponse<T> = { body: T; headers: Headers };
+
+const send = async <T>(url: string, options: ApiRequestOptions): Promise<SentResponse<T>> => {
+  const attempt = async (retried: boolean): Promise<SentResponse<T>> => {
     const headers = new Headers(options.headers);
     headers.set("Accept", "application/json");
     if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -76,10 +79,24 @@ export const request = async <T>(url: string, options: ApiRequestOptions = {}): 
       }
       throw new ApiProblemError(detail, problem);
     }
-    if (response.status === 204) return undefined as T;
-    return (await response.json()) as T;
+    if (response.status === 204) return { body: undefined as T, headers: response.headers };
+    return { body: (await response.json()) as T, headers: response.headers };
   };
   return attempt(false);
+};
+
+export const request = async <T>(url: string, options: ApiRequestOptions = {}): Promise<T> =>
+  (await send<T>(url, options)).body;
+
+export type JsonPage = { rows: JsonRecord[]; nextCursor: string | null };
+
+/**
+ * One page of a cursor-paged list. The body is a bare array; `X-Next-Cursor` is present only when another page exists.
+ * Usage: `const page = await requestPage(buildPagePath("/api/orders", { limit: "100", cursor }))`.
+ */
+export const requestPage = async (url: string, options: ApiRequestOptions = {}): Promise<JsonPage> => {
+  const { body, headers } = await send<unknown>(url, options);
+  return { rows: asRows(body), nextCursor: parseNextCursor(headers.get(NEXT_CURSOR_HEADER)) };
 };
 
 export type JsonRecord = Record<string, unknown>;

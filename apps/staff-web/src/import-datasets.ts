@@ -11,9 +11,9 @@ export type ImportVerification = {
   keyColumn: string;
   /** Field carrying the same value on the record read back from the API. */
   key: string;
-  /** Endpoint that returns the stored records. */
+  /** Endpoint that returns the stored records. The read-back follows its cursor pages. */
   listPath: string;
-  /** False when the endpoint returns one page only, so a missing row cannot be proven. */
+  /** False when the list can leave out rows the file imported, so a missing row cannot be proven. */
   complete: boolean;
   columns: Array<{ key: string; label: string }>;
   /** Nested API rows (inventory balances carry their batch) are flattened for display. */
@@ -189,8 +189,8 @@ const catalogDataset: ImportDataset = {
   verification: {
     keyColumn: "sku",
     key: "sku",
-    // The product list is paged at 100 records, so an absent row is not proof of a failed import.
-    listPath: "/api/products?limit=100",
+    // The product list shows active products only, so an absent row is not proof of a failed import.
+    listPath: "/api/products",
     complete: false,
     columns: [
       { key: "sku", label: "SKU" },

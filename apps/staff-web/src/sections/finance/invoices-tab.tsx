@@ -1,0 +1,219 @@
+import {
+  Alert,
+  Button,
+  DataTable,
+  RowActions,
+  Select,
+  StatusBadge,
+  type DataColumn,
+  type StatusTone,
+} from "@pharmacy/ui";
+import { useRef } from "react";
+
+import { useConfirm, usePrompt } from "../../components/confirm.tsx";
+import { dataTableLabels } from "../../components/data-table-labels.ts";
+import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
+import { useSession } from "../../auth.ts";
+import { useHotkey } from "../../hooks/useHotkey.ts";
+import { useListUrlState } from "../../hooks/useListUrlState.ts";
+import { usePagedList } from "../../hooks/usePagedList.ts";
+import { useRecordLabels } from "../../hooks/useRecordLabels.ts";
+import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
+import { useStaffAction } from "../../hooks/useStaffAction.ts";
+import { translateText } from "../../i18n.ts";
+import { customerLabel, orderLabel, shortId } from "../procurement/labels.ts";
+import { formatDateTime, formatQuantity, idOf, text, type JsonRecord } from "../../staff-api.ts";
+import { FINANCE_SUMMARY_KEY, INVOICES_KEY } from "./query-keys.ts";
+
+const LIST_DEFAULTS = { q: "", status: "all" } as const;
+
+const INVOICE_STATUSES = ["Pending", "Paid", "Failed", "Refunded", "Cancelled"] as const;
+
+const INVOICE_TONE: Readonly<Record<string, StatusTone | undefined>> = {
+  Pending: "warning",
+  Paid: "success",
+  Failed: "danger",
+  Refunded: "info",
+  Cancelled: "neutral",
+};
+
+const LINK_CLASS =
+  "inline-flex h-8 items-center rounded-md px-3 text-xs font-medium text-primary outline-none hover:bg-surface-soft focus-visible:ring-2 focus-visible:ring-primary/50";
+
+/**
+ * Payment invoices, newest first. Staff who may operate the counter (Pharmacist, Platform Admin) confirm cash and refund
+ * here. Pharmacy Managers read the same list without those actions, as the payment routes allow.
+ */
+export const InvoicesTab = (): React.JSX.Element => {
+  // Confirming cash and refunding are a licensed pharmacist's work; a Pharmacy Manager reads the same invoices
+  // without the write actions, which is what the edge policy grants that role on the payment routes.
+  const roles = useSession().roles ?? [];
+  const canOperateCounter = roles.includes("Pharmacist") || roles.includes("Platform Admin");
+  const list = useListUrlState(LIST_DEFAULTS);
+  const run = useStaffAction();
+  const confirm = useConfirm();
+  const prompt = usePrompt();
+  const listRef = useRef<HTMLDivElement>(null);
+  const [search, setSearch] = useSearchDraft(list.values.q, (value) => list.setValues({ q: value }));
+
+  useHotkey(
+    "/",
+    (event) => {
+      event.preventDefault();
+      listRef.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+    },
+    { label: "Focus search" },
+  );
+
+  const invoices = usePagedList({
+    key: INVOICES_KEY,
+    path: "/api/payments/invoices",
+    params: {
+      status: list.values.status === "all" ? undefined : list.values.status,
+      q: list.values.q || undefined,
+    },
+    limit: 100,
+  });
+  // Customer names come from identity-service, which answers the counter roles only; other roles see the short id.
+  const customers = useRecordLabels(
+    "/api/customers",
+    canOperateCounter ? invoices.rows.map((row) => text(row.customerId, "")) : [],
+    customerLabel,
+  );
+
+  const confirmCash = async (row: JsonRecord): Promise<void> => {
+    const accepted = await confirm({
+      title: "Confirm cash payment?",
+      description: "The invoice will be marked as paid.",
+      confirmLabel: "Confirm cash",
+    });
+    if (!accepted) return;
+    await run({
+      path: `/api/payments/${encodeURIComponent(idOf(row))}/confirm-counter`,
+      invalidate: [INVOICES_KEY, FINANCE_SUMMARY_KEY],
+      success: "Cash payment confirmed.",
+    });
+  };
+
+  const refund = async (row: JsonRecord): Promise<void> => {
+    const reason = await prompt({
+      title: "Refund payment",
+      label: "Refund reason:",
+      required: true,
+      defaultValue: translateText("Operational correction"),
+      confirmLabel: "Refund",
+    });
+    if (reason === null) return;
+    await run({
+      path: `/api/payments/${encodeURIComponent(idOf(row))}/refund`,
+      body: { reason },
+      invalidate: [INVOICES_KEY, FINANCE_SUMMARY_KEY],
+      success: "Payment refunded.",
+    });
+  };
+
+  const columns: Array<DataColumn<JsonRecord>> = [
+    {
+      key: "paymentCode",
+      label: translateText("Invoice"),
+      render: (row) => text(row.paymentCode, "") || shortId(row.id),
+      truncate: 24,
+    },
+    {
+      key: "orderId",
+      label: translateText("Order"),
+      render: (row) => (row.orderId ? orderLabel(row.orderId) : "-"),
+      text: (row) => (row.orderId ? orderLabel(row.orderId) : ""),
+    },
+    {
+      key: "customerId",
+      label: translateText("Customer"),
+      render: (row) => (row.customerId ? (customers.get(text(row.customerId, "")) ?? shortId(row.customerId)) : "-"),
+      text: (row) => (row.customerId ? (customers.get(text(row.customerId, "")) ?? shortId(row.customerId)) : ""),
+      truncate: 24,
+    },
+    {
+      key: "amount",
+      label: translateText("Amount"),
+      align: "right",
+      render: (row) => `${formatQuantity(row.amount)} ${text(row.currency, "VND")}`,
+      text: (row) => text(row.amount, ""),
+    },
+    {
+      key: "status",
+      label: translateText("Status"),
+      render: (row) => (
+        <StatusBadge tone={INVOICE_TONE[text(row.status, "")] ?? "neutral"}>
+          {translateText(text(row.status))}
+        </StatusBadge>
+      ),
+      text: (row) => text(row.status, ""),
+    },
+    { key: "createdAt", label: translateText("Created"), render: (row) => formatDateTime(row.createdAt) },
+    {
+      key: "actions",
+      label: translateText("Actions"),
+      pinned: "right",
+      render: (row) => (
+        <RowActions label={text(row.paymentCode, "") || shortId(row.id)}>
+          <a
+            className={LINK_CLASS}
+            href={`/api/payments/${encodeURIComponent(idOf(row))}/reconciliation`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {translateText("Reconciliation")}
+          </a>
+          {canOperateCounter && text(row.status, "") === "Pending" ? (
+            <Button size="sm" onClick={() => void confirmCash(row)}>
+              {translateText("Confirm cash")}
+            </Button>
+          ) : null}
+          {canOperateCounter && text(row.status, "") === "Paid" ? (
+            <Button size="sm" variant="danger-soft" onClick={() => void refund(row)}>
+              {translateText("Refund")}
+            </Button>
+          ) : null}
+        </RowActions>
+      ),
+    },
+  ];
+
+  return (
+    <div ref={listRef} className="grid gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          aria-label={translateText("Status")}
+          className="w-auto min-w-44"
+          value={list.values.status}
+          onChange={(event) => list.setValues({ status: event.target.value })}
+        >
+          <option value="all">{translateText("All statuses")}</option>
+          {INVOICE_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {translateText(status)}
+            </option>
+          ))}
+        </Select>
+        <SavedViewsMenu pageKey="finance-invoices" defaults={LIST_DEFAULTS} />
+      </div>
+      {invoices.error ? <Alert variant="danger">{translateText(invoices.error.message)}</Alert> : null}
+      <DataTable
+        storageKey="staff:finance:invoices"
+        labels={dataTableLabels()}
+        rows={invoices.rows}
+        columns={columns}
+        getKey={(row) => idOf(row)}
+        loading={invoices.isLoading}
+        empty={translateText("No records found")}
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: translateText("Search by invoice number, order ID or customer ID"),
+        }}
+        paging={{ hasMore: invoices.hasMore, loadingMore: invoices.isLoadingMore, onLoadMore: invoices.loadMore }}
+        exportCsv={{ filename: "invoices.csv" }}
+      />
+    </div>
+  );
+};

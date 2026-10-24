@@ -1,88 +1,144 @@
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { DataTable } from "../components/data-table.tsx";
-import { RefreshButton, SubTabs } from "../components/forms.tsx";
-import { referenceLabel } from "../hooks/useStaffReferences.ts";
+import { Alert, Button, RowActions, StatusBadge } from "@pharmacy/ui";
+
+import { DataTable, type Column } from "../components/data-table.tsx";
+import { EntityDrawer } from "../components/entity-drawer.tsx";
+import { useListUrlState } from "../hooks/useListUrlState.ts";
+import { usePagedList } from "../hooks/usePagedList.ts";
+import { referenceLabel, useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { translateText } from "../i18n.ts";
-import { formatDateTime, formatQuantity, numberValue, readRows, text, type JsonRecord } from "../staff-api.ts";
+import { formatDateTime, numberValue, text, type JsonRecord } from "../staff-api.ts";
+import {
+  ALL_STATUSES,
+  activeStatus,
+  formatAmount,
+  ORDER_STATUSES,
+  orderTone,
+  queryParam,
+  shortId,
+  statusParam,
+} from "./sales/rules.ts";
+import { DetailField, ListToolbar, moneyLocale, SalesAuditHistory } from "./sales/shared.tsx";
 
-const STATUS_TABS = ["All", "Pending", "Confirmed", "Preparing", "Ready", "Delivering", "Completed", "Cancelled"];
-
-const shortCode = (id: unknown): string => text(id, "").slice(0, 8).toUpperCase();
+const ORDERS_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
 
 /** An order's total is the subtotal the sales service priced plus the delivery fee it calculated. */
 const orderTotal = (row: JsonRecord): number => numberValue(row.subtotal) + numberValue(row.deliveryFee);
 
-/** Orders shoppers placed on the customer site, listed straight from the sales-service order store. */
-export const OrdersSection = (): React.JSX.Element => {
-  const [tab, setTab] = useState<string>("All");
-  const [error, setError] = useState<string>();
-  const ordersQuery = useQuery({
-    queryKey: ["online-orders", tab],
-    queryFn: () =>
-      readRows(tab === "All" ? "/api/orders?limit=100" : `/api/orders?limit=100&status=${encodeURIComponent(tab)}`),
-  });
-  const storesQuery = useQuery({ queryKey: ["catalog-stores"], queryFn: () => readRows("/api/stores") });
-  const orders = ordersQuery.data ?? [];
-  const stores = storesQuery.data ?? [];
-  const queryError = ordersQuery.error instanceof Error ? ordersQuery.error.message : undefined;
-  const storesError = storesQuery.error instanceof Error ? storesQuery.error.message : undefined;
-  const visibleError = error ?? queryError ?? storesError;
+const orderCode = (row: JsonRecord): string => `#${shortId(row.id).toUpperCase()}`;
 
-  const load = async (): Promise<void> => {
-    setError(undefined);
-    try {
-      const result = await ordersQuery.refetch();
-      if (result.error) throw result.error;
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load online orders");
-    }
-  };
+/**
+ * Orders shoppers placed on the customer site, newest first. The search matches the order id only: sales-service stores
+ * no customer name. Opening an order shows its details and its audit history.
+ */
+export const OrdersSection = (): React.JSX.Element => {
+  const { values, setValues } = useListUrlState(ORDERS_DEFAULTS);
+  const status = activeStatus(values.status, ORDER_STATUSES, ALL_STATUSES);
+  const orders = usePagedList({
+    key: ["staff-orders"],
+    path: "/api/orders",
+    params: { status: statusParam(status), q: queryParam(values.q) },
+    limit: 100,
+  });
+  const references = useStaffReferences();
+  const [openId, setOpenId] = useState<string>();
+  const openRow = orders.rows.find((row) => text(row.id, "") === openId);
+
+  const columns: Column[] = [
+    { key: "id", label: "Order", render: (row) => orderCode(row) },
+    {
+      key: "selectedStoreId",
+      label: "Store",
+      truncate: true,
+      render: (row) => referenceLabel(references.sites, row.selectedStoreId, ["code", "name"]),
+    },
+    {
+      key: "fulfillmentType",
+      label: "Fulfillment",
+      render: (row) => translateText(text(row.fulfillmentType, "") === "pickup" ? "Pickup" : "Delivery"),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (row) => (
+        <StatusBadge tone={orderTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusBadge>
+      ),
+    },
+    {
+      key: "paymentStatus",
+      label: "Payment",
+      render: (row) => translateText(text(row.paymentStatus, "-")),
+    },
+    {
+      key: "total",
+      label: "Total",
+      align: "right",
+      render: (row) => formatAmount(orderTotal(row), row.currency, moneyLocale()),
+    },
+    { key: "createdAt", label: "Placed", render: (row) => formatDateTime(row.createdAt) },
+    {
+      key: "actions",
+      label: "Actions",
+      enableSorting: false,
+      pinned: "right",
+      render: (row) => (
+        <RowActions label={translateText("Order actions")}>
+          <Button variant="ghost" size="sm" onClick={() => setOpenId(text(row.id, ""))}>
+            {translateText("View")}
+          </Button>
+        </RowActions>
+      ),
+    },
+  ];
 
   return (
-    <section className="staff-section">
-      <div className="page-head">
-        <div>
-          <h1>{translateText("Online orders")}</h1>
-          <p className="page-subtitle">{translateText("Orders shoppers placed on the customer website.")}</p>
-        </div>
-        <RefreshButton onClick={() => void load()} />
-      </div>
-      {visibleError ? <p className="notice">{translateText(visibleError)}</p> : null}
-      <SubTabs tabs={STATUS_TABS} active={tab} onChange={setTab} />
+    <section className="grid gap-3">
+      <ListToolbar
+        pageKey="orders"
+        defaults={ORDERS_DEFAULTS}
+        query={values.q}
+        onQueryChange={(q) => setValues({ q })}
+        searchPlaceholder="Search by order ID"
+        statuses={ORDER_STATUSES}
+        status={status}
+        onStatusChange={(next) => setValues({ status: next }, { history: "push" })}
+      />
+      {orders.error ? <Alert variant="danger">{translateText(orders.error.message)}</Alert> : null}
       <DataTable
-        loading={ordersQuery.isPending && !ordersQuery.data}
-        rows={orders}
-        columns={[
-          { key: "id", label: "Order", render: (row) => "#" + shortCode(row.id) },
-          {
-            key: "selectedStoreId",
-            label: "Store",
-            render: (row) => referenceLabel(stores, row.selectedStoreId, ["code", "name"]),
-          },
-          {
-            key: "fulfillmentType",
-            label: "Fulfillment",
-            render: (row) => translateText(text(row.fulfillmentType) === "pickup" ? "Pickup" : "Delivery"),
-          },
-          {
-            key: "status",
-            label: "Status",
-            render: (row) => <span className="status-chip">{translateText(text(row.status))}</span>,
-          },
-          {
-            key: "paymentStatus",
-            label: "Payment",
-            render: (row) => <span className="status-chip">{translateText(text(row.paymentStatus))}</span>,
-          },
-          {
-            key: "total",
-            label: "Total",
-            render: (row) => `${formatQuantity(orderTotal(row))} ${text(row.currency, "VND")}`,
-          },
-          { key: "createdAt", label: "Placed", render: (row) => formatDateTime(row.createdAt) },
-        ]}
+        storageKey="staff:sales:orders"
+        loading={orders.isLoading}
+        rows={orders.rows}
+        columns={columns}
+        paging={{ hasMore: orders.hasMore, loadingMore: orders.isLoadingMore, onLoadMore: orders.loadMore }}
+        exportCsv={{ filename: "online-orders.csv" }}
+      />
+      <EntityDrawer
+        open={openRow !== undefined}
+        onClose={() => setOpenId(undefined)}
+        title={openRow ? orderCode(openRow) : ""}
+        subtitle={translateText("Online order")}
+        {...(openRow
+          ? { status: { label: translateText(text(openRow.status, "-")), tone: orderTone(text(openRow.status, "")) } }
+          : {})}
+        details={
+          openRow ? (
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <DetailField
+                label="Store"
+                value={referenceLabel(references.sites, openRow.selectedStoreId, ["code", "name"])}
+              />
+              <DetailField
+                label="Fulfillment"
+                value={translateText(text(openRow.fulfillmentType, "") === "pickup" ? "Pickup" : "Delivery")}
+              />
+              <DetailField label="Payment" value={translateText(text(openRow.paymentStatus, "-"))} />
+              <DetailField label="Total" value={formatAmount(orderTotal(openRow), openRow.currency, moneyLocale())} />
+              <DetailField label="Placed" value={formatDateTime(openRow.createdAt)} />
+            </dl>
+          ) : null
+        }
+        history={openRow ? <SalesAuditHistory entityType="order" entityId={text(openRow.id, "")} /> : undefined}
       />
     </section>
   );

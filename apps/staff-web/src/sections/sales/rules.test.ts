@@ -1,0 +1,167 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  activeStatus,
+  canCancelPrescription,
+  canConfirmCash,
+  canCreateInvoice,
+  canDispense,
+  canRefund,
+  createPrescriptionBody,
+  dispenseBody,
+  formatAmount,
+  emptyPrescriptionHeader,
+  emptyPrescriptionLine,
+  isCounterInvoice,
+  isDispenseQuantityValid,
+  newIdempotencyKey,
+  openDispenseLines,
+  queryParam,
+  remainingQuantity,
+  statusParam,
+} from "./rules.ts";
+
+describe("status gates", () => {
+  it("dispenses only pending or partly dispensed prescriptions", () => {
+    expect(canDispense("Pending")).toBe(true);
+    expect(canDispense("PartiallyDispensed")).toBe(true);
+    expect(canDispense("Dispensed")).toBe(false);
+    expect(canDispense("Cancelled")).toBe(false);
+  });
+
+  it("cancels draft, pending, and partly dispensed prescriptions only", () => {
+    expect(canCancelPrescription("Draft")).toBe(true);
+    expect(canCancelPrescription("Pending")).toBe(true);
+    expect(canCancelPrescription("PartiallyDispensed")).toBe(true);
+    expect(canCancelPrescription("Dispensed")).toBe(false);
+  });
+
+  it("raises an invoice for any live prescription, never for a cancelled one", () => {
+    expect(canCreateInvoice("Pending")).toBe(true);
+    expect(canCreateInvoice("PartiallyDispensed")).toBe(true);
+    expect(canCreateInvoice("Dispensed")).toBe(true);
+    expect(canCreateInvoice("Cancelled")).toBe(false);
+  });
+
+  it("confirms cash only while pending and refunds only paid invoices", () => {
+    expect(canConfirmCash("Pending")).toBe(true);
+    expect(canConfirmCash("Paid")).toBe(false);
+    expect(canRefund("Paid")).toBe(true);
+    expect(canRefund("Pending")).toBe(false);
+  });
+});
+
+describe("counter invoices", () => {
+  it("excludes invoices raised for an online order", () => {
+    expect(isCounterInvoice({ orderId: "" })).toBe(true);
+    expect(isCounterInvoice({ orderId: null })).toBe(true);
+    expect(isCounterInvoice({ orderId: "order-1" })).toBe(false);
+  });
+});
+
+describe("list params", () => {
+  it("sends no status for the All tab and trims search text", () => {
+    expect(statusParam("All")).toBeUndefined();
+    expect(statusParam("Pending")).toBe("Pending");
+    expect(queryParam("   ")).toBeUndefined();
+    expect(queryParam("  RX-1 ")).toBe("RX-1");
+  });
+
+  it("falls back to the default tab when the URL names an unknown one", () => {
+    expect(activeStatus("Paid", ["All", "Pending", "Paid"], "All")).toBe("Paid");
+    expect(activeStatus("Bogus", ["All", "Pending", "Paid"], "All")).toBe("All");
+  });
+});
+
+describe("amounts", () => {
+  it("formats a currency amount in the screen locale and leaves an unknown code bare", () => {
+    expect(formatAmount(1750000, "VND", "en-US")).toContain("1,750,000");
+    expect(formatAmount(1750000, "VND", "en-US")).toContain("₫");
+    expect(formatAmount(1750000, "", "en-US")).toBe("1,750,000");
+  });
+
+  it("shows a dash for a missing or non-numeric amount", () => {
+    expect(formatAmount(null, "VND", "en-US")).toBe("-");
+    expect(formatAmount("abc", "VND", "en-US")).toBe("-");
+  });
+});
+
+describe("prescription body", () => {
+  it("sends empty optional fields as null and quantities as numbers", () => {
+    const header = { ...emptyPrescriptionHeader(), siteId: "site-1", storageLocationId: "loc-1", patientName: "An" };
+    const line = {
+      ...emptyPrescriptionLine(),
+      productId: "p-1",
+      productUnitId: "u-1",
+      prescribedQuantity: "3",
+    };
+    expect(createPrescriptionBody(header, [line])).toEqual({
+      siteId: "site-1",
+      storageLocationId: "loc-1",
+      patientName: "An",
+      patientPhone: null,
+      doctorName: null,
+      doctorLicense: null,
+      notes: null,
+      customerId: null,
+      lines: [
+        {
+          productId: "p-1",
+          productUnitId: "u-1",
+          prescribedQuantity: 3,
+          dosage: null,
+          frequency: null,
+          duration: null,
+          notes: null,
+        },
+      ],
+    });
+  });
+});
+
+describe("dispense lines", () => {
+  it("never reports a negative remaining quantity", () => {
+    expect(remainingQuantity(5, 2)).toBe(3);
+    expect(remainingQuantity(5, 9)).toBe(0);
+    expect(remainingQuantity("bad", 0)).toBe(0);
+  });
+
+  it("opens only lines that still have quantity due, pre-filled with the remainder", () => {
+    const lines = openDispenseLines([
+      { id: "l-1", productId: "p-1", prescribedQuantity: 4, dispensedQuantity: 4 },
+      { id: "l-2", productId: "p-2", prescribedQuantity: 5, dispensedQuantity: 2 },
+    ]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      prescriptionLineId: "l-2",
+      productId: "p-2",
+      dispensedQuantity: "3",
+      remaining: 3,
+    });
+  });
+
+  it("accepts a quantity from one up to the amount still due", () => {
+    const line = { prescriptionLineId: "l", productId: "p", productBatchId: "b", dispensedQuantity: "3", remaining: 3 };
+    expect(isDispenseQuantityValid(line)).toBe(true);
+    expect(isDispenseQuantityValid({ ...line, dispensedQuantity: "4" })).toBe(false);
+    expect(isDispenseQuantityValid({ ...line, dispensedQuantity: "0" })).toBe(false);
+    expect(isDispenseQuantityValid({ ...line, dispensedQuantity: "" })).toBe(false);
+  });
+
+  it("sends the batch and the quantity as numbers", () => {
+    expect(
+      dispenseBody([
+        { prescriptionLineId: "l", productId: "p", productBatchId: "b", dispensedQuantity: "2", remaining: 3 },
+      ]),
+    ).toEqual({ lines: [{ prescriptionLineId: "l", productBatchId: "b", dispensedQuantity: 2 }] });
+  });
+});
+
+describe("idempotency keys", () => {
+  it("makes a 32-character hex key that differs between calls", () => {
+    const first = newIdempotencyKey();
+    const second = newIdempotencyKey();
+    expect(first).toMatch(/^[0-9a-f]{32}$/);
+    expect(second).not.toBe(first);
+  });
+});

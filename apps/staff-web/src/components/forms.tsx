@@ -115,59 +115,6 @@ export const SelectField = ({ label, value, onChange, options, required }: Selec
   </UiField>
 );
 
-type MultiSelectFieldProps = {
-  label: string;
-  value: string[];
-  onChange: (value: string[]) => void;
-  options: Array<{ value: string; label: string }>;
-  required?: boolean;
-};
-
-export const MultiSelectField = ({
-  label,
-  value,
-  onChange,
-  options,
-  required,
-}: MultiSelectFieldProps): React.JSX.Element => (
-  <UiField label={translateText(label)}>
-    <Select
-      multiple
-      size={Math.max(3, Math.min(options.length, 6))}
-      className="h-auto min-h-24 py-1"
-      value={value}
-      required={required}
-      onChange={(event) => onChange(Array.from(event.target.selectedOptions, (option) => option.value))}
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {translateText(option.label)}
-        </option>
-      ))}
-    </Select>
-  </UiField>
-);
-
-export const FormCard = ({
-  children,
-  onSubmit,
-  title,
-  submitLabel = "Save",
-}: {
-  children: ReactNode;
-  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
-  title: string;
-  submitLabel?: string;
-}): React.JSX.Element => (
-  <form onSubmit={onSubmit} className="rounded-lg border border-line bg-surface-soft p-4">
-    <h3 className="mb-3 text-sm font-semibold text-ink">{translateText(title)}</h3>
-    <div className="grid gap-3 sm:grid-cols-2">{children}</div>
-    <div className="mt-4 flex justify-end">
-      <Button type="submit">{translateText(submitLabel)}</Button>
-    </div>
-  </form>
-);
-
 export const SubTabs = ({
   tabs,
   active,
