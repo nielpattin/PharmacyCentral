@@ -1,9 +1,10 @@
-import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import { ACTOR_SITE_IDS_HEADER } from "../middleware/trusted-request.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 
 import type { OperationsDatabase } from "../shared/infrastructure/database.ts";
 import { auditEvents, financeEntries, projectionCounters, reportRows } from "../shared/infrastructure/schema.ts";
+import type { PageCursor } from "./page-cursor.ts";
 
 export type IntegrationEvent = {
   eventId: string;
@@ -19,6 +20,9 @@ export type OperationsServiceOptions = {
 };
 export type AuditFilters = {
   limit?: number;
+  cursor?: PageCursor;
+  /** Case-insensitive substring over the action, the entity type, the entity id and the actor id. */
+  q?: string;
   actorId?: string;
   siteIds?: string[];
   action?: string;
@@ -27,6 +31,20 @@ export type AuditFilters = {
   from?: string;
   to?: string;
 };
+
+/** One keyset page: its rows, and the position after the last of them when another row follows. */
+export type KeysetPage<Row> = { rows: Row[]; next: PageCursor | undefined };
+
+export type ReportRow = typeof reportRows.$inferSelect;
+export type AuditRow = typeof auditEvents.$inferSelect & {
+  userId: string | null;
+  summary: null;
+  details: string;
+  occurredAtUtc: Date;
+};
+
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 500;
 
 export class OperationsRepository {
   public constructor(
@@ -116,7 +134,11 @@ export class OperationsRepository {
     });
   }
 
-  public async listAudit(filters: AuditFilters = {}) {
+  /** Newest first by `(occurredAt, eventId)`: one keyset page of at most `limit` rows, the default 100. */
+  public async listAudit(filters: AuditFilters = {}): Promise<KeysetPage<AuditRow>> {
+    const limit = Math.min(Math.max(Math.floor(filters.limit ?? DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE);
+    // `%` and `_` in the text match themselves; Postgres ILIKE escapes with backslash.
+    const pattern = filters.q ? `%${filters.q.replace(/[\\%_]/g, (character) => `\\${character}`)}%` : undefined;
     const conditions = [
       filters.actorId ? eq(auditEvents.actorId, filters.actorId) : undefined,
       filters.siteIds ? inArray(auditEvents.siteId, filters.siteIds) : undefined,
@@ -125,27 +147,47 @@ export class OperationsRepository {
       filters.entityId ? eq(auditEvents.entityId, filters.entityId) : undefined,
       filters.from ? gte(auditEvents.occurredAt, new Date(filters.from)) : undefined,
       filters.to ? lte(auditEvents.occurredAt, new Date(filters.to)) : undefined,
-    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    const rows = await this.database.db
-      .select()
+      pattern
+        ? or(
+            ilike(auditEvents.action, pattern),
+            ilike(auditEvents.entityType, pattern),
+            sql`${auditEvents.entityId}::text ilike ${pattern}`,
+            sql`${auditEvents.actorId}::text ilike ${pattern}`,
+          )
+        : undefined,
+      filters.cursor
+        ? sql`(${auditEvents.occurredAt}, ${auditEvents.eventId}) < (${filters.cursor.sortAt}::timestamptz, ${filters.cursor.id}::uuid)`
+        : undefined,
+    ].filter((condition): condition is SQL => condition !== undefined);
+    const fetched = await this.database.db
+      .select({
+        ...getTableColumns(auditEvents),
+        sortAt: sql<string>`to_char(${auditEvents.occurredAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      })
       .from(auditEvents)
       .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(auditEvents.occurredAt))
-      .limit(Math.min(Math.max(filters.limit ?? 100, 1), 500));
-    return rows.map((row) => ({
-      ...row,
-      userId: row.actorId,
-      entityId: row.entityId,
-      summary: null,
-      details: row.payload,
-      occurredAtUtc: row.occurredAt,
-    }));
+      .orderBy(desc(auditEvents.occurredAt), desc(auditEvents.eventId))
+      .limit(limit + 1);
+    const visible = fetched.slice(0, limit);
+    const last = visible.at(-1);
+    return {
+      rows: visible.map(({ sortAt: _sortAt, ...row }) => ({
+        ...row,
+        userId: row.actorId,
+        summary: null,
+        details: row.payload,
+        occurredAtUtc: row.occurredAt,
+      })),
+      next: fetched.length > limit && last ? { sortAt: last.sortAt, id: last.eventId } : undefined,
+    };
   }
 
   public async dashboard(siteIds?: string[]) {
     const rows = await this.database.db.select().from(projectionCounters);
     const live = await this.loadLiveOperations(siteIds);
-    // The projection counters span every site, so a site-scoped reader is answered from the live lists alone.
+    const counts = await this.loadCounts(siteIds);
+    // The projection counters span every site, so a site-scoped reader is answered from the live reads alone, and a
+    // network-wide reader falls back to them only when the owning service did not answer its count.
     const counters: Record<string, number> = siteIds ? {} : Object.fromEntries(rows.map((row) => [row.key, row.value]));
     const recentRows = await this.database.db
       .select({ eventId: auditEvents.eventId, eventType: auditEvents.action, occurredAt: auditEvents.occurredAt })
@@ -176,7 +218,7 @@ export class OperationsRepository {
         live.locations.filter((location) => location.isActive !== false).length ||
         counters.catalog_active_storage_locations ||
         0,
-      totalProducts: live.products.length || counters.catalog_products || 0,
+      totalProducts: counts.products ?? counters.catalog_products ?? 0,
       totalSuppliers: live.suppliers.length || counters.catalog_suppliers || 0,
       totalQuantityOnHand:
         live.balances.reduce((sum, row) => sum + rowQuantity(row, "quantityOnHand"), 0) ||
@@ -192,24 +234,10 @@ export class OperationsRepository {
         counters.inventory_low_stock_batches ||
         0,
       expiringBatchCount: expiringBatchCount || counters.inventory_expiring_batches || 0,
-      pendingTransferCount:
-        live.transfers.filter((row) =>
-          ["PendingApproval", "Draft", "Approved", "InTransit"].includes(String(row.status)),
-        ).length ||
-        counters.inventory_pending_transfers ||
-        0,
-      openPrescriptionCount:
-        live.prescriptions.filter((row) => !["Dispensed", "Cancelled"].includes(String(row.status))).length ||
-        counters.sales_open_prescriptions ||
-        0,
-      openStocktakeCount:
-        live.stocktakes.filter((row) => !["Completed", "Cancelled"].includes(String(row.status))).length ||
-        counters.inventory_open_stocktakes ||
-        0,
-      pendingAdjustmentCount:
-        live.adjustments.filter((row) => row.status === "Pending").length ||
-        counters.inventory_pending_adjustments ||
-        0,
+      pendingTransferCount: counts.pendingTransfers ?? counters.inventory_pending_transfers ?? 0,
+      openPrescriptionCount: counts.openPrescriptions ?? counters.sales_open_prescriptions ?? 0,
+      openStocktakeCount: counts.openStocktakes ?? counters.inventory_open_stocktakes ?? 0,
+      pendingAdjustmentCount: counts.pendingAdjustments ?? counters.inventory_pending_adjustments ?? 0,
       recentActivity,
       projectionLag: rows.find((row) => row.key === "projection:last-occurred-at")?.updatedAt ?? null,
     };
@@ -227,10 +255,13 @@ export class OperationsRepository {
       from: new Date(fromDate).toISOString(),
       to: new Date(toDate).toISOString(),
     });
-    const [live, movementSummary, prices] = await Promise.all([
+    const today = new Date().toISOString().slice(0, 10);
+    const [live, counts, movementSummary, allTimeMovements, prices] = await Promise.all([
       this.loadLiveOperations(siteIds),
+      this.loadCounts(siteIds),
       this.fetchRows(this.options.inventoryUrl, `/inventory/movements/summary?${period.toString()}`, siteIds),
-      this.fetchRows(this.options.catalogUrl, "/pricing/prices?status=Published&limit=500"),
+      this.fetchRows(this.options.inventoryUrl, "/inventory/movements/summary", siteIds),
+      this.fetchRows(this.options.catalogUrl, `/pricing/base-prices?day=${today}`),
     ]);
     const conditions = [
       from ? gte(financeEntries.occurredAt, new Date(from)) : undefined,
@@ -248,10 +279,12 @@ export class OperationsRepository {
       .filter((entry) => entry.entryType === "Refund")
       .reduce((total, entry) => total + Number(entry.amount), 0);
     // The balances are today's stock, so they are valued at today's prices whatever period the money covers.
-    const valuationLines = valueBalances(live, prices, new Date().toISOString().slice(0, 10));
+    const valuationLines = valueBalances(live, prices);
     const movements = new Map(movementSummary.map((row) => [String(row.movementType), row]));
     const moved = (movementType: string, direction: "quantityIn" | "quantityOut"): number =>
       Number(movements.get(movementType)?.[direction] ?? 0);
+    // Received and dispensed quantities are all-time figures, as they always were, read from the stock ledger.
+    const allTime = new Map(allTimeMovements.map((row) => [String(row.movementType), row]));
     return {
       currency: "VND",
       paid,
@@ -267,29 +300,9 @@ export class OperationsRepository {
       reservedValue: Math.round(valuationLines.reduce((sum, line) => sum + (line.valueReserved ?? 0), 0)),
       balanceCount: live.balances.length,
       missingPriceCount: valuationLines.filter((line) => line.unitPrice === null).length,
-      receiptCount: live.receipts.length,
-      receiptQuantity: live.receipts.reduce(
-        (sum, receipt) =>
-          sum +
-          (Array.isArray(receipt.lines)
-            ? receipt.lines.reduce(
-                (lineSum, line) => lineSum + Number((line as Record<string, unknown>).quantity ?? 0),
-                0,
-              )
-            : 0),
-        0,
-      ),
-      dispensedQuantity: live.prescriptions.reduce(
-        (sum, prescription) =>
-          sum +
-          (Array.isArray(prescription.lines)
-            ? prescription.lines.reduce(
-                (lineSum, line) => lineSum + Number((line as Record<string, unknown>).dispensedQuantity ?? 0),
-                0,
-              )
-            : 0),
-        0,
-      ),
+      receiptCount: counts.receipts ?? 0,
+      receiptQuantity: Number(allTime.get("GoodsReceipt")?.quantityIn ?? 0),
+      dispensedQuantity: Number(allTime.get("Dispense")?.quantityOut ?? 0),
       returnQuantity: moved("InventoryReturn", "quantityOut"),
       adjustmentQuantity: ["StockAdjustment", "StocktakeAdjustment", "Adjustment"].reduce(
         (sum, movementType) => sum + moved(movementType, "quantityIn") - moved(movementType, "quantityOut"),
@@ -308,13 +321,33 @@ export class OperationsRepository {
     };
   }
 
-  public async report(reportType?: string, limit = 100) {
-    return this.database.db
-      .select()
+  /** Newest first by `(occurredAt, id)`: one keyset page of at most `limit` rows, the default 100. */
+  public async report(
+    reportType: string | undefined,
+    options: { limit?: number; cursor?: PageCursor } = {},
+  ): Promise<KeysetPage<ReportRow>> {
+    const limit = Math.min(Math.max(Math.floor(options.limit ?? DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE);
+    const conditions = [
+      reportType ? eq(reportRows.reportType, reportType) : undefined,
+      options.cursor
+        ? sql`(${reportRows.occurredAt}, ${reportRows.id}) < (${options.cursor.sortAt}::timestamptz, ${options.cursor.id}::uuid)`
+        : undefined,
+    ].filter((condition): condition is SQL => condition !== undefined);
+    const fetched = await this.database.db
+      .select({
+        ...getTableColumns(reportRows),
+        sortAt: sql<string>`to_char(${reportRows.occurredAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      })
       .from(reportRows)
-      .where(reportType ? eq(reportRows.reportType, reportType) : undefined)
-      .orderBy(desc(reportRows.occurredAt))
-      .limit(Math.min(Math.max(limit, 1), 500));
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(reportRows.occurredAt), desc(reportRows.id))
+      .limit(limit + 1);
+    const visible = fetched.slice(0, limit);
+    const last = visible.at(-1);
+    return {
+      rows: visible.map(({ sortAt: _sortAt, ...row }) => row),
+      next: fetched.length > limit && last ? { sortAt: last.sortAt, id: last.id } : undefined,
+    };
   }
 
   /**
@@ -322,59 +355,70 @@ export class OperationsRepository {
    * site-bound list answers only those sites and the totals never count another pharmacy's stock.
    */
   private async loadLiveOperations(siteIds?: string[]): Promise<LiveOperations> {
-    const [
-      sites,
-      locations,
-      products,
-      suppliers,
-      balances,
-      batches,
-      transfers,
-      stocktakes,
-      adjustments,
-      receipts,
-      prescriptions,
-    ] = await Promise.all([
+    // Only the lists the dashboard sums in full are read here; every count comes from `loadCounts`, so no list is cut.
+    const [sites, locations, suppliers, balances, batches] = await Promise.all([
       this.fetchRows(this.options.catalogUrl, "/sites"),
       this.fetchRows(this.options.catalogUrl, "/storage-locations", siteIds),
-      // The catalog caps one page of products at 100; a larger limit is refused with 400 and the list comes back empty.
-      this.fetchRows(this.options.catalogUrl, "/products?limit=100"),
       this.fetchRows(this.options.catalogUrl, "/suppliers"),
       this.fetchRows(this.options.inventoryUrl, "/inventory/balances", siteIds),
       this.fetchRows(this.options.inventoryUrl, "/inventory/batches"),
-      this.fetchRows(this.options.inventoryUrl, "/inventory/transfers", siteIds),
-      this.fetchRows(this.options.inventoryUrl, "/inventory/stocktakes", siteIds),
-      this.fetchRows(this.options.inventoryUrl, "/inventory/adjustments", siteIds),
-      this.fetchRows(this.options.inventoryUrl, "/procurement/goods-receipts", siteIds),
-      this.fetchRows(this.options.salesUrl, "/prescriptions", siteIds),
     ]);
     return {
       sites: siteIds ? sites.filter((site) => siteIds.includes(String(site.id))) : sites,
       // The scope header is not the only line of defense: a service behind us could answer every location.
       locations: siteIds ? locations.filter((location) => siteIds.includes(String(location.siteId))) : locations,
-      products,
       suppliers,
       balances,
       batches,
-      transfers,
-      stocktakes,
-      adjustments,
-      receipts,
-      prescriptions,
     };
   }
 
   /**
-   * A site-bound read belongs to a scoped reader, and swallowing its failure would report a dashboard with no stock
-   * or no takings as if that were the truth, so a scoped read throws and the route answers 5xx. The unscoped reader
-   * keeps the lenient behavior: a network-wide dashboard is still useful without one list.
+   * Counts the owning services answer with `COUNT(*)` over their whole table, so no page can cut them. An `undefined`
+   * entry means a network-wide reader could not reach that service; the caller then uses the projection counter.
    */
+  private async loadCounts(siteIds?: string[]): Promise<LiveCounts> {
+    const [products, pendingTransfers, openPrescriptions, openStocktakes, pendingAdjustments, receipts] =
+      await Promise.all([
+        this.fetchCount(this.options.catalogUrl, "/products/count"),
+        this.fetchCount(this.options.inventoryUrl, openTransferQuery, siteIds),
+        this.fetchCount(this.options.salesUrl, openPrescriptionQuery, siteIds),
+        this.fetchCount(this.options.inventoryUrl, openStocktakeQuery, siteIds),
+        this.fetchCount(this.options.inventoryUrl, pendingAdjustmentQuery, siteIds),
+        this.fetchCount(this.options.inventoryUrl, "/procurement/goods-receipts/count", siteIds),
+      ]);
+    return { products, pendingTransfers, openPrescriptions, openStocktakes, pendingAdjustments, receipts };
+  }
+
+  /** The rows of a list read. Anything that is not a list counts as no rows for an unscoped reader; see `readJson`. */
   private async fetchRows(
     baseUrl: string | undefined,
     path: string,
     siteIds?: string[],
   ): Promise<Array<Record<string, unknown>>> {
-    if (!baseUrl) return [];
+    const value = await this.readJson(baseUrl, path, siteIds);
+    if (!Array.isArray(value)) {
+      if (siteIds) throw new Error(`Scoped read of ${path} did not answer a list`);
+      return [];
+    }
+    return value.filter((row): row is Record<string, unknown> => typeof row === "object" && row !== null);
+  }
+
+  private async fetchCount(baseUrl: string | undefined, path: string, siteIds?: string[]): Promise<number | undefined> {
+    const count = asRecord(await this.readJson(baseUrl, path, siteIds)).count;
+    if (typeof count === "number" && Number.isInteger(count) && count >= 0) return count;
+    if (siteIds) throw new Error(`Scoped read of ${path} did not answer a count`);
+    return undefined;
+  }
+
+  /**
+   * A site-bound read belongs to a scoped reader, and swallowing its failure would report a dashboard with no stock
+   * or no takings as if that were the truth, so a scoped read throws and the route answers 5xx. The unscoped reader
+   * keeps the lenient behavior: a network-wide dashboard is still useful without one read. `undefined` means that
+   * unscoped read did not answer.
+   */
+  private async readJson(baseUrl: string | undefined, path: string, siteIds?: string[]): Promise<unknown> {
+    if (!baseUrl) return undefined;
     try {
       const response = await fetch(`${baseUrl}${path}`, {
         headers: {
@@ -384,18 +428,12 @@ export class OperationsRepository {
         signal: AbortSignal.timeout(2_000),
       });
       if (!response.ok) {
-        if (siteIds) throw new Error(`Scoped read of ${path} answered HTTP ${response.status}`);
-        return [];
+        throw new Error(`${siteIds ? "Scoped read" : "Read"} of ${path} answered HTTP ${response.status}`);
       }
-      const value = (await response.json()) as unknown;
-      if (!Array.isArray(value)) {
-        if (siteIds) throw new Error(`Scoped read of ${path} did not answer a list`);
-        return [];
-      }
-      return value.filter((row): row is Record<string, unknown> => typeof row === "object" && row !== null);
+      return (await response.json()) as unknown;
     } catch (error) {
       if (siteIds) throw error;
-      return [];
+      return undefined;
     }
   }
 }
@@ -403,16 +441,26 @@ export class OperationsRepository {
 type LiveOperations = {
   sites: Array<Record<string, unknown>>;
   locations: Array<Record<string, unknown>>;
-  products: Array<Record<string, unknown>>;
   suppliers: Array<Record<string, unknown>>;
   balances: Array<Record<string, unknown>>;
   batches: Array<Record<string, unknown>>;
-  transfers: Array<Record<string, unknown>>;
-  stocktakes: Array<Record<string, unknown>>;
-  adjustments: Array<Record<string, unknown>>;
-  receipts: Array<Record<string, unknown>>;
-  prescriptions: Array<Record<string, unknown>>;
 };
+
+/** Each count is `undefined` when a network-wide reader could not reach its service. */
+type LiveCounts = {
+  products: number | undefined;
+  pendingTransfers: number | undefined;
+  openPrescriptions: number | undefined;
+  openStocktakes: number | undefined;
+  pendingAdjustments: number | undefined;
+  receipts: number | undefined;
+};
+
+/** The open-state counts, as the owning services filter them. Their status values are the stored strings. */
+const openTransferQuery = "/inventory/transfers/count?status=PendingApproval,Draft,Approved,InTransit";
+const openPrescriptionQuery = "/prescriptions/count?excludeStatus=Dispensed,Cancelled";
+const openStocktakeQuery = "/inventory/stocktakes/count?excludeStatus=Completed,Cancelled";
+const pendingAdjustmentQuery = "/inventory/adjustments/count?status=Pending";
 
 const rowQuantity = (row: Record<string, unknown>, key: string): number => {
   const direct = row[key];
@@ -476,42 +524,12 @@ const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
 /**
- * Price of one base unit of every product on `day`. A published price is per sale unit while stock is counted in base
- * units, so each price is divided by its unit's conversion factor; the base unit's own price wins over a larger
- * unit's. A price whose unit the product list does not carry cannot be converted and is skipped.
+ * One valuation line per stocked balance row; an empty row has nothing to value and is left out. `basePrices` is the
+ * catalog's `GET /pricing/base-prices` answer: one row per active product, its base-unit price today (null when no
+ * published price qualifies). A product the catalog no longer lists has no price and no name.
  */
-const basePricesOn = (
-  products: Array<Record<string, unknown>>,
-  prices: Array<Record<string, unknown>>,
-  day: string,
-): Map<string, number> => {
-  const units = new Map<string, { factor: number; isBase: boolean }>();
-  for (const product of products) {
-    for (const unit of Array.isArray(product.units) ? product.units.map(asRecord) : []) {
-      const factor = Number(unit.conversionFactorToBaseUnit);
-      if (typeof unit.id === "string" && factor > 0) units.set(unit.id, { factor, isBase: unit.isBaseUnit === true });
-    }
-  }
-  const chosen = new Map<string, { price: number; isBase: boolean }>();
-  for (const price of prices) {
-    const effectiveTo = typeof price.effectiveTo === "string" ? price.effectiveTo : null;
-    if (String(price.effectiveFrom) > day || (effectiveTo !== null && effectiveTo < day)) continue;
-    const unit = units.get(String(price.productUnitId));
-    const amount = Number(price.unitPrice);
-    if (!unit || !Number.isFinite(amount)) continue;
-    const productId = String(price.productId);
-    const current = chosen.get(productId);
-    if (!current || (unit.isBase && !current.isBase)) {
-      chosen.set(productId, { price: amount / unit.factor, isBase: unit.isBase });
-    }
-  }
-  return new Map([...chosen].map(([productId, entry]) => [productId, entry.price]));
-};
-
-/** One valuation line per stocked balance row; an empty row has nothing to value and is left out. */
-const valueBalances = (live: LiveOperations, prices: Array<Record<string, unknown>>, day: string): ValuationLine[] => {
-  const basePrices = basePricesOn(live.products, prices, day);
-  const productNames = new Map(live.products.map((product) => [String(product.id), String(product.name)]));
+const valueBalances = (live: LiveOperations, basePrices: Array<Record<string, unknown>>): ValuationLine[] => {
+  const prices = new Map(basePrices.map((row) => [String(row.productId), row]));
   const siteNames = new Map(live.sites.map((site) => [String(site.id), String(site.name)]));
   return live.balances
     .filter((row) => rowQuantity(row, "quantityOnHand") > 0)
@@ -520,12 +538,13 @@ const valueBalances = (live: LiveOperations, prices: Array<Record<string, unknow
       const batch = asRecord(row.batch);
       const productId = typeof batch.productId === "string" ? batch.productId : null;
       const siteId = typeof balance.siteId === "string" ? balance.siteId : null;
-      const unitPrice = productId === null ? null : (basePrices.get(productId) ?? null);
+      const price = productId === null ? undefined : prices.get(productId);
+      const unitPrice = typeof price?.unitPrice === "number" ? price.unitPrice : null;
       const quantityOnHand = rowQuantity(row, "quantityOnHand");
       const quantityReserved = rowQuantity(row, "quantityReserved");
       return {
         productId,
-        productName: (productId === null ? undefined : productNames.get(productId)) ?? productId ?? "-",
+        productName: (typeof price?.productName === "string" ? price.productName : undefined) ?? productId ?? "-",
         batchNumber: typeof batch.batchNumber === "string" ? batch.batchNumber : null,
         siteId,
         siteName: (siteId === null ? undefined : siteNames.get(siteId)) ?? siteId ?? "-",

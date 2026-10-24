@@ -16,6 +16,7 @@ export const auditEvents = pgTable(
     index("audit_events_entity_idx").on(table.entityType, table.entityId, table.occurredAt),
     index("audit_events_site_idx").on(table.siteId, table.occurredAt),
     index("audit_events_actor_idx").on(table.actorId, table.occurredAt),
+    index("audit_events_keyset_idx").on(table.occurredAt, table.eventId),
   ],
 );
 
@@ -55,5 +56,6 @@ export const reportRows = pgTable(
   (table) => [
     index("report_rows_type_occurred_idx").on(table.reportType, table.occurredAt),
     index("report_rows_subject_idx").on(table.subjectId, table.occurredAt),
+    index("report_rows_keyset_idx").on(table.occurredAt, table.id),
   ],
 );

@@ -51,6 +51,12 @@ describe("OperationsRepository dashboard site scope", () => {
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
       const scope = new Headers(init?.headers).get(scopeHeader)?.split(",") ?? [];
+      if (url.pathname.endsWith("/count")) {
+        return new Response(JSON.stringify({ count: 0 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
       const rows =
         url.pathname === "/inventory/balances"
           ? balances.filter((row) => scope.includes(String((row.balance as Record<string, unknown>).siteId ?? "")))
@@ -129,7 +135,8 @@ describe("OperationsRepository dashboard site scope", () => {
       // Balances are down. A scoped reader must not be told the pharmacy holds nothing, while the network-wide
       // dashboard is still worth answering without one list.
       if (scoped && url.pathname === "/inventory/balances") return new Response("boom", { status: 500 });
-      return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+      const body = url.pathname.endsWith("/count") ? { count: 0 } : [];
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
     });
 
     await expect(repository.dashboard([siteA])).rejects.toThrow(/Scoped read of \/inventory\/balances/);
@@ -139,13 +146,10 @@ describe("OperationsRepository dashboard site scope", () => {
   it("values stock at the base-unit published price and lists a product without one as missing a price", async () => {
     const priced = "00000000-0000-4000-8000-00000000003a";
     const unpriced = "00000000-0000-4000-8000-00000000003b";
-    const tablet = "00000000-0000-4000-8000-00000000004a";
-    const box = "00000000-0000-4000-8000-00000000004b";
     const stocked = (siteId: string, productId: string, quantityOnHand: string, quantityReserved = "0") => ({
       balance: { siteId, quantityOnHand, quantityReserved },
       batch: { id: batchA, productId, batchNumber: `LOT-${productId.slice(-2)}` },
     });
-    const yesterday = dayFromNow(-1);
     stubLiveServices(
       [
         stocked(siteA, priced, "30.000000", "10.000000"),
@@ -156,33 +160,10 @@ describe("OperationsRepository dashboard site scope", () => {
       ],
       {
         "/sites": [{ id: siteA, name: "Pharmacy A" }],
-        "/products": [
-          {
-            id: priced,
-            name: "Paracetamol 500mg",
-            units: [
-              { id: tablet, conversionFactorToBaseUnit: "1.000000", isBaseUnit: true },
-              { id: box, conversionFactorToBaseUnit: "10.000000", isBaseUnit: false },
-            ],
-          },
-          { id: unpriced, name: "Vitamin C", units: [] },
-        ],
-        // Only the box is priced today; the expired tablet price would value the stock at ten times as much.
-        "/pricing/prices": [
-          {
-            productId: priced,
-            productUnitId: box,
-            unitPrice: "50000.00",
-            effectiveFrom: "2025-01-01",
-            effectiveTo: null,
-          },
-          {
-            productId: priced,
-            productUnitId: tablet,
-            unitPrice: "50000.00",
-            effectiveFrom: "2025-01-01",
-            effectiveTo: yesterday,
-          },
+        // The catalog answers today's base-unit price per product (null when none qualifies).
+        "/pricing/base-prices": [
+          { productId: priced, productName: "Paracetamol 500mg", unitPrice: 5_000 },
+          { productId: unpriced, productName: "Vitamin C", unitPrice: null },
         ],
         "/inventory/movements/summary": [
           { movementType: "TransferOut", count: 1, quantityIn: 0, quantityOut: 4 },

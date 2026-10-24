@@ -1,8 +1,9 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { z } from "zod";
 
 import { listSiteIds } from "../middleware/trusted-request.ts";
-import { OperationsRepository, type IntegrationEvent } from "./operations-repository.ts";
+import { decodePageCursor, encodePageCursor } from "./page-cursor.ts";
+import { OperationsRepository, type AuditFilters, type IntegrationEvent } from "./operations-repository.ts";
 
 const eventSchema = z.object({
   eventId: z.string().uuid(),
@@ -39,16 +40,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       return;
     }
     try {
-      const filters: {
-        limit?: number;
-        actorId?: string;
-        siteIds?: string[];
-        action?: string;
-        entityType?: string;
-        entityId?: string;
-        from?: string;
-        to?: string;
-      } = {};
+      const filters: AuditFilters = {};
       const limit = queryNumber(request.query.limit);
       const actorId = queryString(request.query.actorId) ?? queryString(request.query.userId);
       const siteIds = listSiteIds(request);
@@ -57,7 +49,16 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       const entityType = queryString(request.query.entityType);
       const from = queryString(request.query.from);
       const to = queryString(request.query.to);
+      const q = queryString(request.query.q);
+      const rawCursor = queryString(request.query.cursor);
+      const cursor = rawCursor === undefined ? undefined : decodePageCursor(rawCursor);
+      if (rawCursor !== undefined && cursor === undefined) {
+        invalidCursor(response);
+        return;
+      }
       if (limit !== undefined) filters.limit = limit;
+      if (cursor) filters.cursor = cursor;
+      if (q) filters.q = q;
       if (actorId) filters.actorId = actorId;
       if (siteIds) filters.siteIds = siteIds;
       if (action) filters.action = action;
@@ -65,7 +66,10 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       if (entityId) filters.entityId = entityId;
       if (from) filters.from = from;
       if (to) filters.to = to;
-      response.json(await repository.listAudit(filters));
+      const page = await repository.listAudit(filters);
+      // The body stays a plain array; the cursor of the next page travels in a header.
+      if (page.next) response.set("X-Next-Cursor", encodePageCursor(page.next));
+      response.json(page.rows);
     } catch (error) {
       next(error);
     }
@@ -103,10 +107,20 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       unavailable(response);
       return;
     }
+    const rawCursor = queryString(request.query.cursor);
+    const cursor = rawCursor === undefined ? undefined : decodePageCursor(rawCursor);
+    if (rawCursor !== undefined && cursor === undefined) {
+      invalidCursor(response);
+      return;
+    }
     try {
-      response.json(
-        await repository.report(queryString(request.query.reportType), queryNumber(request.query.limit) ?? 100),
-      );
+      const page = await repository.report(queryString(request.query.reportType), {
+        limit: queryNumber(request.query.limit) ?? 100,
+        ...(cursor ? { cursor } : {}),
+      });
+      // The body stays a plain array; the cursor of the next page travels in a header.
+      if (page.next) response.set("X-Next-Cursor", encodePageCursor(page.next));
+      response.json(page.rows);
     } catch (error) {
       next(error);
     }
@@ -140,3 +154,5 @@ const unavailable = (response: import("express").Response) =>
   response.status(503).json({ title: "Operations database is not configured", status: 503 });
 const invalid = (response: import("express").Response) =>
   response.status(400).json({ title: "Invalid event", status: 400, code: "invalid_request" });
+const invalidCursor = (response: Response) =>
+  response.status(400).json({ title: "Invalid page cursor", status: 400, code: "invalid_cursor" });
