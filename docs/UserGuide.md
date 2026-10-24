@@ -79,7 +79,7 @@ Staff Web has four business roles. Access is decided by role, and non-admin user
 | Platform Admin | Every sidebar workspace, including Governance (Users, Audit, AI integrations) |
 | Pharmacy Manager | Dashboard, Pharmacist overview, Prescriptions, Online orders, Procurement, Reporting, Finance, Sites, Storage locations, Catalog, Search synonyms, Units, Pricing, Suppliers, Data import |
 | Pharmacist | Pharmacist overview, Prescriptions, Online orders, Replenishment, Search synonyms |
-| Warehouse Staff | Dashboard, Transfers, Replenishment, Receiving, Stocktake, Inventory, Adjustments, Returns and removals, Quality, Reporting, Data import |
+| Warehouse Staff | Dashboard, Transfers, Replenishment, Receiving, Stocktake, Inventory, Adjustments, Returns and removals, Quality, Reporting, Data import (Stock only) |
 
 Points to note:
 
@@ -136,7 +136,7 @@ Prices are recorded per product unit in the catalog service.
 
 ### Data import
 
-**Data import** (Platform Admin, Pharmacy Manager, Warehouse Staff) has one sidebar entry per dataset, in this dependency order:
+**Data import** (Platform Admin and Pharmacy Manager; Warehouse Staff only see **Stock**, because only a Pharmacy Manager may write catalog data) has one sidebar entry per dataset, in this dependency order:
 
 1. **Sites**
 2. **Storage locations**

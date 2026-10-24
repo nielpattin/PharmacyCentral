@@ -24,6 +24,8 @@ Authenticated browser mutations send the `pharmacy_session` cookie and `X-CSRF-T
 
 The Google routes answer `503 google_not_configured` when Google sign-in is not configured. The callback answers `400 invalid_oauth_state` when the `state` query value does not match the `oauth_state` cookie.
 
+Credential routes are rate limited: `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, and `GET /api/auth/verify-email`. Each is a sliding window of `AUTH_RATE_LIMIT_WINDOW_SECONDS` seconds with up to `AUTH_RATE_LIMIT_MAX_ATTEMPTS` attempts. On `POST /api/auth/login` only failed sign-ins count: a successful sign-in gives its attempt back, so a shopper who signs in normally never reaches the limit. The other four routes count every attempt. The bucket is the email (or the account id on the two token routes) together with the client address identity-service sees behind the gateway. The limit applies whether or not the account exists, so a refused request reveals nothing about the address. A refused attempt answers `429` with `code: "rate_limited"`, a `Retry-After` header in whole seconds, and the usual `{ title, status, code }` body, and it records nothing. The check runs before the password or token is read. When the Redis counter cannot be read or written, the route answers `503 rate_limit_unavailable` and processes nothing. `setup-admin` and `change-password` are not limited: the first is a one-time bootstrap and the second already requires a session.
+
 ## Accounts and administration
 
 Employee roles are `Platform Admin`, `Pharmacy Manager`, `Pharmacist`, and `Warehouse Staff`.
@@ -295,9 +297,13 @@ All routes below need a Platform Admin: `401` without a session, `403` for any o
 
 `GET /api/system/metrics/summary?windowMinutes=15|60|360|1440` answers `{ generatedAt, from, to, stepSeconds, services }`, where `services` maps each configured service to `{ availability }`: a list of `[unixSeconds, ratio | null]` points, the average of the probe gauge per step. The step is 15 s for 15 minutes and grows with the window (60 steps at most).
 
-`GET /api/system/metrics/range?service=<name>&windowMinutes=15|60|360|1440` answers `{ generatedAt, service, from, to, stepSeconds, series }`. `service` is a configured service name, or `all` for the sum of the configured services. `series` holds `cpuCores`, `memoryBytes` and `eventLoopLagSeconds`, each a list of `[unixSeconds, value | null]` on one grid. The step is at least 60 s.
+The step is at least 60 s.
 
 Both metric reads answer `400 invalid_request` for an unknown service or an unsupported window, and `502 prometheus_unavailable` when Prometheus does not answer.
+
+`GET /api/system/catalog` answers `{ services }`, one entry per probed service: `name`, `description`, `port`, `database` (the owned PostgreSQL database, or `null`), `routePrefixes` (gateway patterns; `GET /...` where the row matches one method), `dependsOn` (services it calls over HTTP), `calledBy` (services whose `dependsOn` names it), `events` (`published` and `consumed` event names). The answer is static: it changes only when ops-console-service is redeployed.
+
+`GET /api/system/routes` answers `{ routes }`, one row per gateway path pattern: `path` (with `/api`, and a trailing `*` for a prefix), `method` (only when the row matches one method), `service`, `access` and `note`. `access.kind` is `public`, `signed-in`, `roles` (with a `roles` list), or `platform-admin`. `note` is an English sentence about an exception to that access and is optional.
 
 ## Query projections
 

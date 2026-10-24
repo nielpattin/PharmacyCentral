@@ -162,6 +162,15 @@ Use Node.js 24.19.x and pnpm 12.3.4+. Node 25 or later is rejected by the worksp
 pnpm install --frozen-lockfile
 ```
 
+## Identity rate limits and client address
+
+identity-service requires `REDIS_URL`, `AUTH_RATE_LIMIT_MAX_ATTEMPTS`, `AUTH_RATE_LIMIT_WINDOW_SECONDS`, and `TRUST_PROXY_HOPS`, with no defaults. Startup fails when one is missing or is not a whole number of at least 1.
+
+- `TRUST_PROXY_HOPS` is the number of proxies in front of identity-service that append to `X-Forwarded-For`. Locally it is `1`: the nginx gateway overwrites the header with its own `$remote_addr`, so a client cannot supply its own address. Behind AWS the value is unverified. The path is API Gateway HTTP API, then the VPC link, then the internal ALB. Two is the expected value if API Gateway appends the client address and the ALB appends the VPC link address. Confirm that from the `X-Forwarded-For` header of a real request before setting it in `deploy/aws`. A value that is too low keys every client to a proxy address, and a value that is too high lets a client choose its own.
+- The Compose stack reaches identity-service through the nginx gateway. Docker usually presents host clients to nginx as the bridge gateway address, which is not verified here, so locally the limit may be one bucket per account rather than per client.
+- When Redis is unreachable, `POST /api/auth/login`, `register`, `request-password-reset`, and `reset-password`, and `GET /api/auth/verify-email` answer `503 rate_limit_unavailable`. Sessions are stored in Postgres, so `GET /api/auth/me` keeps working.
+- To clear a lockout for a support request, find the account's keys with `redis-cli --scan --pattern 'identity:auth-limit:<action>:<digest>:*'`, where `<digest>` is the SHA-256 of the lowercased, trimmed email, then `DEL` them. Keys hold that digest and the client address, never the email itself.
+
 ## Database migrations and seeds
 
 Each microservice owns its Drizzle migrations and database schema under `apps/<service>/drizzle/migrations`.
@@ -414,12 +423,12 @@ Business metrics and alerts:
   - Chatbot: `pharmacy_chatbot_step_duration_seconds{step,outcome}`. `step` is `intent_gate`, `model` or `tool`, `outcome` is `ok` or `error`.
   - Delivery: `pharmacy_delivery_calculation_duration_seconds{outcome}`, with `outcome` `ok`, `out_of_range` or `provider_error`, and `pharmacy_delivery_cache_total{result}`, with `result` `hit` or `miss`.
 - The collector scrapes queue depth from the RabbitMQ management API. It needs `RABBITMQ_USER` and `RABBITMQ_PASSWORD`, which are passed to the collector container.
-- Five alert rules live in the folder `Pharmacy Central`, group `pharmacy-central`, in `deploy/local/grafana/provisioning/alerting/alerts.yaml`. They evaluate over `[5m]` windows:
-  - `Outbox stuck`: unpublished rows stay above zero while the oldest row ages. Check that RabbitMQ is up with `docker compose logs rabbitmq`, then the relay logs of the service. The rows stay safe in the table and drain when the broker is back.
-  - `Dead-letter queue not empty`: a `<queue>.dead` queue holds a message. Open RabbitMQ management on `http://localhost:${RABBITMQ_MANAGEMENT_PORT}`, inspect the message in `<queue>.dead`, and fix the cause. Then shovel the message back to `pharmacy.events` or purge it.
-  - `Server error rate high`: the 5xx rate is high. Search Tempo with `{ status = error }` and open the Service Overview dashboard.
-  - `Consumer failures`: consumers are failing. The service logs show the attempt count for each message.
-  - `SePay webhook errors`: webhooks fail. Check the payment-service logs and the SePay delivery log.
+- Five alert rules live in the folder `Pharmacy Central`, group `pharmacy-central`, in `deploy/local/grafana/provisioning/alerting/alerts.yaml`. Each rule has `__dashboardUid__` and `__panelId__` annotations, so Grafana shows an Open dashboard link to the panel named below. The recovery steps are in [Alert runbooks](#alert-runbooks):
+  - `Outbox stuck` (critical): the oldest unpublished outbox row of a service is older than 120 s for 2 minutes. Panel: Business Health, "Oldest unpublished row age (max)".
+  - `Dead-letter queue not empty` (critical): a `<queue>.dead` queue holds a message for 1 minute. Panel: Business Health, "Messages in dead-letter queues".
+  - `Server error rate high` (critical): more than 5% of one service's requests returned 5xx over the last 5 minutes, for 2 minutes. Panel: Service Overview, "5xx error rate by service".
+  - `Consumer failures` (warning): a consumer retried or dead-lettered a message in the last 10 minutes. Panel: Business Health, "Consumer messages by queue and outcome".
+  - `SePay webhook errors` (warning): the SePay webhook recorded an `error` outcome in the last 10 minutes. Panel: Business Health, "SePay webhook errors (error + invalid_payload)".
 - Locally the alerts have no notification channel. View their state in Grafana under Alerting > Alert rules. Production notification wiring is a TODO for deploy.
 
 Daily workflow:
@@ -428,17 +437,62 @@ Daily workflow:
 - To go from a log line to its trace, open Explore with the `Loki` datasource and select the `TraceID` link on a line that carries a `trace_id`. Tempo opens on that trace.
 - To follow an event across services, search Tempo with `{span.messaging.system="rabbitmq"}`. The outbox row stores the `traceparent` of the request that wrote it (`outbox_messages.traceparent`, in inventory, sales and payment), and the relay publishes under it. One trace therefore runs from the request, through `publish pharmacy.events`, to every consumer's `process` span.
 
+### Alert runbooks
+
+Each heading below is the runbook of one alert rule.
+
+#### Outbox stuck
+
+What fired: the oldest unpublished row of a service in `outbox_messages` has been older than 120 s for 2 minutes (`pharmacy_outbox_oldest_age_seconds`). The relay publishes every second, so the relay or RabbitMQ is down.
+
+First check: that RabbitMQ is up with `docker compose logs rabbitmq`, then the relay logs of the service.
+
+Recovery: the rows stay safe in the table and drain when the broker is back. Restore RabbitMQ or the relay. The alert clears when the oldest age is back under 120 s.
+
+#### Dead-letter queue not empty
+
+What fired: a `<queue>.dead` queue holds at least one message for 1 minute (`rabbitmq_message_current`). Consumers could not process it.
+
+First check: open RabbitMQ management on `http://localhost:${RABBITMQ_MANAGEMENT_PORT}`, inspect the message in `<queue>.dead`, and find the cause.
+
+Recovery: fix the cause, then shovel the message back to `pharmacy.events` or purge it. The alert clears when the queue is empty.
+
+#### Server error rate high
+
+What fired: more than 5% of one service's HTTP requests returned 5xx over the last 5 minutes, with more than 0.05 requests per second (`http_server_request_duration_seconds_count`).
+
+First check: search Tempo with `{ status = error }` and open the Service Overview dashboard.
+
+Recovery: fix the failing path that the error traces show. The alert clears when the 5xx share is back at 5% or below.
+
+#### Consumer failures
+
+What fired: a queue consumer recorded a `retried` or `dead_lettered` outcome in the last 10 minutes (`pharmacy_consumer_messages_total`).
+
+First check: the service logs, which show the attempt count for each message.
+
+Recovery: fix the failure the logs show. A message that ended as `dead_lettered` is in a `.dead` queue, see [Dead-letter queue not empty](#dead-letter-queue-not-empty). The alert clears after 10 minutes without retries or dead letters.
+
+#### SePay webhook errors
+
+What fired: the SePay webhook recorded an `error` outcome in the last 10 minutes (`pharmacy_payment_webhook_total`).
+
+First check: the payment-service logs and the SePay delivery log.
+
+Recovery: fix the cause the logs show. The alert clears after 10 minutes without an `error` outcome.
+
 ## System page (ops-console-service)
 
-staff-web has a System page in the Governance group. Only a Platform Admin sees it. It talks to `ops-console-service` (port 3010), which has no database and writes nothing. The page is one overview, with no tabs.
+staff-web has a System page in the Governance group. Only a Platform Admin sees it. It talks to `ops-console-service` (port 3010), which has no database and writes nothing. The page has four tabs, held in the URL as `?tab=`: Services, Messaging, API routes and Dashboards. The header (status line, refresh) stays on every tab; the window picker shows on Services only.
 
-From top to bottom it shows:
+The tabs show:
 
-- **Status line:** "all services are operating normally", or how many services are down or degraded. The verdict comes from the rules in `health.ts`: readiness and liveness probes, 5xx share, p95 latency, DB pool use and outbox lag.
-- **Services table:** one row per service with a status dot, readiness and liveness, version, instances, CPU, memory, event loop lag and a 24 h uptime strip. The window picker (15 min, 1 h, 6 h, 24 h) sets the strip. Select a row for a side sheet with the state, the reasons the verdict is not healthy, CPU, memory and event loop lag charts, and links to the Grafana Service Overview, Traces and Logs of that service.
-- **Queues:** ready and unacknowledged messages, consumers and status per RabbitMQ queue. Queues without consumers and dead letter queues holding messages come first.
-- **Search index:** documents per Typesense collection.
-- **Grafana:** links to the dashboards. RED per service, the latency heatmap, the service graph, traces, logs, async messaging and the outbox live there, not on this page.
+- **Status line (header):** "all services are operating normally", or how many services are down or degraded. The verdict comes from the rules in `health.ts`: readiness and liveness probes, 5xx share, p95 latency, DB pool use and outbox lag.
+- **Services tab:** one row per service with a status dot, readiness and liveness, version, instances, CPU, memory, event loop lag and a 24 h uptime strip. The window picker (15 min, 1 h, 6 h, 24 h) sets the strip. Select a row for a side sheet with the state, the reasons the verdict is not healthy, and links to the Grafana Service Overview, Traces and Logs of that service. The sheet has two tabs: Overview (the catalog) and Resources (CPU, memory and event loop lag charts with their window picker). The catalog block shows the description, database and port, the services it calls and the services that call it (a name opens that service's sheet), and the events it publishes and consumes.
+- **Messaging tab, queues:** ready and unacknowledged messages, consumers and status per RabbitMQ queue. Queues without consumers and dead letter queues holding messages come first.
+- **Messaging tab, search index:** documents per Typesense collection.
+- **API routes tab:** the gateway path table. Each `/api` path pattern, the service it goes to, and who may call it: public, signed in, the staff roles, or Platform Admin only. A filter box narrows the rows. The table is read only.
+- **Dashboards tab:** links to the dashboards. RED per service, the latency heatmap, the service graph, traces, logs, async messaging and the outbox live there, not on this page.
 
 How the numbers come about:
 
@@ -449,8 +503,9 @@ How the numbers come about:
 - Instances are counted from the memory gauge series per host over the last 5 minutes, so a container that was just replaced counts twice for up to 5 minutes.
 - Uptime is `avg_over_time` of a gauge `pharmacy_ops_probe_up` that ops-console exports after probing every service each 15 s. It counts only the time ops-console itself ran, so it starts again after a restart of that service.
 - Access is checked three times: the edge Lambda policy (`/api/system` is in `platformAdminPaths`), the service (HMAC-verified identity context, role `Platform Admin`, employee), and the staff-web menu.
-- Required environment (no defaults): `PORT`, `INTERNAL_IDENTITY_SECRET`, the eight `*_SERVICE_URL`, `PROMETHEUS_URL`, `RABBITMQ_MANAGEMENT_URL`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `TYPESENSE_URL`, `TYPESENSE_API_KEY`, `GRAFANA_PUBLIC_URL`.
+- Required environment (no defaults): `PORT`, `INTERNAL_IDENTITY_SECRET`, the eight `*_SERVICE_URL`, `PROMETHEUS_URL`, `RABBITMQ_MANAGEMENT_URL`, `RABBITMQ_MANAGEMENT_USER`, `RABBITMQ_MANAGEMENT_PASSWORD`, `TYPESENSE_URL`, `TYPESENSE_API_KEY`, `GRAFANA_PUBLIC_URL`.
 - The page is read only: no replay of dead letters, no reindex.
+- The service catalog (`GET /api/system/catalog`) and the route table (`GET /api/system/routes`) are constants of the service, in `src/modules/system/service-manifest.ts`, `probed-services.ts` and `route-table.ts`. The service reads nothing from `deploy/` at runtime. When a gateway path, a platform-admin path, an ALB rule or a service dependency changes, change the table or the manifest too. `route-table.test.ts` fails when `deploy/local/gateway/routes.conf`, `deploy/aws/main.tf` or `deploy/aws/lambda/policy.mjs` disagree with the table. `service-manifest.test.ts` checks that every probed service has an entry, that every `dependsOn` names a known service, that every consumed event is published, and that every runbook anchor is a heading of this file. The dependencies and events come from the code (`*_SERVICE_URL` use, `fetch` calls, outbox writes, queue bindings), so update them when those change.
 - **Limits on AWS:** Amazon Managed Prometheus accepts only SigV4-signed queries and `ops-console-service` does not sign, so the overview's load numbers need a signing proxy (for example `aws-sigv4-proxy`) in front of the workspace and `PROMETHEUS_URL` pointing at it. The RabbitMQ section needs the management endpoint of Amazon MQ, which was not tested.
 
 ### Grafana bookmarks for the System page
