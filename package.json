@@ -28,9 +28,9 @@
     "stack:aws-like": "docker compose -f docker-compose.yml -f docker-compose.aws-like.yml stop gateway-dev && docker compose -f docker-compose.yml -f docker-compose.aws-like.yml up -d --build --wait"
   },
   "devDependencies": {
-    "@nx/js": "23.1.1",
+    "@nx/js": "23.2.1",
     "@typescript/native": "npm:typescript@7.0.2",
-    "nx": "23.1.1",
+    "nx": "23.2.1",
     "oxfmt": "0.64.0",
     "oxlint": "1.79.0",
     "oxlint-tsgolint": "7.0.2001",
