@@ -7,7 +7,7 @@ export const Field = ({
   className,
 }: {
   label: string;
-  hint?: string;
+  hint?: string | undefined;
   children: React.ReactNode;
   className?: string;
 }): React.JSX.Element => (
