@@ -19,8 +19,6 @@ const translatedLabels = (): DataTableLabels => ({
   previous: translateText("Previous"),
   next: translateText("Next"),
   loading: translateText("Loading…"),
-  sortAscending: translateText("(asc)"),
-  sortDescending: translateText("(desc)"),
   sortLoadedRowsOnly: translateText("Sorting applies to loaded rows only"),
   density: translateText("Density"),
   densityCompact: translateText("Compact"),

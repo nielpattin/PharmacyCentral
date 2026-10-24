@@ -12,7 +12,9 @@ const buttonVariants = cva(
         outline: "border border-line bg-surface text-ink hover:bg-surface-soft",
         ghost: "text-ink hover:bg-surface-soft",
         danger: "bg-danger text-white hover:brightness-95",
-        "danger-soft": "bg-danger-soft text-danger hover:bg-danger/15",
+        "danger-soft": "bg-danger-soft text-danger-ink hover:bg-danger/15",
+        // Quiet until hovered, for a destructive action repeated on every table row.
+        "danger-ghost": "text-danger-ink hover:bg-danger-soft",
       },
       size: {
         sm: "h-8 px-3 text-xs",

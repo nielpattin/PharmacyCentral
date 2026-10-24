@@ -48,8 +48,6 @@ export const procurementLiterals: Record<string, string> = {
   Compact: "Gọn",
   Standard: "Tiêu chuẩn",
   Loose: "Thoáng",
-  "(asc)": "(tăng dần)",
-  "(desc)": "(giảm dần)",
   "Sorting applies to loaded rows only": "Sắp xếp chỉ áp dụng cho các dòng đã tải",
   "Showing {count} rows": "Hiển thị {count} bản ghi",
   "Showing {count} of {total} rows": "Hiển thị {count} trên {total} bản ghi",

@@ -28,6 +28,22 @@ const FieldControl = ({
       </Field>
     );
   }
+  if (field.kind === "select") {
+    // A stored value outside the set stays selectable, so editing an older record does not blank it.
+    const known = Object.keys(field.options);
+    return (
+      <Field label={label}>
+        <Select required value={value} onChange={(event) => onChange(event.target.value)}>
+          {value !== "" && !known.includes(value) ? <option value={value}>{value}</option> : null}
+          {known.map((key) => (
+            <option key={key} value={key}>
+              {translateText(field.options[key] ?? key)}
+            </option>
+          ))}
+        </Select>
+      </Field>
+    );
+  }
   if (field.kind === "site") {
     return (
       <Field label={label}>

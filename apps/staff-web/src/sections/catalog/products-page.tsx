@@ -95,7 +95,7 @@ export const ProductsPage = (): React.JSX.Element => {
           <Button variant="ghost" size="sm" onClick={() => setDrawer({ kind: "edit", product: row })}>
             {translateText("Edit")}
           </Button>
-          <Button variant="danger-soft" size="sm" onClick={() => void removeProduct(row)}>
+          <Button variant="danger-ghost" size="sm" onClick={() => void removeProduct(row)}>
             {translateText("Delete")}
           </Button>
         </RowActions>

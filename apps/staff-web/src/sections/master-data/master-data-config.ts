@@ -10,9 +10,28 @@ export type MasterField =
   | { kind: "text"; name: string; label: string; required?: boolean; type?: "text" | "email" }
   | { kind: "number"; name: string; label: string; min?: number; max?: number }
   | { kind: "boolean"; name: string; label: string }
-  | { kind: "site"; name: string; label: string };
+  | { kind: "site"; name: string; label: string }
+  /** A fixed set: `options` maps each stored value to its readable English label. */
+  | { kind: "select"; name: string; label: string; options: Readonly<Record<string, string>> };
 
-export type MasterColumn = { key: string; label: string; truncate?: boolean };
+// Sites, storage locations and suppliers share these two statuses; the server only requires a string up to 30 characters.
+const STATUS_LABELS = { Active: "Active", Inactive: "Inactive" } as const;
+
+// The site types the catalog stores, with the label shown for each.
+const SITE_TYPE_LABELS = {
+  Headquarters: "Headquarters",
+  RegionalHub: "Regional hub",
+  RetailStore: "Retail store",
+  Warehouse: "Warehouse",
+} as const;
+
+/** `valueLabels` maps a stored value to the readable English label shown in the table; the export keeps the stored value. */
+export type MasterColumn = {
+  key: string;
+  label: string;
+  truncate?: boolean;
+  valueLabels?: Readonly<Record<string, string>>;
+};
 
 export type MasterDataConfig = {
   id: MasterDataKind;
@@ -67,15 +86,19 @@ const siteConfig: MasterDataConfig = {
   columns: [
     { key: "code", label: "Code" },
     { key: "name", label: "Name" },
-    { key: "siteType", label: "Type" },
-    { key: "address", label: "Address", truncate: true },
+    {
+      key: "siteType",
+      label: "Type",
+      valueLabels: SITE_TYPE_LABELS,
+    },
+    { key: "address", label: "Address" },
     { key: "status", label: "Status" },
   ],
   fields: [
     { kind: "text", name: "code", label: "Code", required: true },
     { kind: "text", name: "name", label: "Name", required: true },
-    { kind: "text", name: "siteType", label: "Site type", required: true },
-    { kind: "text", name: "status", label: "Status", required: true },
+    { kind: "select", name: "siteType", label: "Site type", options: SITE_TYPE_LABELS },
+    { kind: "select", name: "status", label: "Status", options: STATUS_LABELS },
     { kind: "text", name: "address", label: "Address" },
     { kind: "text", name: "notes", label: "Notes" },
     { kind: "boolean", name: "isActive", label: "Active" },
@@ -86,7 +109,7 @@ const siteConfig: MasterDataConfig = {
   initialValues: () => ({
     code: "",
     name: "",
-    siteType: "Retail",
+    siteType: "RetailStore",
     status: "Active",
     address: "",
     notes: "",
@@ -146,7 +169,7 @@ const locationConfig: MasterDataConfig = {
     { kind: "text", name: "code", label: "Code", required: true },
     { kind: "text", name: "name", label: "Name", required: true },
     { kind: "text", name: "locationType", label: "Location type", required: true },
-    { kind: "text", name: "status", label: "Status", required: true },
+    { kind: "select", name: "status", label: "Status", options: STATUS_LABELS },
     { kind: "number", name: "capacity", label: "Capacity", min: 0 },
     { kind: "boolean", name: "isActive", label: "Active" },
   ],
@@ -206,7 +229,7 @@ const supplierConfig: MasterDataConfig = {
     { kind: "text", name: "email", label: "Email", type: "email" },
     { kind: "text", name: "phone", label: "Phone" },
     { kind: "text", name: "address", label: "Address" },
-    { kind: "text", name: "status", label: "Status", required: true },
+    { kind: "select", name: "status", label: "Status", options: STATUS_LABELS },
     { kind: "text", name: "notes", label: "Notes" },
     { kind: "boolean", name: "isActive", label: "Active" },
   ],

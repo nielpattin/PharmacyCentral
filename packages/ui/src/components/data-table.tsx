@@ -13,7 +13,7 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useId, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "../cn.ts";
 import { downloadCsv, toCsv, type CsvColumn } from "../data-table/csv.ts";
@@ -62,8 +62,6 @@ const DEFAULT_LABELS = {
   previous: "Previous",
   next: "Next",
   loading: "Loading…",
-  sortAscending: "(asc)",
-  sortDescending: "(desc)",
   sortLoadedRowsOnly: "Sorting applies to loaded rows only",
   density: "Density",
   densityCompact: "Compact",
@@ -137,6 +135,8 @@ export type DataTableProps<T> = {
   /** Server mode: the caller owns paging. */
   paging?: DataTablePaging | undefined;
   exportCsv?: DataTableExport | undefined;
+  /** Extra controls in the toolbar, before the density and column controls (for example a saved-views menu). */
+  toolbarExtra?: ReactNode | undefined;
 };
 
 type ColumnLayout = Pick<DataColumn<unknown>, "align" | "pinned" | "width">;
@@ -144,7 +144,11 @@ type ColumnLayout = Pick<DataColumn<unknown>, "align" | "pinned" | "width">;
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 const ALIGN_CLASS = { left: "text-left", right: "text-right", center: "text-center" } as const;
 const DENSITY_CELL: Record<TableDensity, string> = { compact: "py-1", standard: "py-2", loose: "py-3.5" };
-const PINNED_CELL = "sticky right-0 z-[1] border-l border-line bg-surface";
+// The edge line only shows while the table scrolls sideways, which is when the pinned column overlaps other cells.
+const PINNED_CELL = "sticky right-0 z-[1] bg-surface";
+const PINNED_EDGE = "border-l border-line";
+// Density and the sort caveat only help once there is a long list to read.
+const DENSITY_MIN_ROWS = 10;
 const EMPTY_STATE_CLASS =
   "my-8 rounded-lg border border-dashed border-line bg-surface-soft px-6 py-12 text-center text-sm text-muted";
 
@@ -171,6 +175,22 @@ const useTablePreferences = (storageKey: string | undefined): [TablePreferences,
   };
   return [preferences, update];
 };
+
+const SortIcon = ({ direction }: { direction: false | "asc" | "desc" }): React.JSX.Element => (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 12 12"
+    className={cn("size-3 shrink-0", direction ? "text-ink" : "text-muted-soft")}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M3 4.5 6 1.5l3 3" className={direction === "desc" ? "opacity-25" : undefined} />
+    <path d="M3 7.5 6 10.5l3-3" className={direction === "asc" ? "opacity-25" : undefined} />
+  </svg>
+);
 
 const ColumnMenu = ({
   options,
@@ -261,6 +281,7 @@ export const DataTable = <T,>({
   search,
   paging,
   exportCsv,
+  toolbarExtra,
 }: DataTableProps<T>): React.JSX.Element => {
   const text = <K extends keyof typeof DEFAULT_LABELS>(key: K): string => labels[key] ?? DEFAULT_LABELS[key];
 
@@ -273,7 +294,19 @@ export const DataTable = <T,>({
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 25 });
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [scrollsSideways, setScrollsSideways] = useState(false);
+  // Ref callback with cleanup: remeasures when the container or the table inside it changes size.
+  const attachScroller = useCallback((element: HTMLDivElement | null): (() => void) | undefined => {
+    scrollRef.current = element;
+    if (element === null) return undefined;
+    const measure = (): void => setScrollsSideways(element.scrollWidth > element.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    return () => observer.disconnect();
+  }, []);
 
   const hiddenKeys = new Set(preferences.hiddenColumns);
   const hideableKeys = new Set(
@@ -314,6 +347,8 @@ export const DataTable = <T,>({
   const pageRows = table.getRowModel().rows;
   const visibleCount = table.getVisibleLeafColumns().length;
   const density = preferences.density;
+  // A non-default density stays reachable so it can be switched back.
+  const showDensity = density !== "standard" || rows.length > DENSITY_MIN_ROWS;
   const pageKeys = pageRows.map((row) => row.id);
   const selectedKeys = selection?.keys ?? EMPTY_KEYS;
   const headerState = selectionState(pageKeys, selectedKeys);
@@ -410,7 +445,7 @@ export const DataTable = <T,>({
               className={cn(
                 DENSITY_CELL[density],
                 column?.align !== undefined && ALIGN_CLASS[column.align],
-                column?.pinned === "right" && PINNED_CELL,
+                column?.pinned === "right" && cn(PINNED_CELL, scrollsSideways && PINNED_EDGE),
               )}
             >
               {renderCell(cell, row)}
@@ -452,20 +487,18 @@ export const DataTable = <T,>({
               "whitespace-nowrap bg-surface",
               stickyHeaderClass,
               column?.align !== undefined && ALIGN_CLASS[column.align],
-              column?.pinned === "right" && "sticky right-0 z-20 border-l border-line",
+              column?.pinned === "right" && cn("sticky right-0 z-20", scrollsSideways && PINNED_EDGE),
             )}
             style={widthStyle(column)}
           >
             {canSort ? (
               <button
                 type="button"
-                className="inline-flex items-center gap-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="inline-flex items-center gap-1 rounded-sm text-left [text-transform:inherit] outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 onClick={header.column.getToggleSortingHandler()}
               >
                 {label}
-                <span aria-hidden="true">
-                  {sorted === "asc" ? text("sortAscending") : sorted === "desc" ? text("sortDescending") : ""}
-                </span>
+                <SortIcon direction={sorted} />
               </button>
             ) : (
               label
@@ -516,7 +549,10 @@ export const DataTable = <T,>({
   } else {
     // The scroll container bounds the height, so sticky header cells pin inside it.
     body = (
-      <div ref={scrollRef} className={cn("overflow-auto", stickyHeader && "max-h-[max(24rem,calc(100dvh-21rem))]")}>
+      <div
+        ref={attachScroller}
+        className={cn("overflow-auto", stickyHeader && "max-h-[max(24rem,calc(100dvh-21rem))]")}
+      >
         <table className="w-full border-collapse text-left text-sm">
           <TableHeader>{headerRows}</TableHeader>
           <TableBody>{renderBodyRows()}</TableBody>
@@ -554,16 +590,21 @@ export const DataTable = <T,>({
             {filteredRows.length} {filteredRows.length === 1 ? text("singularRow") : text("pluralRows")}
           </span>
         ) : null}
-        {serverMode && sortingEnabled ? <span className="text-xs text-muted">{text("sortLoadedRowsOnly")}</span> : null}
-        <ToggleGroup
-          aria-label={text("density")}
-          value={density}
-          onValueChange={(next) => updatePreferences({ ...preferences, density: next })}
-        >
-          <ToggleGroupItem value="compact">{text("densityCompact")}</ToggleGroupItem>
-          <ToggleGroupItem value="standard">{text("densityStandard")}</ToggleGroupItem>
-          <ToggleGroupItem value="loose">{text("densityLoose")}</ToggleGroupItem>
-        </ToggleGroup>
+        {serverMode && sortingEnabled && paging?.hasMore ? (
+          <span className="text-xs text-muted">{text("sortLoadedRowsOnly")}</span>
+        ) : null}
+        {toolbarExtra}
+        {showDensity ? (
+          <ToggleGroup
+            aria-label={text("density")}
+            value={density}
+            onValueChange={(next) => updatePreferences({ ...preferences, density: next })}
+          >
+            <ToggleGroupItem value="compact">{text("densityCompact")}</ToggleGroupItem>
+            <ToggleGroupItem value="standard">{text("densityStandard")}</ToggleGroupItem>
+            <ToggleGroupItem value="loose">{text("densityLoose")}</ToggleGroupItem>
+          </ToggleGroup>
+        ) : null}
         <ColumnMenu
           options={columns
             .filter((column) => hideableKeys.has(column.key))

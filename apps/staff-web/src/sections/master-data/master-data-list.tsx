@@ -138,6 +138,13 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
   const columns: Column[] = [
     ...config.columns.map((column): Column => {
       const base = { key: column.key, label: column.label, truncate: column.truncate ?? false };
+      const valueLabels = column.valueLabels;
+      if (valueLabels !== undefined) {
+        return {
+          ...base,
+          render: (row) => translateText(valueLabels[text(row[column.key], "")] ?? text(row[column.key], "")),
+        };
+      }
       return column.key === "siteId"
         ? { ...base, render: (row) => referenceLabel(sites, row.siteId, ["code", "name"]) }
         : base;
@@ -153,7 +160,7 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
           <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>
             {translateText("Edit")}
           </Button>
-          <Button variant="danger-soft" size="sm" onClick={() => void remove(row)}>
+          <Button variant="danger-ghost" size="sm" onClick={() => void remove(row)}>
             {translateText("Delete")}
           </Button>
         </RowActions>
@@ -179,9 +186,6 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
         </Alert>
       ) : null}
       <div ref={tableRef} className="grid gap-3">
-        <div className="flex justify-end">
-          <SavedViewsMenu pageKey={`master-data-${config.id}`} defaults={LIST_DEFAULTS} />
-        </div>
         <DataTable
           storageKey={`staff:master-data:${config.id}`}
           rows={list.rows}
@@ -198,6 +202,7 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
           }}
           paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
           exportCsv={{ filename: `${config.id}.csv` }}
+          toolbarExtra={<SavedViewsMenu pageKey={`master-data-${config.id}`} defaults={LIST_DEFAULTS} />}
         />
       </div>
       <EntityDrawer
