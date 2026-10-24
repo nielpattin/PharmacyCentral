@@ -79,6 +79,8 @@ export const orders = pgTable(
   (table) => [
     index("orders_customer_created_idx").on(table.customerId, table.createdAt),
     index("orders_store_status_idx").on(table.selectedStoreId, table.status),
+    // The staff order list pages newest first on `(created_at, id)`.
+    index("orders_created_id_idx").on(table.createdAt.desc(), table.id.desc()),
   ],
 );
 
@@ -161,6 +163,8 @@ export const prescriptions = pgTable(
     uniqueIndex("prescriptions_number_unique").on(table.prescriptionNumber),
     index("prescriptions_site_status_idx").on(table.siteId, table.status, table.createdAt),
     index("prescriptions_customer_created_idx").on(table.customerId, table.createdAt),
+    // The prescription and counter lists page newest first on `(created_at, id)`.
+    index("prescriptions_created_id_idx").on(table.createdAt.desc(), table.id.desc()),
   ],
 );
 
@@ -203,6 +207,8 @@ export const prescriptionConsultations = pgTable(
   (table) => [
     index("prescription_consultations_customer_created_idx").on(table.customerId, table.createdAt),
     index("prescription_consultations_status_created_idx").on(table.status, table.createdAt),
+    // The consultation list pages newest first on `(created_at, id)`.
+    index("prescription_consultations_created_id_idx").on(table.createdAt.desc(), table.id.desc()),
   ],
 );
 

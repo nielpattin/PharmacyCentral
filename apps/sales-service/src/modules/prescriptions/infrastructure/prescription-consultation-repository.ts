@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, isNull, or, sql } from "drizzle-orm";
 
 import type {
   ConsultationLine,
@@ -7,10 +7,18 @@ import type {
 } from "../../../contracts/prescription-consultation.ts";
 import type { SalesDatabase } from "../../../shared/infrastructure/database.ts";
 import {
+  afterCursor,
+  clampLimit,
+  containsPattern,
+  createdAtSortKey,
+  toPage,
+} from "../../../shared/infrastructure/keyset-page.ts";
+import {
   idempotencyRecords,
   outboxMessages,
   prescriptionConsultations,
 } from "../../../shared/infrastructure/schema.ts";
+import type { Page, PageCursor } from "../../../shared/page-cursor.ts";
 
 /** Prescription header as the shopper's page read it, minus the flag and the lines the consultation carries itself. */
 export type ConsultationPrescription = PrescriptionConsultation["prescription"];
@@ -119,28 +127,46 @@ export class PrescriptionConsultationRepository {
     });
   }
 
-  /** Newest first. The route decides who may ask for more than their own records. */
+  /**
+   * Newest first. The route decides who may ask for more than their own records. `q` matches the patient's name and
+   * the prescription code the shopper copied, both as stored in the prescription.
+   */
   public async list(input: {
     customerId?: string | undefined;
     siteIds?: string[] | undefined;
     status?: PrescriptionConsultationStatus | undefined;
+    q?: string | undefined;
+    after?: PageCursor | undefined;
     limit: number;
-  }): Promise<PrescriptionConsultation[]> {
-    const filters = [
-      input.customerId ? eq(prescriptionConsultations.customerId, input.customerId) : undefined,
-      // A request whose shopper picked no pharmacy belongs to no site, so every pharmacist's queue keeps it.
-      input.siteIds
-        ? or(inArray(prescriptionConsultations.siteId, input.siteIds), isNull(prescriptionConsultations.siteId))
-        : undefined,
-      input.status ? eq(prescriptionConsultations.status, input.status) : undefined,
-    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    const rows = await this.database.db
-      .select()
+  }): Promise<Page<PrescriptionConsultation>> {
+    const limit = clampLimit(input.limit, 200);
+    const fetched = await this.database.db
+      .select({
+        ...getTableColumns(prescriptionConsultations),
+        sortKey: createdAtSortKey(prescriptionConsultations.createdAt),
+      })
       .from(prescriptionConsultations)
-      .where(filters.length ? and(...filters) : undefined)
-      .orderBy(desc(prescriptionConsultations.createdAt))
-      .limit(Math.min(Math.max(input.limit, 1), 200));
-    return rows.map(toConsultation);
+      .where(
+        and(
+          input.customerId ? eq(prescriptionConsultations.customerId, input.customerId) : undefined,
+          // A request whose shopper picked no pharmacy belongs to no site, so every pharmacist's queue keeps it.
+          input.siteIds
+            ? or(inArray(prescriptionConsultations.siteId, input.siteIds), isNull(prescriptionConsultations.siteId))
+            : undefined,
+          input.status ? eq(prescriptionConsultations.status, input.status) : undefined,
+          input.q
+            ? or(
+                sql`(${prescriptionConsultations.prescription}->>'patientName') ilike ${containsPattern(input.q)}`,
+                sql`(${prescriptionConsultations.prescription}->>'code') ilike ${containsPattern(input.q)}`,
+              )
+            : undefined,
+          afterCursor(prescriptionConsultations.createdAt, prescriptionConsultations.id, input.after),
+        ),
+      )
+      .orderBy(desc(prescriptionConsultations.createdAt), desc(prescriptionConsultations.id))
+      .limit(limit + 1);
+    const page = toPage(fetched, limit);
+    return { rows: page.rows.map(toConsultation), nextCursor: page.nextCursor };
   }
 
   public async get(id: string): Promise<PrescriptionConsultation | undefined> {

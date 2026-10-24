@@ -1,8 +1,16 @@
 import { createHash } from "node:crypto";
 
-import { and, asc, desc, eq, inArray, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, lt, ne, notInArray, or, sql } from "drizzle-orm";
 
 import type { SalesDatabase } from "../shared/infrastructure/database.ts";
+import {
+  afterCursor,
+  clampLimit,
+  containsPattern,
+  createdAtSortKey,
+  toPage,
+} from "../shared/infrastructure/keyset-page.ts";
+import type { Page, PageCursor } from "../shared/page-cursor.ts";
 import {
   cartLines,
   carts,
@@ -33,6 +41,11 @@ type DeliverySnapshotInput = Omit<typeof orderDeliverySnapshots.$inferInsert, "o
 
 /** A dispense the prescription cannot take: it is closed, names a line it lacks, or exceeds what was prescribed. */
 export class PrescriptionDispenseError extends Error {}
+
+/** A prescription header with the lines it was written for, as the prescription list answers it. */
+export type PrescriptionWithLines = typeof prescriptions.$inferSelect & {
+  lines: Array<typeof prescriptionLines.$inferSelect>;
+};
 
 /** The goods a dispense takes off the shelf, handed to inventory while the prescription row is still locked. */
 export type PrescriptionStockDispense = {
@@ -232,20 +245,31 @@ export class SalesRepository {
     status?: string | undefined;
     paymentStatus?: string | undefined;
     selectedStoreId?: string | undefined;
-    limit?: number | undefined;
-  }) {
+    q?: string | undefined;
+    after?: PageCursor | undefined;
+    limit: number;
+  }): Promise<Page<typeof orders.$inferSelect>> {
     const filters = [
       input.customerId ? eq(orders.customerId, input.customerId) : undefined,
       input.status ? eq(orders.status, input.status) : undefined,
       input.paymentStatus ? eq(orders.paymentStatus, input.paymentStatus) : undefined,
       input.selectedStoreId ? eq(orders.selectedStoreId, input.selectedStoreId) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    return this.database.db
-      .select()
+    const limit = clampLimit(input.limit);
+    const fetched = await this.database.db
+      .select({ ...getTableColumns(orders), sortKey: createdAtSortKey(orders.createdAt) })
       .from(orders)
-      .where(filters.length ? and(...filters) : undefined)
-      .orderBy(desc(orders.createdAt))
-      .limit(Math.min(Math.max(input.limit ?? 100, 1), 500));
+      .where(
+        and(
+          ...filters,
+          // The order id is the only identifier sales-service stores: customer name, phone and order number live elsewhere.
+          input.q ? sql`(${orders.id})::text ilike ${containsPattern(input.q)}` : undefined,
+          afterCursor(orders.createdAt, orders.id, input.after),
+        ),
+      )
+      .orderBy(desc(orders.createdAt), desc(orders.id))
+      .limit(limit + 1);
+    return toPage(fetched, limit);
   }
 
   public async getOrder(id: string) {
@@ -600,26 +624,83 @@ export class SalesRepository {
     status?: string | undefined;
     customerId?: string | undefined;
     limit: number;
+    q?: string | undefined;
+    after?: PageCursor | undefined;
+  }): Promise<Page<PrescriptionWithLines>> {
+    const limit = clampLimit(input.limit);
+    const fetched = await this.database.db
+      .select({ ...getTableColumns(prescriptions), sortKey: createdAtSortKey(prescriptions.createdAt) })
+      .from(prescriptions)
+      .where(this.prescriptionFilter(input))
+      .orderBy(desc(prescriptions.createdAt), desc(prescriptions.id))
+      .limit(limit + 1);
+    const page = toPage(fetched, limit);
+    // One query for the lines of the whole page, grouped in memory, instead of one query per prescription.
+    const lines =
+      page.rows.length === 0
+        ? []
+        : await this.database.db
+            .select()
+            .from(prescriptionLines)
+            .where(
+              inArray(
+                prescriptionLines.prescriptionId,
+                page.rows.map((prescription) => prescription.id),
+              ),
+            );
+    const linesByPrescription = new Map<string, Array<typeof prescriptionLines.$inferSelect>>();
+    for (const line of lines) {
+      const group = linesByPrescription.get(line.prescriptionId);
+      if (group) group.push(line);
+      else linesByPrescription.set(line.prescriptionId, [line]);
+    }
+    return {
+      rows: page.rows.map((prescription) => ({
+        ...prescription,
+        lines: linesByPrescription.get(prescription.id) ?? [],
+      })),
+      nextCursor: page.nextCursor,
+    };
+  }
+
+  /** How many prescriptions the same filters select, for a count that must not depend on one page. */
+  public async countPrescriptions(input: {
+    siteIds?: string[] | undefined;
+    status?: string | undefined;
+    excludeStatuses?: string[] | undefined;
+  }): Promise<number> {
+    const [row] = await this.database.db
+      .select({ total: count() })
+      .from(prescriptions)
+      .where(
+        and(
+          this.prescriptionFilter(input),
+          input.excludeStatuses?.length ? notInArray(prescriptions.status, input.excludeStatuses) : undefined,
+        ),
+      );
+    return row?.total ?? 0;
+  }
+
+  /** The filters a prescription list and its count share, so the two always describe the same rows. */
+  private prescriptionFilter(input: {
+    siteIds?: string[] | undefined;
+    status?: string | undefined;
+    customerId?: string | undefined;
+    q?: string | undefined;
+    after?: PageCursor | undefined;
   }) {
-    const filters = [
+    return and(
       input.siteIds ? inArray(prescriptions.siteId, input.siteIds) : undefined,
       input.status ? eq(prescriptions.status, input.status) : undefined,
       input.customerId ? eq(prescriptions.customerId, input.customerId) : undefined,
-    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    const rows = await this.database.db
-      .select()
-      .from(prescriptions)
-      .where(filters.length ? and(...filters) : undefined)
-      .orderBy(desc(prescriptions.createdAt))
-      .limit(Math.min(Math.max(input.limit, 1), 500));
-    return Promise.all(
-      rows.map(async (prescription) => ({
-        ...prescription,
-        lines: await this.database.db
-          .select()
-          .from(prescriptionLines)
-          .where(eq(prescriptionLines.prescriptionId, prescription.id)),
-      })),
+      input.q
+        ? or(
+            ilike(prescriptions.prescriptionNumber, containsPattern(input.q)),
+            ilike(prescriptions.patientName, containsPattern(input.q)),
+            ilike(prescriptions.patientPhone, containsPattern(input.q)),
+          )
+        : undefined,
+      afterCursor(prescriptions.createdAt, prescriptions.id, input.after),
     );
   }
 
@@ -747,7 +828,14 @@ export class SalesRepository {
     });
   }
 
-  public async listCounterTransactions(input: { siteIds?: string[]; status?: string; limit: number }) {
+  /** Still the prescription list, under the counter's name; see the route for why the two share one query. */
+  public async listCounterTransactions(input: {
+    siteIds?: string[] | undefined;
+    status?: string | undefined;
+    q?: string | undefined;
+    after?: PageCursor | undefined;
+    limit: number;
+  }) {
     return this.listPrescriptions(input);
   }
 

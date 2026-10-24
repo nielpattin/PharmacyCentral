@@ -1,0 +1,3 @@
+CREATE INDEX "orders_created_id_idx" ON "orders" USING btree ("created_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "prescription_consultations_created_id_idx" ON "prescription_consultations" USING btree ("created_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "prescriptions_created_id_idx" ON "prescriptions" USING btree ("created_at" DESC NULLS LAST,"id" DESC NULLS LAST);

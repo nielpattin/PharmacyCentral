@@ -66,7 +66,7 @@ describe("SalesRepository prescription site filter", () => {
   });
 
   const idsFor = async (siteIds: string[]): Promise<string[]> =>
-    (await repository.listPrescriptions({ siteIds, limit: 100 })).map((row) => row.id).sort();
+    (await repository.listPrescriptions({ siteIds, limit: 100 })).rows.map((row) => row.id).sort();
 
   it("unions the prescriptions of the reader's sites and excludes every other site", async () => {
     await expect(idsFor([siteA, siteB])).resolves.toEqual([prescriptionA, prescriptionB].sort());

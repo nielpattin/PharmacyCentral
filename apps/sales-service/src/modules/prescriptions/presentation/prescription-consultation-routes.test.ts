@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import type { PrescriptionConsultation } from "../../../contracts/prescription-consultation.ts";
 import { createLogger } from "../../../logger.ts";
+import { encodeCursor } from "../../../shared/page-cursor.ts";
 import { createErrorHandler } from "../../../shared/presentation/error-handler.ts";
 import type { PrescriptionConsultationRepository } from "../infrastructure/prescription-consultation-repository.ts";
 import { createPrescriptionConsultationRouter } from "./prescription-consultation-routes.ts";
@@ -284,7 +285,7 @@ describe("prescription consultation API", () => {
 
   it("lists only the shopper's own consultations and ignores their site filter", async () => {
     const repository = createRepository();
-    repository.list.mockResolvedValue([consultation()]);
+    repository.list.mockResolvedValue({ rows: [consultation()], nextCursor: undefined });
     const started = await createTestServer(repository);
     server = started.server;
 
@@ -301,7 +302,10 @@ describe("prescription consultation API", () => {
 
   it("lets staff list every consultation, narrowed by site and status", async () => {
     const repository = createRepository();
-    repository.list.mockResolvedValue([consultation(), consultation({ id: ids.other })]);
+    repository.list.mockResolvedValue({
+      rows: [consultation(), consultation({ id: ids.other })],
+      nextCursor: undefined,
+    });
     const started = await createTestServer(repository);
     server = started.server;
 
@@ -313,6 +317,36 @@ describe("prescription consultation API", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toHaveLength(2);
     expect(repository.list.mock.calls[0]?.[0]).toEqual({ siteIds: [ids.site], status: "Answered", limit: 25 });
+  });
+
+  it("pages the consultation queue with a cursor header and answers a bad cursor as invalid_cursor", async () => {
+    const repository = createRepository();
+    const position = { at: "2026-10-08T08:00:00.123456Z", id: ids.consultation };
+    repository.list
+      .mockResolvedValueOnce({ rows: [consultation()], nextCursor: encodeCursor(position) })
+      .mockResolvedValueOnce({ rows: [consultation({ id: ids.other })], nextCursor: undefined });
+    const started = await createTestServer(repository);
+    server = started.server;
+    const staffHeaders = { "X-Actor-Id": ids.pharmacist, "X-Actor-Type": "employee" };
+
+    const first = await httpFetch(`${started.url}/prescriptions/consultations?q=nguyen&limit=1`, {
+      headers: staffHeaders,
+    });
+    expect(first.headers.get("x-next-cursor")).toBe(encodeCursor(position));
+    expect(repository.list.mock.calls[0]?.[0]).toEqual({ limit: 1, q: "nguyen" });
+
+    const last = await httpFetch(`${started.url}/prescriptions/consultations?cursor=${encodeCursor(position)}`, {
+      headers: staffHeaders,
+    });
+    expect(last.headers.has("x-next-cursor")).toBe(false);
+    expect(repository.list.mock.calls[1]?.[0]).toMatchObject({ limit: 50, after: position });
+
+    const malformed = await httpFetch(`${started.url}/prescriptions/consultations?cursor=%%%`, {
+      headers: staffHeaders,
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual({ title: "Invalid cursor", status: 400, code: "invalid_cursor" });
+    expect(repository.list).toHaveBeenCalledTimes(2);
   });
 
   it("answers an open consultation", async () => {

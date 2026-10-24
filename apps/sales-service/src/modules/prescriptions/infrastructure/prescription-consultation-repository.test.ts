@@ -1,5 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { ConsultationLine } from "../../../contracts/prescription-consultation.ts";
 import type { SalesDatabase } from "../../../shared/infrastructure/database.ts";
 import * as schema from "../../../shared/infrastructure/schema.ts";
+import { decodeCursor } from "../../../shared/page-cursor.ts";
 import {
   PrescriptionConsultationRepository,
   type CreatePrescriptionConsultationInput,
@@ -208,21 +209,75 @@ describe("PrescriptionConsultationRepository", () => {
     await repository.answer(older.consultation.id, "Câu trả lời.", pharmacist);
 
     const own = await repository.list({ customerId: shopper, limit: 50 });
-    expect(own.map((row) => row.id)).toEqual([newer.consultation.id, older.consultation.id]);
+    expect(own.rows.map((row) => row.id)).toEqual([newer.consultation.id, older.consultation.id]);
 
     const open = await repository.list({ status: "Open", limit: 50 });
-    expect(open).toHaveLength(3);
-    expect(open.every((row) => row.status === "Open")).toBe(true);
+    expect(open.rows).toHaveLength(3);
+    expect(open.rows.every((row) => row.status === "Open")).toBe(true);
 
     // A request without a pharmacy is in every site's queue, or a multi-site pharmacist could never answer it.
     const atOtherSite = await repository.list({ siteIds: [otherSite], limit: 50 });
-    expect(atOtherSite.map((row) => row.id).sort()).toEqual([newer.consultation.id, unassigned.consultation.id].sort());
-    expect(await repository.list({ siteIds: [], limit: 50 })).toEqual([
+    expect(atOtherSite.rows.map((row) => row.id).sort()).toEqual(
+      [newer.consultation.id, unassigned.consultation.id].sort(),
+    );
+    expect((await repository.list({ siteIds: [], limit: 50 })).rows).toEqual([
       expect.objectContaining({ id: unassigned.consultation.id }),
     ]);
 
     // An unowned, unscoped list is the full register: it returns every shopper's rows.
-    expect(await repository.list({ limit: 50 })).toHaveLength(4);
+    expect((await repository.list({ limit: 50 })).rows).toHaveLength(4);
+  });
+
+  it("pages newest first across instants that share a millisecond, and filters by patient or code", async () => {
+    const names = ["Nguyễn An", "Trần Bình", "Lê Chi", "Phạm Dũng"];
+    const made = [];
+    for (const [index, patientName] of names.entries())
+      made.push(
+        await create({
+          prescription: { ...prescription, patientName, code: index < 2 ? `CODE-${index}` : null },
+        }),
+      );
+    // The first two rows differ by microseconds inside one millisecond, and the next pair shares an instant exactly.
+    const instants = [
+      "2026-10-08T07:00:00.123456Z",
+      "2026-10-08T07:00:00.123400Z",
+      "2026-10-08T07:00:00.123400Z",
+      "2026-10-08T07:00:00.123000Z",
+    ];
+    for (const [index, { consultation }] of made.entries())
+      await db
+        .update(schema.prescriptionConsultations)
+        .set({ createdAt: sql`${instants[index]}::timestamptz` })
+        .where(eq(schema.prescriptionConsultations.id, consultation.id));
+    const [first, second, third, fourth] = made.map((row) => row.consultation.id);
+    // Equal instants are ordered by id, newest id first.
+    const tied = [second, third].sort().reverse();
+    const expected = [first, ...tied, fourth];
+
+    const walk = async (limit: number, q?: string): Promise<string[]> => {
+      const collected: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await repository.list({
+          limit,
+          q,
+          after: cursor ? decodeCursor(cursor) : undefined,
+        });
+        collected.push(...page.rows.map((row) => row.id));
+        cursor = page.nextCursor;
+      } while (cursor !== undefined);
+      return collected;
+    };
+
+    for (const limit of [1, 2, 3, 4, 10]) expect(await walk(limit)).toEqual(expected);
+    // The last page of a list that fits in one page carries no cursor at all.
+    expect((await repository.list({ limit: 10 })).nextCursor).toBeUndefined();
+
+    expect((await repository.list({ limit: 10, q: "code-" })).rows.map((row) => row.id)).toEqual([first, second]);
+    expect((await repository.list({ limit: 10, q: "Lê Chi" })).rows.map((row) => row.id)).toEqual([third]);
+    // `%` and `_` are literal characters here, so a bare wildcard matches no patient or code.
+    expect((await repository.list({ limit: 10, q: "%" })).rows).toEqual([]);
+    expect(await walk(1, "code-")).toEqual([first, second]);
   });
 
   it("keeps the stored prescription and lines whole", async () => {

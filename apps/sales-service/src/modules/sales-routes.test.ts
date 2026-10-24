@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import type { OrderStock } from "./orders/application/order-stock.ts";
 import { InsufficientStockError, InventoryRequestError } from "./orders/infrastructure/inventory-reservations.ts";
+import { encodeCursor } from "../shared/page-cursor.ts";
 import { SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
 import { createSalesRouter } from "./sales-routes.ts";
 
@@ -383,7 +384,7 @@ describe("sales order listing API", () => {
   it("lists every shopper's orders for pharmacy staff and only the caller's own for a customer", async () => {
     const listOrders = vi
       .fn<(input: Parameters<SalesRepository["listOrders"]>[0]) => Promise<unknown>>()
-      .mockResolvedValue([]);
+      .mockResolvedValue({ rows: [], nextCursor: undefined });
     const repository = { listOrders } as unknown as SalesRepository;
     const testServer = await createTestServer(repository);
     server = testServer.server;
@@ -426,7 +427,7 @@ describe("sales prescription ownership API", () => {
   it("scopes a shopper's prescription list to their own records and leaves staff unfiltered", async () => {
     const listPrescriptions = vi
       .fn<(input: Parameters<SalesRepository["listPrescriptions"]>[0]) => Promise<unknown>>()
-      .mockResolvedValue([]);
+      .mockResolvedValue({ rows: [], nextCursor: undefined });
     const repository = { listPrescriptions } as unknown as SalesRepository;
     const testServer = await createTestServer(repository);
     server = testServer.server;
@@ -628,7 +629,7 @@ describe("sales counter transaction API", () => {
   it("refuses a shopper the takings behind the counter", async () => {
     const listCounterTransactions = vi
       .fn<(input: Parameters<SalesRepository["listCounterTransactions"]>[0]) => Promise<unknown>>()
-      .mockResolvedValue([]);
+      .mockResolvedValue({ rows: [], nextCursor: undefined });
     const repository = { listCounterTransactions } as unknown as SalesRepository;
     const testServer = await createTestServer(repository);
     server = testServer.server;
@@ -645,7 +646,7 @@ describe("sales counter transaction API", () => {
   it("lists the counter's takings for staff, narrowed to the requested site", async () => {
     const listCounterTransactions = vi
       .fn<(input: Parameters<SalesRepository["listCounterTransactions"]>[0]) => Promise<unknown>>()
-      .mockResolvedValue([]);
+      .mockResolvedValue({ rows: [], nextCursor: undefined });
     const repository = { listCounterTransactions } as unknown as SalesRepository;
     const testServer = await createTestServer(repository);
     server = testServer.server;
@@ -667,6 +668,113 @@ describe("sales counter transaction API", () => {
     const response = await httpFetch(`${testServer.url}/counter-transactions`);
     expect(response.status).toBe(401);
     expect(listCounterTransactions).not.toHaveBeenCalled();
+  });
+});
+
+describe("sales paged lists and count API", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) await closeServer(server);
+    server = undefined;
+    vi.unstubAllGlobals();
+  });
+
+  const position = { at: "2026-10-08T08:00:00.123456Z", id: ids.prescription };
+
+  it("carries the next cursor in a header only when another page follows", async () => {
+    const listOrders = vi
+      .fn<(input: Parameters<SalesRepository["listOrders"]>[0]) => Promise<unknown>>()
+      .mockResolvedValueOnce({ rows: [{ id: ids.prescription }], nextCursor: encodeCursor(position) })
+      .mockResolvedValueOnce({ rows: [{ id: ids.actor }], nextCursor: undefined });
+    const testServer = await createTestServer({ listOrders } as unknown as SalesRepository);
+    server = testServer.server;
+
+    const first = await httpFetch(`${testServer.url}/orders?limit=1`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+    });
+    expect(await first.json()).toEqual([{ id: ids.prescription }]);
+    expect(first.headers.get("x-next-cursor")).toBe(encodeCursor(position));
+    expect(listOrders.mock.calls[0]?.[0]).toMatchObject({ limit: 1, after: undefined });
+
+    const last = await httpFetch(`${testServer.url}/orders?limit=1&cursor=${encodeCursor(position)}&q=abc`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+    });
+    expect(last.headers.has("x-next-cursor")).toBe(false);
+    expect(listOrders.mock.calls[1]?.[0]).toMatchObject({ limit: 1, q: "abc", after: position });
+  });
+
+  it("answers a tampered or repeated cursor as invalid_cursor without listing", async () => {
+    const listPrescriptions = vi.fn();
+    const testServer = await createTestServer({ listPrescriptions } as unknown as SalesRepository);
+    server = testServer.server;
+
+    const tampered = await httpFetch(`${testServer.url}/prescriptions?cursor=not-a-cursor!`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+    });
+    expect(tampered.status).toBe(400);
+    expect(tampered.headers.get("content-type")).toContain("application/problem+json");
+    expect(await tampered.json()).toEqual({ title: "Invalid cursor", status: 400, code: "invalid_cursor" });
+
+    const repeated = await httpFetch(`${testServer.url}/counter-transactions?cursor=a&cursor=b`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+    });
+    expect(repeated.status).toBe(400);
+    expect(await repeated.json()).toMatchObject({ code: "invalid_cursor" });
+    expect(listPrescriptions).not.toHaveBeenCalled();
+  });
+
+  it("counts prescriptions with the list's status and site scope, excluding the named states", async () => {
+    const countPrescriptions = vi
+      .fn<(input: Parameters<SalesRepository["countPrescriptions"]>[0]) => Promise<number>>()
+      .mockResolvedValue(7);
+    const testServer = await createTestServer({ countPrescriptions } as unknown as SalesRepository);
+    server = testServer.server;
+
+    const response = await httpFetch(
+      `${testServer.url}/prescriptions/count?status=Pending&excludeStatus=Dispensed,Cancelled`,
+      { headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee", "x-actor-site-ids": ids.site } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ count: 7 });
+    expect(countPrescriptions.mock.calls[0]?.[0]).toEqual({
+      siteIds: [ids.site],
+      status: "Pending",
+      excludeStatuses: ["Dispensed", "Cancelled"],
+    });
+  });
+
+  it("serves the operations dashboard's count as a service with no actor of its own", async () => {
+    const countPrescriptions = vi.fn().mockResolvedValue(3);
+    const testServer = await createTestServer({ countPrescriptions } as unknown as SalesRepository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/prescriptions/count?excludeStatus=Dispensed,Cancelled`, {
+      headers: { "X-Actor-Type": "system", "x-actor-site-ids": ids.site },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ count: 3 });
+    expect(countPrescriptions.mock.calls[0]?.[0]).toMatchObject({ siteIds: [ids.site] });
+  });
+
+  it("refuses an unknown excluded state, a shopper, and an anonymous caller", async () => {
+    const countPrescriptions = vi.fn();
+    const testServer = await createTestServer({ countPrescriptions } as unknown as SalesRepository);
+    server = testServer.server;
+
+    const unknownState = await httpFetch(`${testServer.url}/prescriptions/count?excludeStatus=Lost`, {
+      headers: { "X-Actor-Type": "system" },
+    });
+    expect(unknownState.status).toBe(400);
+    const shopper = await httpFetch(`${testServer.url}/prescriptions/count`, {
+      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "customer" },
+    });
+    expect(shopper.status).toBe(403);
+    const anonymous = await httpFetch(`${testServer.url}/prescriptions/count`);
+    expect(anonymous.status).toBe(401);
+    expect(countPrescriptions).not.toHaveBeenCalled();
   });
 });
 

@@ -9,18 +9,21 @@ import {
 } from "../../../contracts/prescription-consultation.ts";
 import { internalServiceHeaders } from "../../../internal-service-headers.ts";
 import { actorSiteIds, listSiteIds } from "../../../middleware/trusted-request.ts";
+import { readCursorParam } from "../../../shared/page-cursor.ts";
+import { invalidCursor, sendPage } from "../../../shared/presentation/page-response.ts";
 import { sendDatabaseUnavailable as unavailable } from "../../../shared/presentation/database-unavailable.ts";
 import type { PrescriptionConsultationRepository } from "../infrastructure/prescription-consultation-repository.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
 /**
  * `siteId` is only read for staff and internal callers; a shopper's own rows are never narrowed by site, so their
- * query is parsed without it.
+ * query is parsed without it. `q` matches the patient's name and the prescription code, as stored in the consultation.
  */
 const listQuerySchema = z.object({
   status: z.enum(prescriptionConsultationStatuses).optional(),
   siteId: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
+  q: z.string().trim().max(200).optional(),
 });
 
 const problem = (response: Response, status: number, code: string, title: string, detail: string) =>
@@ -132,18 +135,22 @@ export const createPrescriptionConsultationRouter = (
     const actorType = request.header("X-Actor-Type");
     const staff = actorType === "employee" || actorType === "system";
     const query = listQuerySchema.safeParse(
-      staff ? request.query : { status: request.query.status, limit: request.query.limit },
+      staff ? request.query : { status: request.query.status, limit: request.query.limit, q: request.query.q },
     );
     if (!query.success) return response.status(400).json(INVALID_REQUEST);
+    const cursor = readCursorParam(request.query.cursor);
+    if (!cursor.ok) return invalidCursor(response);
     try {
       // The owner filter is never optional for a shopper, and their site filter is ignored rather than honoured.
-      const consultations = await repository.list({
+      const page = await repository.list({
         ...(staff ? {} : { customerId: requesterId }),
         ...(staff ? { siteIds: listSiteIds(request) } : {}),
         ...(query.data.status ? { status: query.data.status } : {}),
         limit: query.data.limit,
+        ...(query.data.q ? { q: query.data.q } : {}),
+        ...(cursor.cursor ? { after: cursor.cursor } : {}),
       });
-      return response.json(consultations);
+      return sendPage(response, page);
     } catch (error) {
       return next(error);
     }

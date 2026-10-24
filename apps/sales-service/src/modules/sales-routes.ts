@@ -13,6 +13,8 @@ import {
 } from "../contracts/sales.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
+import { readCursorParam } from "../shared/page-cursor.ts";
+import { invalidCursor, pagedListQuery, sendPage } from "../shared/presentation/page-response.ts";
 import { sendDatabaseUnavailable as unavailable } from "../shared/presentation/database-unavailable.ts";
 
 import {
@@ -26,6 +28,20 @@ import { InsufficientStockError, InventoryRequestError } from "./orders/infrastr
 import { PrescriptionDispenseError, SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
+/** The prescription states a caller may name in `excludeStatus`, as stored. */
+const prescriptionStatuses = ["Draft", "Pending", "PartiallyDispensed", "Dispensed", "Cancelled"] as const;
+const excludeStatusParam = z
+  .string()
+  .optional()
+  .transform((value) =>
+    value
+      ? value
+          .split(",")
+          .map((status) => status.trim())
+          .filter((status) => status.length > 0)
+      : [],
+  )
+  .pipe(z.array(z.enum(prescriptionStatuses)));
 const actor = (request: Request): string | undefined => request.header("X-Actor-Id") ?? undefined;
 /** Pharmacy staff and internal services read every customer's orders; a shopper only reads their own. */
 const readsEveryOrder = (request: Request): boolean => {
@@ -201,21 +217,31 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     if (!repository) return unavailable(response);
     const requesterId = actor(request);
     if (!requesterId) return unauthorized(response);
+    const query = pagedListQuery.safeParse(request.query);
+    const cursor = readCursorParam(request.query.cursor);
+    if (!query.success) return invalid(response);
+    if (!cursor.ok) return invalidCursor(response);
     const status = queryString(request.query.status);
-    const limit = queryNumber(request.query.limit, 100);
+    const { limit, q } = query.data;
     try {
       // The staff portal reviews every shopper's order, optionally narrowed to one site or payment state.
       if (readsEveryOrder(request)) {
-        return response.json(
+        return sendPage(
+          response,
           await repository.listOrders({
             status,
             limit,
+            q,
+            after: cursor.cursor,
             paymentStatus: queryString(request.query.paymentStatus),
             selectedStoreId: queryString(request.query.siteId),
           }),
         );
       }
-      return response.json(await repository.listOrders({ customerId: requesterId, status, limit }));
+      return sendPage(
+        response,
+        await repository.listOrders({ customerId: requesterId, status, limit, q, after: cursor.cursor }),
+      );
     } catch (error) {
       return next(error);
     }
@@ -344,18 +370,52 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
 
   router.get("/prescriptions", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const query = pagedListQuery.safeParse(request.query);
+    const cursor = readCursorParam(request.query.cursor);
+    if (!query.success) return invalid(response);
+    if (!cursor.ok) return invalidCursor(response);
     try {
       const status = queryString(request.query.status);
-      const limit = queryNumber(request.query.limit, 100);
+      const { limit, q } = query.data;
       // The staff portal reviews the prescriptions of the caller's sites, optionally narrowed to one site or state, and
       // an internal reader such as the operations dashboard needs no actor of its own for that. A shopper only ever
       // sees the records linked to their own account, so the owner filter is never optional there.
       if (readsEveryOrder(request)) {
-        return response.json(await repository.listPrescriptions({ siteIds: listSiteIds(request), status, limit }));
+        return sendPage(
+          response,
+          await repository.listPrescriptions({ siteIds: listSiteIds(request), status, limit, q, after: cursor.cursor }),
+        );
       }
       const requesterId = actor(request);
       if (!requesterId) return unauthorized(response);
-      return response.json(await repository.listPrescriptions({ customerId: requesterId, status, limit }));
+      return sendPage(
+        response,
+        await repository.listPrescriptions({ customerId: requesterId, status, limit, q, after: cursor.cursor }),
+      );
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Registered before `/prescriptions/:id`, which would otherwise take `count` for an id. `status` and site scope are
+  // the list's own filters; `excludeStatus` (comma-separated) drops the named states, e.g. `Dispensed,Cancelled` for
+  // the open register. The count is a SQL COUNT(*), so it never depends on a page size.
+  router.get("/prescriptions/count", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    const requesterId = actor(request);
+    if (!readsEveryOrder(request)) {
+      if (!requesterId) return unauthorized(response);
+      return response.status(403).json({ title: "Forbidden", status: 403, code: "forbidden" });
+    }
+    const excluded = excludeStatusParam.safeParse(queryString(request.query.excludeStatus));
+    if (!excluded.success) return invalid(response);
+    try {
+      const count = await repository.countPrescriptions({
+        siteIds: listSiteIds(request),
+        status: queryString(request.query.status),
+        excludeStatuses: excluded.data,
+      });
+      return response.json({ count });
     } catch (error) {
       return next(error);
     }
@@ -496,15 +556,21 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     // The day's takings behind the counter are a staff read; a shopper's receipts are the orders they placed.
     if (!readsEveryOrder(request))
       return response.status(403).json({ title: "Forbidden", status: 403, code: "forbidden" });
+    const query = pagedListQuery.safeParse(request.query);
+    const cursor = readCursorParam(request.query.cursor);
+    if (!query.success) return invalid(response);
+    if (!cursor.ok) return invalidCursor(response);
     try {
       const siteIds = listSiteIds(request);
       const status = queryString(request.query.paymentStatus);
-      const filter: { limit: number; siteIds?: string[]; status?: string } = {
-        limit: queryNumber(request.query.limit, 100),
+      const filter: Parameters<SalesRepository["listCounterTransactions"]>[0] = {
+        limit: query.data.limit,
+        q: query.data.q,
+        after: cursor.cursor,
       };
       if (siteIds) filter.siteIds = siteIds;
       if (status) filter.status = status;
-      return response.json(await repository.listCounterTransactions(filter));
+      return sendPage(response, await repository.listCounterTransactions(filter));
     } catch (error) {
       return next(error);
     }
@@ -671,10 +737,7 @@ const toDeliverySnapshot = (delivery: DeliveryCalculation) => ({
 const roundMoney = (value: number): number => Math.round(value * 100) / 100;
 const queryString = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
-const queryNumber = (value: unknown, fallback: number): number => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
+
 const setGuestCookie = (response: Response, token: string): void => {
   response.setHeader("Set-Cookie", `pharmacy_guest_cart=${token}; SameSite=Lax; Path=/; Max-Age=2592000`);
 };
