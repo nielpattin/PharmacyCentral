@@ -67,8 +67,8 @@ export const ProductsPage = (): React.JSX.Element => {
   const columns: Column[] = [
     { key: "sku", label: translateText("SKU"), truncate: 18 },
     { key: "name", label: translateText("Name"), truncate: 40 },
-    { key: "category", label: translateText("Category"), truncate: 24 },
-    { key: "manufacturer", label: translateText("Manufacturer"), truncate: 28 },
+    { key: "category", label: translateText("Category"), truncate: 24, hideBelow: "lg" },
+    { key: "manufacturer", label: translateText("Manufacturer"), truncate: 28, hideBelow: "xl" },
     {
       key: "prescriptionRequired",
       label: translateText("Prescription required"),
@@ -110,51 +110,53 @@ export const ProductsPage = (): React.JSX.Element => {
           {translateText("Create product")}
         </Button>
       </PageActions>
-      <div ref={toolbarRef} className="mb-3 flex flex-wrap items-center gap-2">
-        <Input
-          type="search"
-          aria-label={translateText("Search products")}
-          placeholder={translateText("Search by SKU or name")}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="max-w-xs"
-        />
-        <Input
-          aria-label={translateText("Filter by category")}
-          placeholder={translateText("Category")}
-          value={category}
-          onChange={(event) => setCategory(event.target.value)}
-          className="max-w-48"
-        />
-        <Select
-          aria-label={translateText("Prescription required")}
-          value={values.prescriptionRequired}
-          onChange={(event) => setValues({ prescriptionRequired: event.target.value })}
-          className="w-auto"
-        >
-          <option value="">{translateText("All products")}</option>
-          <option value="true">{translateText("Prescription only")}</option>
-          <option value="false">{translateText("Non-prescription")}</option>
-        </Select>
-        <div className="ms-auto">
-          <SavedViewsMenu pageKey="catalog-products" defaults={LIST_DEFAULTS} />
-        </div>
-      </div>
       {list.error ? (
         <Alert variant="danger" className="mb-3">
           {translateText(list.error.message)}
         </Alert>
       ) : null}
-      <DataTable
-        rows={list.rows}
-        columns={columns}
-        loading={list.isLoading}
-        empty={translateText("No products match these filters.")}
-        getKey={(row) => idOf(row)}
-        storageKey="staff:catalog:products"
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
-        exportCsv={{ filename: "products.csv" }}
-      />
+      <div ref={toolbarRef}>
+        <DataTable
+          toolbarStart={
+            <>
+              <Input
+                type="search"
+                aria-label={translateText("Search products")}
+                placeholder={translateText("Search by SKU or name")}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="max-w-xs"
+              />
+              <Input
+                aria-label={translateText("Filter by category")}
+                placeholder={translateText("Category")}
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                className="max-w-48"
+              />
+              <Select
+                aria-label={translateText("Prescription required")}
+                value={values.prescriptionRequired}
+                onChange={(event) => setValues({ prescriptionRequired: event.target.value })}
+                className="w-auto"
+              >
+                <option value="">{translateText("All products")}</option>
+                <option value="true">{translateText("Prescription only")}</option>
+                <option value="false">{translateText("Non-prescription")}</option>
+              </Select>
+            </>
+          }
+          toolbarExtra={<SavedViewsMenu pageKey="catalog-products" defaults={LIST_DEFAULTS} />}
+          rows={list.rows}
+          columns={columns}
+          loading={list.isLoading}
+          empty={translateText("No products match these filters.")}
+          getKey={(row) => idOf(row)}
+          storageKey="staff:catalog:products"
+          paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+          exportCsv={{ filename: "products.csv" }}
+        />
+      </div>
       {drawer ? (
         <ProductDrawer
           key={drawer.kind === "edit" ? idOf(drawer.product) : "new"}

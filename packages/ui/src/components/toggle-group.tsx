@@ -1,8 +1,9 @@
 import { createContext, useContext } from "react";
 
 import { cn } from "../cn.ts";
+import { SEGMENT_TRACK, segmentClass } from "../segmented.ts";
 
-// Single-select segmented control. Items are radios: arrow keys move and select, Home and End jump to the ends.
+// Single-select segmented control; its look lives in segmented.ts, shared with Tabs. Items are radios: arrow keys move and select, Home and End jump to the ends.
 
 type ToggleGroupContextValue = {
   value: string;
@@ -58,12 +59,7 @@ export const ToggleGroup = <T extends string>({
 
   return (
     <ToggleGroupContext.Provider value={{ value, onSelect: (next) => onValueChange(next as T) }}>
-      <div
-        role="radiogroup"
-        aria-label={label}
-        onKeyDown={onKeyDown}
-        className={cn("inline-flex items-center gap-0.5 rounded-md border border-line bg-surface p-0.5", className)}
-      >
+      <div role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className={cn(SEGMENT_TRACK, className)}>
         {children}
       </div>
     </ToggleGroupContext.Provider>
@@ -96,11 +92,7 @@ export const ToggleGroupItem = <T extends string>({
       tabIndex={selected ? 0 : -1}
       disabled={disabled ?? false}
       onClick={() => group.onSelect(value)}
-      className={cn(
-        "inline-flex h-7 items-center justify-center rounded-[5px] px-2.5 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-50",
-        selected ? "bg-surface-soft text-ink shadow-sm ring-1 ring-line" : "text-muted hover:text-ink",
-        className,
-      )}
+      className={segmentClass(selected, className)}
       {...aria}
     >
       {children}

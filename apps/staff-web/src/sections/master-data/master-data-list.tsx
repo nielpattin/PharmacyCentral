@@ -137,7 +137,12 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
 
   const columns: Column[] = [
     ...config.columns.map((column): Column => {
-      const base = { key: column.key, label: column.label, truncate: column.truncate ?? false };
+      const base = {
+        key: column.key,
+        label: column.label,
+        truncate: column.truncate ?? false,
+        ...(column.hideBelow === undefined ? {} : { hideBelow: column.hideBelow }),
+      };
       const valueLabels = column.valueLabels;
       if (valueLabels !== undefined) {
         return {

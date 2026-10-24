@@ -44,6 +44,8 @@ export { StatusDot } from "./components/status-dot.tsx";
 export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/table.tsx";
 export { ToastProvider, useToast, type ToastApi, type ToastLabels } from "./components/toast.tsx";
 export { Textarea } from "./components/textarea.tsx";
+export { Popover, type PopoverProps } from "./components/popover.tsx";
+export { Tabs, tabId, tabPanelId, type TabItem, type TabsProps } from "./components/tabs.tsx";
 export { ToggleGroup, ToggleGroupItem } from "./components/toggle-group.tsx";
 export { Tracker } from "./components/tracker.tsx";
 export { toneColor, type DataTone, type Tone } from "./charts/palette.ts";

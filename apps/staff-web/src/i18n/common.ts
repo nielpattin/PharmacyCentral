@@ -126,4 +126,5 @@ export const commonLiterals: Record<string, string> = {
   "Focus search": "Tìm kiếm",
   "Create new": "Tạo mới",
   "Drawer sections": "Các mục của ngăn chi tiết",
+  Sections: "Các mục",
 };

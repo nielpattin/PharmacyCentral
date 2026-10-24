@@ -1,6 +1,6 @@
 import { useId, useState, type ReactNode } from "react";
 
-import { Sheet, StatusBadge, type StatusTone } from "@pharmacy/ui";
+import { Sheet, StatusBadge, Tabs, type StatusTone } from "@pharmacy/ui";
 
 import { translateText } from "../i18n.ts";
 
@@ -72,27 +72,13 @@ export const EntityDrawer = ({
           </div>
         ) : null}
         {hasHistory ? (
-          <div role="tablist" aria-label={translateText("Drawer sections")} className="flex gap-1 border-b border-line">
-            {tabs.map((item) => {
-              const selected = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="tab"
-                  id={`${tabsId}-${item.id}-tab`}
-                  aria-selected={selected}
-                  aria-controls={`${tabsId}-${item.id}-panel`}
-                  onClick={() => setTab(item.id)}
-                  className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
-                    selected ? "border-primary text-ink" : "border-transparent text-muted hover:text-ink"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
+          <Tabs
+            aria-label={translateText("Drawer sections")}
+            idBase={tabsId}
+            items={tabs}
+            value={activeTab}
+            onValueChange={(next) => setTab(next as DrawerTab)}
+          />
         ) : null}
         <div
           role={hasHistory ? "tabpanel" : undefined}

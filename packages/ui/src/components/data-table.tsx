@@ -13,7 +13,7 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "../cn.ts";
 import { downloadCsv, toCsv, type CsvColumn } from "../data-table/csv.ts";
@@ -28,6 +28,7 @@ import {
 import { selectionState, setVisibleSelection, toggleSelectionKey } from "../data-table/selection.ts";
 import { Button } from "./button.tsx";
 import { Input } from "./input.tsx";
+import { Popover } from "./popover.tsx";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "./table.tsx";
 import { ToggleGroup, ToggleGroupItem } from "./toggle-group.tsx";
 
@@ -49,6 +50,12 @@ export type DataColumn<T> = {
   align?: "left" | "right" | "center" | undefined;
   /** Pixels for a number, any CSS length for a string. */
   width?: number | string | undefined;
+  /**
+   * Hides the column while the table's own container is narrower than 48rem (`md`), 64rem (`lg`) or 80rem (`xl`), so
+   * the table fits without sideways scrolling. It follows the container, not the window, so an open sidebar counts.
+   * The Columns menu and the CSV export still include the column. Keep the key identifying columns and actions free of it.
+   */
+  hideBelow?: "md" | "lg" | "xl" | undefined;
 };
 
 // Every visible string is a label with an English default. Staff-web passes translated values.
@@ -68,7 +75,8 @@ const DEFAULT_LABELS = {
   densityStandard: "Standard",
   densityLoose: "Loose",
   columns: "Columns",
-  columnsMenu: "Show or hide columns",
+  view: "Display",
+  viewMenu: "Table view options",
   selectAllVisible: "Select all visible rows",
   selectRow: "Select {name}",
   selectedCount: "{count} selected",
@@ -137,9 +145,18 @@ export type DataTableProps<T> = {
   exportCsv?: DataTableExport | undefined;
   /** Extra controls in the toolbar, before the density and column controls (for example a saved-views menu). */
   toolbarExtra?: ReactNode | undefined;
+  /** Filter controls at the start of the toolbar, so a page's filters and the table controls share one row. */
+  toolbarStart?: ReactNode | undefined;
 };
 
-type ColumnLayout = Pick<DataColumn<unknown>, "align" | "pinned" | "width">;
+type ColumnLayout = Pick<DataColumn<unknown>, "align" | "pinned" | "width" | "hideBelow">;
+
+// Static class names, so Tailwind can see them. Container query sizes: 3xl = 48rem, 5xl = 64rem, 7xl = 80rem.
+const HIDE_BELOW_CLASS = {
+  md: "@max-3xl:hidden",
+  lg: "@max-5xl:hidden",
+  xl: "@max-7xl:hidden",
+} as const;
 
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 const ALIGN_CLASS = { left: "text-left", right: "text-right", center: "text-center" } as const;
@@ -147,8 +164,6 @@ const DENSITY_CELL: Record<TableDensity, string> = { compact: "py-1", standard: 
 // The edge line only shows while the table scrolls sideways, which is when the pinned column overlaps other cells.
 const PINNED_CELL = "sticky right-0 z-[1] bg-surface";
 const PINNED_EDGE = "border-l border-line";
-// Density and the sort caveat only help once there is a long list to read.
-const DENSITY_MIN_ROWS = 10;
 const EMPTY_STATE_CLASS =
   "my-8 rounded-lg border border-dashed border-line bg-surface-soft px-6 py-12 text-center text-sm text-muted";
 
@@ -192,74 +207,71 @@ const SortIcon = ({ direction }: { direction: false | "asc" | "desc" }): React.J
   </svg>
 );
 
-const ColumnMenu = ({
+type ViewMenuLabels = {
+  button: string;
+  menu: string;
+  density: string;
+  compact: string;
+  standard: string;
+  loose: string;
+  columns: string;
+};
+
+/** One menu for how the table looks: row density, then which columns show. */
+const ViewMenu = ({
   options,
   hidden,
   visibleCount,
-  buttonLabel,
-  menuLabel,
+  density,
+  labels,
+  onDensityChange,
   onToggle,
 }: {
   options: ReadonlyArray<{ key: string; label: string }>;
   hidden: ReadonlySet<string>;
   visibleCount: number;
-  buttonLabel: string;
-  menuLabel: string;
+  density: TableDensity;
+  labels: ViewMenuLabels;
+  onDensityChange: (next: TableDensity) => void;
   onToggle: (key: string) => void;
-}): React.JSX.Element | null => {
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-  if (options.length === 0) return null;
-  return (
-    <div
-      className="relative"
-      onBlur={(event) => {
-        const next = event.relatedTarget;
-        if (!(next instanceof Node) || !event.currentTarget.contains(next)) setOpen(false);
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape" || !open) return;
-        setOpen(false);
-        event.currentTarget.querySelector<HTMLButtonElement>("button")?.focus();
-      }}
-    >
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        aria-expanded={open}
-        aria-controls={menuId}
-        onClick={() => setOpen((value) => !value)}
-      >
-        {buttonLabel}
-      </Button>
-      {open ? (
-        <div
-          id={menuId}
-          role="group"
-          aria-label={menuLabel}
-          className="absolute right-0 z-20 mt-1 grid min-w-48 gap-1 rounded-md border border-line bg-surface p-2 shadow-lg"
-        >
-          {options.map((option) => {
-            const checked = !hidden.has(option.key);
-            return (
-              <label key={option.key} className="flex items-center gap-2 rounded-sm px-1 py-1 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  className="size-4 accent-primary"
-                  checked={checked}
-                  disabled={checked && visibleCount <= 1}
-                  onChange={() => onToggle(option.key)}
-                />
-                {option.label}
-              </label>
-            );
-          })}
-        </div>
-      ) : null}
+}): React.JSX.Element => (
+  <Popover buttonLabel={labels.button} panelLabel={labels.menu} panelClassName="grid w-64 gap-3 p-3">
+    <div className="grid gap-1.5">
+      <p className="text-xs font-semibold tracking-wide text-muted uppercase">{labels.density}</p>
+      <ToggleGroup aria-label={labels.density} value={density} onValueChange={onDensityChange} className="w-full">
+        <ToggleGroupItem value="compact" className="flex-1">
+          {labels.compact}
+        </ToggleGroupItem>
+        <ToggleGroupItem value="standard" className="flex-1">
+          {labels.standard}
+        </ToggleGroupItem>
+        <ToggleGroupItem value="loose" className="flex-1">
+          {labels.loose}
+        </ToggleGroupItem>
+      </ToggleGroup>
     </div>
-  );
-};
+    {options.length > 0 ? (
+      <div className="grid gap-0.5">
+        <p className="text-xs font-semibold tracking-wide text-muted uppercase">{labels.columns}</p>
+        {options.map((option) => {
+          const checked = !hidden.has(option.key);
+          return (
+            <label key={option.key} className="flex items-center gap-2 rounded-sm px-1 py-1 text-sm text-ink">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={checked}
+                disabled={checked && visibleCount <= 1}
+                onChange={() => onToggle(option.key)}
+              />
+              {option.label}
+            </label>
+          );
+        })}
+      </div>
+    ) : null}
+  </Popover>
+);
 
 /**
  * Table with optional client features (`interactive`), server-driven search and paging, row selection, density and
@@ -282,6 +294,7 @@ export const DataTable = <T,>({
   paging,
   exportCsv,
   toolbarExtra,
+  toolbarStart,
 }: DataTableProps<T>): React.JSX.Element => {
   const text = <K extends keyof typeof DEFAULT_LABELS>(key: K): string => labels[key] ?? DEFAULT_LABELS[key];
 
@@ -347,8 +360,6 @@ export const DataTable = <T,>({
   const pageRows = table.getRowModel().rows;
   const visibleCount = table.getVisibleLeafColumns().length;
   const density = preferences.density;
-  // A non-default density stays reachable so it can be switched back.
-  const showDensity = density !== "standard" || rows.length > DENSITY_MIN_ROWS;
   const pageKeys = pageRows.map((row) => row.id);
   const selectedKeys = selection?.keys ?? EMPTY_KEYS;
   const headerState = selectionState(pageKeys, selectedKeys);
@@ -446,6 +457,7 @@ export const DataTable = <T,>({
                 DENSITY_CELL[density],
                 column?.align !== undefined && ALIGN_CLASS[column.align],
                 column?.pinned === "right" && cn(PINNED_CELL, scrollsSideways && PINNED_EDGE),
+                column?.hideBelow && HIDE_BELOW_CLASS[column.hideBelow],
               )}
             >
               {renderCell(cell, row)}
@@ -488,6 +500,7 @@ export const DataTable = <T,>({
               stickyHeaderClass,
               column?.align !== undefined && ALIGN_CLASS[column.align],
               column?.pinned === "right" && cn("sticky right-0 z-20", scrollsSideways && PINNED_EDGE),
+              column?.hideBelow && HIDE_BELOW_CLASS[column.hideBelow],
             )}
             style={widthStyle(column)}
           >
@@ -581,45 +594,50 @@ export const DataTable = <T,>({
       />
     ) : null;
 
+  // Wide table: filters at the start and the table controls at the end of one row. Narrower than 56rem the two groups
+  // stack, each aligned to the start, so the controls never float at the right edge of a second row.
   const toolbar = (
-    <div className="mb-3 flex flex-wrap items-center gap-2">
-      {filterInput}
-      <div className="ms-auto flex flex-wrap items-center gap-2">
-        {clientMode ? (
-          <span className="text-xs text-muted">
-            {filteredRows.length} {filteredRows.length === 1 ? text("singularRow") : text("pluralRows")}
-          </span>
-        ) : null}
-        {serverMode && sortingEnabled && paging?.hasMore ? (
-          <span className="text-xs text-muted">{text("sortLoadedRowsOnly")}</span>
-        ) : null}
-        {toolbarExtra}
-        {showDensity ? (
-          <ToggleGroup
-            aria-label={text("density")}
-            value={density}
-            onValueChange={(next) => updatePreferences({ ...preferences, density: next })}
-          >
-            <ToggleGroupItem value="compact">{text("densityCompact")}</ToggleGroupItem>
-            <ToggleGroupItem value="standard">{text("densityStandard")}</ToggleGroupItem>
-            <ToggleGroupItem value="loose">{text("densityLoose")}</ToggleGroupItem>
-          </ToggleGroup>
-        ) : null}
-        <ColumnMenu
-          options={columns
-            .filter((column) => hideableKeys.has(column.key))
-            .map((column) => ({ key: column.key, label: column.label }))}
-          hidden={hiddenKeys}
-          visibleCount={visibleCount}
-          buttonLabel={text("columns")}
-          menuLabel={text("columnsMenu")}
-          onToggle={toggleColumn}
-        />
-        {exportCsv ? (
-          <Button type="button" variant="outline" size="sm" onClick={exportCurrentRows}>
-            {text("exportCsv")}
-          </Button>
-        ) : null}
+    <div className="@container mb-3">
+      <div className="flex flex-col gap-2 @4xl:flex-row @4xl:items-center @4xl:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 @4xl:flex-1">
+          {toolbarStart}
+          {filterInput}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 @4xl:shrink-0">
+          {clientMode ? (
+            <span className="text-xs text-muted">
+              {filteredRows.length} {filteredRows.length === 1 ? text("singularRow") : text("pluralRows")}
+            </span>
+          ) : null}
+          {serverMode && sortingEnabled && paging?.hasMore ? (
+            <span className="text-xs text-muted">{text("sortLoadedRowsOnly")}</span>
+          ) : null}
+          {toolbarExtra}
+          <ViewMenu
+            options={columns
+              .filter((column) => hideableKeys.has(column.key))
+              .map((column) => ({ key: column.key, label: column.label }))}
+            hidden={hiddenKeys}
+            visibleCount={visibleCount}
+            density={density}
+            labels={{
+              button: text("view"),
+              menu: text("viewMenu"),
+              density: text("density"),
+              compact: text("densityCompact"),
+              standard: text("densityStandard"),
+              loose: text("densityLoose"),
+              columns: text("columns"),
+            }}
+            onDensityChange={(next) => updatePreferences({ ...preferences, density: next })}
+            onToggle={toggleColumn}
+          />
+          {exportCsv ? (
+            <Button type="button" variant="secondary" onClick={exportCurrentRows}>
+              {text("exportCsv")}
+            </Button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -702,7 +720,8 @@ export const DataTable = <T,>({
     <>
       {toolbar}
       {bulkBar}
-      {body}
+      {/* Container for the hideBelow column queries: they follow the table's width, not the window's. */}
+      <div className="@container">{body}</div>
       {clientFooter}
       {serverFooter}
     </>

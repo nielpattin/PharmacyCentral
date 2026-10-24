@@ -5,7 +5,17 @@ import { idOf, text, type JsonRecord } from "../staff-api.ts";
 
 export type Column = Pick<
   DataColumn<JsonRecord>,
-  "key" | "label" | "render" | "text" | "enableSorting" | "hideable" | "pinned" | "truncate" | "align" | "width"
+  | "key"
+  | "label"
+  | "render"
+  | "text"
+  | "enableSorting"
+  | "hideable"
+  | "pinned"
+  | "truncate"
+  | "align"
+  | "width"
+  | "hideBelow"
 >;
 
 // Every key the UI can show, translated here so the shared package stays free of i18n.
@@ -25,7 +35,8 @@ const translatedLabels = (): DataTableLabels => ({
   densityStandard: translateText("Standard"),
   densityLoose: translateText("Loose"),
   columns: translateText("Columns"),
-  columnsMenu: translateText("Show or hide columns"),
+  view: translateText("Display"),
+  viewMenu: translateText("Table view options"),
   selectAllVisible: translateText("Select all visible rows"),
   selectRow: translateText("Select {name}"),
   selectedCount: translateText("{count} selected"),

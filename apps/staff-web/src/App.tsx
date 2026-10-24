@@ -508,7 +508,7 @@ const StaffApp = (): React.JSX.Element => {
                 actions={
                   <>
                     <div ref={setActionsTarget} className="flex flex-wrap items-center gap-2" />
-                    <Button variant="outline" size="sm" onClick={() => void queryClient.invalidateQueries()}>
+                    <Button variant="secondary" size="sm" onClick={() => void queryClient.invalidateQueries()}>
                       <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
                       {translateText("Refresh")}
                     </Button>

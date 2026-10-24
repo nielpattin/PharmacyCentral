@@ -31,6 +31,8 @@ export type MasterColumn = {
   label: string;
   truncate?: boolean;
   valueLabels?: Readonly<Record<string, string>>;
+  /** Hides the column in a narrow table; see `DataColumn.hideBelow`. */
+  hideBelow?: "md" | "lg" | "xl";
 };
 
 export type MasterDataConfig = {
@@ -90,8 +92,9 @@ const siteConfig: MasterDataConfig = {
       key: "siteType",
       label: "Type",
       valueLabels: SITE_TYPE_LABELS,
+      hideBelow: "md",
     },
-    { key: "address", label: "Address" },
+    { key: "address", label: "Address", hideBelow: "lg" },
     { key: "status", label: "Status" },
   ],
   fields: [
@@ -161,7 +164,7 @@ const locationConfig: MasterDataConfig = {
     { key: "code", label: "Code" },
     { key: "name", label: "Name" },
     { key: "siteId", label: "Site" },
-    { key: "locationType", label: "Type" },
+    { key: "locationType", label: "Type", hideBelow: "md" },
     { key: "status", label: "Status" },
   ],
   fields: [
@@ -218,9 +221,9 @@ const supplierConfig: MasterDataConfig = {
   columns: [
     { key: "code", label: "Code" },
     { key: "name", label: "Name" },
-    { key: "contactName", label: "Contact" },
-    { key: "email", label: "Email" },
-    { key: "phone", label: "Phone" },
+    { key: "contactName", label: "Contact", hideBelow: "md" },
+    { key: "email", label: "Email", hideBelow: "lg" },
+    { key: "phone", label: "Phone", hideBelow: "md" },
   ],
   fields: [
     { kind: "text", name: "code", label: "Code", required: true },

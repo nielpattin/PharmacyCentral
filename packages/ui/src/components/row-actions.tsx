@@ -10,7 +10,7 @@ export const RowActions = ({ label, className, children, ...props }: RowActionsP
   <div
     role="group"
     aria-label={label}
-    className={cn("flex flex-wrap items-center justify-end gap-1.5", className)}
+    className={cn("flex flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap", className)}
     {...props}
   >
     {children}

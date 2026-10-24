@@ -167,6 +167,7 @@ export const PricingPage = (): React.JSX.Element => {
     {
       key: "unit",
       label: translateText("Product unit"),
+      hideBelow: "md",
       enableSorting: false,
       text: (row) => productFor(row).unit,
       render: (row) => productFor(row).unit,
@@ -177,7 +178,7 @@ export const PricingPage = (): React.JSX.Element => {
       text: (row) => formatPrice(row.unitPrice, row.currency, locale),
       render: (row) => formatPrice(row.unitPrice, row.currency, locale),
     },
-    { key: "currency", label: translateText("Currency") },
+    { key: "currency", label: translateText("Currency"), hideBelow: "lg" },
     {
       key: "effectiveFrom",
       label: translateText("Effective from"),
@@ -187,6 +188,7 @@ export const PricingPage = (): React.JSX.Element => {
     {
       key: "effectiveTo",
       label: translateText("Effective to"),
+      hideBelow: "lg",
       text: (row) => formatDate(row.effectiveTo),
       render: (row) => formatDate(row.effectiveTo),
     },
@@ -231,61 +233,63 @@ export const PricingPage = (): React.JSX.Element => {
           {translateText("Create price draft")}
         </Button>
       </PageActions>
-      <div ref={toolbarRef} className="mb-3 flex flex-wrap items-center gap-2">
-        <Input
-          type="search"
-          aria-label={translateText("Search prices")}
-          placeholder={translateText("Search by SKU or name")}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="max-w-xs"
-        />
-        <Select
-          aria-label={translateText("Status")}
-          value={values.status}
-          onChange={(event) => setValues({ status: event.target.value })}
-          className="w-auto"
-        >
-          <option value="all">{translateText("All statuses")}</option>
-          <option value="Draft">{translateText("Draft")}</option>
-          <option value="Published">{translateText("Published")}</option>
-          <option value="Archived">{translateText("Archived")}</option>
-        </Select>
-        <div className="ms-auto">
-          <SavedViewsMenu pageKey="catalog-prices" defaults={LIST_DEFAULTS} />
-        </div>
-      </div>
       {list.error ? (
         <Alert variant="danger" className="mb-3">
           {translateText(list.error.message)}
         </Alert>
       ) : null}
-      <DataTable
-        rows={list.rows}
-        columns={columns}
-        loading={list.isLoading}
-        empty={translateText("No prices match these filters.")}
-        getKey={(row) => idOf(row)}
-        storageKey="staff:catalog:prices"
-        selection={{ keys: selected, onChange: setSelected }}
-        bulkActions={
-          <>
-            <Button size="sm" disabled={busy || publishable === 0} onClick={() => void runBulk("publish")}>
-              {translateText("Publish selected")}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy || archivable === 0}
-              onClick={() => void runBulk("archive")}
-            >
-              {translateText("Archive selected")}
-            </Button>
-          </>
-        }
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
-        exportCsv={{ filename: "prices.csv" }}
-      />
+      <div ref={toolbarRef}>
+        <DataTable
+          toolbarStart={
+            <>
+              <Input
+                type="search"
+                aria-label={translateText("Search prices")}
+                placeholder={translateText("Search by SKU or name")}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="max-w-xs"
+              />
+              <Select
+                aria-label={translateText("Status")}
+                value={values.status}
+                onChange={(event) => setValues({ status: event.target.value })}
+                className="w-auto"
+              >
+                <option value="all">{translateText("All statuses")}</option>
+                <option value="Draft">{translateText("Draft")}</option>
+                <option value="Published">{translateText("Published")}</option>
+                <option value="Archived">{translateText("Archived")}</option>
+              </Select>
+            </>
+          }
+          toolbarExtra={<SavedViewsMenu pageKey="catalog-prices" defaults={LIST_DEFAULTS} />}
+          rows={list.rows}
+          columns={columns}
+          loading={list.isLoading}
+          empty={translateText("No prices match these filters.")}
+          getKey={(row) => idOf(row)}
+          storageKey="staff:catalog:prices"
+          selection={{ keys: selected, onChange: setSelected }}
+          bulkActions={
+            <>
+              <Button size="sm" disabled={busy || publishable === 0} onClick={() => void runBulk("publish")}>
+                {translateText("Publish selected")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || archivable === 0}
+                onClick={() => void runBulk("archive")}
+              >
+                {translateText("Archive selected")}
+              </Button>
+            </>
+          }
+          paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+          exportCsv={{ filename: "prices.csv" }}
+        />
+      </div>
       {drawerOpen ? <PriceDrawer onClose={() => setDrawerOpen(false)} /> : null}
     </>
   );

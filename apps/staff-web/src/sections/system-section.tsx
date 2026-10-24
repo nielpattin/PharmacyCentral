@@ -87,6 +87,7 @@ export const SystemSection = (): React.JSX.Element => {
       </div>
       {errorMessage ? <Alert variant="danger">{translateText(errorMessage)}</Alert> : null}
       <SubTabs
+        className="mt-4"
         tabs={[...SYSTEM_TABS]}
         active={tab}
         onChange={(next) => {

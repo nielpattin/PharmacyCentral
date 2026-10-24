@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 
-import { Button, Field as UiField, Input, Select } from "@pharmacy/ui";
+import { Button, cn, Field as UiField, Input, Select, Tabs } from "@pharmacy/ui";
 import { useMountEffect } from "../hooks/useMountEffect.ts";
 
 import { translateText } from "../i18n.ts";
@@ -115,33 +115,26 @@ export const SelectField = ({ label, value, onChange, options, required }: Selec
   </UiField>
 );
 
+/** Page-level tab group. Tab names are English keys; they are translated here. */
 export const SubTabs = ({
   tabs,
   active,
   onChange,
+  className,
 }: {
   tabs: string[];
   active: string;
   onChange: (tab: string) => void;
+  /** Extra classes, for example a top margin where the parent adds no gap. */
+  className?: string;
 }): React.JSX.Element => (
-  <div role="tablist" className="mb-4 flex flex-wrap gap-1 rounded-lg border border-line bg-surface-soft p-1">
-    {tabs.map((tab) => (
-      <button
-        key={tab}
-        type="button"
-        role="tab"
-        aria-selected={active === tab}
-        onClick={() => onChange(tab)}
-        className={
-          active === tab
-            ? "rounded-md bg-surface px-3 py-1.5 text-xs font-bold text-primary shadow-sm"
-            : "rounded-md px-3 py-1.5 text-xs font-bold text-muted hover:text-ink"
-        }
-      >
-        {translateText(tab)}
-      </button>
-    ))}
-  </div>
+  <Tabs
+    aria-label={translateText("Sections")}
+    className={cn("mb-4", className)}
+    items={tabs.map((tab) => ({ id: tab, label: translateText(tab) }))}
+    value={active}
+    onValueChange={onChange}
+  />
 );
 
 export const RefreshButton = ({ onClick }: { onClick: () => void }): React.JSX.Element => (

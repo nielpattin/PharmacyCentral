@@ -1,6 +1,4 @@
-import { useState } from "react";
-
-import { Button, useToast } from "@pharmacy/ui";
+import { Button, Popover, useToast } from "@pharmacy/ui";
 
 import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { useSavedViews } from "../hooks/useSavedViews.ts";
@@ -24,7 +22,6 @@ export const SavedViewsMenu = ({
   pageKey: string;
   defaults: ListDefaults;
 }): React.JSX.Element => {
-  const [open, setOpen] = useState(false);
   const list = useListUrlState(defaults);
   const saved = useSavedViews(pageKey);
   const confirm = useConfirm();
@@ -32,11 +29,11 @@ export const SavedViewsMenu = ({
   const toast = useToast();
   const currentParams = serializeListValues(list.values, defaults);
 
-  const apply = (view: SavedView): void => {
+  const apply = (view: SavedView, close: () => void): void => {
     const patch: Record<string, string> = {};
     for (const key of Object.keys(defaults)) patch[key] = view.params[key] ?? defaults[key] ?? "";
     list.setValues(patch);
-    setOpen(false);
+    close();
   };
 
   const save = async (): Promise<void> => {
@@ -76,19 +73,13 @@ export const SavedViewsMenu = ({
   };
 
   return (
-    <div className="relative">
-      <Button variant="outline" size="sm" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
-        {translateText("Saved views")}
-      </Button>
-      {open ? (
-        <div
-          role="region"
-          aria-label={translateText("Saved views")}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setOpen(false);
-          }}
-          className="absolute right-0 z-20 mt-2 grid w-72 gap-2 rounded-md border border-line bg-surface p-3 shadow-lg"
-        >
+    <Popover
+      buttonLabel={translateText("Saved views")}
+      panelLabel={translateText("Saved views")}
+      panelClassName="grid w-72 gap-2 p-3"
+    >
+      {(close) => (
+        <>
           {saved.views.length === 0 ? (
             <p className="text-sm text-muted">{translateText("No saved views yet.")}</p>
           ) : (
@@ -97,7 +88,7 @@ export const SavedViewsMenu = ({
                 <li key={view.id} className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => apply(view)}
+                    onClick={() => apply(view, close)}
                     className="flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-surface-soft"
                   >
                     {view.name}
@@ -125,8 +116,8 @@ export const SavedViewsMenu = ({
           <Button variant="secondary" size="sm" onClick={() => void save()}>
             {translateText("Save current view")}
           </Button>
-        </div>
-      ) : null}
-    </div>
+        </>
+      )}
+    </Popover>
   );
 };
