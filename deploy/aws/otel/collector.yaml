@@ -1,0 +1,49 @@
+# Runs in the AWS Distro for OpenTelemetry collector (see aws_ecs_task_definition.otel_collector). Every backend service
+# pushes OTLP over HTTP to port 4318. Metrics go to Amazon Managed Service for Prometheus, traces to X-Ray, and logs to
+# CloudWatch Logs. The task role signs the requests; the placeholders are filled in from the task environment.
+extensions:
+  sigv4auth:
+    region: ${env:AWS_REGION}
+    service: aps
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 600
+  batch: {}
+
+exporters:
+  prometheusremotewrite:
+    endpoint: ${env:AMP_REMOTE_WRITE_ENDPOINT}
+    auth:
+      authenticator: sigv4auth
+    resource_to_telemetry_conversion:
+      enabled: true
+  awsxray: {}
+  awscloudwatchlogs:
+    log_group_name: ${env:OTEL_LOG_GROUP}
+    log_stream_name: otlp
+
+service:
+  extensions: [sigv4auth, health_check]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [awsxray]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [awscloudwatchlogs]

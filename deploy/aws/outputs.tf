@@ -112,3 +112,13 @@ output "embedder_client_security_group_id" {
   description = "Security group ID attached to catalog-service and search-service tasks, the only clients allowed to reach the embedder."
   value       = aws_security_group.embedder_client.id
 }
+
+output "prometheus_workspace_id" {
+  description = "Amazon Managed Service for Prometheus workspace that receives the services' metrics."
+  value       = aws_prometheus_workspace.this.id
+}
+
+output "prometheus_query_endpoint" {
+  description = "Query endpoint of the Managed Prometheus workspace. It requires SigV4-signed requests."
+  value       = aws_prometheus_workspace.this.prometheus_endpoint
+}

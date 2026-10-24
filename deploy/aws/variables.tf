@@ -53,7 +53,7 @@ variable "images" {
 
   validation {
     condition = alltrue([
-      for service in ["identity-service", "catalog-service", "inventory-service", "sales-service", "payment-service", "operations-query-service", "chatbot-service", "search-service"] :
+      for service in ["identity-service", "catalog-service", "inventory-service", "sales-service", "payment-service", "operations-query-service", "chatbot-service", "search-service", "ops-console-service"] :
       contains(keys(var.images), service) && strcontains(var.images[service], "@sha256:")
     ])
     error_message = "Every backend service image must be provided as an immutable image@sha256:digest reference."
@@ -189,6 +189,16 @@ variable "embedder_image" {
   validation {
     condition     = strcontains(var.embedder_image, "@sha256:")
     error_message = "The embedder image must be an immutable image@sha256:digest reference."
+  }
+}
+
+variable "otel_collector_image" {
+  description = "Immutable image@sha256:digest reference for the AWS Distro for OpenTelemetry collector, for example public.ecr.aws/aws-observability/aws-otel-collector@sha256:..."
+  type        = string
+
+  validation {
+    condition     = strcontains(var.otel_collector_image, "@sha256:")
+    error_message = "The OpenTelemetry collector image must be an immutable image@sha256:digest reference."
   }
 }
 

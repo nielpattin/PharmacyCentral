@@ -24,12 +24,17 @@ images = {
   payment-service = "ghcr.io/example/pharmacy-central/payment-service@sha256:replace-me"
   operations-query-service = "ghcr.io/example/pharmacy-central/operations-query-service@sha256:replace-me"
   chatbot-service = "ghcr.io/example/pharmacy-central/chatbot-service@sha256:replace-me"
+  ops-console-service = "ghcr.io/example/pharmacy-central/ops-console-service@sha256:replace-me"
   search-service = "ghcr.io/example/pharmacy-central/search-service@sha256:replace-me"
 }
 
 # The self-hosted product search embedder (deploy/embedder). Build the image with its model baked in, push it, and pin
 # the digest. The service is internal: catalog-service reaches it at http://embedder.<environment>.pharmacy.internal:80/v1.
 embedder_image = "ghcr.io/example/pharmacy-central/embedder@sha256:replace-me"
+
+# The collector the services push OTLP to (OTEL_EXPORTER_OTLP_ENDPOINT below). It forwards metrics to Managed Prometheus,
+# traces to X-Ray and logs to CloudWatch Logs. Tested with v0.158.0.
+otel_collector_image = "public.ecr.aws/aws-observability/aws-otel-collector@sha256:7968fb60db6a2390a47ba6a2df029745638486e285c9b2487da1b722d0855a3e"
 
 # Secrets Manager ARN of the embedder API key. The embedder reads it as API_KEY, and catalog-service and search-service
 # read the same secret as AI_EMBEDDING_API_KEY.
@@ -72,6 +77,22 @@ service_environment = {
     CATALOG_SERVICE_URL        = "http://catalog-service.staging.pharmacy.internal:3002"
     OTEL_EXPORTER_OTLP_ENDPOINT = "http://otel-collector.staging.pharmacy.internal:4318"
   }
+  # ops-console-service reads health from every service, queue depth from the RabbitMQ management API, load and outbox
+  # figures from a Prometheus-compatible query endpoint, and shows GRAFANA_PUBLIC_URL as a link.
+  ops-console-service = {
+    IDENTITY_SERVICE_URL         = "http://identity-service.staging.pharmacy.internal:3001"
+    CATALOG_SERVICE_URL          = "http://catalog-service.staging.pharmacy.internal:3002"
+    SEARCH_SERVICE_URL           = "http://search-service.staging.pharmacy.internal:3009"
+    INVENTORY_SERVICE_URL        = "http://inventory-service.staging.pharmacy.internal:3004"
+    SALES_SERVICE_URL            = "http://sales-service.staging.pharmacy.internal:3005"
+    PAYMENT_SERVICE_URL          = "http://payment-service.staging.pharmacy.internal:3006"
+    OPERATIONS_QUERY_SERVICE_URL = "http://operations-query-service.staging.pharmacy.internal:3007"
+    CHATBOT_SERVICE_URL          = "http://chatbot-service.staging.pharmacy.internal:3008"
+    PROMETHEUS_URL               = "http://prometheus.staging.pharmacy.internal:9090"
+    RABBITMQ_MANAGEMENT_URL      = "https://replace-with-the-broker-management-endpoint"
+    GRAFANA_PUBLIC_URL           = "https://grafana.staging.example.com"
+    OTEL_EXPORTER_OTLP_ENDPOINT  = "http://otel-collector.staging.pharmacy.internal:4318"
+  }
 }
 
 # Secret values belong in Secrets Manager. These maps contain ARNs only.
@@ -113,6 +134,12 @@ service_secrets = {
   search-service = {
     TYPESENSE_API_KEY = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/typesense-api-key"
     TYPESENSE_URL     = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/typesense-url"
+  }
+  ops-console-service = {
+    RABBITMQ_MANAGEMENT_USER     = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/rabbitmq-management-user"
+    RABBITMQ_MANAGEMENT_PASSWORD = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/rabbitmq-management-password"
+    TYPESENSE_API_KEY            = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/typesense-api-key"
+    TYPESENSE_URL                = "arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:pharmacy-central/staging/typesense-url"
   }
 }
 

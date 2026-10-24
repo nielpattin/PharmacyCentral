@@ -61,6 +61,17 @@ The embedder is a separate ECS Fargate service, not a backend service. It has no
 
 The operating steps (building and pushing the image, creating the secret, checking the health endpoint, and the fallback to keyword search) are in `docs/Runbooks.md`, section "Self-hosted product search embeddings", subsection "On AWS".
 
+## OpenTelemetry collector and metrics
+
+Every service requires `OTEL_EXPORTER_OTLP_ENDPOINT`. `telemetry.tf` creates what it points at:
+
+- **Collector:** one ECS Fargate task (`otel-collector`, 0.5 vCPU, 1 GiB) running the pinned image `otel_collector_image` (an `@sha256` reference). Its config is `deploy/aws/otel/collector.yaml`, passed in `AOT_CONFIG_CONTENT`. It listens on OTLP/HTTP 4318 and is reachable through Cloud Map as `otel-collector.<environment>.pharmacy.internal`. Set `OTEL_EXPORTER_OTLP_ENDPOINT` of the services to `http://otel-collector.<environment>.pharmacy.internal:4318`. Only the backend task security group may reach it.
+- **Metrics:** remote write with SigV4 to the Amazon Managed Prometheus workspace created in the same file. **Traces:** X-Ray. **Logs:** the CloudWatch log group `/otel/<environment>/logs`.
+- One task means telemetry is lost while it restarts; the services keep running.
+- **System page on AWS:** the System page reads health, queues and the search index itself. Traces, logs and the RED charts are in Grafana, and this stack has no Grafana data source for X-Ray or CloudWatch Logs unless one is added there.
+- **Open limit:** nothing reads the workspace yet. `ops-console-service` cannot query it without a SigV4 proxy, and no Managed Grafana is provisioned. Cost of the workspace was not estimated.
+- Tested: `terraform validate`, and the collector config started in the pinned image (v0.158.0) with a read-only root filesystem, answering OTLP POST with 200 and `/healthcheck` with 200. Not tested: a real `apply`, so the writes to AMP, X-Ray and CloudWatch are unverified.
+
 ## Operational runbook (no-apply guide)
 
 This repository does not configure remote state or live AWS credentials and must not run `terraform apply` during local validation. Use the following runbook when deploying to a live AWS account.
@@ -180,6 +191,8 @@ The configuration exports the following outputs for deployment and operational o
 | `embedder_internal_url` | Private base URL that catalog-service and search-service call, `http://embedder.<environment>.pharmacy.internal:80/v1`. |
 | `embedder_security_group_id` | Security group of the embedder task. |
 | `embedder_client_security_group_id` | Security group attached to catalog-service and search-service tasks, the only clients of the embedder. |
+| `prometheus_workspace_id` | Amazon Managed Prometheus workspace that receives the metrics. |
+| `prometheus_query_endpoint` | Query endpoint of that workspace. Queries need SigV4. |
 
 ## Configuration inputs
 
@@ -220,6 +233,7 @@ The internal ALB sees paths without `/api`. Rules are evaluated by priority, low
 | 60 | `/payments*` | payment-service |
 | 70 | `/operations*`, `/dashboard*`, `/finance*`, `/audit*`, `/reports*` | operations-query-service |
 | 80 | `/chatbot*` | chatbot-service |
+| 90 | `/system*` | ops-console-service |
 
 The `GET /products` rule matches only the list endpoint. `GET /api/products/{id}`, `POST /api/products`, and every other method on `/api/products*` fall through to the catalog-service rule at priority 20.
 
