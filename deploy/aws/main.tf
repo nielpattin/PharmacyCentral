@@ -34,6 +34,10 @@ locals {
       port  = 3009
       image = var.images["search-service"]
     }
+    ops-console-service = {
+      port  = 3010
+      image = var.images["ops-console-service"]
+    }
   }
 
   path_rules = {
@@ -76,6 +80,11 @@ locals {
       priority = 80
       paths    = ["/chatbot*"]
       service  = "chatbot-service"
+    }
+    ops-console = {
+      priority = 90
+      paths    = ["/system*"]
+      service  = "ops-console-service"
     }
   }
 
@@ -230,7 +239,7 @@ resource "aws_security_group_rule" "alb_egress_tasks" {
   type                     = "egress"
   description              = "Allow outbound HTTP traffic from ALB to backend ECS tasks"
   from_port                = 3001
-  to_port                  = 3009
+  to_port                  = 3010
   protocol                 = "tcp"
   security_group_id        = aws_security_group.alb.id
   source_security_group_id = aws_security_group.ecs_tasks.id
@@ -250,7 +259,7 @@ resource "aws_security_group_rule" "tasks_ingress_self" {
   type              = "ingress"
   description       = "Allow service-to-service Cloud Map communication between ECS tasks"
   from_port         = 3001
-  to_port           = 3009
+  to_port           = 3010
   protocol          = "tcp"
   security_group_id = aws_security_group.ecs_tasks.id
   self              = true

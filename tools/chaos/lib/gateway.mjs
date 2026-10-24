@@ -30,6 +30,7 @@ const ROUTES = [
   ["/api/counter-transactions", "sales-service"],
   ["/api/payments", "payment-service"],
   ["/api/chatbot", "chatbot-service"],
+  ["/api/system", "ops-console-service"],
   ["/api/operations", "operations-query-service"],
   ["/api/dashboard", "operations-query-service"],
   ["/api/finance", "operations-query-service"],

@@ -205,6 +205,8 @@ services:
       - --web.enable-otlp-receiver
       - --web.enable-remote-write-receiver
       - --storage.tsdb.path=/prometheus
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/-/healthy"]
       interval: 10s
@@ -238,6 +240,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/start-here.json
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health"]
       interval: 10s
@@ -334,6 +337,7 @@ services:
       INVENTORY_PORT: ${INVENTORY_PORT}
       SALES_PORT: ${SALES_PORT}
       CHATBOT_PORT: ${CHATBOT_PORT}
+      OPS_CONSOLE_PORT: ${OPS_CONSOLE_PORT}
       PAYMENT_PORT: ${PAYMENT_PORT}
       OPERATIONS_QUERY_PORT: ${OPERATIONS_QUERY_PORT}
     volumes:
@@ -353,6 +357,7 @@ services:
       args:
         APP_NAME: "@pharmacy/identity-service"
         APP_DIR: apps/identity-service
+        BUILD_VERSION: ${BUILD_VERSION}
     environment:
       <<: *backend-environment
       PORT: 3001
@@ -375,6 +380,7 @@ services:
       args:
         APP_NAME: "@pharmacy/catalog-service"
         APP_DIR: apps/catalog-service
+        BUILD_VERSION: ${BUILD_VERSION}
     depends_on:
       postgres-roles:
         condition: service_completed_successfully
@@ -415,6 +421,8 @@ services:
     build:
       context: .
       dockerfile: apps/search-service/Dockerfile
+      args:
+        BUILD_VERSION: ${BUILD_VERSION}
     depends_on:
       typesense:
         condition: service_healthy
@@ -451,6 +459,7 @@ services:
       args:
         APP_NAME: "@pharmacy/inventory-service"
         APP_DIR: apps/inventory-service
+        BUILD_VERSION: ${BUILD_VERSION}
     environment:
       <<: *backend-environment
       PORT: 3004
@@ -467,6 +476,7 @@ services:
       args:
         APP_NAME: "@pharmacy/sales-service"
         APP_DIR: apps/sales-service
+        BUILD_VERSION: ${BUILD_VERSION}
     environment:
       <<: *backend-environment
       PORT: 3005
@@ -498,6 +508,7 @@ services:
       args:
         APP_NAME: "@pharmacy/chatbot-service"
         APP_DIR: apps/chatbot-service
+        BUILD_VERSION: ${BUILD_VERSION}
     depends_on:
       postgres-roles:
         condition: service_completed_successfully
@@ -521,6 +532,44 @@ services:
     ports:
       - "${CHATBOT_PORT}:3008"
 
+  ops-console-service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: apps/Dockerfile.service
+      args:
+        APP_NAME: "@pharmacy/ops-console-service"
+        APP_DIR: apps/ops-console-service
+        BUILD_VERSION: ${BUILD_VERSION}
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    environment:
+      PORT: 3010
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      INTERNAL_IDENTITY_SECRET: ${INTERNAL_IDENTITY_SECRET}
+      IDENTITY_SERVICE_URL: http://identity-service:3001
+      CATALOG_SERVICE_URL: http://catalog-service:3002
+      SEARCH_SERVICE_URL: http://search-service:3009
+      INVENTORY_SERVICE_URL: http://inventory-service:3004
+      SALES_SERVICE_URL: http://sales-service:3005
+      PAYMENT_SERVICE_URL: http://payment-service:3006
+      OPERATIONS_QUERY_SERVICE_URL: http://operations-query-service:3007
+      CHATBOT_SERVICE_URL: http://chatbot-service:3008
+      PROMETHEUS_URL: http://prometheus:9090
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      RABBITMQ_MANAGEMENT_USER: ${RABBITMQ_USER}
+      RABBITMQ_MANAGEMENT_PASSWORD: ${RABBITMQ_PASSWORD}
+      TYPESENSE_URL: http://typesense:8108
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}
+      GRAFANA_PUBLIC_URL: ${GRAFANA_PUBLIC_URL}
+    ports:
+      - "${OPS_CONSOLE_PORT}:3010"
+
   payment-service:
     <<: *backend-defaults
     build:
@@ -529,6 +578,7 @@ services:
       args:
         APP_NAME: "@pharmacy/payment-service"
         APP_DIR: apps/payment-service
+        BUILD_VERSION: ${BUILD_VERSION}
     environment:
       <<: *backend-environment
       PORT: 3006
@@ -550,6 +600,7 @@ services:
       args:
         APP_NAME: "@pharmacy/operations-query-service"
         APP_DIR: apps/operations-query-service
+        BUILD_VERSION: ${BUILD_VERSION}
     environment:
       <<: *backend-environment
       PORT: 3007

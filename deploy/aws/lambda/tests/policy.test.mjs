@@ -100,6 +100,7 @@ describe("policy - route classification", () => {
     assert.equal(isEmployeeRoute("/api/dashboard", "GET"), true);
     assert.equal(isEmployeeRoute("/api/finance", "GET"), true);
     assert.equal(isEmployeeRoute("/api/audit", "GET"), true);
+    assert.equal(isEmployeeRoute("/api/system/overview", "GET"), true);
     assert.equal(isEmployeeRoute("/api/reports", "GET"), true);
     assert.equal(isEmployeeRoute("/api/prescriptions/123", "GET"), true);
     assert.equal(isEmployeeRoute("/api/counter-transactions", "GET"), true);
@@ -239,6 +240,7 @@ describe("policy - employee roles and authorization", () => {
     // Platform Admin
     assert.deepEqual(employeeRolesForRequest("/api/admin", "GET"), ["Platform Admin"]);
     assert.deepEqual(employeeRolesForRequest("/api/audit", "GET"), ["Platform Admin"]);
+    assert.deepEqual(employeeRolesForRequest("/api/system/overview", "GET"), ["Platform Admin"]);
 
     // Management Only
     assert.deepEqual(employeeRolesForRequest("/api/finance", "GET"), ["Pharmacy Manager"]);
@@ -324,6 +326,7 @@ describe("policy - target service selection", () => {
     assert.equal(selectTargetService("/api/prescriptions"), "sales-service");
     assert.equal(selectTargetService("/api/payments"), "payment-service");
     assert.equal(selectTargetService("/api/chatbot/messages"), "chatbot-service");
+    assert.equal(selectTargetService("/api/system/overview"), "ops-console-service");
     assert.equal(selectTargetService("/api/operations/metrics"), "operations-query-service");
     assert.equal(selectTargetService("/api/dashboard/summary"), "operations-query-service");
     assert.equal(selectTargetService("/api/finance/summary"), "operations-query-service");

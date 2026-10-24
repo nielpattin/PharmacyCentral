@@ -35,6 +35,7 @@ services:
   payment-service: *ecs-task
   operations-query-service: *ecs-task
   chatbot-service: *ecs-task
+  ops-console-service: *ecs-task
 
   postgres:
     deploy:
