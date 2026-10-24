@@ -4,14 +4,19 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Alert } from "@pharmacy/ui";
 
-import { RefreshButton } from "../components/forms.tsx";
+import { SubTabs } from "../components/forms.tsx";
+import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { translateText } from "../i18n.ts";
 import { ApiProblemError, readSystemOverview, type SystemMetricsWindowMinutes } from "../staff-api.ts";
 import { DEFAULT_SYSTEM_WINDOW_MINUTES, SYSTEM_REFRESH_INTERVAL_MS } from "./system/constants.ts";
 import { evaluateOverallHealth, evaluateServiceHealth } from "./system/health.ts";
-import { OverviewTab } from "./system/overview-tab.tsx";
+import { GrafanaCard } from "./system/grafana-card.tsx";
+import { MessagingTab } from "./system/messaging-tab.tsx";
+import { RoutesCard } from "./system/routes-card.tsx";
 import { ServiceDetailSheet } from "./system/service-detail-sheet.tsx";
+import { ServicesTab } from "./system/services-tab.tsx";
 import { StatusPill } from "./system/status-pill.tsx";
+import { isSystemTab, SYSTEM_TABS } from "./system/tabs.ts";
 import { WindowPicker } from "./system/window-picker.tsx";
 
 const systemQueryKey = ["system-overview"] as const;
@@ -23,7 +28,11 @@ const formatClock = (iso: string): string => {
     : date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 };
 
+const LIST_DEFAULTS = { tab: "Services" } as const;
+
 export const SystemSection = (): React.JSX.Element => {
+  const list = useListUrlState(LIST_DEFAULTS);
+  const tab = isSystemTab(list.values.tab) ? list.values.tab : LIST_DEFAULTS.tab;
   // The service whose detail sheet is open. The sheet mounts only while a service is selected.
   const [selectedService, setSelectedService] = useState<string | null>(null);
   // The window the availability strips and the sheet's charts read. The header picker drives it.
@@ -63,30 +72,41 @@ export const SystemSection = (): React.JSX.Element => {
   return (
     <section className="staff-section">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="grid gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{translateText("System")}</h1>
-          <p className="text-sm text-muted">
-            {translateText("Service health, queues and the search index. The overview refreshes every 15 seconds.")}
-          </p>
-        </div>
+        <p className="text-sm text-muted">
+          {translateText("Service health, queues and the search index. The overview refreshes every 15 seconds.")}
+        </p>
         <div className="flex flex-wrap items-center gap-3">
           {overall ? <StatusPill overall={overall} /> : null}
-          <WindowPicker value={windowMinutes} onChange={setWindowMinutes} />
+          {tab === "Services" ? <WindowPicker value={windowMinutes} onChange={setWindowMinutes} /> : null}
           {overview ? (
             <span className="text-sm tabular-nums text-muted">
               {`${translateText("Updated")} ${formatClock(overview.generatedAt)}`}
             </span>
           ) : null}
-          <RefreshButton onClick={() => void overviewQuery.refetch()} />
         </div>
       </div>
       {errorMessage ? <Alert variant="danger">{translateText(errorMessage)}</Alert> : null}
+      <SubTabs
+        tabs={[...SYSTEM_TABS]}
+        active={tab}
+        onChange={(next) => {
+          setSelectedService(null);
+          list.setValues({ tab: next }, { history: "push" });
+        }}
+      />
+      {tab === "API routes" ? <RoutesCard /> : null}
       {overview ? (
-        <OverviewTab overview={overview} windowMinutes={windowMinutes} onOpenService={setSelectedService} />
-      ) : errorMessage ? null : (
+        <>
+          {tab === "Services" ? (
+            <ServicesTab overview={overview} windowMinutes={windowMinutes} onOpenService={setSelectedService} />
+          ) : null}
+          {tab === "Messaging" ? <MessagingTab overview={overview} /> : null}
+          {tab === "Dashboards" ? <GrafanaCard baseUrl={grafanaUrl} /> : null}
+        </>
+      ) : tab === "API routes" || errorMessage ? null : (
         <p className="text-sm text-muted">{translateText("Loading system overview...")}</p>
       )}
-      {selectedService !== null && overview ? (
+      {tab === "Services" && selectedService !== null && overview ? (
         <ServiceDetailSheet
           key={selectedService}
           serviceName={selectedService}

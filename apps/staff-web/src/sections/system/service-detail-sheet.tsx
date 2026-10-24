@@ -16,6 +16,7 @@ import {
   type DataTone,
 } from "@pharmacy/ui";
 
+import { SubTabs } from "../../components/forms.tsx";
 import { translateText } from "../../i18n.ts";
 import {
   formatQuantity,
@@ -29,6 +30,7 @@ import { SYSTEM_HEAVY_REFRESH_INTERVAL_MS } from "./constants.ts";
 import { DASH, formatChartTime, formatMilliseconds } from "./format.ts";
 import { evaluateServiceHealth, type HealthReason, type HealthTone } from "./health.ts";
 import { serviceDashboardUrl, serviceLogsUrl, serviceTracesUrl } from "./grafana-links.ts";
+import { ServiceCatalogBlock } from "./service-catalog-block.tsx";
 import { WindowPicker } from "./window-picker.tsx";
 import { metricsErrorMessage } from "./system-errors.ts";
 
@@ -123,6 +125,8 @@ const ChartCard = ({
   </Card>
 );
 
+const SHEET_TABS = ["Overview", "Resources"] as const;
+
 export const ServiceDetailSheet = ({
   serviceName,
   overview,
@@ -130,6 +134,7 @@ export const ServiceDetailSheet = ({
   grafanaUrl,
   onClose,
 }: {
+  /** The service the sheet opens with. A Calls or Called by link inside the sheet shows that service instead. */
   serviceName: string;
   overview: SystemOverview;
   initialWindow: SystemMetricsWindowMinutes;
@@ -138,13 +143,15 @@ export const ServiceDetailSheet = ({
   onClose: () => void;
 }): React.JSX.Element => {
   const [windowMinutes, setWindowMinutes] = useState<SystemMetricsWindowMinutes>(initialWindow);
+  const [shownService, setShownService] = useState(serviceName);
+  const [sheetTab, setSheetTab] = useState<(typeof SHEET_TABS)[number]>("Overview");
   const service =
-    overview.services.status === "ok" ? overview.services.data.find((row) => row.name === serviceName) : undefined;
-  const load = overview.load.status === "ok" ? overview.load.data.find((row) => row.name === serviceName) : undefined;
+    overview.services.status === "ok" ? overview.services.data.find((row) => row.name === shownService) : undefined;
+  const load = overview.load.status === "ok" ? overview.load.data.find((row) => row.name === shownService) : undefined;
 
   const rangeQuery = useQuery({
-    queryKey: ["system-metrics-range", serviceName, windowMinutes],
-    queryFn: () => readSystemMetricsRange(serviceName, windowMinutes),
+    queryKey: ["system-metrics-range", shownService, windowMinutes],
+    queryFn: () => readSystemMetricsRange(shownService, windowMinutes),
     refetchInterval: SYSTEM_HEAVY_REFRESH_INTERVAL_MS,
     placeholderData: keepPreviousData,
     retry: false,
@@ -152,10 +159,11 @@ export const ServiceDetailSheet = ({
 
   const includeDate = windowMinutes > LONG_WINDOW_MINUTES;
   const health = service ? evaluateServiceHealth(service, load) : undefined;
+  // While another service's range is still on screen as placeholder data, its charts must not show under this title.
+  const range = rangeQuery.data?.service === shownService ? rangeQuery.data : undefined;
 
   let charts: React.JSX.Element;
-  if (rangeQuery.data) {
-    const range = rangeQuery.data;
+  if (range) {
     charts = (
       <div className="grid gap-4 md:grid-cols-2">
         {CHARTS.map((meta) => (
@@ -173,7 +181,7 @@ export const ServiceDetailSheet = ({
     <Sheet
       open
       onClose={onClose}
-      title={serviceName}
+      title={shownService}
       description={translateText("Service detail")}
       width="xl"
       closeLabel={translateText("Close")}
@@ -215,12 +223,11 @@ export const ServiceDetailSheet = ({
               ))}
             </ul>
           ) : null}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <WindowPicker value={windowMinutes} onChange={setWindowMinutes} />
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {grafanaUrl === undefined ? null : (
               <nav aria-label={translateText("Grafana")} className="flex flex-wrap gap-4 text-sm">
                 <a
-                  href={serviceDashboardUrl(grafanaUrl, serviceName)}
+                  href={serviceDashboardUrl(grafanaUrl, shownService)}
                   target="_blank"
                   rel="noreferrer"
                   className="text-link"
@@ -228,7 +235,7 @@ export const ServiceDetailSheet = ({
                   {translateText("Service Overview")}
                 </a>
                 <a
-                  href={serviceTracesUrl(grafanaUrl, serviceName)}
+                  href={serviceTracesUrl(grafanaUrl, shownService)}
                   target="_blank"
                   rel="noreferrer"
                   className="text-link"
@@ -236,7 +243,7 @@ export const ServiceDetailSheet = ({
                   {translateText("Traces")}
                 </a>
                 <a
-                  href={serviceLogsUrl(grafanaUrl, serviceName)}
+                  href={serviceLogsUrl(grafanaUrl, shownService)}
                   target="_blank"
                   rel="noreferrer"
                   className="text-link"
@@ -248,7 +255,21 @@ export const ServiceDetailSheet = ({
           </div>
         </header>
 
-        {charts}
+        <div>
+          <SubTabs
+            tabs={[...SHEET_TABS]}
+            active={sheetTab}
+            onChange={(next) => setSheetTab(next as (typeof SHEET_TABS)[number])}
+          />
+          {sheetTab === "Overview" ? (
+            <ServiceCatalogBlock serviceName={shownService} onOpenService={setShownService} />
+          ) : (
+            <div className="grid gap-4">
+              <WindowPicker value={windowMinutes} onChange={setWindowMinutes} />
+              {charts}
+            </div>
+          )}
+        </div>
       </div>
     </Sheet>
   );

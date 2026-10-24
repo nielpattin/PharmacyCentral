@@ -7,7 +7,8 @@ import { z } from "zod";
 import { createApp } from "./app.ts";
 import { createLogger } from "./logger.ts";
 import { createProbeLoop, PROBE_INTERVAL_MS } from "./modules/system/probe-loop.ts";
-import type { Probes, ServiceTarget } from "./modules/system/probes.ts";
+import { PROBED_SERVICES } from "./modules/system/probed-services.ts";
+import type { Probes } from "./modules/system/probes.ts";
 
 const requireEnv = (name: string): string => {
   const value = process.env[name];
@@ -22,29 +23,13 @@ if (!parsedPort.success) {
   throw new Error("Invalid environment variable: PORT must be an integer from 1 to 65535.");
 }
 
-const target = (
-  name: string,
-  urlVariable: string,
-  healthPath = "/health/ready",
-  livePath = "/health/live",
-): ServiceTarget => ({
-  name,
-  url: requireEnv(urlVariable),
-  healthPath,
-  livePath,
-});
-
 const probes: Probes = {
-  services: [
-    target("identity-service", "IDENTITY_SERVICE_URL"),
-    target("catalog-service", "CATALOG_SERVICE_URL"),
-    target("search-service", "SEARCH_SERVICE_URL", "/healthz", "/healthz"),
-    target("inventory-service", "INVENTORY_SERVICE_URL"),
-    target("sales-service", "SALES_SERVICE_URL"),
-    target("payment-service", "PAYMENT_SERVICE_URL"),
-    target("chatbot-service", "CHATBOT_SERVICE_URL"),
-    target("operations-query-service", "OPERATIONS_QUERY_SERVICE_URL"),
-  ],
+  services: PROBED_SERVICES.map((service) => ({
+    name: service.name,
+    url: requireEnv(service.urlVariable),
+    healthPath: service.healthPath,
+    livePath: service.livePath,
+  })),
   prometheusUrl: requireEnv("PROMETHEUS_URL"),
   rabbitmq: {
     url: requireEnv("RABBITMQ_MANAGEMENT_URL"),

@@ -1,0 +1,158 @@
+import type { RouteRow } from "../../contracts/system.ts";
+
+/**
+ * Every `/api` path the gateway forwards, with the service that owns it and who may call it. Rows follow gateway order:
+ * the exact product list comes before its prefix, and a credential path comes after the prefix it sits under.
+ *
+ * The container cannot read deploy/ at runtime, so this is a constant. route-table.test.ts fails when it disagrees with
+ * deploy/local/gateway/routes.conf, the ALB path rules in deploy/aws/main.tf, or platformAdminPaths in
+ * deploy/aws/lambda/policy.mjs. Access summarises the edge policy; the policy file is the authority.
+ */
+
+// Every staff role that the edge lets through on a route with no role of its own. Platform Admin passes every role
+// check, so it is not listed.
+const STAFF_ROLES = ["Pharmacy Manager", "Pharmacist", "Warehouse Staff"];
+
+export const ROUTE_TABLE: readonly RouteRow[] = [
+  {
+    path: "/api/auth*",
+    service: "identity-service",
+    access: { kind: "signed-in" },
+    note: "Login, registration, email verification, setup status and Google sign-in are public.",
+  },
+  { path: "/api/admin*", service: "identity-service", access: { kind: "platform-admin" } },
+  { path: "/api/customers*", service: "identity-service", access: { kind: "roles", roles: ["Pharmacist"] } },
+  {
+    path: "/api/products",
+    method: "GET",
+    service: "search-service",
+    access: { kind: "public" },
+    note: "The product list. Other methods on this path go to catalog-service.",
+  },
+  {
+    path: "/api/products*",
+    service: "catalog-service",
+    access: { kind: "public" },
+    note: "Writes need the Pharmacy Manager role.",
+  },
+  {
+    path: "/api/products/search-credential",
+    service: "catalog-service",
+    access: { kind: "platform-admin" },
+  },
+  {
+    path: "/api/sites*",
+    service: "catalog-service",
+    access: { kind: "public" },
+    note: "Writes need the Pharmacy Manager role.",
+  },
+  {
+    path: "/api/storage-locations*",
+    service: "catalog-service",
+    access: { kind: "signed-in" },
+    note: "Writes need the Pharmacy Manager role.",
+  },
+  {
+    path: "/api/suppliers*",
+    service: "catalog-service",
+    access: { kind: "signed-in" },
+    note: "Writes need the Pharmacy Manager role.",
+  },
+  {
+    path: "/api/pricing*",
+    service: "catalog-service",
+    access: { kind: "signed-in" },
+    note: "Active prices are public. Price writes need the Pharmacy Manager role.",
+  },
+  { path: "/api/stores*", service: "catalog-service", access: { kind: "public" } },
+  { path: "/api/availability*", service: "catalog-service", access: { kind: "public" } },
+  {
+    path: "/api/procurement*",
+    service: "inventory-service",
+    access: { kind: "roles", roles: ["Pharmacy Manager", "Warehouse Staff"] },
+    note: "Purchase order writes need the Pharmacy Manager role. Goods receipts need Warehouse Staff.",
+  },
+  {
+    path: "/api/inventory*",
+    service: "inventory-service",
+    access: { kind: "roles", roles: STAFF_ROLES },
+    note: "Batches, movements, adjustments, transfers, stocktakes and returns need Warehouse Staff.",
+  },
+  {
+    path: "/api/quality*",
+    service: "inventory-service",
+    access: { kind: "roles", roles: ["Warehouse Staff"] },
+  },
+  {
+    path: "/api/carts*",
+    service: "sales-service",
+    access: { kind: "public" },
+    note: "Carts work for guests. Orders need a sign-in.",
+  },
+  { path: "/api/orders*", service: "sales-service", access: { kind: "signed-in" } },
+  {
+    path: "/api/delivery*",
+    service: "sales-service",
+    access: { kind: "signed-in" },
+    note: "Delivery fee estimates, reverse geocoding and address lookup are public.",
+  },
+  {
+    path: "/api/prescriptions*",
+    service: "sales-service",
+    access: { kind: "roles", roles: ["Pharmacist", "Pharmacy Manager"] },
+    note: "Shoppers can upload their own prescriptions and request consultations.",
+  },
+  {
+    path: "/api/prescriptions/intake-credential",
+    service: "sales-service",
+    access: { kind: "platform-admin" },
+  },
+  {
+    path: "/api/counter-transactions*",
+    service: "sales-service",
+    access: { kind: "roles", roles: ["Pharmacist", "Pharmacy Manager"] },
+  },
+  {
+    path: "/api/payments*",
+    service: "payment-service",
+    access: { kind: "roles", roles: ["Pharmacist", "Pharmacy Manager"] },
+    note: "Shoppers can create and read their own invoices. The SePay webhook is public and HMAC-verified.",
+  },
+  {
+    path: "/api/chatbot*",
+    service: "chatbot-service",
+    access: { kind: "signed-in" },
+  },
+  {
+    path: "/api/chatbot/credential",
+    service: "chatbot-service",
+    access: { kind: "platform-admin" },
+  },
+  {
+    path: "/api/chatbot/intent-gate-credential",
+    service: "chatbot-service",
+    access: { kind: "platform-admin" },
+  },
+  {
+    path: "/api/operations*",
+    service: "operations-query-service",
+    access: { kind: "roles", roles: STAFF_ROLES },
+  },
+  {
+    path: "/api/dashboard*",
+    service: "operations-query-service",
+    access: { kind: "roles", roles: STAFF_ROLES },
+  },
+  {
+    path: "/api/finance*",
+    service: "operations-query-service",
+    access: { kind: "roles", roles: ["Pharmacy Manager"] },
+  },
+  {
+    path: "/api/reports*",
+    service: "operations-query-service",
+    access: { kind: "roles", roles: STAFF_ROLES },
+  },
+  { path: "/api/audit*", service: "operations-query-service", access: { kind: "platform-admin" } },
+  { path: "/api/system*", service: "ops-console-service", access: { kind: "platform-admin" } },
+];

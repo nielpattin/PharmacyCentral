@@ -221,6 +221,65 @@ export const governanceLiterals: Record<string, string> = {
   "Service detail": "Chi tiết dịch vụ",
   "Live down": "Live lỗi",
   "This service is not in the current health list.": "Dịch vụ này không có trong danh sách tình trạng hiện tại.",
+  About: "Giới thiệu",
+  Database: "Cơ sở dữ liệu",
+  Port: "Cổng",
+  None: "Không có",
+  Calls: "Gọi tới",
+  "Called by": "Được gọi bởi",
+  "Events published": "Sự kiện phát hành",
+  "Events consumed": "Sự kiện nhận",
+  Messaging: "Hàng đợi và tìm kiếm",
+  "API routes": "Đường dẫn API",
+  Dashboards: "Bảng điều khiển Grafana",
+  Resources: "Tài nguyên",
+  Overview: "Tổng quan",
+  "Service catalog unavailable.": "Không tải được danh mục dịch vụ.",
+  "This service has no catalog entry.": "Dịch vụ này không có trong danh mục.",
+  Routes: "Đường dẫn API",
+  "The API paths the gateway sends to each service, and who may call them. Read only: the edge policy enforces access.":
+    "Các đường dẫn API mà gateway chuyển tới từng dịch vụ, và ai được gọi. Chỉ đọc: chính sách biên thực thi quyền truy cập.",
+  "Route table unavailable.": "Không tải được bảng đường dẫn.",
+  "Filter routes": "Lọc đường dẫn",
+  "No routes match this filter.": "Không có đường dẫn nào khớp bộ lọc.",
+  Access: "Quyền truy cập",
+  Note: "Ghi chú",
+  Public: "Công khai",
+  "Signed in": "Đã đăng nhập",
+  "Platform Admin only": "Chỉ Quản trị nền tảng",
+  "Authentication, users, sessions, roles and Google sign-in.":
+    "Xác thực, người dùng, phiên, vai trò và đăng nhập Google.",
+  "Products, units, sites, storage locations, suppliers, pricing and the product search index.":
+    "Sản phẩm, đơn vị, cơ sở, vị trí kho, nhà cung cấp, giá và chỉ mục tìm kiếm sản phẩm.",
+  "Product list reads from Typesense, falling back to catalog-service when Typesense cannot answer.":
+    "Đọc danh sách sản phẩm từ Typesense, chuyển sang catalog-service khi Typesense không phản hồi.",
+  "Stock, batches, movements, procurement, transfers, stocktakes and quality.":
+    "Tồn kho, lô, biến động, mua hàng, điều chuyển, kiểm kê và chất lượng.",
+  "Carts, orders, counter sales, prescriptions and delivery calculation.":
+    "Giỏ hàng, đơn hàng, bán tại quầy, đơn thuốc và tính phí giao hàng.",
+  "Invoices, payments and SePay webhook processing.": "Hóa đơn, thanh toán và xử lý webhook SePay.",
+  "Customer consultation assistant that answers from catalog lookups.":
+    "Trợ lý tư vấn khách hàng, trả lời dựa trên tra cứu danh mục.",
+  "Read models for dashboards, operational reports, finance and the audit log.":
+    "Mô hình đọc cho bảng điều khiển, báo cáo vận hành, tài chính và nhật ký kiểm toán.",
+  "Login, registration, email verification, setup status and Google sign-in are public.":
+    "Đăng nhập, đăng ký, xác minh email, trạng thái thiết lập và đăng nhập Google là công khai.",
+  "The product list. Other methods on this path go to catalog-service.":
+    "Danh sách sản phẩm. Các phương thức khác trên đường dẫn này đi tới catalog-service.",
+  "Writes need the Pharmacy Manager role.": "Ghi dữ liệu cần vai trò Quản lý nhà thuốc.",
+  "Active prices are public. Price writes need the Pharmacy Manager role.":
+    "Giá đang áp dụng là công khai. Ghi giá cần vai trò Quản lý nhà thuốc.",
+  "Purchase order writes need the Pharmacy Manager role. Goods receipts need Warehouse Staff.":
+    "Ghi đơn đặt hàng cần vai trò Quản lý nhà thuốc. Phiếu nhập hàng cần vai trò Nhân viên kho.",
+  "Batches, movements, adjustments, transfers, stocktakes and returns need Warehouse Staff.":
+    "Lô, biến động, điều chỉnh, điều chuyển, kiểm kê và trả hàng cần vai trò Nhân viên kho.",
+  "Carts work for guests. Orders need a sign-in.": "Giỏ hàng dùng được với khách vãng lai. Đơn hàng cần đăng nhập.",
+  "Delivery fee estimates, reverse geocoding and address lookup are public.":
+    "Ước tính phí giao hàng, tìm địa chỉ ngược và tra cứu địa chỉ là công khai.",
+  "Shoppers can upload their own prescriptions and request consultations.":
+    "Khách hàng có thể tải đơn thuốc của chính mình và yêu cầu tư vấn.",
+  "Shoppers can create and read their own invoices. The SePay webhook is public and HMAC-verified.":
+    "Khách hàng có thể tạo và xem hóa đơn của chính mình. Webhook SePay là công khai và được xác thực HMAC.",
   "with its direct callers and callees": "cùng các bên gọi và bên được gọi trực tiếp",
   "Open details": "Mở chi tiết",
   "Service map": "Sơ đồ dịch vụ",

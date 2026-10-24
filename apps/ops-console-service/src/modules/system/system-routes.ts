@@ -4,6 +4,9 @@ import { z } from "zod";
 import { probeLoad, probeMetricsRange, probeServiceFacts, type ServiceFacts, type ServiceLoad } from "./prometheus.ts";
 import { problem, windowMinutes } from "./http.ts";
 import { ALL_SERVICES } from "./promql.ts";
+import { ROUTE_TABLE } from "./route-table.ts";
+import { buildServiceCatalog } from "./service-catalog.ts";
+import { SERVICE_MANIFEST } from "./service-manifest.ts";
 import { probeMetricsSummary, type MetricsSummary } from "./summary.ts";
 import {
   probeQueues,
@@ -19,6 +22,9 @@ import {
 export type DashboardLink = { label: string; url: string };
 
 export type ServiceHealth = ServiceProbe & ServiceFacts;
+
+// The catalog and the route table are constants of this service, so they are built once.
+const SERVICE_CATALOG = buildServiceCatalog(SERVICE_MANIFEST, ROUTE_TABLE);
 
 export type Overview = {
   generatedAt: string;
@@ -68,6 +74,16 @@ export const createSystemRouter = (probes: Probes, links: DashboardLink[]): Rout
     };
     response.setHeader("Cache-Control", "no-store");
     response.json(overview);
+  });
+
+  router.get("/system/catalog", (_request, response) => {
+    response.setHeader("Cache-Control", "no-store");
+    response.json(SERVICE_CATALOG);
+  });
+
+  router.get("/system/routes", (_request, response) => {
+    response.setHeader("Cache-Control", "no-store");
+    response.json({ routes: ROUTE_TABLE });
   });
 
   router.get("/system/metrics/summary", async (request, response) => {
