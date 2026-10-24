@@ -24,6 +24,8 @@ export const apiServiceForPath = (path: string): string | undefined => {
       return "payment-service";
     case "chatbot":
       return "chatbot-service";
+    case "system":
+      return "ops-console-service";
     case "operations":
     case "dashboard":
     case "finance":

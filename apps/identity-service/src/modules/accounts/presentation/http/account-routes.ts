@@ -70,6 +70,7 @@ export const createAccountRouter = (service: AccountService, googleSignIn?: Goog
     "payment-service",
     "operations-query-service",
     "chatbot-service",
+    "ops-console-service",
   ];
 
   router.get("/context", async (request, response) => {

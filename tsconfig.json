@@ -30,6 +30,9 @@
     },
     {
       "path": "./apps/chatbot-service"
+    },
+    {
+      "path": "./apps/ops-console-service"
     }
   ],
   "extends": "./tsconfig.base.json"

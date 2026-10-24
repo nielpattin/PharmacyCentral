@@ -64,6 +64,7 @@ describe("account csrf route", () => {
       "chatbot-service",
       "inventory-service",
       "operations-query-service",
+      "ops-console-service",
       "payment-service",
       "sales-service",
     ]);
