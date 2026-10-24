@@ -1,3 +1,5 @@
+import { monitorEventLoopDelay } from "node:perf_hooks";
+import { metrics } from "@opentelemetry/api";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
@@ -36,6 +38,35 @@ const sdk = new NodeSDK({
 });
 
 sdk.start();
+
+// Per-process metrics, scraped by Prometheus as pharmacy_process_* (see deploy/local/otel/collector.yaml).
+const processMeter = metrics.getMeter("pharmacy-process");
+processMeter
+  .createObservableCounter("pharmacy.process.cpu", {
+    unit: "s",
+    description: "User and system CPU time used by this process",
+  })
+  .addCallback((result) => {
+    const usage = process.cpuUsage();
+    result.observe((usage.user + usage.system) / 1e6);
+  });
+processMeter
+  .createObservableGauge("pharmacy.process.resident_memory", {
+    unit: "By",
+    description: "Resident set size of this process",
+  })
+  .addCallback((result) => result.observe(process.memoryUsage().rss));
+const eventLoopDelay = monitorEventLoopDelay();
+eventLoopDelay.enable();
+processMeter
+  .createObservableGauge("pharmacy.process.event_loop_lag", {
+    unit: "s",
+    description: "p99 event loop delay since the previous collection",
+  })
+  .addCallback((result) => {
+    result.observe(eventLoopDelay.percentile(99) / 1e9);
+    eventLoopDelay.reset();
+  });
 
 process.once("SIGTERM", () => void sdk.shutdown());
 process.once("SIGINT", () => void sdk.shutdown());

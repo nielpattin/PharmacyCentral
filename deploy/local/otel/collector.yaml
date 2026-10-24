@@ -23,6 +23,12 @@ processors:
       - context: datapoint
         statements:
           - set(datapoint.attributes["rabbitmq.queue.name"], resource.attributes["rabbitmq.queue.name"]) where resource.attributes["rabbitmq.queue.name"] != nil
+  # Health probes (Docker healthchecks, ops-console) are not dependencies. Drop them from the service graph only; Tempo and span metrics keep them.
+  filter/health_probes:
+    error_mode: ignore
+    traces:
+      span:
+        - IsMatch(attributes["url.path"], "^/health")
 
 exporters:
   debug:
@@ -55,7 +61,11 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [debug, otlp_http/tempo, span_metrics, service_graph]
+      exporters: [debug, otlp_http/tempo, span_metrics]
+    traces/service_graph:
+      receivers: [otlp]
+      processors: [filter/health_probes, batch]
+      exporters: [service_graph]
     metrics:
       receivers: [otlp, rabbitmq, span_metrics, service_graph]
       processors: [transform/rabbitmq_queue, batch]

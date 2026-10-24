@@ -35,7 +35,8 @@ type Shutdown func(ctx context.Context) error
 // Setup installs the global tracer, meter and logger providers, and makes slog write JSON to stdout and, through the
 // OTel bridge, to OTLP logs.
 func Setup(ctx context.Context) (Shutdown, error) {
-	res, err := resource.New(ctx, resource.WithAttributes(attribute.String("service.name", serviceName)))
+	// WithFromEnv reads OTEL_RESOURCE_ATTRIBUTES (service.version comes from the image build), and the service name comes last so it always wins.
+	res, err := resource.New(ctx, resource.WithFromEnv(), resource.WithAttributes(attribute.String("service.name", serviceName)))
 	if err != nil {
 		return nil, fmt.Errorf("build resource: %w", err)
 	}
@@ -57,6 +58,9 @@ func Setup(ctx context.Context) (Shutdown, error) {
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
 	)
 	otel.SetMeterProvider(meterProvider)
+	if err := registerProcessMetrics(meterProvider.Meter(serviceName)); err != nil {
+		return nil, fmt.Errorf("process metrics: %w", err)
+	}
 
 	logExporter, err := otlploghttp.New(ctx)
 	if err != nil {

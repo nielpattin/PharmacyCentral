@@ -16,8 +16,11 @@ RUN mkdir -p "/out/dist" && cp -R "/workspace/${APP_DIR}/dist/." "/out/dist/"
 RUN if [ -d "/workspace/${APP_DIR}/drizzle/migrations" ]; then mkdir -p /out/drizzle/migrations && cp -R "/workspace/${APP_DIR}/drizzle/migrations/." /out/drizzle/migrations/; fi
 
 FROM node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS runtime
+ARG BUILD_VERSION
 WORKDIR /app
 ENV NODE_ENV=production
+# service.version in target_info comes from the build version (OTel reads OTEL_RESOURCE_ATTRIBUTES).
+ENV OTEL_RESOURCE_ATTRIBUTES=service.version=${BUILD_VERSION}
 USER node
 COPY --from=build --chown=node:node /out ./
 EXPOSE 3000

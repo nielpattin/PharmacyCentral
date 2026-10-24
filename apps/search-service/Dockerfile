@@ -10,7 +10,10 @@ RUN --mount=type=cache,id=pharmacy-central-go-mod,target=/go/pkg/mod \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/search-service ./cmd/search-service
 
 FROM alpine:3.22@sha256:d406446bc05b82480756ce8f1287964d28768c23955fa9480d2a74a2eae7a654 AS runtime
+ARG BUILD_VERSION
 RUN apk add --no-cache ca-certificates
+# service.version in target_info comes from the build version (the Go service reads OTEL_RESOURCE_ATTRIBUTES).
+ENV OTEL_RESOURCE_ATTRIBUTES=service.version=${BUILD_VERSION}
 RUN adduser -S -D -H -h /nonexistent -s /sbin/nologin nonroot
 COPY --from=build /out/search-service /search-service
 USER nonroot

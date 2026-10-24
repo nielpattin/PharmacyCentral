@@ -1,0 +1,58 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Where the signals that the System page no longer shows live in Grafana: the dashboards, their rows, and Explore views for traces, the service map and logs. Set as the home dashboard.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": ["pharmacy-central"],
+      "targetBlank": false,
+      "title": "Dashboards",
+      "tooltip": "All Pharmacy Central dashboards",
+      "type": "dashboards"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "gridPos": { "h": 20, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "code": { "language": "plaintext", "showLineNumbers": false, "showMiniMap": false },
+        "content": "# Where the System page went\n\nThe System page keeps the health verdict, the services table, the queues and the search index. Everything else is in Grafana, in the places below.\n\n| Used to be on the System page | Open in Grafana |\n| --- | --- |\n| Requests per second, errors, p95 and DB pool per service; KPI tiles; traffic chart | [RED per service: Service Overview](/d/pc-service-overview) (rows Traffic and errors, HTTP server latency and Database client; choose services in the Service variable) |\n| Latency heatmap | [Service Overview, Latency heatmap row](/d/pc-service-overview?viewPanel=panel-19) |\n| Service map and its RED table | [Service map in Explore](/explore?schemaVersion=1&orgId=1&panes=%7B%22pc%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22editorMode%22%3A%22code%22%2C%22queryType%22%3A%22serviceMap%22%2C%22query%22%3A%22%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D), or [Service Overview, Service map row](/d/pc-service-overview?viewPanel=panel-21) |\n| Traces tab (root requests and messages, health checks left out) | [Trace search in Explore](/explore?schemaVersion=1&orgId=1&panes=%7B%22pc%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22editorMode%22%3A%22code%22%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22%7B%20nestedSetParent%20%3C%200%20%26%26%20%28kind%20%3D%20server%20%7C%7C%20kind%20%3D%20consumer%29%20%26%26%20span.url.path%20!~%20%5C%22%2Fhealth.*%5C%22%20%7D%22%2C%22limit%22%3A20%2C%22tableType%22%3A%22traces%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D) |\n| Logs tab | [Log search in Explore](/explore?schemaVersion=1&orgId=1&panes=%7B%22pc%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22editorMode%22%3A%22code%22%2C%22queryType%22%3A%22range%22%2C%22expr%22%3A%22%7Bservice_name%3D~%5C%22.%2B%5C%22%7D%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D) |\n| Outbox lag | [Business Health, Outbox row](/d/pc-business-health) |\n| Queue details (depth over time, consumer errors, dead letters) | [Business Health, Consumers and queues row](/d/pc-business-health) |\n| Messaging spans and broker logs | [Async Messaging](/d/pc-async-messaging) |\n\nThe Explore links open the last hour with the Tempo or Loki datasource already selected. To narrow a view to one service, use the Service variable on Service Overview, or search Explore by `resource.service.name`.",
+        "mode": "markdown"
+      },
+      "title": "Where the System page went",
+      "type": "text"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 42,
+  "tags": ["pharmacy-central"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Pharmacy Central - Start here",
+  "uid": "pharmacy-start",
+  "version": 1,
+  "weekStart": ""
+}

@@ -17,7 +17,20 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Start here",
+      "tooltip": "Where each signal the System page no longer shows lives in Grafana",
+      "type": "link",
+      "url": "/d/pharmacy-start"
+    }
+  ],
   "liveNow": false,
   "panels": [
     {

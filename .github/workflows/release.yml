@@ -101,6 +101,9 @@ jobs:
           - name: operations-query-service
             app: "@pharmacy/operations-query-service"
             dockerfile: Dockerfile.service
+          - name: ops-console-service
+            app: "@pharmacy/ops-console-service"
+            dockerfile: Dockerfile.service
           - name: search-service
             app: "@pharmacy/search-service"
             dockerfile: search-service/Dockerfile
@@ -130,6 +133,7 @@ jobs:
           build-args: |
             APP_NAME=${{ matrix.app }}
             APP_DIR=apps/${{ matrix.name }}
+            BUILD_VERSION=${{ github.sha }}
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/pharmacy-central/${{ matrix.name }}:sha-${{ github.sha }}

@@ -6,6 +6,7 @@ otlp:
   promote_resource_attributes:
     - service.name
     - service.instance.id
+    - host.name
     - service.namespace
     - deployment.environment
   translation_strategy: UnderscoreEscapingWithSuffixes

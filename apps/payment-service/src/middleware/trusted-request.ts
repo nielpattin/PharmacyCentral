@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { trace } from "@opentelemetry/api";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 import {
@@ -412,6 +413,10 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
     }
 
     if (verifiedContext) {
+      // Lets an operator find the trace of a request from the correlation id shown to a user (System page, Traces).
+      const span = trace.getActiveSpan();
+      span?.setAttribute("correlation_id", verifiedContext.correlationId);
+      span?.setAttribute("request_id", verifiedContext.requestId);
       if (verifiedContext.actorId) {
         request.headers["x-actor-id"] = verifiedContext.actorId;
       } else {
