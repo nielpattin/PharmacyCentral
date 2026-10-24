@@ -65,6 +65,7 @@ catalog:
   qrcode: 1.5.4
   react: 19.2.8
   react-dom: 19.2.8
+  recharts: 3.8.0
   resend: 6.21.0
   tailwind-merge: 3.6.0
   tailwindcss: 4.3.3

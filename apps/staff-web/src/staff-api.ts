@@ -268,3 +268,100 @@ export const approveSearchSynonymGroup = async (id: string, version: number): Pr
 export const deleteSearchSynonymGroup = async (id: string): Promise<void> => {
   await writeJson<unknown>(searchSynonymPath(id), "DELETE");
 };
+
+// System overview: read-only health of the services, queues, and search index. Mirrors the ops-console-service
+// contract (`GET /api/system/overview`). Each section is either loaded or unavailable with its own error.
+export type SystemSectionResult<T> = { status: "ok"; data: T } | { status: "unavailable"; error: string };
+
+export type SystemService = {
+  name: string;
+  status: "up" | "down";
+  httpStatus: number | null;
+  latencyMs: number | null;
+  liveStatus: "up" | "down";
+  liveHttpStatus: number | null;
+  /** Prometheus target_info service_version, latest. */
+  version: string | null;
+  /** Distinct instances reporting in the last 5 minutes. */
+  instances: number | null;
+  /** 0..100, from the ops probe; null when there are no samples. */
+  uptimePercent24h: number | null;
+};
+
+export type SystemLoad = {
+  name: string;
+  /** 0..1, 5xx over all requests. */
+  errorRatio: number | null;
+  p95Seconds: number | null;
+  outboxOldestSeconds: number | null;
+  cpuCores: number | null;
+  memoryBytes: number | null;
+  eventLoopLagSeconds: number | null;
+  dbPoolUsed: number | null;
+  dbPoolMax: number | null;
+};
+
+export type SystemQueue = {
+  name: string;
+  ready: number;
+  unacknowledged: number;
+  consumers: number;
+  deadLetter: boolean;
+};
+
+export type SystemSearchIndex = { name: string; documents: number };
+
+export type SystemLink = { label: string; url: string };
+
+export type SystemOverview = {
+  generatedAt: string;
+  services: SystemSectionResult<SystemService[]>;
+  load: SystemSectionResult<SystemLoad[]>;
+  queues: SystemSectionResult<SystemQueue[]>;
+  searchIndex: SystemSectionResult<SystemSearchIndex[]>;
+  links: SystemLink[];
+};
+
+export const readSystemOverview = (): Promise<SystemOverview> => readOne<SystemOverview>("/api/system/overview");
+
+export const SYSTEM_METRICS_WINDOWS_MINUTES = [15, 60, 360, 1440] as const;
+export type SystemMetricsWindowMinutes = (typeof SYSTEM_METRICS_WINDOWS_MINUTES)[number];
+
+// Each point is [unix seconds, value or null].
+export type SystemMetricPoint = readonly [unixSeconds: number, value: number | null];
+
+// Metrics range: one service's time series from Prometheus, for the detail sheet's charts.
+export type SystemMetricsRange = {
+  generatedAt: string;
+  service: string;
+  from: number;
+  to: number;
+  stepSeconds: number;
+  series: {
+    cpuCores: SystemMetricPoint[];
+    memoryBytes: SystemMetricPoint[];
+    eventLoopLagSeconds: SystemMetricPoint[];
+  };
+};
+
+export const readSystemMetricsRange = (
+  service: string,
+  windowMinutes: SystemMetricsWindowMinutes,
+): Promise<SystemMetricsRange> =>
+  readOne<SystemMetricsRange>(
+    `/api/system/metrics/range?${new URLSearchParams({ service, windowMinutes: String(windowMinutes) }).toString()}`,
+  );
+
+// Metrics summary: availability per configured service over the window, for the uptime strips.
+export type SystemMetricsSummary = {
+  generatedAt: string;
+  from: number;
+  to: number;
+  stepSeconds: number;
+  services: Record<string, { availability: SystemMetricPoint[] }>;
+};
+
+export const readSystemMetricsSummary = (windowMinutes: SystemMetricsWindowMinutes): Promise<SystemMetricsSummary> =>
+  readOne<SystemMetricsSummary>(
+    `/api/system/metrics/summary?${new URLSearchParams({ windowMinutes: String(windowMinutes) }).toString()}`,
+  );

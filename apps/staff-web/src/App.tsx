@@ -13,6 +13,7 @@ import {
   Menu,
   Package,
   Ruler,
+  Server,
   Settings,
   ShieldCheck,
   ShoppingBag,
@@ -41,6 +42,7 @@ import { OrdersSection } from "./sections/orders-section.tsx";
 import { PrescriptionsSection } from "./sections/prescriptions-section.tsx";
 import { ProcurementSection } from "./sections/procurement-section.tsx";
 import { SearchSynonymsSection } from "./sections/search-synonyms-section.tsx";
+import { SystemSection } from "./sections/system-section.tsx";
 import { request, setIdentityContextsEnabled } from "./staff-api.ts";
 import { governanceTabPaths, pathForSection, sectionFromPath, type Section } from "./router.ts";
 import "./styles.css";
@@ -79,6 +81,7 @@ const sectionRoles: Record<Section, readonly string[]> = {
   users: ["Platform Admin"],
   audit: ["Platform Admin"],
   aiIntegrations: ["Platform Admin"],
+  system: ["Platform Admin"],
 };
 
 export const canAccessSection = (section: Section, roles: readonly string[]): boolean =>
@@ -147,6 +150,7 @@ const navGroups: NavGroup[] = [
       { key: "users", label: "Users", icon: <ShieldCheck size={16} strokeWidth={2} /> },
       { key: "audit", label: "Audit", icon: <ShieldCheck size={16} strokeWidth={2} /> },
       { key: "aiIntegrations", label: "AI integrations", icon: <Sparkles size={16} strokeWidth={2} /> },
+      { key: "system", label: "System", icon: <Server size={16} strokeWidth={2} /> },
     ],
   },
 ];
@@ -329,6 +333,8 @@ export const App = (): React.JSX.Element => {
         return <GovernanceSection key={location.pathname} initialTab={governanceTab} />;
       case "aiIntegrations":
         return <AiIntegrationsSection key={activeSection} />;
+      case "system":
+        return <SystemSection key={activeSection} />;
       case "dashboard":
         return <DashboardSection key={activeSection} />;
     }

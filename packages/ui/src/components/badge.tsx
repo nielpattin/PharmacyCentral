@@ -9,6 +9,8 @@ const badgeVariants = cva("inline-flex items-center rounded-full px-2.5 py-0.5 t
       secondary: "bg-surface-soft text-muted",
       outline: "border border-line text-muted",
       danger: "bg-danger-soft text-danger",
+      success: "bg-success-soft text-success",
+      warning: "bg-warning-soft text-warning",
     },
   },
   defaultVariants: { variant: "primary" },

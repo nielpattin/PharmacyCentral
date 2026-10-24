@@ -32,7 +32,8 @@ export type Section =
   | "finance"
   | "users"
   | "audit"
-  | "aiIntegrations";
+  | "aiIntegrations"
+  | "system";
 
 export const sectionPaths = {
   dashboard: "/",
@@ -65,6 +66,7 @@ export const sectionPaths = {
   users: "/users",
   audit: "/audit",
   aiIntegrations: "/ai-integrations",
+  system: "/system",
 } as const satisfies Record<Section, string>;
 
 export const governanceTabPaths = {
@@ -111,6 +113,7 @@ const sectionsByPath: Record<string, Section> = {
   "/users/access": "users",
   "/audit": "audit",
   "/ai-integrations": "aiIntegrations",
+  "/system": "system",
 };
 
 export const pathForSection = (section: Section): StaffPath => sectionPaths[section];
@@ -152,6 +155,7 @@ const financeRoute = createRoute({ getParentRoute: () => rootRoute, path: "/fina
 const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users" });
 const auditRoute = createRoute({ getParentRoute: () => rootRoute, path: "/audit" });
 const aiIntegrationsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/ai-integrations" });
+const systemRoute = createRoute({ getParentRoute: () => rootRoute, path: "/system" });
 
 const createUserRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users/create" });
 const editAccessRoute = createRoute({ getParentRoute: () => rootRoute, path: "/users/access" });
@@ -189,6 +193,7 @@ const routeTree = rootRoute.addChildren([
   editAccessRoute,
   auditRoute,
   aiIntegrationsRoute,
+  systemRoute,
 ]);
 
 export const router = createRouter({ routeTree, scrollRestoration: true });

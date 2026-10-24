@@ -15,12 +15,51 @@
   --color-primary-soft: oklch(0.95 0.02 256);
   --color-danger: oklch(0.6 0.2 30);
   --color-danger-soft: oklch(0.95 0.03 30);
+  --color-success: oklch(0.5 0.15 150);
+  --color-success-soft: oklch(0.96 0.04 150);
+  --color-warning: oklch(0.5 0.13 70);
+  --color-warning-soft: oklch(0.96 0.06 85);
   --color-sidebar: oklch(0.19 0.025 247);
   --color-sidebar-text: oklch(0.93 0.005 271);
   --color-sidebar-muted: oklch(0.76 0.02 247);
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
+}
+
+/* Sheet slide-in. Components apply it with `motion-safe:animate-sheet-in` so reduced-motion users get no movement. */
+@theme {
+  --animate-sheet-in: sheet-in 200ms cubic-bezier(0.2, 0, 0, 1);
+  @keyframes sheet-in {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+}
+
+/* Chart series colours and the log terminal. `static` keeps them emitted even when no utility class names them,
+   because charts and the trace waterfall reference them through var(). The terminal stays dark in both themes. */
+@theme static {
+  /* Identity palette for chart series. Muted, and no green, red, or amber, so colour never competes with status. */
+  --color-chart-1: oklch(0.55 0.17 256);
+  --color-chart-2: oklch(0.62 0.12 190);
+  --color-chart-3: oklch(0.55 0.15 305);
+  --color-chart-4: oklch(0.66 0.13 350);
+  --color-chart-5: oklch(0.6 0.05 240);
+  --color-terminal-bg: oklch(0.17 0.012 260);
+  --color-terminal-panel: oklch(0.21 0.014 260);
+  --color-terminal-line: oklch(0.31 0.014 260);
+  --color-terminal-text: oklch(0.91 0.008 260);
+  --color-terminal-muted: oklch(0.66 0.012 260);
+  --color-terminal-debug: oklch(0.62 0.01 260);
+  --color-terminal-info: oklch(0.8 0.1 215);
+  --color-terminal-warn: oklch(0.85 0.15 85);
+  --color-terminal-error: oklch(0.72 0.19 25);
+  --color-terminal-match: oklch(0.45 0.12 85);
+  --color-terminal-link: oklch(0.82 0.12 240);
 }
 
 :root {

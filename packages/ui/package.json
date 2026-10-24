@@ -19,6 +19,7 @@
     "@tanstack/react-virtual": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
+    "recharts": "catalog:",
     "tailwind-merge": "catalog:"
   },
   "devDependencies": {
