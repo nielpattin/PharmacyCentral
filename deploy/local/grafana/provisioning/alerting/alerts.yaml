@@ -20,6 +20,8 @@ groups:
         annotations:
           summary: Transactional outbox is not draining
           description: 'Outbox rows in {{ $labels.service_name }} have been pending for {{ printf "%.0f" $values.B.Value }} seconds. The relay publishes every second, so the relay or RabbitMQ is down.'
+          __dashboardUid__: pc-business-health
+          __panelId__: "4"
         data:
           - refId: A
             relativeTimeRange:
@@ -93,6 +95,8 @@ groups:
         annotations:
           summary: Messages were dead-lettered
           description: "Dead-letter queue {{ $labels.rabbitmq_queue_name }} holds {{ $values.B.Value }} messages that consumers could not process. Inspect and replay or discard them."
+          __dashboardUid__: pc-business-health
+          __panelId__: "13"
         data:
           - refId: A
             relativeTimeRange:
@@ -166,6 +170,8 @@ groups:
         annotations:
           summary: HTTP 5xx share is high
           description: "{{ $labels.service_name }} returned 5xx for {{ humanizePercentage $values.B.Value }} of its requests over the last 5 minutes (threshold 5%)."
+          __dashboardUid__: pc-service-overview
+          __panelId__: "3"
         data:
           - refId: A
             relativeTimeRange:
@@ -239,6 +245,8 @@ groups:
         annotations:
           summary: Queue consumers are failing messages
           description: "{{ $labels.service_name }} consumer on queue {{ $labels.queue }} retried or dead-lettered {{ $values.B.Value }} messages in the last 10 minutes."
+          __dashboardUid__: pc-business-health
+          __panelId__: "9"
         data:
           - refId: A
             relativeTimeRange:
@@ -312,6 +320,8 @@ groups:
         annotations:
           summary: SePay payment webhook is failing
           description: "The SePay webhook recorded {{ $values.B.Value }} processing errors in the last 10 minutes. Check payment-service logs."
+          __dashboardUid__: pc-business-health
+          __panelId__: "19"
         data:
           - refId: A
             relativeTimeRange:
