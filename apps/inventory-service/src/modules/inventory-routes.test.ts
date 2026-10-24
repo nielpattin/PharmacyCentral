@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InventoryRepository } from "./inventory-repository.ts";
 import { createInventoryRouter } from "./inventory-routes.ts";
+import { encodePageCursor } from "./page-cursor.ts";
 
 const ids = {
   actor: "00000000-0000-4000-8000-000000000001",
@@ -315,5 +316,108 @@ describe("inventory API", () => {
     const adjustmentInput = createAdjustment.mock.calls[0]?.[0];
     expect(adjustmentInput?.createdBy).toBe(ids.actor);
     expect(adjustmentInput?.quantity).toBe(2);
+  });
+
+  it("sends the next-page cursor in a header only while another page follows, and reads the cursor back", async () => {
+    const nextCursor = encodePageCursor({ sortValue: "2026-03-01T10:00:00.000000Z", id: ids.transfer });
+    const listTransfers = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ id: ids.transfer }], nextCursor })
+      .mockResolvedValueOnce({ rows: [], nextCursor: undefined });
+    const repository = { listTransfers } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const first = await fetch(`${testServer.url}/inventory/transfers?limit=1&status=Approved&q=TR-1`);
+    const second = await fetch(`${testServer.url}/inventory/transfers?limit=1&cursor=${nextCursor}`);
+
+    expect(first.status).toBe(200);
+    expect(first.headers.get("x-next-cursor")).toBe(nextCursor);
+    expect(await first.json()).toEqual([{ id: ids.transfer }]);
+    const [firstFilters, firstPage] = listTransfers.mock.calls[0] ?? [];
+    expect(firstFilters).toMatchObject({ statuses: ["Approved"], q: "TR-1" });
+    expect(firstPage).toEqual({ limit: 1, cursor: undefined });
+
+    expect(second.headers.get("x-next-cursor")).toBeNull();
+    expect(await second.json()).toEqual([]);
+    expect(listTransfers.mock.calls[1]?.[1]).toEqual({
+      limit: 1,
+      cursor: { sortValue: "2026-03-01T10:00:00.000000Z", id: ids.transfer },
+    });
+  });
+
+  it("refuses a tampered cursor with invalid_cursor before the repository is asked", async () => {
+    const listTransfers = vi.fn();
+    const repository = { listTransfers } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/inventory/transfers?cursor=not-a-cursor`);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_cursor" });
+    expect(listTransfers).not.toHaveBeenCalled();
+  });
+
+  it("counts transfers, adjustments and stocktakes with comma-separated statuses and exclusions", async () => {
+    const countTransfers = vi.fn().mockResolvedValue(4);
+    const countAdjustments = vi.fn().mockResolvedValue(2);
+    const countStocktakes = vi.fn().mockResolvedValue(7);
+    const repository = { countTransfers, countAdjustments, countStocktakes } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const transfers = await fetch(
+      `${testServer.url}/inventory/transfers/count?status=PendingApproval,Draft,Approved,InTransit`,
+    );
+    const adjustments = await fetch(`${testServer.url}/inventory/adjustments/count?status=Pending`);
+    const stocktakes = await fetch(`${testServer.url}/inventory/stocktakes/count?excludeStatus=Completed,Cancelled`);
+
+    expect(await transfers.json()).toEqual({ count: 4 });
+    expect(await adjustments.json()).toEqual({ count: 2 });
+    expect(await stocktakes.json()).toEqual({ count: 7 });
+    expect(countTransfers.mock.calls[0]?.[0]).toMatchObject({
+      statuses: ["PendingApproval", "Draft", "Approved", "InTransit"],
+    });
+    expect(countAdjustments.mock.calls[0]?.[0]).toMatchObject({ statuses: ["Pending"] });
+    expect(countStocktakes.mock.calls[0]?.[0]).toMatchObject({ excludeStatuses: ["Completed", "Cancelled"] });
+  });
+
+  it("refuses a movement window that is not a timestamp and bounds the ledger by it when valid", async () => {
+    const listMovements = vi.fn().mockResolvedValue({ rows: [], nextCursor: undefined });
+    const repository = { listMovements } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const invalid = await fetch(`${testServer.url}/inventory/movements?from=yesterday`);
+    const valid = await fetch(
+      `${testServer.url}/inventory/movements?from=2026-03-01T00:00:00Z&to=2026-03-31T23:59:59Z&productId=${ids.productA}`,
+    );
+
+    expect(invalid.status).toBe(400);
+    expect(valid.status).toBe(200);
+    const [filters, page] = listMovements.mock.calls[0] ?? [];
+    expect(filters.from).toEqual(new Date("2026-03-01T00:00:00Z"));
+    expect(filters.to).toEqual(new Date("2026-03-31T23:59:59Z"));
+    expect(filters.productId).toBe(ids.productA);
+    expect(page).toEqual({ limit: 500, cursor: undefined });
+  });
+
+  it("answers every return and every balance when neither limit nor cursor is sent", async () => {
+    const listReturns = vi.fn().mockResolvedValue({ rows: [{ id: ids.transfer }], nextCursor: undefined });
+    const listBalances = vi.fn().mockResolvedValue({ rows: [], nextCursor: undefined });
+    const repository = { listReturns, listBalances } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const returns = await fetch(`${testServer.url}/inventory/returns`);
+    const balances = await fetch(`${testServer.url}/inventory/balances?limit=2&q=LOT&includeZeroBalances=false`);
+
+    expect(await returns.json()).toEqual([{ id: ids.transfer }]);
+    expect(listReturns.mock.calls[0]?.[1]).toEqual({ limit: undefined, cursor: undefined });
+    expect(balances.status).toBe(200);
+    const [balanceFilters, balancePage] = listBalances.mock.calls[0] ?? [];
+    expect(balanceFilters).toMatchObject({ q: "LOT", includeZeroBalances: false });
+    expect(balancePage).toEqual({ limit: 2, cursor: undefined });
   });
 });

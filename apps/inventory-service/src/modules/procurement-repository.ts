@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, sql, type SQL } from "drizzle-orm";
 
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import {
@@ -7,6 +7,8 @@ import {
   purchaseOrderLines,
   purchaseOrders,
 } from "../shared/infrastructure/schema.ts";
+import { containsPattern, everything, type PageRequest } from "./page-cursor.ts";
+import { afterCursor, presentConditions, splitPage, timestampSortValue } from "./keyset-page.ts";
 
 type InventoryReceipt = {
   productId: string;
@@ -25,25 +27,52 @@ type InventoryReceipt = {
 };
 type InventoryReceiptHandler = (input: InventoryReceipt) => Promise<void>;
 
+/** Purchase orders are found by their number; the supplier's name lives in catalog-service, not here. */
+export type PurchaseOrderFilters = {
+  siteIds?: string[] | undefined;
+  status?: string | undefined;
+  q?: string | undefined;
+};
+/** Goods receipts are found by their receipt number. */
+export type ReceiptFilters = { siteIds?: string[] | undefined; q?: string | undefined };
+
+const purchaseOrderFilters = (filters: PurchaseOrderFilters): Array<SQL | undefined> => [
+  filters.siteIds ? inArray(purchaseOrders.siteId, filters.siteIds) : undefined,
+  filters.status ? eq(purchaseOrders.status, filters.status) : undefined,
+  filters.q ? ilike(purchaseOrders.purchaseOrderNumber, containsPattern(filters.q)) : undefined,
+];
+
+const receiptFilters = (filters: ReceiptFilters): Array<SQL | undefined> => [
+  filters.siteIds ? inArray(goodsReceipts.siteId, filters.siteIds) : undefined,
+  filters.q ? ilike(goodsReceipts.receiptNumber, containsPattern(filters.q)) : undefined,
+];
+
 export class ProcurementRepository {
   public constructor(
     private readonly database: InventoryDatabase,
     private readonly receiveInventory?: InventoryReceiptHandler,
   ) {}
 
-  public async listPurchaseOrders(siteIds?: string[], status?: string, limit = 100) {
-    const conditions = [
-      siteIds ? inArray(purchaseOrders.siteId, siteIds) : undefined,
-      status ? eq(purchaseOrders.status, status) : undefined,
-    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    const orders = await this.database.db
-      .select()
+  public async listPurchaseOrders(filters: PurchaseOrderFilters = {}, page: PageRequest = everything) {
+    const conditions = presentConditions([
+      ...purchaseOrderFilters(filters),
+      afterCursor({
+        sortColumn: purchaseOrders.createdAt,
+        idColumn: purchaseOrders.id,
+        direction: "desc",
+        kind: "timestamp",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({ order: purchaseOrders, id: purchaseOrders.id, sortValue: timestampSortValue(purchaseOrders.createdAt) })
       .from(purchaseOrders)
       .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(asc(purchaseOrders.createdAt))
-      .limit(Math.min(Math.max(limit, 1), 500));
-    return Promise.all(
-      orders.map(async (order) => ({
+      .orderBy(desc(purchaseOrders.createdAt), desc(purchaseOrders.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    const rows = await Promise.all(
+      items.map(async ({ order }) => ({
         ...order,
         lines: await this.database.db
           .select()
@@ -51,6 +80,16 @@ export class ProcurementRepository {
           .where(eq(purchaseOrderLines.purchaseOrderId, order.id)),
       })),
     );
+    return { rows, nextCursor };
+  }
+
+  public async countPurchaseOrders(filters: PurchaseOrderFilters = {}) {
+    const conditions = presentConditions(purchaseOrderFilters(filters));
+    const [row] = await this.database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(purchaseOrders)
+      .where(conditions.length ? and(...conditions) : undefined);
+    return Number(row?.count ?? 0);
   }
 
   public async getPurchaseOrder(id: string) {
@@ -249,15 +288,26 @@ export class ProcurementRepository {
     };
   }
 
-  public async listReceipts(siteIds?: string[], limit = 100) {
-    const receipts = await this.database.db
-      .select()
+  public async listReceipts(filters: ReceiptFilters = {}, page: PageRequest = everything) {
+    const conditions = presentConditions([
+      ...receiptFilters(filters),
+      afterCursor({
+        sortColumn: goodsReceipts.receivedAt,
+        idColumn: goodsReceipts.id,
+        direction: "desc",
+        kind: "timestamp",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({ receipt: goodsReceipts, id: goodsReceipts.id, sortValue: timestampSortValue(goodsReceipts.receivedAt) })
       .from(goodsReceipts)
-      .where(siteIds ? inArray(goodsReceipts.siteId, siteIds) : undefined)
-      .orderBy(asc(goodsReceipts.receivedAt))
-      .limit(Math.min(Math.max(limit, 1), 500));
-    return Promise.all(
-      receipts.map(async (receipt) => ({
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(goodsReceipts.receivedAt), desc(goodsReceipts.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    const rows = await Promise.all(
+      items.map(async ({ receipt }) => ({
         ...receipt,
         lines: await this.database.db
           .select()
@@ -265,6 +315,16 @@ export class ProcurementRepository {
           .where(eq(goodsReceiptLines.goodsReceiptId, receipt.id)),
       })),
     );
+    return { rows, nextCursor };
+  }
+
+  public async countReceipts(filters: ReceiptFilters = {}) {
+    const conditions = presentConditions(receiptFilters(filters));
+    const [row] = await this.database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(goodsReceipts)
+      .where(conditions.length ? and(...conditions) : undefined);
+    return Number(row?.count ?? 0);
   }
 
   public async getReceipt(id: string) {

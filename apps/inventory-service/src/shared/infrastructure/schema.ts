@@ -32,7 +32,10 @@ export const productBatches = pgTable(
     qualityNotes: text("quality_notes"),
     isActive: boolean("is_active").notNull().default(true),
   },
-  (table) => [uniqueIndex("product_batches_product_number_unique").on(table.productId, table.batchNumber)],
+  (table) => [
+    uniqueIndex("product_batches_product_number_unique").on(table.productId, table.batchNumber),
+    index("product_batches_expiry_id_idx").on(table.expiryDate, table.id),
+  ],
 );
 
 export const inventoryBalances = pgTable(
@@ -53,24 +56,28 @@ export const inventoryBalances = pgTable(
   ],
 );
 
-export const stockAdjustments = pgTable("stock_adjustments", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  productId: uuid("product_id").notNull(),
-  productBatchId: uuid("product_batch_id").notNull(),
-  siteId: uuid("site_id").notNull(),
-  storageLocationId: uuid("storage_location_id").notNull(),
-  adjustmentType: varchar("adjustment_type", { length: 20 }).notNull(),
-  quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
-  reason: text("reason").notNull(),
-  status: varchar("status", { length: 20 }).notNull().default("Pending"),
-  createdBy: uuid("created_by").notNull(),
-  approvedBy: uuid("approved_by"),
-  approvalNotes: text("approval_notes"),
-  notes: text("notes"),
-  stocktakeSessionId: uuid("stocktake_session_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const stockAdjustments = pgTable(
+  "stock_adjustments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    productId: uuid("product_id").notNull(),
+    productBatchId: uuid("product_batch_id").notNull(),
+    siteId: uuid("site_id").notNull(),
+    storageLocationId: uuid("storage_location_id").notNull(),
+    adjustmentType: varchar("adjustment_type", { length: 20 }).notNull(),
+    quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
+    reason: text("reason").notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("Pending"),
+    createdBy: uuid("created_by").notNull(),
+    approvedBy: uuid("approved_by"),
+    approvalNotes: text("approval_notes"),
+    notes: text("notes"),
+    stocktakeSessionId: uuid("stocktake_session_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("stock_adjustments_created_id_idx").on(table.createdAt, table.id)],
+);
 
 export const stockLedgerEntries = pgTable(
   "stock_ledger_entries",
@@ -91,7 +98,10 @@ export const stockLedgerEntries = pgTable(
     createdBy: uuid("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("stock_ledger_product_occurred_idx").on(table.productId, table.occurredAt)],
+  (table) => [
+    index("stock_ledger_product_occurred_idx").on(table.productId, table.occurredAt),
+    index("stock_ledger_entries_occurred_id_idx").on(table.occurredAt, table.id),
+  ],
 );
 
 export const stockReservations = pgTable(
@@ -150,7 +160,10 @@ export const transferOrders = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("transfer_orders_number_unique").on(table.transferNumber)],
+  (table) => [
+    uniqueIndex("transfer_orders_number_unique").on(table.transferNumber),
+    index("transfer_orders_created_id_idx").on(table.createdAt, table.id),
+  ],
 );
 
 export const transferOrderLines = pgTable("transfer_order_lines", {
@@ -167,19 +180,23 @@ export const transferOrderLines = pgTable("transfer_order_lines", {
   notes: text("notes"),
 });
 
-export const replenishmentRequests = pgTable("replenishment_requests", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  siteId: uuid("site_id").notNull(),
-  storageLocationId: uuid("storage_location_id").notNull(),
-  notes: text("notes"),
-  status: varchar("status", { length: 20 }).notNull().default("Pending"),
-  requestedBy: uuid("requested_by").notNull(),
-  reviewedBy: uuid("reviewed_by"),
-  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
-  reviewNotes: text("review_notes"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const replenishmentRequests = pgTable(
+  "replenishment_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    siteId: uuid("site_id").notNull(),
+    storageLocationId: uuid("storage_location_id").notNull(),
+    notes: text("notes"),
+    status: varchar("status", { length: 20 }).notNull().default("Pending"),
+    requestedBy: uuid("requested_by").notNull(),
+    reviewedBy: uuid("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNotes: text("review_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("replenishment_requests_created_id_idx").on(table.createdAt, table.id)],
+);
 
 export const replenishmentRequestLines = pgTable("replenishment_request_lines", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -191,18 +208,22 @@ export const replenishmentRequestLines = pgTable("replenishment_request_lines", 
   notes: text("notes"),
 });
 
-export const stocktakes = pgTable("stocktakes", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  siteId: uuid("site_id").notNull(),
-  storageLocationId: uuid("storage_location_id").notNull(),
-  status: varchar("status", { length: 20 }).notNull().default("Pending"),
-  notes: text("notes"),
-  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  createdBy: uuid("created_by").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const stocktakes = pgTable(
+  "stocktakes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    siteId: uuid("site_id").notNull(),
+    storageLocationId: uuid("storage_location_id").notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("Pending"),
+    notes: text("notes"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("stocktakes_created_id_idx").on(table.createdAt, table.id)],
+);
 
 export const stocktakeLines = pgTable("stocktake_lines", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -213,14 +234,18 @@ export const stocktakeLines = pgTable("stocktake_lines", {
   status: varchar("status", { length: 20 }).notNull().default("Pending"),
 });
 
-export const returnRequests = pgTable("return_requests", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  siteId: uuid("site_id").notNull(),
-  status: varchar("status", { length: 20 }).notNull().default("Pending"),
-  reason: text("reason").notNull(),
-  createdBy: uuid("created_by").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const returnRequests = pgTable(
+  "return_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    siteId: uuid("site_id").notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("Pending"),
+    reason: text("reason").notNull(),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("return_requests_created_id_idx").on(table.createdAt, table.id)],
+);
 
 export const returnLines = pgTable("return_lines", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -279,6 +304,7 @@ export const purchaseOrders = pgTable(
   (table) => [
     uniqueIndex("purchase_orders_number_unique").on(table.purchaseOrderNumber),
     index("purchase_orders_site_status_idx").on(table.siteId, table.status),
+    index("purchase_orders_created_id_idx").on(table.createdAt, table.id),
   ],
 );
 
@@ -305,7 +331,10 @@ export const goodsReceipts = pgTable(
     notes: text("notes"),
     createdBy: uuid("created_by").notNull(),
   },
-  (table) => [uniqueIndex("goods_receipts_number_unique").on(table.receiptNumber)],
+  (table) => [
+    uniqueIndex("goods_receipts_number_unique").on(table.receiptNumber),
+    index("goods_receipts_received_id_idx").on(table.receivedAt, table.id),
+  ],
 );
 
 export const goodsReceiptLines = pgTable("goods_receipt_lines", {

@@ -45,7 +45,7 @@ const inventoryImportService = database
 const procurementRepository = database
   ? new ProcurementRepository(database, async (input) => {
       if (!repository) return;
-      const existingBatch = (await repository.listBatches(input.productId)).find(
+      const existingBatch = (await repository.listBatches({ productId: input.productId })).rows.find(
         (batch) => batch.batchNumber === input.batchNumber,
       );
       const batch =

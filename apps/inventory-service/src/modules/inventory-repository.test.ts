@@ -8,6 +8,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import * as schema from "../shared/infrastructure/schema.ts";
 import { InventoryRepository, StockDispenseError } from "./inventory-repository.ts";
+import type { Page } from "./keyset-page.ts";
+import { everything, readPageRequest, type PageOptions, type PageRequest } from "./page-cursor.ts";
 import { InsufficientStockError } from "./stock/application/fefo-allocate.ts";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle/migrations", import.meta.url));
@@ -97,7 +99,7 @@ describe("InventoryRepository site filters", () => {
 
   it("shows a transfer to both ends of the move and hides it from a third site", async () => {
     const idsFor = async (siteIds: string[]): Promise<string[]> =>
-      (await repository.listTransfers(siteIds)).map((transfer) => transfer.id).sort();
+      (await repository.listTransfers({ siteIds })).rows.map((transfer) => transfer.id).sort();
 
     await expect(idsFor([siteA])).resolves.toEqual([transferAB, transferBA].sort());
     await expect(idsFor([siteB])).resolves.toEqual([transferAB, transferBA].sort());
@@ -107,7 +109,7 @@ describe("InventoryRepository site filters", () => {
 
   it("unions the balances of the reader's sites and excludes every other site", async () => {
     const siteIdsFor = async (siteIds: string[]): Promise<string[]> =>
-      (await repository.listBalances(undefined, siteIds)).map((row) => row.balance.siteId).sort();
+      (await repository.listBalances({ siteIds })).rows.map((row) => row.balance.siteId).sort();
 
     await expect(siteIdsFor([siteA, siteB])).resolves.toEqual([siteA, siteB].sort());
     await expect(siteIdsFor([siteB])).resolves.toEqual([siteB]);
@@ -116,7 +118,7 @@ describe("InventoryRepository site filters", () => {
 
   it("unions the replenishment requests of the reader's sites and excludes every other site", async () => {
     const idsFor = async (siteIds: string[]): Promise<string[]> =>
-      (await repository.listReplenishments(siteIds)).map((request) => request.id).sort();
+      (await repository.listReplenishments({ siteIds })).rows.map((request) => request.id).sort();
 
     await expect(idsFor([siteA, siteB])).resolves.toEqual([replenishmentA, replenishmentB].sort());
     await expect(idsFor([siteB])).resolves.toEqual([replenishmentB]);
@@ -607,5 +609,246 @@ describe("InventoryRepository online order holds", () => {
 
   it("answers an unknown reservation with nothing", async () => {
     await expect(repository.consumeReservation(order, "Order", order)).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * Every list pages by keyset: a cursor names the last row a page answered, so rows that share a sort value are
+ * neither repeated nor skipped, and a filter or search applies to every page. Only the real engine with the real
+ * migrations shows the ordering and the row comparison that the next page relies on.
+ */
+describe("InventoryRepository list paging", () => {
+  const client = new PGlite();
+  const db = drizzle({ client, schema });
+  const repository = new InventoryRepository({ db, pool: undefined } as unknown as InventoryDatabase);
+
+  const site = "00000000-0000-4000-8000-00000000000a";
+  const otherSite = "00000000-0000-4000-8000-00000000000b";
+  const location = "00000000-0000-4000-8000-00000000001a";
+  const product = "00000000-0000-4000-8000-00000000002a";
+  const actor = "00000000-0000-4000-8000-00000000003a";
+  const sameInstant = new Date("2026-03-01T10:00:00Z");
+  const idOf = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
+  const timestampPage: PageOptions = { kind: "timestamp", defaultLimit: 100, maxLimit: 500 };
+  const expiryPage: PageOptions = { kind: "date", defaultLimit: 100, maxLimit: 500, allWithoutLimit: true };
+
+  /** Follows the cursors the way a client does, each one read back by the route's own parser. */
+  const everyPage = async <Row>(
+    options: PageOptions,
+    limit: number,
+    list: (page: PageRequest) => Promise<Page<Row>>,
+  ): Promise<Row[][]> => {
+    const pages: Row[][] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 20; guard++) {
+      const query = cursor === undefined ? { limit: String(limit) } : { limit: String(limit), cursor };
+      const page = readPageRequest(query, options);
+      if (!page) throw new Error("the repository's own cursor was refused");
+      const answer = await list(page);
+      pages.push(answer.rows);
+      if (answer.nextCursor === undefined) return pages;
+      cursor = answer.nextCursor;
+    }
+    throw new Error("paging did not end");
+  };
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder });
+  });
+
+  beforeEach(async () => {
+    await client.exec(`
+      TRUNCATE product_batches, inventory_balances, stock_ledger_entries, transfer_orders,
+        stock_adjustments, return_requests, return_lines CASCADE;
+    `);
+    // Six transfers: five share one timestamp, and TR-006 is the newest of all.
+    const transfer = (n: number, status: string, createdAt: Date) => ({
+      id: idOf(0x100 + n),
+      transferNumber: `TR-${String(n).padStart(3, "0")}`,
+      sourceSiteId: site,
+      destinationSiteId: otherSite,
+      status,
+      createdBy: actor,
+      createdAt,
+    });
+    await db
+      .insert(schema.transferOrders)
+      .values([
+        transfer(1, "PendingApproval", sameInstant),
+        transfer(2, "PendingApproval", sameInstant),
+        transfer(3, "PendingApproval", sameInstant),
+        transfer(4, "PendingApproval", sameInstant),
+        transfer(5, "Approved", sameInstant),
+        transfer(6, "PendingApproval", new Date("2026-03-02T10:00:00Z")),
+      ]);
+    // Three batches: two expire together, and NUM-7 expires last.
+    await db.insert(schema.productBatches).values([
+      { id: idOf(0x200), productId: product, batchNumber: "LOT-ALPHA", expiryDate: "2099-01-31" },
+      { id: idOf(0x201), productId: product, batchNumber: "LOT-BETA", expiryDate: "2099-01-31" },
+      { id: idOf(0x202), productId: product, batchNumber: "NUM-7", expiryDate: "2099-06-30" },
+    ]);
+    await db.insert(schema.inventoryBalances).values(
+      [0x200, 0x201, 0x202].map((batch, index) => ({
+        id: idOf(0x700 + index),
+        productBatchId: idOf(batch),
+        siteId: site,
+        storageLocationId: location,
+        quantityOnHand: "5",
+      })),
+    );
+    const entry = (n: number, occurredAt: Date) => ({
+      id: idOf(0x400 + n),
+      productId: product,
+      productBatchId: idOf(0x200),
+      siteId: site,
+      storageLocationId: location,
+      quantityDelta: "1",
+      quantityAfter: "1",
+      movementType: "StockAdjustment",
+      occurredAt,
+    });
+    await db
+      .insert(schema.stockLedgerEntries)
+      .values([
+        entry(1, new Date("2026-02-01T10:00:00Z")),
+        entry(2, sameInstant),
+        entry(3, sameInstant),
+        entry(4, sameInstant),
+        entry(5, new Date("2026-03-02T10:00:00Z")),
+      ]);
+    await db.insert(schema.stockAdjustments).values([
+      {
+        id: idOf(0x500),
+        productId: product,
+        productBatchId: idOf(0x200),
+        siteId: site,
+        storageLocationId: location,
+        adjustmentType: "Positive",
+        quantity: "1",
+        reason: "Damaged in transit",
+        createdBy: actor,
+      },
+      {
+        id: idOf(0x501),
+        productId: product,
+        productBatchId: idOf(0x202),
+        siteId: site,
+        storageLocationId: location,
+        adjustmentType: "Negative",
+        quantity: "1",
+        reason: "Count correction",
+        createdBy: actor,
+      },
+    ]);
+    await db.insert(schema.returnRequests).values(
+      [1, 2, 3].map((n) => ({
+        id: idOf(0x600 + n),
+        siteId: site,
+        reason: `Return ${n}`,
+        createdBy: actor,
+        createdAt: sameInstant,
+      })),
+    );
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it("pages newest first through rows that share a timestamp, without repeats or gaps", async () => {
+    const pages = await everyPage(timestampPage, 2, (page) => repository.listTransfers({ siteIds: [site] }, page));
+
+    expect(pages.map((rows) => rows.length)).toEqual([2, 2, 2]);
+    // TR-006 is newest; the five rows that share an instant follow in id order, descending.
+    expect(pages.flat().map((transfer) => transfer.transferNumber)).toEqual([
+      "TR-006",
+      "TR-005",
+      "TR-004",
+      "TR-003",
+      "TR-002",
+      "TR-001",
+    ]);
+  });
+
+  it("keeps the status filter on every page", async () => {
+    const pages = await everyPage(timestampPage, 2, (page) =>
+      repository.listTransfers({ siteIds: [site], statuses: ["PendingApproval"] }, page),
+    );
+
+    expect(pages.map((rows) => rows.length)).toEqual([2, 2, 1]);
+    expect(
+      pages
+        .flat()
+        .map((transfer) => transfer.transferNumber)
+        .sort(),
+    ).toEqual(["TR-001", "TR-002", "TR-003", "TR-004", "TR-006"]);
+  });
+
+  it("matches the transfer number case-insensitively, takes a literal wildcard, and pages the match", async () => {
+    const matched = await everyPage(timestampPage, 1, (page) =>
+      repository.listTransfers({ siteIds: [site], q: "tr-005" }, page),
+    );
+    const literal = await repository.listTransfers({ siteIds: [site], q: "%" }, everything);
+
+    expect(matched.flat().map((transfer) => transfer.transferNumber)).toEqual(["TR-005"]);
+    expect(literal.rows).toEqual([]);
+  });
+
+  it("counts the transfers its list selects, by status, exclusion and site", async () => {
+    await expect(repository.countTransfers({ siteIds: [site], statuses: ["PendingApproval"] })).resolves.toBe(5);
+    await expect(repository.countTransfers({ siteIds: [site], excludeStatuses: ["PendingApproval"] })).resolves.toBe(1);
+    await expect(repository.countTransfers({ siteIds: [site], q: "tr-00" })).resolves.toBe(6);
+    await expect(repository.countTransfers({ siteIds: [] })).resolves.toBe(0);
+  });
+
+  it("answers every balance when no limit is sent, and pages them in expiry order when one is", async () => {
+    const unpaged = await repository.listBalances({ siteIds: [site] });
+    expect(unpaged.rows).toHaveLength(3);
+    expect(unpaged.nextCursor).toBeUndefined();
+
+    const pages = await everyPage(expiryPage, 1, (page) => repository.listBalances({ siteIds: [site] }, page));
+    const batchNumbers = pages.flat().map((row) => row.batch.batchNumber);
+    expect(pages.map((rows) => rows.length)).toEqual([1, 1, 1]);
+    expect(batchNumbers.at(-1)).toBe("NUM-7");
+    expect([...batchNumbers].sort()).toEqual(["LOT-ALPHA", "LOT-BETA", "NUM-7"]);
+  });
+
+  it("searches balances and batches by batch number", async () => {
+    const balances = await repository.listBalances({ siteIds: [site], q: "lot" });
+    const batches = await repository.listBatches({ q: "num-7" });
+
+    expect(balances.rows.map((row) => row.batch.batchNumber).sort()).toEqual(["LOT-ALPHA", "LOT-BETA"]);
+    expect(batches.rows.map((batch) => batch.batchNumber)).toEqual(["NUM-7"]);
+  });
+
+  it("pages movements newest first and keeps the occurred-at window inclusive", async () => {
+    const all = await everyPage(timestampPage, 2, (page) => repository.listMovements({}, page));
+    expect(all.map((rows) => rows.length)).toEqual([2, 2, 1]);
+    expect(new Set(all.flat().map((entry) => entry.id)).size).toBe(5);
+
+    const window = await everyPage(timestampPage, 2, (page) =>
+      repository.listMovements({ from: new Date("2026-03-01T00:00:00Z"), to: new Date("2026-03-01T23:59:59Z") }, page),
+    );
+    expect(window.map((rows) => rows.length)).toEqual([2, 1]);
+  });
+
+  it("answers every return when no page is asked for, and pages them when one is", async () => {
+    const returnPage: PageOptions = { kind: "timestamp", defaultLimit: 100, maxLimit: 500, allWithoutLimit: true };
+    const whole = await repository.listReturns({ siteIds: [site] });
+    const pages = await everyPage(returnPage, 2, (page) => repository.listReturns({ siteIds: [site] }, page));
+
+    expect(whole.rows).toHaveLength(3);
+    expect(pages.map((rows) => rows.length)).toEqual([2, 1]);
+  });
+
+  it("searches adjustments by reason or by the number of the batch they move", async () => {
+    const byReason = await repository.listAdjustments({ siteIds: [site], q: "transit" });
+    const byBatch = await repository.listAdjustments({ siteIds: [site], q: "num-7" });
+
+    expect(byReason.rows.map((row) => row.reason)).toEqual(["Damaged in transit"]);
+    expect(byBatch.rows.map((row) => row.reason)).toEqual(["Count correction"]);
+    await expect(repository.countAdjustments({ siteIds: [site], q: "count" })).resolves.toBe(1);
+    await expect(repository.countAdjustments({ siteIds: [site], statuses: ["Pending"] })).resolves.toBe(2);
+    await expect(repository.countAdjustments({ siteIds: [site], statuses: ["Approved"] })).resolves.toBe(0);
   });
 });

@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, inArray, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   idempotencyRecords,
   inventoryBalances,
@@ -22,6 +23,8 @@ import { allocateFefo } from "./stock/application/fefo-allocate.ts";
 import { transitionReplenishment, type ReplenishmentStatus } from "./replenishment/domain/replenishment-request.ts";
 import { transitionTransfer, type TransferStatus } from "./transfers/domain/transfer-order.ts";
 import { recordSiteAvailability, sellableBatch, today } from "./site-availability.ts";
+import { containsPattern, everything, type PageRequest } from "./page-cursor.ts";
+import { afterCursor, dateSortValue, presentConditions, splitPage, timestampSortValue } from "./keyset-page.ts";
 
 /** A dispense the stock cannot honour: the batch is wrong for the product, not releasable, or not on the shelf. */
 export class StockDispenseError extends Error {}
@@ -50,35 +53,150 @@ export type StockDispenseResult = {
 
 const DISPENSE_SCOPE = "inventory.dispense";
 
+/**
+ * The site scope and the filters a status list and its count share, so a count always answers its list. A status
+ * filter takes several values and an exclusion takes several too; an empty list means no filter.
+ */
+export type StatusListFilters = {
+  siteIds?: string[] | undefined;
+  statuses?: string[] | undefined;
+  excludeStatuses?: string[] | undefined;
+  /** Free text over the identifiers of the list; see the text matchers below for the columns of each list. */
+  q?: string | undefined;
+};
+
+const statusConditions = (column: AnyPgColumn, filters: StatusListFilters): Array<SQL | undefined> => [
+  filters.statuses?.length ? inArray(column, filters.statuses) : undefined,
+  filters.excludeStatuses?.length ? notInArray(column, filters.excludeStatuses) : undefined,
+];
+
+const transferFilters = (filters: StatusListFilters): Array<SQL | undefined> => [
+  filters.siteIds
+    ? or(
+        inArray(transferOrders.sourceSiteId, filters.siteIds),
+        inArray(transferOrders.destinationSiteId, filters.siteIds),
+      )
+    : undefined,
+  ...statusConditions(transferOrders.status, filters),
+  filters.q ? ilike(transferOrders.transferNumber, containsPattern(filters.q)) : undefined,
+];
+
+const replenishmentFilters = (filters: StatusListFilters): Array<SQL | undefined> => [
+  filters.siteIds ? inArray(replenishmentRequests.siteId, filters.siteIds) : undefined,
+  ...statusConditions(replenishmentRequests.status, filters),
+  filters.q ? replenishmentText(filters.q) : undefined,
+];
+
+const stocktakeFilters = (filters: StatusListFilters): Array<SQL | undefined> => [
+  filters.siteIds ? inArray(stocktakes.siteId, filters.siteIds) : undefined,
+  ...statusConditions(stocktakes.status, filters),
+  filters.q ? stocktakeText(filters.q) : undefined,
+];
+
+const adjustmentFilters = (
+  filters: StatusListFilters & { stocktakeSessionId?: string | undefined },
+): Array<SQL | undefined> => [
+  filters.siteIds ? inArray(stockAdjustments.siteId, filters.siteIds) : undefined,
+  ...statusConditions(stockAdjustments.status, filters),
+  filters.stocktakeSessionId ? eq(stockAdjustments.stocktakeSessionId, filters.stocktakeSessionId) : undefined,
+  filters.q ? adjustmentText(filters.q) : undefined,
+];
+
+/** Adjustments carry no number: `q` matches their reason, their notes, or the number of the batch they move. */
+const adjustmentText = (text: string): SQL | undefined => {
+  const pattern = containsPattern(text);
+  return or(
+    ilike(stockAdjustments.reason, pattern),
+    ilike(stockAdjustments.notes, pattern),
+    sql`${stockAdjustments.productBatchId} in (select ${productBatches.id} from ${productBatches} where ${ilike(productBatches.batchNumber, pattern)})`,
+  );
+};
+
+/** Stocktakes carry no number: `q` matches their notes or the batch number of one of their lines. */
+const stocktakeText = (text: string): SQL | undefined => {
+  const pattern = containsPattern(text);
+  return or(
+    ilike(stocktakes.notes, pattern),
+    sql`exists (select 1 from ${stocktakeLines} inner join ${productBatches} on ${productBatches.id} = ${stocktakeLines.productBatchId} where ${stocktakeLines.stocktakeId} = ${stocktakes.id} and ${ilike(productBatches.batchNumber, pattern)})`,
+  );
+};
+
+/** Replenishment requests carry no number: `q` matches their notes or the batch number of one of their lines. */
+const replenishmentText = (text: string): SQL | undefined => {
+  const pattern = containsPattern(text);
+  return or(
+    ilike(replenishmentRequests.notes, pattern),
+    sql`exists (select 1 from ${replenishmentRequestLines} inner join ${productBatches} on ${productBatches.id} = ${replenishmentRequestLines.productBatchId} where ${replenishmentRequestLines.replenishmentRequestId} = ${replenishmentRequests.id} and ${ilike(productBatches.batchNumber, pattern)})`,
+  );
+};
+
 export class InventoryRepository {
   public constructor(private readonly database: InventoryDatabase) {}
 
   public async listBalances(
-    productId?: string,
-    siteIds?: string[],
-    storageLocationId?: string,
-    includeZeroBalances = true,
+    filters: {
+      productId?: string | undefined;
+      siteIds?: string[] | undefined;
+      storageLocationId?: string | undefined;
+      includeZeroBalances?: boolean | undefined;
+      /** Matches the batch number: a batch carries no SKU here, the catalog owns it. */
+      q?: string | undefined;
+    } = {},
+    page: PageRequest = everything,
   ) {
-    const filters = [
-      productId ? eq(productBatches.productId, productId) : undefined,
-      siteIds ? inArray(inventoryBalances.siteId, siteIds) : undefined,
-      storageLocationId ? eq(inventoryBalances.storageLocationId, storageLocationId) : undefined,
-      includeZeroBalances ? undefined : gt(inventoryBalances.quantityOnHand, "0"),
-    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    return this.database.db
-      .select({ balance: inventoryBalances, batch: productBatches })
+    const conditions = presentConditions([
+      filters.productId ? eq(productBatches.productId, filters.productId) : undefined,
+      filters.siteIds ? inArray(inventoryBalances.siteId, filters.siteIds) : undefined,
+      filters.storageLocationId ? eq(inventoryBalances.storageLocationId, filters.storageLocationId) : undefined,
+      filters.includeZeroBalances === false ? gt(inventoryBalances.quantityOnHand, "0") : undefined,
+      filters.q ? ilike(productBatches.batchNumber, containsPattern(filters.q)) : undefined,
+      afterCursor({
+        sortColumn: productBatches.expiryDate,
+        idColumn: inventoryBalances.id,
+        direction: "asc",
+        kind: "date",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({
+        balance: inventoryBalances,
+        batch: productBatches,
+        id: inventoryBalances.id,
+        sortValue: dateSortValue(productBatches.expiryDate),
+      })
       .from(inventoryBalances)
       .innerJoin(productBatches, eq(productBatches.id, inventoryBalances.productBatchId))
-      .where(filters.length ? and(...filters) : undefined)
-      .orderBy(asc(productBatches.expiryDate));
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(asc(productBatches.expiryDate), asc(inventoryBalances.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    return { rows: items.map(({ balance, batch }) => ({ balance, batch })), nextCursor };
   }
 
-  public async listBatches(productId?: string) {
-    return this.database.db
-      .select()
+  public async listBatches(
+    filters: { productId?: string | undefined; q?: string | undefined } = {},
+    page: PageRequest = everything,
+  ) {
+    const conditions = presentConditions([
+      filters.productId ? eq(productBatches.productId, filters.productId) : undefined,
+      filters.q ? ilike(productBatches.batchNumber, containsPattern(filters.q)) : undefined,
+      afterCursor({
+        sortColumn: productBatches.expiryDate,
+        idColumn: productBatches.id,
+        direction: "asc",
+        kind: "date",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({ batch: productBatches, id: productBatches.id, sortValue: dateSortValue(productBatches.expiryDate) })
       .from(productBatches)
-      .where(productId ? eq(productBatches.productId, productId) : undefined)
-      .orderBy(asc(productBatches.expiryDate));
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(asc(productBatches.expiryDate), asc(productBatches.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    return { rows: items.map(({ batch }) => batch), nextCursor };
   }
 
   public async listMovements(
@@ -87,21 +205,39 @@ export class InventoryRepository {
       productBatchId?: string | undefined;
       siteIds?: string[] | undefined;
       storageLocationId?: string | undefined;
-      limit?: number | undefined;
+      /** Inclusive bounds on when a movement occurred. */
+      from?: Date | undefined;
+      to?: Date | undefined;
     } = {},
+    page: PageRequest = everything,
   ) {
-    const conditions = [
+    const conditions = presentConditions([
       input.productId ? eq(stockLedgerEntries.productId, input.productId) : undefined,
       input.productBatchId ? eq(stockLedgerEntries.productBatchId, input.productBatchId) : undefined,
       input.siteIds ? inArray(stockLedgerEntries.siteId, input.siteIds) : undefined,
       input.storageLocationId ? eq(stockLedgerEntries.storageLocationId, input.storageLocationId) : undefined,
-    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    return this.database.db
-      .select()
+      input.from ? gte(stockLedgerEntries.occurredAt, input.from) : undefined,
+      input.to ? lte(stockLedgerEntries.occurredAt, input.to) : undefined,
+      afterCursor({
+        sortColumn: stockLedgerEntries.occurredAt,
+        idColumn: stockLedgerEntries.id,
+        direction: "desc",
+        kind: "timestamp",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({
+        entry: stockLedgerEntries,
+        id: stockLedgerEntries.id,
+        sortValue: timestampSortValue(stockLedgerEntries.occurredAt),
+      })
       .from(stockLedgerEntries)
       .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(stockLedgerEntries.occurredAt))
-      .limit(Math.min(Math.max(input.limit ?? 500, 1), 500));
+      .orderBy(desc(stockLedgerEntries.occurredAt), desc(stockLedgerEntries.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    return { rows: items.map(({ entry }) => entry), nextCursor };
   }
 
   /**
@@ -137,24 +273,40 @@ export class InventoryRepository {
   }
 
   public async listAdjustments(
-    input: {
-      siteIds?: string[] | undefined;
-      status?: string | undefined;
-      stocktakeSessionId?: string | undefined;
-      limit?: number | undefined;
-    } = {},
+    filters: StatusListFilters & { stocktakeSessionId?: string | undefined } = {},
+    page: PageRequest = everything,
   ) {
-    const conditions = [
-      input.siteIds ? inArray(stockAdjustments.siteId, input.siteIds) : undefined,
-      input.status ? eq(stockAdjustments.status, input.status) : undefined,
-      input.stocktakeSessionId ? eq(stockAdjustments.stocktakeSessionId, input.stocktakeSessionId) : undefined,
-    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    return this.database.db
-      .select()
+    const conditions = presentConditions([
+      ...adjustmentFilters(filters),
+      afterCursor({
+        sortColumn: stockAdjustments.createdAt,
+        idColumn: stockAdjustments.id,
+        direction: "desc",
+        kind: "timestamp",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({
+        adjustment: stockAdjustments,
+        id: stockAdjustments.id,
+        sortValue: timestampSortValue(stockAdjustments.createdAt),
+      })
       .from(stockAdjustments)
       .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(stockAdjustments.createdAt))
-      .limit(Math.min(Math.max(input.limit ?? 100, 1), 500));
+      .orderBy(desc(stockAdjustments.createdAt), desc(stockAdjustments.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    return { rows: items.map(({ adjustment }) => adjustment), nextCursor };
+  }
+
+  public async countAdjustments(filters: StatusListFilters & { stocktakeSessionId?: string | undefined } = {}) {
+    const conditions = presentConditions(adjustmentFilters(filters));
+    const [row] = await this.database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(stockAdjustments)
+      .where(conditions.length ? and(...conditions) : undefined);
+    return Number(row?.count ?? 0);
   }
 
   public async createAdjustment(input: {
@@ -830,21 +982,30 @@ export class InventoryRepository {
       .orderBy(asc(stockReservations.createdAt));
   }
 
-  public async listTransfers(siteIds?: string[], status?: string, limit = 100) {
-    const conditions = [
-      siteIds
-        ? or(inArray(transferOrders.sourceSiteId, siteIds), inArray(transferOrders.destinationSiteId, siteIds))
-        : undefined,
-      status ? eq(transferOrders.status, status) : undefined,
-    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    const transfers = await this.database.db
-      .select()
+  public async listTransfers(filters: StatusListFilters = {}, page: PageRequest = everything) {
+    const conditions = presentConditions([
+      ...transferFilters(filters),
+      afterCursor({
+        sortColumn: transferOrders.createdAt,
+        idColumn: transferOrders.id,
+        direction: "desc",
+        kind: "timestamp",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({
+        transfer: transferOrders,
+        id: transferOrders.id,
+        sortValue: timestampSortValue(transferOrders.createdAt),
+      })
       .from(transferOrders)
       .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(asc(transferOrders.createdAt))
-      .limit(Math.min(Math.max(limit, 1), 500));
-    return Promise.all(
-      transfers.map(async (transfer) => ({
+      .orderBy(desc(transferOrders.createdAt), desc(transferOrders.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    const rows = await Promise.all(
+      items.map(async ({ transfer }) => ({
         ...transfer,
         lines: await this.database.db
           .select()
@@ -852,6 +1013,16 @@ export class InventoryRepository {
           .where(eq(transferOrderLines.transferOrderId, transfer.id)),
       })),
     );
+    return { rows, nextCursor };
+  }
+
+  public async countTransfers(filters: StatusListFilters = {}) {
+    const conditions = presentConditions(transferFilters(filters));
+    const [row] = await this.database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(transferOrders)
+      .where(conditions.length ? and(...conditions) : undefined);
+    return Number(row?.count ?? 0);
   }
 
   public async getTransfer(id: string) {
@@ -869,19 +1040,30 @@ export class InventoryRepository {
       : undefined;
   }
 
-  public async listReplenishments(siteIds?: string[], status?: string, limit = 100) {
-    const conditions = [
-      siteIds ? inArray(replenishmentRequests.siteId, siteIds) : undefined,
-      status ? eq(replenishmentRequests.status, status) : undefined,
-    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    const requests = await this.database.db
-      .select()
+  public async listReplenishments(filters: StatusListFilters = {}, page: PageRequest = everything) {
+    const conditions = presentConditions([
+      ...replenishmentFilters(filters),
+      afterCursor({
+        sortColumn: replenishmentRequests.createdAt,
+        idColumn: replenishmentRequests.id,
+        direction: "desc",
+        kind: "timestamp",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({
+        request: replenishmentRequests,
+        id: replenishmentRequests.id,
+        sortValue: timestampSortValue(replenishmentRequests.createdAt),
+      })
       .from(replenishmentRequests)
       .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(replenishmentRequests.createdAt))
-      .limit(Math.min(Math.max(limit, 1), 500));
-    return Promise.all(
-      requests.map(async (request) => ({
+      .orderBy(desc(replenishmentRequests.createdAt), desc(replenishmentRequests.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    const rows = await Promise.all(
+      items.map(async ({ request }) => ({
         ...request,
         lines: await this.database.db
           .select()
@@ -889,6 +1071,16 @@ export class InventoryRepository {
           .where(eq(replenishmentRequestLines.replenishmentRequestId, request.id)),
       })),
     );
+    return { rows, nextCursor };
+  }
+
+  public async countReplenishments(filters: StatusListFilters = {}) {
+    const conditions = presentConditions(replenishmentFilters(filters));
+    const [row] = await this.database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(replenishmentRequests)
+      .where(conditions.length ? and(...conditions) : undefined);
+    return Number(row?.count ?? 0);
   }
 
   public async getReplenishment(id: string) {
@@ -1018,19 +1210,26 @@ export class InventoryRepository {
     return result;
   }
 
-  public async listStocktakes(siteIds?: string[], status?: string, limit = 100) {
-    const conditions = [
-      siteIds ? inArray(stocktakes.siteId, siteIds) : undefined,
-      status ? eq(stocktakes.status, status) : undefined,
-    ].filter((value): value is NonNullable<typeof value> => value !== undefined);
-    const sessions = await this.database.db
-      .select()
+  public async listStocktakes(filters: StatusListFilters = {}, page: PageRequest = everything) {
+    const conditions = presentConditions([
+      ...stocktakeFilters(filters),
+      afterCursor({
+        sortColumn: stocktakes.createdAt,
+        idColumn: stocktakes.id,
+        direction: "desc",
+        kind: "timestamp",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({ session: stocktakes, id: stocktakes.id, sortValue: timestampSortValue(stocktakes.createdAt) })
       .from(stocktakes)
       .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(stocktakes.createdAt))
-      .limit(Math.min(Math.max(limit, 1), 500));
-    return Promise.all(
-      sessions.map(async (session) => ({
+      .orderBy(desc(stocktakes.createdAt), desc(stocktakes.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    const rows = await Promise.all(
+      items.map(async ({ session }) => ({
         ...session,
         lines: (
           await this.database.db
@@ -1041,6 +1240,16 @@ export class InventoryRepository {
         ).map(({ line, batch }) => ({ ...line, productId: batch.productId })),
       })),
     );
+    return { rows, nextCursor };
+  }
+
+  public async countStocktakes(filters: StatusListFilters = {}) {
+    const conditions = presentConditions(stocktakeFilters(filters));
+    const [row] = await this.database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(stocktakes)
+      .where(conditions.length ? and(...conditions) : undefined);
+    return Number(row?.count ?? 0);
   }
 
   public async getStocktake(id: string) {
@@ -1059,18 +1268,35 @@ export class InventoryRepository {
       : undefined;
   }
 
-  public async listReturns(siteIds?: string[]) {
-    const requests = await this.database.db
-      .select()
+  public async listReturns(filters: { siteIds?: string[] | undefined } = {}, page: PageRequest = everything) {
+    const conditions = presentConditions([
+      filters.siteIds ? inArray(returnRequests.siteId, filters.siteIds) : undefined,
+      afterCursor({
+        sortColumn: returnRequests.createdAt,
+        idColumn: returnRequests.id,
+        direction: "desc",
+        kind: "timestamp",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({
+        request: returnRequests,
+        id: returnRequests.id,
+        sortValue: timestampSortValue(returnRequests.createdAt),
+      })
       .from(returnRequests)
-      .where(siteIds ? inArray(returnRequests.siteId, siteIds) : undefined)
-      .orderBy(desc(returnRequests.createdAt));
-    return Promise.all(
-      requests.map(async (request) => ({
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(returnRequests.createdAt), desc(returnRequests.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    const rows = await Promise.all(
+      items.map(async ({ request }) => ({
         ...request,
         lines: await this.database.db.select().from(returnLines).where(eq(returnLines.returnRequestId, request.id)),
       })),
     );
+    return { rows, nextCursor };
   }
 
   public async createTransfer(input: {

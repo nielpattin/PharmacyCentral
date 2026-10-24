@@ -10,10 +10,15 @@ import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import { ProcurementRepository } from "./procurement-repository.ts";
+import { invalidCursor, sendPage } from "./keyset-page.ts";
+import { readPageRequest, readSearchText, type PageOptions } from "./page-cursor.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
 const actor = (request: import("express").Request): string =>
-  request.header("X-Actor-Id") ?? "00000000-0000-0000-0000-000000000001";
+  request.header("X-Actor-Id") ?? "00000000-0000-4000-8000-000000000001";
+
+/** Lists answer 100 rows by default, newest first, and at most 500 per page. */
+const listPage: PageOptions = { kind: "timestamp", defaultLimit: 100, maxLimit: 500 };
 
 export type ProcurementRouterOptions = {
   /** Validated at boot by main.ts, so a missing one is a type error and never a localhost guess. */
@@ -27,12 +32,18 @@ export const createProcurementRouter = (
   const router = Router();
   router.get("/procurement/purchase-orders", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const page = readPageRequest(request.query, listPage);
+    if (!page) return invalidCursor(response);
     try {
-      return response.json(
+      return sendPage(
+        response,
         await repository.listPurchaseOrders(
-          listSiteIds(request),
-          typeof request.query.status === "string" ? request.query.status : undefined,
-          queryLimit(request.query.limit),
+          {
+            siteIds: listSiteIds(request),
+            status: typeof request.query.status === "string" ? request.query.status : undefined,
+            q: readSearchText(request.query),
+          },
+          page,
         ),
       );
     } catch (error) {
@@ -87,8 +98,23 @@ export const createProcurementRouter = (
   });
   router.get("/procurement/goods-receipts", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const page = readPageRequest(request.query, listPage);
+    if (!page) return invalidCursor(response);
     try {
-      return response.json(await repository.listReceipts(listSiteIds(request), queryLimit(request.query.limit)));
+      return sendPage(
+        response,
+        await repository.listReceipts({ siteIds: listSiteIds(request), q: readSearchText(request.query) }, page),
+      );
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.get("/procurement/goods-receipts/count", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    try {
+      return response.json({
+        count: await repository.countReceipts({ siteIds: listSiteIds(request), q: readSearchText(request.query) }),
+      });
     } catch (error) {
       return next(error);
     }
@@ -136,11 +162,6 @@ const unavailable = (response: import("express").Response) =>
   response.status(503).json({ title: "Procurement database is not configured", status: 503 });
 const invalid = (response: import("express").Response) =>
   response.status(400).json({ title: "Invalid procurement request", status: 400, code: "invalid_request" });
-const queryLimit = (value: unknown): number => {
-  const parsed = typeof value === "string" ? Number(value) : Number.NaN;
-  return Number.isFinite(parsed) ? parsed : 100;
-};
-
 const assertCatalogReferences = async (
   baseUrl: string,
   supplierId: string,

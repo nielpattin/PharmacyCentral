@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 
 import {
@@ -10,6 +10,8 @@ import {
 import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import { InventoryRepository, StockDispenseError } from "./inventory-repository.ts";
+import { invalidCursor, sendPage } from "./keyset-page.ts";
+import { readCommaList, readPageRequest, readSearchText, type PageOptions } from "./page-cursor.ts";
 import { InsufficientStockError } from "./stock/application/fefo-allocate.ts";
 
 const idParam = z.object({ id: z.string().uuid() });
@@ -92,17 +94,34 @@ const periodSchema = z.object({
   to: z.string().datetime({ offset: true }).optional(),
 });
 
+/** Status lists answer 100 rows by default, newest first, and at most 500 per page. */
+const statusListPage: PageOptions = { kind: "timestamp", defaultLimit: 100, maxLimit: 500 };
+/** The ledger answers 500 rows by default, as it always has. */
+const ledgerPage: PageOptions = { kind: "timestamp", defaultLimit: 500, maxLimit: 500 };
+/** Balances and batches answer every row, in expiry order, unless a `limit` or `cursor` asks for a page. */
+const expiryPage: PageOptions = { kind: "date", defaultLimit: 100, maxLimit: 500, allWithoutLimit: true };
+/** Returns answer every row, newest first, unless a `limit` or `cursor` asks for a page. */
+const returnPage: PageOptions = { kind: "timestamp", defaultLimit: 100, maxLimit: 500, allWithoutLimit: true };
+
 export const createInventoryRouter = (repository: InventoryRepository | undefined): Router => {
   const router = Router();
   router.get("/inventory/balances", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const page = readPageRequest(request.query, expiryPage);
+    if (!page) return invalidCursor(response);
     try {
-      return response.json(
+      return sendPage(
+        response,
         await repository.listBalances(
-          typeof request.query.productId === "string" ? request.query.productId : undefined,
-          listSiteIds(request),
-          typeof request.query.storageLocationId === "string" ? request.query.storageLocationId : undefined,
-          request.query.includeZeroBalances !== "false",
+          {
+            productId: typeof request.query.productId === "string" ? request.query.productId : undefined,
+            siteIds: listSiteIds(request),
+            storageLocationId:
+              typeof request.query.storageLocationId === "string" ? request.query.storageLocationId : undefined,
+            includeZeroBalances: request.query.includeZeroBalances !== "false",
+            q: readSearchText(request.query),
+          },
+          page,
         ),
       );
     } catch (error) {
@@ -111,9 +130,18 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/batches", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const page = readPageRequest(request.query, expiryPage);
+    if (!page) return invalidCursor(response);
     try {
-      return response.json(
-        await repository.listBatches(typeof request.query.productId === "string" ? request.query.productId : undefined),
+      return sendPage(
+        response,
+        await repository.listBatches(
+          {
+            productId: typeof request.query.productId === "string" ? request.query.productId : undefined,
+            q: readSearchText(request.query),
+          },
+          page,
+        ),
       );
     } catch (error) {
       return next(error);
@@ -153,14 +181,18 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/adjustments", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const page = readPageRequest(request.query, statusListPage);
+    if (!page) return invalidCursor(response);
     try {
-      return response.json(
-        await repository.listAdjustments({
-          siteIds: listSiteIds(request),
-          status: typeof request.query.status === "string" ? request.query.status : undefined,
-          limit: queryNumber(request.query.limit, 100),
-        }),
-      );
+      return sendPage(response, await repository.listAdjustments(statusListFilters(request), page));
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.get("/inventory/adjustments/count", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    try {
+      return response.json({ count: await repository.countAdjustments(statusListFilters(request)) });
     } catch (error) {
       return next(error);
     }
@@ -218,16 +250,25 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/movements", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const page = readPageRequest(request.query, ledgerPage);
+    if (!page) return invalidCursor(response);
+    const period = periodSchema.safeParse(request.query);
+    if (!period.success) return invalid(response);
     try {
-      return response.json(
-        await repository.listMovements({
-          productId: typeof request.query.productId === "string" ? request.query.productId : undefined,
-          productBatchId: typeof request.query.productBatchId === "string" ? request.query.productBatchId : undefined,
-          siteIds: listSiteIds(request),
-          storageLocationId:
-            typeof request.query.storageLocationId === "string" ? request.query.storageLocationId : undefined,
-          limit: queryNumber(request.query.limit, 500),
-        }),
+      return sendPage(
+        response,
+        await repository.listMovements(
+          {
+            productId: typeof request.query.productId === "string" ? request.query.productId : undefined,
+            productBatchId: typeof request.query.productBatchId === "string" ? request.query.productBatchId : undefined,
+            siteIds: listSiteIds(request),
+            storageLocationId:
+              typeof request.query.storageLocationId === "string" ? request.query.storageLocationId : undefined,
+            ...(period.data.from ? { from: new Date(period.data.from) } : {}),
+            ...(period.data.to ? { to: new Date(period.data.to) } : {}),
+          },
+          page,
+        ),
       );
     } catch (error) {
       return next(error);
@@ -366,14 +407,18 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/transfers", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const page = readPageRequest(request.query, statusListPage);
+    if (!page) return invalidCursor(response);
     try {
-      return response.json(
-        await repository.listTransfers(
-          listSiteIds(request),
-          typeof request.query.status === "string" ? request.query.status : undefined,
-          queryNumber(request.query.limit, 100),
-        ),
-      );
+      return sendPage(response, await repository.listTransfers(statusListFilters(request), page));
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.get("/inventory/transfers/count", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    try {
+      return response.json({ count: await repository.countTransfers(statusListFilters(request)) });
     } catch (error) {
       return next(error);
     }
@@ -442,14 +487,18 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/stocktakes", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const page = readPageRequest(request.query, statusListPage);
+    if (!page) return invalidCursor(response);
     try {
-      return response.json(
-        await repository.listStocktakes(
-          listSiteIds(request),
-          typeof request.query.status === "string" ? request.query.status : undefined,
-          queryNumber(request.query.limit, 100),
-        ),
-      );
+      return sendPage(response, await repository.listStocktakes(statusListFilters(request), page));
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.get("/inventory/stocktakes/count", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    try {
+      return response.json({ count: await repository.countStocktakes(statusListFilters(request)) });
     } catch (error) {
       return next(error);
     }
@@ -510,8 +559,10 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/returns", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const page = readPageRequest(request.query, returnPage);
+    if (!page) return invalidCursor(response);
     try {
-      return response.json(await repository.listReturns(listSiteIds(request)));
+      return sendPage(response, await repository.listReturns({ siteIds: listSiteIds(request) }, page));
     } catch (error) {
       return next(error);
     }
@@ -533,14 +584,10 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/replenishment", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const page = readPageRequest(request.query, statusListPage);
+    if (!page) return invalidCursor(response);
     try {
-      return response.json(
-        await repository.listReplenishments(
-          listSiteIds(request),
-          typeof request.query.status === "string" ? request.query.status : undefined,
-          queryNumber(request.query.limit, 100),
-        ),
-      );
+      return sendPage(response, await repository.listReplenishments(statusListFilters(request), page));
     } catch (error) {
       return next(error);
     }
@@ -611,7 +658,13 @@ const unavailable = (response: import("express").Response) =>
   response.status(503).json({ title: "Inventory database is not configured", status: 503 });
 const invalid = (response: import("express").Response) =>
   response.status(400).json({ title: "Invalid inventory request", status: 400, code: "invalid_request" });
-const queryNumber = (value: unknown, fallback: number): number => {
-  const parsed = typeof value === "string" ? Number(value) : Number.NaN;
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
+/**
+ * The site scope and the filters of a status list, shared by the list and its count. `status` and `excludeStatus`
+ * take comma-separated values, so one count can cover several states.
+ */
+const statusListFilters = (request: Request) => ({
+  siteIds: listSiteIds(request),
+  statuses: readCommaList(request.query.status),
+  excludeStatuses: readCommaList(request.query.excludeStatus),
+  q: readSearchText(request.query),
+});
