@@ -42,6 +42,9 @@ deployment {
       chatbotTask = workload "chatbot-service :3008" {
         instanceOf pharmacyCentral.services.chatbotService
       }
+      opsConsoleTask = workload "ops-console-service :3010" {
+        instanceOf pharmacyCentral.services.opsConsoleService
+      }
     }
 
     infra = zone "Infrastructure" {

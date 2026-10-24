@@ -81,6 +81,19 @@ views {
     include pharmacyCentral.services.salesService
   }
 
+  view opsConsoleDetail {
+    title "ops-console-service"
+    description "The System page backend. Platform Admin only, read only: service health, load, queues and the search index."
+    include pharmacyCentral.web.staffWeb
+    include pharmacyCentral.services.opsConsoleService
+    include pharmacyCentral.data.prometheus
+    include pharmacyCentral.data.rabbitmq
+    include pharmacyCentral.data.typesense
+    include pharmacyCentral.data.tempo
+    include pharmacyCentral.data.loki
+    exclude pharmacyCentral.services.opsConsoleService -> pharmacyCentral.services.* where target.kind is service
+  }
+
   view chatbotDetail {
     title "chatbot-service"
     description "The shopping assistant, its tools and its session, and the Jev gate that classifies a question before the chat model runs."

@@ -107,6 +107,7 @@ Both local gateways forward paths with identical patterns: `gateway` (container 
 - `/api/carts*`, `/api/orders*`, `/api/delivery*`, `/api/prescriptions*`, `/api/counter-transactions*` -> `sales-service:3005`
 - `/api/payments*` -> `payment-service:3006`
 - `/api/operations*`, `/api/dashboard*`, `/api/finance*`, `/api/audit*`, `/api/reports*` -> `operations-query-service:3007`
+- `/api/system*` -> `ops-console-service:3010`
 
 Any other path, `/` included, returns a JSON 404. Either gateway strips `/api` before forwarding.
 
@@ -426,6 +427,51 @@ Daily workflow:
 - To find a trace, open Explore in Grafana, choose the `Tempo` datasource, and search by `service.name` (for example `sales-service`).
 - To go from a log line to its trace, open Explore with the `Loki` datasource and select the `TraceID` link on a line that carries a `trace_id`. Tempo opens on that trace.
 - To follow an event across services, search Tempo with `{span.messaging.system="rabbitmq"}`. The outbox row stores the `traceparent` of the request that wrote it (`outbox_messages.traceparent`, in inventory, sales and payment), and the relay publishes under it. One trace therefore runs from the request, through `publish pharmacy.events`, to every consumer's `process` span.
+
+## System page (ops-console-service)
+
+staff-web has a System page in the Governance group. Only a Platform Admin sees it. It talks to `ops-console-service` (port 3010), which has no database and writes nothing. The page is one overview, with no tabs.
+
+From top to bottom it shows:
+
+- **Status line:** "all services are operating normally", or how many services are down or degraded. The verdict comes from the rules in `health.ts`: readiness and liveness probes, 5xx share, p95 latency, DB pool use and outbox lag.
+- **Services table:** one row per service with a status dot, readiness and liveness, version, instances, CPU, memory, event loop lag and a 24 h uptime strip. The window picker (15 min, 1 h, 6 h, 24 h) sets the strip. Select a row for a side sheet with the state, the reasons the verdict is not healthy, CPU, memory and event loop lag charts, and links to the Grafana Service Overview, Traces and Logs of that service.
+- **Queues:** ready and unacknowledged messages, consumers and status per RabbitMQ queue. Queues without consumers and dead letter queues holding messages come first.
+- **Search index:** documents per Typesense collection.
+- **Grafana:** links to the dashboards. RED per service, the latency heatmap, the service graph, traces, logs, async messaging and the outbox live there, not on this page.
+
+How the numbers come about:
+
+- Each section of the overview fails alone: a source that is down makes only its section `unavailable`. The health grid still shows when Prometheus is down, with its version and instance facts blank.
+- Saturation comes from three metrics each service pushes: `pharmacy_process_cpu_seconds_total`, `pharmacy_process_resident_memory_bytes`, `pharmacy_process_event_loop_lag_seconds`. For search-service (Go) the last one is the scheduler latency p99, not a real event loop, and memory is read on Linux only.
+- The overview's load also carries the 5xx share and p95 latency (`http_server_request_duration_seconds`), the oldest outbox row (`pharmacy_outbox_oldest_age_seconds`) and DB pool use (`db_client_connection_*`). The verdict reads them; the same metrics are charted in Grafana.
+- The version is the `BUILD_VERSION` build arg (`local` in `.env`, the commit sha in the release workflow), which ends up as `service_version` on `target_info`.
+- Instances are counted from the memory gauge series per host over the last 5 minutes, so a container that was just replaced counts twice for up to 5 minutes.
+- Uptime is `avg_over_time` of a gauge `pharmacy_ops_probe_up` that ops-console exports after probing every service each 15 s. It counts only the time ops-console itself ran, so it starts again after a restart of that service.
+- Access is checked three times: the edge Lambda policy (`/api/system` is in `platformAdminPaths`), the service (HMAC-verified identity context, role `Platform Admin`, employee), and the staff-web menu.
+- Required environment (no defaults): `PORT`, `INTERNAL_IDENTITY_SECRET`, the eight `*_SERVICE_URL`, `PROMETHEUS_URL`, `RABBITMQ_MANAGEMENT_URL`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `TYPESENSE_URL`, `TYPESENSE_API_KEY`, `GRAFANA_PUBLIC_URL`.
+- The page is read only: no replay of dead letters, no reindex.
+- **Limits on AWS:** Amazon Managed Prometheus accepts only SigV4-signed queries and `ops-console-service` does not sign, so the overview's load numbers need a signing proxy (for example `aws-sigv4-proxy`) in front of the workspace and `PROMETHEUS_URL` pointing at it. The RabbitMQ section needs the management endpoint of Amazon MQ, which was not tested.
+
+### Grafana bookmarks for the System page
+
+The System page keeps only what Grafana cannot show: the health verdict, the services table (status, version, instances, CPU, memory, event loop lag, uptime), the queues and the search index. The rest is in the provisioned Grafana dashboards under the folder `Pharmacy Central`.
+
+| Removed from the System page | Where in Grafana |
+| --- | --- |
+| Requests per second, 5xx share, p95 and DB pool per service; KPI tiles; traffic chart | Service Overview (uid `pc-service-overview`): rows Traffic and errors, HTTP server latency and Database client. The Service variable filters to one service. |
+| Latency heatmap | Service Overview, row Latency heatmap (panel Request duration buckets). Full screen: `/d/pc-service-overview?viewPanel=panel-19`. |
+| Service map and its RED table | Service Overview, row Service map (node graph and RED table from the Tempo `serviceMap` query). Explore, Tempo, query type Service Graph gives the same view. |
+| Traces tab | Explore, Tempo, TraceQL: `{ nestedSetParent < 0 && (kind = server || kind = consumer) && span.url.path !~ "/health.*" }`. Add `resource.service.name = "<service>"` inside the braces for one service. |
+| Logs tab | Explore, Loki: `{service_name=~".+"}`, or `{service_name="<service>"}` for one service. Service Overview also has a Logs panel. |
+| Outbox lag card | Business Health (uid `pc-business-health`), row Outbox. |
+| Traces and logs of one service (System page Sheet links) | The same Explore queries as above, with the service filled in. Service Overview with `var-service=<service>` is the RED view. |
+
+Queues stay on the System page, and Business Health (row Consumers and queues) has the depth over time, consumer errors and dead letters. Async messaging spans and broker logs are in Async Messaging (uid `pc-async-messaging`).
+
+**Start here.** The dashboard `Pharmacy Central - Start here` (uid `pharmacy-start`, file `deploy/local/grafana/dashboards/start-here.json`) has the table above with working links. It is the home dashboard: `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH` in the `grafana` service of `docker-compose.yml` points to it. Open Grafana at `http://localhost:${GRAFANA_PORT}` (3030 in `.env.example`) and sign in with `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD`. Each Pharmacy Central dashboard also has a `Start here` link at the top.
+
+**Service graph filter.** The OTel collector (`deploy/local/otel/collector.yaml`) sends `/health*` spans to Tempo and span metrics, but not to the service graph pipeline (`filter/health_probes`). Docker healthchecks and the probes of `ops-console-service` would otherwise draw a `user` or ops-console edge to every service. Edges already in Prometheus fade out of a 1 h view within the hour.
 
 ## Self-hosted product search embeddings
 

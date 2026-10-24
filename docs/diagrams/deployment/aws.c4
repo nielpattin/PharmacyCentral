@@ -53,6 +53,14 @@ deployment {
         chatbotTask = workload "chatbot-service :3008" {
           instanceOf pharmacyCentral.services.chatbotService
         }
+        opsConsoleTask = workload "ops-console-service :3010" {
+          summary "Platform Admin only. The edge Lambda policy and the service both check the role."
+          instanceOf pharmacyCentral.services.opsConsoleService
+        }
+        otelCollectorTask = workload "otel-collector :4318" {
+          summary "One ADOT task. The services push OTLP/HTTP to it through Cloud Map; it forwards metrics, traces and logs to AWS."
+          instanceOf pharmacyCentral.data.telemetry
+        }
         searchTask = workload "search-service :3009" {
           summary "Product list only. Behind the internal ALB, with no Cloud Map name of its own."
           instanceOf pharmacyCentral.services.searchService
@@ -81,6 +89,12 @@ deployment {
       }
       secrets = managed "Secrets Manager" {
         summary "Holds DATABASE_URL (one secret per service, each with its own database role), RABBITMQ_URL, REDIS_URL, TYPESENSE_* and the internal secrets."
+      }
+      prometheusManaged = managed "Amazon Managed Service for Prometheus" {
+        summary "Receives the metrics by remote write. Queries need SigV4, so ops-console-service cannot read it directly yet."
+      }
+      xray = managed "AWS X-Ray" {
+        summary "Receives the traces."
       }
       cloudwatch = managed "CloudWatch Logs" {
         summary "Receives the logs of the tasks, of the Lambdas and of the API Gateway."

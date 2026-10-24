@@ -28,7 +28,7 @@ model {
     }
 
     services = container "Application services" {
-      summary "Eight business services. They never import each other, they talk over HTTP and over events."
+      summary "Eight business services and the read-only ops console. The business services never import each other, they talk over HTTP and over events."
 
       searchService = service "search-service" {
         technology "Go + Typesense"

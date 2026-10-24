@@ -42,6 +42,9 @@ model {
   pharmacyCentral.web.staffWeb -> pharmacyCentral.services.catalogService "Master data and prices (/api/sites, /api/products/{id}, /api/products/imports, /api/pricing)" {
     technology "HTTPS"
   }
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.opsConsoleService "System page, Platform Admin only (GET /api/system/overview)" {
+    technology "HTTPS"
+  }
   pharmacyCentral.web.staffWeb -> pharmacyCentral.services.searchService "Product list (GET /api/products)" {
     technology "HTTPS"
   }
@@ -193,5 +196,41 @@ model {
   }
   sepayGateway -> pharmacyCentral.services.paymentService "Payment webhook, HMAC over the raw bytes" {
     technology "HTTPS"
+  }
+}
+
+model {
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.services.identityService "Probe /health/ready" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.services.catalogService "Probe /health/ready" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.services.searchService "Probe /health/ready" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.services.inventoryService "Probe /health/ready" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.services.salesService "Probe /health/ready" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.services.paymentService "Probe /health/ready" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.services.operationsService "Probe /health/ready" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.services.chatbotService "Probe /health/ready" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.data.prometheus "Request rate, errors, p95 and outbox backlog (PromQL)" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.data.rabbitmq "Queue depth and dead letters (management API)" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.opsConsoleService -> pharmacyCentral.data.typesense "Collections and document counts" {
+    technology "HTTP"
   }
 }

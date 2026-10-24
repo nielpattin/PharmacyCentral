@@ -74,7 +74,7 @@ two things in 1.60.0:
 | `eventFlow` | Who publishes on `pharmacy.events`, and who consumes what. |
 | `aiFeatures` | The three AI features, their owner and their provider. |
 | `securityModel` | The trust boundary: the session, the roles, the site scope, the CSRF. |
-| `identityDetail`, `catalogDetail`, `searchDetail`, `inventoryDetail`, `salesDetail`, `paymentDetail`, `operationsDetail`, `chatbotDetail` | The modules of a service and the services it depends on. |
+| `identityDetail`, `catalogDetail`, `searchDetail`, `inventoryDetail`, `salesDetail`, `paymentDetail`, `operationsDetail`, `opsConsoleDetail`, `chatbotDetail` | The modules of a service and the services it depends on. |
 | `checkoutFlow` | From the cart to the paid invoice. |
 | `prescriptionIntake` | From the photo of a prescription to the consultation. |
 | `chatbotToolCalling` | The Jev gate and the three model calls of the shopping assistant. |

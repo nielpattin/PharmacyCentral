@@ -247,6 +247,23 @@ Only a Platform Admin may call these routes: `403` for any other signed-in accou
 
 Saving the product search settings also starts a background reindex that creates embeddings for existing products. A change of model embeds them again. The `PUT` does not wait for the reindex, and it does not fail if the reindex cannot start. Until the reindex finishes, search matches keywords only. When the provider fails during a reindex (quota, timeout, a bad answer), the changed products are still indexed for keywords, and the service tries again after 30 seconds, doubling the wait up to 15 minutes, until every product has its vector.
 
+## System overview
+
+All routes below need a Platform Admin: `401` without a session, `403` for any other account. They are read only and answer `Cache-Control: no-store`. Errors are problem JSON `{ title, status, code }`.
+
+`GET /api/system/overview` answers `{ generatedAt, services, load, queues, searchIndex, links }`. Each of `services`, `load`, `queues` and `searchIndex` is `{ "status": "ok", "data" }` or `{ "status": "unavailable", "error" }`, so one source being down does not fail the request. `links` is `[{ label, url }]` from the configured dashboards; the Grafana entry drives the Grafana card.
+
+- `services[]`: `name`, `status` and `httpStatus`, `latencyMs` (from `/health/ready`), `liveStatus` and `liveHttpStatus` (from `/health/live`), `version`, `instances`, `uptimePercent24h`. The last three are `null` when Prometheus has nothing.
+- `load[]`: `name`, `errorRatio` (0 to 1, 5xx over all requests in the last 5 minutes), `p95Seconds`, `outboxOldestSeconds`, `cpuCores`, `memoryBytes`, `eventLoopLagSeconds`, `dbPoolUsed`, `dbPoolMax`. Services without a database have `null` pool fields.
+- `queues[]`: `name`, `ready`, `unacknowledged`, `consumers`, `deadLetter`.
+- `searchIndex[]`: `name`, `documents`.
+
+`GET /api/system/metrics/summary?windowMinutes=15|60|360|1440` answers `{ generatedAt, from, to, stepSeconds, services }`, where `services` maps each configured service to `{ availability }`: a list of `[unixSeconds, ratio | null]` points, the average of the probe gauge per step. The step is 15 s for 15 minutes and grows with the window (60 steps at most).
+
+`GET /api/system/metrics/range?service=<name>&windowMinutes=15|60|360|1440` answers `{ generatedAt, service, from, to, stepSeconds, series }`. `service` is a configured service name, or `all` for the sum of the configured services. `series` holds `cpuCores`, `memoryBytes` and `eventLoopLagSeconds`, each a list of `[unixSeconds, value | null]` on one grid. The step is at least 60 s.
+
+Both metric reads answer `400 invalid_request` for an unknown service or an unsupported window, and `502 prometheus_unavailable` when Prometheus does not answer.
+
 ## Query projections
 
 - `GET /api/dashboard/summary`

@@ -12,6 +12,7 @@ Pharmacy Central is a Node.js 24 pharmacy platform split into an Express 5 micro
 - `apps/sales-service`: guest and customer carts, orders, prescriptions, counter transactions, delivery calculation, and order events.
 - `apps/payment-service`: provider-neutral invoices, QR attempts, cash payments, SePay webhooks, refunds, and reconciliation.
 - `apps/operations-query-service`: RabbitMQ-fed dashboard, finance, reporting, and audit projections.
+- `apps/ops-console-service`: read-only backend of the staff-web System page (Platform Admin only). It reads service health, Prometheus, the RabbitMQ management API and Typesense. It owns no database.
 - `apps/customer-web` and `apps/staff-web`: independently deployable React/Vite applications.
 - `packages/`: only stable technical packages and versioned transport contracts.
 

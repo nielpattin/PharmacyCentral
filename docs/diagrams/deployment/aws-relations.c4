@@ -40,6 +40,24 @@ deployment {
   aws.edge.alb -> aws.compute.ecs.chatbotTask "route /api/chatbot" {
     technology "HTTP"
   }
+  aws.edge.alb -> aws.compute.ecs.opsConsoleTask "route /api/system" {
+    technology "HTTP"
+  }
+  aws.compute.ecs.opsConsoleTask -> aws.managedData.rabbitManaged "Queues, management API" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.opsConsoleTask -> aws.managedData.typesenseManaged "Collections" {
+    technology "HTTP"
+  }
+  aws.compute.ecs.otelCollectorTask -> aws.managedData.prometheusManaged "Metrics, remote write with SigV4" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.otelCollectorTask -> aws.managedData.xray "Traces" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.otelCollectorTask -> aws.managedData.cloudwatch "Logs" {
+    technology "HTTPS"
+  }
 
   aws.compute.ecs.identityTask -> aws.external.googleNode "Google sign-in" {
     technology "HTTPS"

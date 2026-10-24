@@ -30,6 +30,18 @@ deployment {
   local.edge.gateway -> local.apps.chatbotTask "route /api/chatbot" {
     technology "HTTP"
   }
+  local.edge.gateway -> local.apps.opsConsoleTask "route /api/system" {
+    technology "HTTP"
+  }
+  local.apps.opsConsoleTask -> local.infra.prometheusNode "PromQL instant queries" {
+    technology "HTTP"
+  }
+  local.apps.opsConsoleTask -> local.infra.rabbitNode "Queues, management API" {
+    technology "HTTP"
+  }
+  local.apps.opsConsoleTask -> local.infra.typesenseNode "Collections" {
+    technology "HTTP"
+  }
 
   local.apps.identityTask -> local.external.googleNode "Google sign-in" {
     technology "HTTPS"

@@ -1,0 +1,9 @@
+model {
+  extend pharmacyCentral.services {
+    opsConsoleService = service "ops-console-service" {
+      technology "Express 5"
+      summary "The System page of staff-web, for Platform Admin only. It reads the health of every service, the metrics the page charts from Prometheus, the queues from RabbitMQ and the search index from Typesense. Read only, no database. Traces, logs and RED live in Grafana, not here."
+      metadata { port "3010"; package "@pharmacy/ops-console-service" }
+    }
+  }
+}
