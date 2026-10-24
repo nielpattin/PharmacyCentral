@@ -30,6 +30,21 @@ processors:
       span:
         - IsMatch(attributes["url.path"], "^/health")
 
+  # Keep only this system's telemetry. Every backend service is named <name>-service. Anything else that points at this
+  # collector (a tool or agent that inherited OTEL_EXPORTER_OTLP_ENDPOINT from .env) is dropped. Resources with no
+  # service.name, such as the RabbitMQ queue metrics, pass through.
+  filter/foreign_telemetry:
+    error_mode: ignore
+    traces:
+      span:
+        - 'resource.attributes["service.name"] != nil and not IsMatch(resource.attributes["service.name"], "-service$")'
+    metrics:
+      metric:
+        - 'resource.attributes["service.name"] != nil and not IsMatch(resource.attributes["service.name"], "-service$")'
+    logs:
+      log_record:
+        - 'resource.attributes["service.name"] != nil and not IsMatch(resource.attributes["service.name"], "-service$")'
+
 exporters:
   debug:
     verbosity: basic
@@ -60,17 +75,17 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
+      processors: [filter/foreign_telemetry, batch]
       exporters: [debug, otlp_http/tempo, span_metrics]
     traces/service_graph:
       receivers: [otlp]
-      processors: [filter/health_probes, batch]
+      processors: [filter/foreign_telemetry, filter/health_probes, batch]
       exporters: [service_graph]
     metrics:
       receivers: [otlp, rabbitmq, span_metrics, service_graph]
-      processors: [transform/rabbitmq_queue, batch]
+      processors: [filter/foreign_telemetry, transform/rabbitmq_queue, batch]
       exporters: [debug, otlp_http/prometheus]
     logs:
       receivers: [otlp]
-      processors: [batch]
+      processors: [filter/foreign_telemetry, batch]
       exporters: [debug, otlp_http/loki]
