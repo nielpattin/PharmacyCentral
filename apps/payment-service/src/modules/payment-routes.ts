@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { z } from "zod";
 
-import { createInvoiceRequestSchema } from "../contracts/payment.ts";
+import { createInvoiceRequestSchema, invoiceListQuerySchema } from "../contracts/payment.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 
 import { InvoiceRefusal, priceInvoiceRequest, type PayableOrder } from "./invoice-pricing.ts";
+import { decodePageCursor, encodePageCursor } from "./page-cursor.ts";
 import { PaymentRepository } from "./payment-repository.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
@@ -119,9 +120,19 @@ export const createPaymentRouter = (
 
   router.get("/payments/invoices", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const parsed = invoiceListQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalid(response);
+    const { status, q, limit, cursor: rawCursor } = parsed.data;
+    const cursor = rawCursor === undefined ? undefined : decodePageCursor(rawCursor);
+    if (rawCursor !== undefined && cursor === undefined) return invalidCursor(response);
+    // A cursor with no limit still pages, at the default size; no parameter at all keeps the whole-list answer.
+    const pageSize = limit ?? (rawCursor === undefined ? undefined : 100);
     const customerId = employee(request) ? undefined : actor(request);
     try {
-      return response.json(await repository.listInvoices(customerId));
+      const page = await repository.listInvoices({ customerId, status, q, limit: pageSize, cursor });
+      // The body stays a plain array; the cursor of the next page travels in a header.
+      if (page.next) response.set("X-Next-Cursor", encodePageCursor(page.next));
+      return response.json(page.rows);
     } catch (error) {
       return next(error);
     }
@@ -330,3 +341,5 @@ const unauthorized = (response: import("express").Response) =>
   response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
 const invalid = (response: import("express").Response) =>
   response.status(400).json({ title: "Invalid payment request", status: 400, code: "invalid_request" });
+const invalidCursor = (response: Response) =>
+  response.status(400).json({ title: "Invalid page cursor", status: 400, code: "invalid_cursor" });

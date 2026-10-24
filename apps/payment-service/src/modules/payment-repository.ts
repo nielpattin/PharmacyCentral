@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 
 import type { PaymentDatabase } from "../shared/infrastructure/database.ts";
+import type { PageCursor } from "./page-cursor.ts";
 import {
   paymentAttempts,
   paymentInvoiceLines,
@@ -12,6 +13,34 @@ import {
 } from "./payments/infrastructure/schema.ts";
 
 export type InvoicePaymentMethod = "sepay_qr" | "cash_on_delivery" | "cash";
+export type InvoiceStatus = "Pending" | "Paid" | "Failed" | "Refunded" | "Cancelled";
+
+export type InvoiceListInput = {
+  customerId?: string | undefined;
+  status?: InvoiceStatus | undefined;
+  /** Case-insensitive substring over the invoice number, the order id and the customer id. */
+  q?: string | undefined;
+  /** Undefined answers the whole list; a number answers one keyset page of that many invoices. */
+  limit?: number | undefined;
+  cursor?: PageCursor | undefined;
+};
+
+export type InvoiceListPage<Row> = { rows: Row[]; next: PageCursor | undefined };
+
+/** The sort value of a row as UTC text with microseconds, so a cursor built from it compares exactly. */
+const sortAtSql = sql<string>`to_char(${paymentInvoices.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
+/** Escapes LIKE wildcards so a typed `%` or `_` matches itself. Postgres ILIKE uses backslash as its escape. */
+const likePattern = (text: string): string => `%${text.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+
+const invoiceTextMatch = (text: string): SQL => {
+  const pattern = likePattern(text);
+  return or(
+    ilike(paymentInvoices.paymentCode, pattern),
+    sql`${paymentInvoices.orderId}::text ilike ${pattern}`,
+    sql`${paymentInvoices.customerId}::text ilike ${pattern}`,
+  ) as SQL;
+};
 
 export class PaymentRepository {
   public constructor(private readonly database: PaymentDatabase) {}
@@ -111,12 +140,32 @@ export class PaymentRepository {
     return invoice ? this.withInvoiceDetails(this.database.db, invoice) : undefined;
   }
 
-  public async listInvoices(customerId?: string) {
-    return this.database.db
-      .select()
+  /**
+   * Newest first by `(createdAt, id)`. Without a limit the answer is the whole filtered list. With a limit it is one
+   * keyset page: `limit + 1` rows are read so the page knows whether another row follows.
+   */
+  public async listInvoices(input: InvoiceListInput): Promise<InvoiceListPage<typeof paymentInvoices.$inferSelect>> {
+    const conditions = [
+      input.customerId ? eq(paymentInvoices.customerId, input.customerId) : undefined,
+      input.status ? eq(paymentInvoices.status, input.status) : undefined,
+      input.q ? invoiceTextMatch(input.q) : undefined,
+      input.cursor
+        ? sql`(${paymentInvoices.createdAt}, ${paymentInvoices.id}) < (${input.cursor.sortAt}::timestamptz, ${input.cursor.id}::uuid)`
+        : undefined,
+    ].filter((condition): condition is SQL => condition !== undefined);
+    const base = this.database.db
+      .select({ ...getTableColumns(paymentInvoices), sortAt: sortAtSql })
       .from(paymentInvoices)
-      .where(customerId ? eq(paymentInvoices.customerId, customerId) : undefined)
-      .orderBy(desc(paymentInvoices.createdAt));
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(paymentInvoices.createdAt), desc(paymentInvoices.id));
+    const fetched = input.limit === undefined ? await base : await base.limit(input.limit + 1);
+    const visible = input.limit === undefined ? fetched : fetched.slice(0, input.limit);
+    const last = visible.at(-1);
+    const hasMore = input.limit !== undefined && fetched.length > input.limit;
+    return {
+      rows: visible.map(({ sortAt: _sortAt, ...invoice }) => invoice),
+      next: hasMore && last ? { sortAt: last.sortAt, id: last.id } : undefined,
+    };
   }
 
   public async markCashPaid(id: string, actorId?: string) {
@@ -344,6 +393,7 @@ export class PaymentRepository {
 }
 
 const roundMoney = (value: number): number => Math.round(value * 100) / 100;
+
 const createPaymentInstruction = (paymentCode: string, amount: number) => {
   const bank = process.env.PHARMACY_PAYMENT_SEPAY_BANK;
   if (!bank)

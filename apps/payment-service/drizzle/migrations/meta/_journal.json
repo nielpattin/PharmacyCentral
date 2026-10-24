@@ -50,6 +50,13 @@
       "when": 1792764855255,
       "tag": "0006_line_fk_index",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792810000000,
+      "tag": "0007_invoice_list_keyset_index",
+      "breakpoints": true
     }
   ]
 }

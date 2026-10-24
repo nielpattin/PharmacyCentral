@@ -28,6 +28,32 @@ export const createInvoiceRequestSchema = z.object({
 
 export const paymentStatusSchema = z.enum(["pending", "paid", "failed", "refunded", "cancelled"]);
 
+/** Largest page `GET /payments/invoices` answers; a larger `limit` is clamped to it. */
+export const invoiceListMaxLimit = 500;
+
+/**
+ * Query of `GET /payments/invoices`. With no `limit` and no `cursor` the answer is the whole list, as before. A `limit`
+ * (default 100 when only a `cursor` is sent) answers one page and `X-Next-Cursor` names the next one.
+ * `status` matches the stored invoice status exactly. `q` is a case-insensitive substring over the invoice number
+ * (`paymentCode`), the `orderId` and the `customerId`, as stored.
+ */
+export const invoiceListQuerySchema = z.object({
+  status: z.enum(["Pending", "Paid", "Failed", "Refunded", "Cancelled"]).optional(),
+  q: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .transform((value) => Math.min(value, invoiceListMaxLimit))
+    .optional(),
+  cursor: z.string().min(1).max(512).optional(),
+});
+
 export const paymentStatusResponseSchema = z.object({
   invoiceId: z.string().uuid(),
   status: paymentStatusSchema,
@@ -40,3 +66,4 @@ export type InvoiceLine = z.infer<typeof invoiceLineSchema>;
 export type CreateInvoiceRequest = z.infer<typeof createInvoiceRequestSchema>;
 export type PaymentStatus = z.infer<typeof paymentStatusSchema>;
 export type PaymentStatusResponse = z.infer<typeof paymentStatusResponseSchema>;
+export type InvoiceListQuery = z.infer<typeof invoiceListQuerySchema>;

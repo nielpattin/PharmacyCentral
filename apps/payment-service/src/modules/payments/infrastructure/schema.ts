@@ -22,6 +22,7 @@ export const paymentInvoices = pgTable(
     index("payment_invoices_customer_status_idx").on(table.customerId, table.status),
     index("payment_invoices_order_idx").on(table.orderId),
     index("payment_invoices_prescription_idx").on(table.prescriptionId),
+    index("payment_invoices_created_id_idx").on(table.createdAt, table.id),
   ],
 );
 
