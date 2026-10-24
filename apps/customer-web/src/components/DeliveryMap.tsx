@@ -1,10 +1,11 @@
 import "@vietmap/vietmap-gl-js/dist/vietmap-gl.css";
 
 import * as vietmapgl from "@vietmap/vietmap-gl-js/dist/vietmap-gl.js";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import { useMountEffect } from "../hooks/useMountEffect.ts";
 import { deliveryView } from "./delivery-view.ts";
+import { MapUnavailable, webglSupported } from "./map-support.tsx";
 import { VIETMAP_STYLE_URL } from "./vietmap-style.ts";
 
 type Point = { latitude: number; longitude: number };
@@ -23,14 +24,21 @@ export const DeliveryMap = ({
   onDestinationChange,
 }: DeliveryMapProps): React.JSX.Element => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [unavailable, setUnavailable] = useState(() => !webglSupported());
   useMountEffect(() => {
     if (!containerRef.current) return;
-    const map = new vietmapgl.Map({
-      container: containerRef.current,
-      style: VIETMAP_STYLE_URL,
-      center: [store.longitude, store.latitude],
-      zoom: 11,
-    });
+    let map: vietmapgl.Map;
+    try {
+      map = new vietmapgl.Map({
+        container: containerRef.current,
+        style: VIETMAP_STYLE_URL,
+        center: [store.longitude, store.latitude],
+        zoom: 11,
+      });
+    } catch {
+      setUnavailable(true);
+      return;
+    }
     const storeMarker = new vietmapgl.Marker({ color: "#1769aa" })
       .setLngLat([store.longitude, store.latitude])
       .addTo(map);
@@ -66,6 +74,7 @@ export const DeliveryMap = ({
       map.remove();
     };
   });
+  if (unavailable) return <MapUnavailable minHeight={360} />;
   return (
     <div
       ref={containerRef}

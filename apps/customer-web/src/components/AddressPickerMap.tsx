@@ -1,9 +1,10 @@
 import "@vietmap/vietmap-gl-js/dist/vietmap-gl.css";
 
 import * as vietmapgl from "@vietmap/vietmap-gl-js/dist/vietmap-gl.js";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import { useMountEffect } from "../hooks/useMountEffect.ts";
+import { MapUnavailable, webglSupported } from "./map-support.tsx";
 import { VIETMAP_STYLE_URL } from "./vietmap-style.ts";
 
 export type Point = { latitude: number; longitude: number };
@@ -36,14 +37,21 @@ export const AddressPickerMap = ({
   resolving,
 }: AddressPickerMapProps): React.JSX.Element => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [unavailable, setUnavailable] = useState(() => !webglSupported());
   useMountEffect(() => {
     if (!containerRef.current) return;
-    const map = new vietmapgl.Map({
-      container: containerRef.current,
-      style: VIETMAP_STYLE_URL,
-      center: [point.longitude, point.latitude],
-      zoom: 16,
-    });
+    let map: vietmapgl.Map;
+    try {
+      map = new vietmapgl.Map({
+        container: containerRef.current,
+        style: VIETMAP_STYLE_URL,
+        center: [point.longitude, point.latitude],
+        zoom: 16,
+      });
+    } catch {
+      setUnavailable(true);
+      return;
+    }
     const pin = new vietmapgl.Marker({ color: "#c62828", draggable: true })
       .setLngLat([point.longitude, point.latitude])
       .addTo(map);
@@ -59,11 +67,15 @@ export const AddressPickerMap = ({
   });
   return (
     <div className="overflow-hidden rounded-lg border border-line">
-      <div
-        ref={containerRef}
-        aria-label="Bản đồ xác nhận điểm giao. Kéo điểm đỏ đến đúng cổng, hẻm hoặc lối vào."
-        style={{ minHeight: 300, width: "100%" }}
-      />
+      {unavailable ? (
+        <MapUnavailable minHeight={300} />
+      ) : (
+        <div
+          ref={containerRef}
+          aria-label="Bản đồ xác nhận điểm giao. Kéo điểm đỏ đến đúng cổng, hẻm hoặc lối vào."
+          style={{ minHeight: 300, width: "100%" }}
+        />
+      )}
       <p className="border-t border-line bg-surface-soft px-3.5 py-2 text-xs text-muted">
         Kéo điểm đỏ về đúng cổng, hẻm hoặc lối vào — phí giao được tính theo đúng vị trí này.
         {resolving ? (
