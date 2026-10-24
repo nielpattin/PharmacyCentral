@@ -49,6 +49,8 @@ Admin routes require a signed-in account with the `Platform Admin` role. A reque
 
 `GET /api/products` is served by `search-service`, a Go service that reads only the Typesense product index. Its path, query parameters, cursor, `X-Next-Cursor` header, product objects and `400` problem body are the same as before. When the index is unavailable, the request is passed on to `catalog-service`, which answers it from PostgreSQL. Every other `/api/products` route is served by `catalog-service`.
 
+`GET /api/products/count` is served by `catalog-service` and answers `{ "count": n }`: the active products the product list shows, under the same optional `search`, `category` and `prescriptionRequired` filters. It is a count of the catalog itself, not of the search index.
+
 - `GET /api/stores`, `GET /api/stores/nearest`
 - `GET /api/pricing/active`
 - `GET /api/carts`
@@ -72,6 +74,8 @@ Admin routes require a signed-in account with the `Platform Admin` role. A reque
 `POST /api/orders` accepts product and unit IDs, quantity, selected store, and pickup or delivery choice. `sales-service` recalculates active prices and delivery server-side. Delivery snapshots contain the provider-resolved address, separate customer note, road distance, duration, fee, and GeoJSON route.
 
 `GET /api/orders` answers the signed-in shopper's own orders. A staff session answers every order, narrowed by `status`, `paymentStatus`, and `siteId` when given. `GET /api/orders/{id}` answers `404` for an order that belongs to another customer.
+
+`GET /api/orders` takes `status`, `paymentStatus`, `siteId`, `limit` (default 100, at most 500), `cursor`, and `q`. The body is the plain array of one page, newest first. `q` is a case-insensitive substring match over the order id only: sales-service stores no customer name, phone, or order number, and those live with identity-service. When another page follows, the answer carries its cursor in the `X-Next-Cursor` header; send it back as `cursor` with the same other parameters. The last page has no header. A cursor is opaque, and a malformed one answers `400 invalid_cursor` (problem JSON).
 
 `POST /api/orders/{id}/transition` takes `{ "status" }`, one of `Confirmed`, `Preparing`, `Ready`, `Delivering`, `Completed`, or `Cancelled`.
 
@@ -102,9 +106,12 @@ A signed-in customer may send a prescription consultation to the pharmacy. Every
 
 A consultation whose site cannot be verified answers `503 catalog_unavailable`, and nothing is written.
 
+`GET /api/prescriptions/consultations` takes `status`, `limit` (1 to 200, default 50), `cursor`, and `q`, and `siteId` for staff only. The body is the plain array of one page, newest first. `q` is a case-insensitive substring match over the patient's name and the prescription code, as stored in the consultation. When another page follows, the answer carries its cursor in the `X-Next-Cursor` header, and the last page has none. A malformed cursor answers `400 invalid_cursor`.
+
 ## Staff sales and inventory
 
 - `GET /api/prescriptions`
+- `GET /api/prescriptions/count`
 - `POST /api/prescriptions`
 - `GET /api/prescriptions/{id}`
 - `POST /api/prescriptions/{id}/cancel`
@@ -115,6 +122,7 @@ A consultation whose site cannot be verified answers `503 catalog_unavailable`, 
 - `POST /api/inventory/batches`
 - `POST /api/inventory/batches/{id}/quality` takes `{ "decision": "release" | "reject", "notes"? }`.
 - `GET /api/inventory/adjustments`
+- `GET /api/inventory/adjustments/count`
 - `POST /api/inventory/adjustments`
 - `POST /api/inventory/adjustments/{id}/approve`
 - `POST /api/inventory/adjustments/{id}/reject`
@@ -125,10 +133,12 @@ A consultation whose site cannot be verified answers `503 catalog_unavailable`, 
 - `POST /api/inventory/reservations`
 - `POST /api/inventory/reservations/{id}/release`
 - `GET /api/inventory/transfers`
+- `GET /api/inventory/transfers/count`
 - `POST /api/inventory/transfers`
 - `GET /api/inventory/transfers/{id}`
 - `POST /api/inventory/transfers/{id}/approve`, `ship`, `receive`, or `cancel`
 - `GET /api/inventory/stocktakes`
+- `GET /api/inventory/stocktakes/count`
 - `POST /api/inventory/stocktakes`
 - `GET /api/inventory/stocktakes/{id}`
 - `POST /api/inventory/stocktakes/{id}/post`
@@ -140,9 +150,24 @@ A consultation whose site cannot be verified answers `503 catalog_unavailable`, 
 - `POST /api/inventory/replenishment/{id}/approve`, `reject`, `cancel`, or `fulfill`
 - `POST /api/inventory/imports/opening-balances`
 
+Inventory lists page by cursor where they take `limit` and `cursor`. The next page's cursor travels in the `X-Next-Cursor` header, present only while another page follows. A malformed cursor answers `400 invalid_cursor`. An out-of-range `limit` is clamped to its range; a non-numeric one takes the default.
+
+- `transfers`, `adjustments`, `stocktakes`, and `replenishment` take `status` (comma-separated, such as `status=PendingApproval,Draft`), `limit` (1 to 500, default 100), `cursor`, and `q`. They answer newest first by creation time, with the id breaking ties. `transfers` answered oldest first before this change. `q` is a case-insensitive substring match: the transfer number on transfers; the reason, notes, or batch number on adjustments; the notes or a line's batch number on stocktakes and replenishment requests.
+- `movements` takes `productId`, `productBatchId`, `storageLocationId`, `from`, `to` (ISO 8601 timestamps; both bounds are inclusive on `occurredAt`), `limit` (1 to 500, default 500), and `cursor`. It answers newest first by `(occurredAt, id)`.
+- `balances` and `batches` answer every row, in expiry order, when neither `limit` nor `cursor` is sent, as before. With `limit` (1 to 500, default 100) or `cursor` they page in the same order, ties broken by id. `q` matches the batch number. Balances carry no SKU locally (the catalog owns it), so SKU search is not offered here.
+- `returns` answers every row, newest first, when neither `limit` nor `cursor` is sent, as before. With `limit` or `cursor` it pages.
+
+`GET /api/inventory/transfers/count`, `GET /api/inventory/adjustments/count`, `GET /api/inventory/stocktakes/count`, and `GET /api/procurement/goods-receipts/count` answer `{ "count": n }` from `COUNT(*)`, with no cap. They take the same site scope, `status`, `excludeStatus` (where the list has a status), and `q` as their list, so a count answers the list it sits beside.
+
 `POST /api/inventory/reservations/{id}/consume` and `POST /api/inventory/dispenses` accept only the system actor that `sales-service` sends. A browser request answers `403 forbidden`. Stock leaves only when the sale that records it is handed over.
 
 Prescription creation reserves FEFO stock through `inventory-service`. A reservation that cannot be met answers `409 insufficient_stock` from inventory. Cancellation releases the reservation. Dispensing consumes the reservation and records the prescription status transition.
+
+`GET /api/prescriptions` takes `status`, `limit` (default 100, at most 500), `cursor`, and `q`. It answers the plain array of one page, newest first, and each prescription carries its `lines`. Staff see the prescriptions of their own sites; a shopper sees only the records linked to their account. `q` is a case-insensitive substring match over the prescription number, the patient's name, and the patient's phone. When another page follows, the answer carries its cursor in the `X-Next-Cursor` header, and the last page has none. A malformed cursor answers `400 invalid_cursor`.
+
+`GET /api/prescriptions/count` answers `{ "count" }`, the number of prescriptions the same filters select: `status` (one state), the caller's site scope, and `excludeStatus`, a comma-separated list of states to leave out, such as `Dispensed,Cancelled` for the open register. The states are `Draft`, `Pending`, `PartiallyDispensed`, `Dispensed`, and `Cancelled`; any other name answers `400 invalid_request`. It is a SQL `COUNT(*)`, so it never depends on a page size. Shoppers get `403`, and a request with no identity gets `401`. Service callers such as operations-query-service need no actor header of their own.
+
+`GET /api/counter-transactions` takes `paymentStatus` (the prescription state it maps to), `limit` (default 100, at most 500), `cursor`, and `q`, and answers the same paged prescription rows as `GET /api/prescriptions`. The route shares that query, so the answer is a list of prescriptions and not a list of counter receipts. Staff only; a shopper gets `403`.
 
 `POST /api/inventory/imports/opening-balances` takes `{ "schemaVersion", "balances" }` (at least one row, up to 25 MB) and is the import behind the staff-web Data import screen. The committed sample CSVs are in `data/import-samples/`.
 
@@ -153,10 +178,13 @@ Prescription creation reserves FEFO stock through `inventory-service`. A reserva
 - `GET /api/procurement/purchase-orders/{id}`
 - `POST /api/procurement/purchase-orders/{id}/action` takes `{ "action": "approve" | "cancel", "notes"? }`.
 - `GET /api/procurement/goods-receipts`
+- `GET /api/procurement/goods-receipts/count`
 - `POST /api/procurement/goods-receipts`
 - `GET /api/procurement/goods-receipts/{id}`
 
 Procurement routes check that the supplier, site, products, and storage location exist in `catalog-service` before a receipt is written.
+
+`GET /api/procurement/purchase-orders` takes `status`, `q`, `limit` (1 to 500, default 100), and `cursor`, and answers newest first by creation time. `q` matches the purchase order number only: the supplier's name lives in `catalog-service`, so it is not searched here. `GET /api/procurement/goods-receipts` takes `q` (receipt number), `limit`, and `cursor`, and answers newest first by `receivedAt`, with the id breaking ties. Goods receipts answered oldest first before this change.
 
 ## Catalog administration
 
@@ -165,14 +193,19 @@ Reads under the catalog's public prefixes (`/sites`, `/storage-locations`, `/pro
 - `GET|POST /api/sites`, `GET|PUT|DELETE /api/sites/{id}`
 - `GET|POST /api/storage-locations`, `GET|PUT|DELETE /api/storage-locations/{id}`
 - `GET|POST /api/suppliers`, `GET|PUT|DELETE /api/suppliers/{id}`
+
 - `POST /api/products/imports` takes the catalog import document (`schemaVersion` and the `sites` and product sections, defined in `apps/catalog-service/src/contracts/imports.ts`) and accepts up to 25 MB.
 - `PUT /api/products/{id}/image` takes the raw image bytes (`image/jpeg`, `image/png`, or `image/webp`, 5 MB at most). It answers `503` when media storage is not configured.
-- `GET /api/pricing/prices`
+- `GET /api/pricing/prices` takes `productId`, `status`, `q` (a case-insensitive match on the SKU or name of the price's product), `limit` (1 to 500, default 100), and `cursor`. Rows come newest first by `effectiveFrom`, ties broken by id. The body is the plain array of one page. When another page follows, `X-Next-Cursor` carries the cursor to send back as `cursor` with the same other parameters; the last page has no header. A malformed cursor answers `400` with `code: "invalid_cursor"`.
+- `GET /api/pricing/prices/count` takes `productId`, `status`, and `q` as the price list does, and answers `{ "count": n }`.
+- `GET /api/pricing/base-prices?day=YYYY-MM-DD` (default today, UTC) answers a plain array with one row per active product: `{ productId, productName, unitPrice }`. `unitPrice` is the price of one base unit effective on `day`, or `null` when no price qualifies. A price on a larger sale unit is divided by that unit's conversion factor; the base unit's own price wins over a larger unit's; then the latest effective date wins. Only site-less Published prices on a unit of their own product count. The answer is not paged, and an invalid `day` answers `400`.
 - `POST /api/pricing/prices`
 - `POST /api/pricing/prices/{id}/publish` or `archive`
 - `GET /api/pricing/active` answers the active price for a product unit at a site on a date.
-- `GET /api/stores`, `GET /api/stores/nearest`
+- `GET /api/stores` takes `limit` (1 to 100, default 50) and `cursor`. Stores come in code order, and `X-Next-Cursor` works as it does for the price list. `GET /api/stores/nearest` answers the nearest stores to a point.
 - `GET /api/availability`
+
+`GET /api/sites`, `GET /api/storage-locations`, and `GET /api/suppliers` take `q`, a case-insensitive match on the code or the name (up to 200 characters; `%` and `_` match literally). Without `q` they answer the whole list in code order, as before.
 
 There is no single-product create route. Products enter the catalog through `POST /api/products/imports`, and `pnpm run dev:data` uploads the sample images before it imports `products.csv`, so the `imageUrl` keys resolve. `data/` is never served by a web app or baked into a container image.
 
@@ -212,6 +245,8 @@ After an approval, an edit of an approved group, or a delete of an approved grou
 - `POST /api/payments/sepay/webhook`
 
 Payment invoices snapshot line prices. `POST /api/payments/prescriptions/{prescriptionId}` builds a `sepay_qr` invoice from a prescription's lines and returns the existing invoice when one already exists. A shopper reads only their own invoices, and staff read any invoice. `GET /api/payments/invoices/{id}/invoice` and `GET /api/payments/{id}/invoice` return the printable form. An invoice that is not visible to the caller answers `404`.
+
+`GET /api/payments/invoices` takes `status` (`Pending`, `Paid`, `Failed`, `Refunded` or `Cancelled`, matched exactly), `q` (a case-insensitive substring of the invoice number, the `orderId` or the `customerId`; `%` and `_` match themselves), `limit` (1 to 500; a larger value is clamped to 500) and `cursor`. Invoices are listed newest first by `(createdAt, id)`. With neither `limit` nor `cursor` the body is the whole filtered list, as before, and no header is sent. With a `limit`, or with a `cursor` alone (default page size 100), the body is one page: when another page follows, `X-Next-Cursor` carries its cursor, and the last page has no header. Send the cursor back as `cursor` with the same other parameters. A malformed or tampered cursor answers `400` with `code: "invalid_cursor"`.
 
 QR attempts use provider-neutral invoice data and configured SePay VietQR instructions. The SePay webhook is the only payment route that skips the gateway identity check. API Gateway passes its raw request bytes through unchanged. `payment-service` verifies `x-sepay-signature` (HMAC-SHA256 over `${x-sepay-timestamp}.${rawBody}`) and answers `401 invalid_signature` when verification fails. For every verified delivery it answers `200 {"success": true}`, because SePay records a delivery as successful only on that exact response. It accepts inbound transfers only, matches the payment code and amount, and deduplicates provider transaction IDs.
 
@@ -274,6 +309,14 @@ Both metric reads answer `400 invalid_request` for an unknown service or an unsu
 `operations-query-service` also serves `GET /api/operations/dashboard`, `GET /api/operations/audit`, and `GET /api/operations/finance`, which answer the same data as the dashboard, audit, and finance routes above.
 
 These endpoints read only `operations-query-service` projections. Projection lag is observable and does not change write-model truth.
+
+`GET /api/audit/logs` and `GET /api/reports` answer one keyset page each. Both list newest first: audit events by `(occurredAt, eventId)`, reports by `(occurredAt, id)`. Each takes `limit` (default 100, clamped to 500) and `cursor`, and the body is the plain array of that page. When another row follows, `X-Next-Cursor` carries the cursor; send it back as `cursor` with the same other parameters. The last page has no header. A malformed or tampered cursor answers `400` with `code: "invalid_cursor"`.
+
+`GET /api/audit/logs` also takes `q`, a case-insensitive substring over the action, the entity type, the entity id and the actor id (`%` and `_` match themselves). `siteId` narrows the audit list to one site; a site-scoped employee may name only their own sites and a request for another site answers `403`. Audit rows carry a `siteId` only when their source event names one. Order and status-change events do not, so those rows appear only when no site filter or site scope applies. `entityType`, `entityId`, `actorId` (or `userId`), `action`, `from` and `to` filter as before.
+
+`GET /api/dashboard/summary` and `GET /api/finance/summary` count from the owning services' `COUNT(*)` endpoints, never from a capped list: `totalProducts` from `GET /api/products/count`, `pendingTransferCount` from `GET /api/inventory/transfers/count?status=PendingApproval,Draft,Approved,InTransit`, `openPrescriptionCount` from `GET /api/prescriptions/count?excludeStatus=Dispensed,Cancelled`, `openStocktakeCount` from `GET /api/inventory/stocktakes/count?excludeStatus=Completed,Cancelled`, `pendingAdjustmentCount` from `GET /api/inventory/adjustments/count?status=Pending`, and `receiptCount` from `GET /api/procurement/goods-receipts/count`. A scoped reader's counts carry its site scope, and a scoped read that fails answers `5xx` rather than a fallback. A network-wide reader falls back to the projection counter only when the owning service does not answer; a reachable zero stays zero.
+
+Stock is valued from `GET /api/pricing/base-prices?day=` (one row per active product, its base-unit price that day, `null` when none qualifies). A stocked balance whose product has no such price is listed as `Missing price` and counted in `missingPriceCount`. `receiptQuantity` and `dispensedQuantity` are all-time quantities summed by inventory-service from the stock ledger (`GoodsReceipt` quantity in, `Dispense` quantity out), so they no longer sum prescription and receipt lines.
 
 ## Route groups without an endpoint
 

@@ -20,6 +20,32 @@ Screens are described as the code renders them. A sidebar item lists only for ro
 
 Customer accounts cannot sign in to Staff Web (it answers "Employee account required").
 
+### Working with lists
+
+Every list in Staff Web follows the same conventions.
+
+- **Search and filters** run on the server, so a match is found however many rows exist. The search text, status filter, sort and active tab are kept in the address bar: refresh the page, press Back or share the link and you land on the same view.
+- **Load more.** A list loads one page at a time, newest first. The footer reads "Showing N rows" and offers **Load more** while more rows exist.
+- **Table tools.** Choose **Density** for compact, standard or loose rows and **Columns** to hide columns. Both choices are remembered per table on this device. The header stays in view while you scroll, and the actions column stays pinned on the right.
+- **Export CSV** saves the rows currently loaded and the visible columns as a UTF-8 file that Excel opens correctly.
+- **Bulk actions.** Where it applies (for example approving adjustments or publishing prices), tick rows. A bar shows the count and the actions. The result is one summary message, for example "3 of 4 approved", with the failures listed.
+- **Saved views.** Use the **Views** menu to save the current search and filters under a name, apply them later, rename or delete them. Views are stored on this device for your account.
+- **Details drawer.** Open a row to view or edit it without leaving the list. Where history is recorded (orders, prescriptions, consultations, inventory batches) the drawer has a **History** tab.
+- **Confirmations.** Actions that change stock, money or approvals ask for confirmation. Irreversible ones (deleting a product, site, location or supplier, cancelling a purchase order, replacing or removing an AI key) ask you to type a code to confirm.
+- **Messages.** A short toast confirms a completed action and disappears after a few seconds. Errors stay longer and say what the service refused.
+- **Unsaved changes.** Leaving a form with unsaved input asks first. Long forms (product, purchase order, goods receipt, transfer, prescription) keep a draft on this device and offer **Restore draft** or **Discard** when you return. Passwords are never stored.
+
+| Key | Action |
+| --- | --- |
+| `/` | Focus the search box |
+| `n` | Open the create form of the page |
+| `Ctrl`/`Cmd` + `S` | Save the form you are editing |
+| `[` | Collapse or expand the sidebar |
+| `?` | Show the shortcuts of the current page |
+| `Esc` | Close the dialog or drawer |
+
+Shortcuts other than `Ctrl`/`Cmd` + `S` and `Esc` are ignored while you type in a field.
+
 ### Customer Web
 
 1. Open `http://localhost:5301/`.
