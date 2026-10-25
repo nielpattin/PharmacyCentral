@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { BusinessRuleError } from "../../../shared/business-rule-error.ts";
+
 import { transitionPrice, validatePriceWindow } from "./price-policy.ts";
 
 describe("catalog price policy", () => {
@@ -24,6 +26,6 @@ describe("catalog price policy", () => {
   it("allows only Draft to publish", () => {
     expect(transitionPrice("Draft", "publish")).toBe("Published");
     expect(transitionPrice("Published", "archive")).toBe("Archived");
-    expect(() => transitionPrice("Published", "publish")).toThrow();
+    expect(() => transitionPrice("Published", "publish")).toThrow(BusinessRuleError);
   });
 });

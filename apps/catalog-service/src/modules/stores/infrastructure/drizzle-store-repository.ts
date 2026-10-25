@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { BusinessRuleError } from "../../../shared/business-rule-error.ts";
 
 import {
   INGREDIENT_SIMILARITY_FLOOR,
@@ -761,12 +762,13 @@ export class DrizzleStoreRepository {
   }
 
   public async createPrice(input: typeof productPrices.$inferInsert): Promise<typeof productPrices.$inferSelect> {
-    if (input.siteId !== null && input.siteId !== undefined) throw new Error("Prices are global across pharmacies");
-    if (Number(input.unitPrice) <= 0) throw new Error("Unit price must be greater than zero");
+    if (input.siteId !== null && input.siteId !== undefined)
+      throw new BusinessRuleError("Prices are global across pharmacies");
+    if (Number(input.unitPrice) <= 0) throw new BusinessRuleError("Unit price must be greater than zero");
     const currency = input.currency ?? "VND";
-    if (currency.length !== 3) throw new Error("Currency must be a three-letter code");
+    if (currency.length !== 3) throw new BusinessRuleError("Currency must be a three-letter code");
     if (input.effectiveTo && input.effectiveTo < input.effectiveFrom)
-      throw new Error("Effective end date must not precede start date");
+      throw new BusinessRuleError("Effective end date must not precede start date");
     const [price] = await this.database.db
       .insert(productPrices)
       .values({ ...input, siteId: null, currency, status: "Draft" })
@@ -783,9 +785,10 @@ export class DrizzleStoreRepository {
   ): Promise<typeof productPrices.$inferSelect | undefined> {
     const current = await this.database.db.select().from(productPrices).where(eq(productPrices.id, id)).limit(1);
     if (!current[0]) return undefined;
-    if (action === "publish" && current[0].status !== "Draft") throw new Error("Only Draft prices can be published");
+    if (action === "publish" && current[0].status !== "Draft")
+      throw new BusinessRuleError("Only Draft prices can be published");
     if (action === "archive" && current[0].status === "Archived")
-      throw new Error("Archived prices cannot be archived again");
+      throw new BusinessRuleError("Archived prices cannot be archived again");
     if (action === "publish") {
       const overlap = await this.database.db
         .select({ id: productPrices.id })
@@ -801,7 +804,7 @@ export class DrizzleStoreRepository {
           ),
         )
         .limit(1);
-      if (overlap[0]) throw new Error("Published price windows must not overlap");
+      if (overlap[0]) throw new BusinessRuleError("Published price windows must not overlap");
     }
     const now = new Date();
     const [price] = await this.database.db

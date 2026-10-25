@@ -6,9 +6,14 @@ import { z } from "zod";
 
 import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware, matchesPathPrefix } from "./middleware/trusted-request.ts";
+import { BusinessRuleError } from "./shared/business-rule-error.ts";
 
 import { AvailabilityProjection } from "./modules/availability/application/availability-projection.ts";
 import { RabbitMqAvailabilityConsumer } from "./modules/availability/infrastructure/rabbitmq-availability-consumer.ts";
+import { createAuditMiddleware } from "./modules/audit/audit-middleware.ts";
+import { createAuditRecorder } from "./modules/audit/audit-recorder.ts";
+import { CATALOG_AUDIT_RULES } from "./modules/audit/audit-rules.ts";
+import { CatalogOutboxPublisher } from "./modules/outbox-publisher.ts";
 import { createCatalogImportRouter } from "./modules/catalog-import-routes.ts";
 import { CatalogImportService } from "./modules/catalog-import-service.ts";
 import { createCatalogRouter } from "./modules/catalog-routes.ts";
@@ -48,6 +53,8 @@ const requireEnv = (name: string): string => {
 
 const rabbitmqUrl = requireEnv("RABBITMQ_URL");
 const database = createCatalogDatabase();
+const outboxPublisher = database ? new CatalogOutboxPublisher(database, logger, rabbitmqUrl) : undefined;
+outboxPublisher?.start();
 const storeRepository = database ? new DrizzleStoreRepository(database) : undefined;
 const catalogImportService = database ? new CatalogImportService(database) : undefined;
 const mediaStore = ProductMediaStore.createFromEnvironment();
@@ -119,6 +126,7 @@ app.use(
       publicCatalogPaths.some((prefix) => matchesPathPrefix(request.path, prefix)),
   }),
 );
+if (database) app.use(createAuditMiddleware(CATALOG_AUDIT_RULES, createAuditRecorder(database, logger)));
 app.get("/health/live", (_request, response) => response.json({ status: "ok", service: serviceName }));
 app.get("/health/ready", (_request, response) => response.json({ status: "ok", service: serviceName }));
 const requestSearchSweep = (): void => void searchIndexer?.requestSweep();
@@ -155,13 +163,17 @@ app.use(
 );
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+  if (error instanceof BusinessRuleError) {
+    return response.status(409).json({ title: error.message, status: 409, code: "business_rule" });
+  }
   logger.error({ error }, "unhandled request error");
-  response.status(500).json({ title: "Internal Server Error", status: 500 });
+  return response.status(500).json({ title: "Internal Server Error", status: 500 });
 });
 
 const server = createServer(app);
 server.on("close", () => {
   void availabilityConsumer?.close();
+  void outboxPublisher?.close();
   void database?.pool.end();
 });
 const shutdown = (signal: string): void => {

@@ -16,6 +16,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
+import { currentTraceparent } from "./trace-context.ts";
 import type { SearchSynonymTerms } from "../../contracts/synonyms.ts";
 
 export const sites = pgTable(
@@ -175,6 +176,7 @@ export const outboxMessages = pgTable(
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     attempts: integer("attempts").notNull().default(0),
+    traceparent: varchar("traceparent", { length: 200 }).$type<string | null>().$defaultFn(currentTraceparent),
   },
   (table) => [index("outbox_pending_idx").on(table.publishedAt, table.occurredAt)],
 );
