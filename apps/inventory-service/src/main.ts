@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 
 import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware } from "./middleware/trusted-request.ts";
+import { BusinessRuleError } from "./shared/business-rule-error.ts";
 
 import { CatalogServiceReferenceResolver } from "./modules/catalog-reference-resolver.ts";
 import { ExpiryAvailabilitySweeper } from "./modules/expiry-availability-sweeper.ts";
@@ -12,6 +13,9 @@ import { createInventoryImportRouter } from "./modules/inventory-import-routes.t
 import { InventoryImportService } from "./modules/inventory-import-service.ts";
 import { createInventoryRouter } from "./modules/inventory-routes.ts";
 import { InventoryRepository } from "./modules/inventory-repository.ts";
+import { createAuditMiddleware } from "./modules/audit/audit-middleware.ts";
+import { createAuditRecorder } from "./modules/audit/audit-recorder.ts";
+import { INVENTORY_AUDIT_RULES } from "./modules/audit/audit-rules.ts";
 import { InventoryOutboxPublisher } from "./modules/outbox-publisher.ts";
 import { createProcurementRouter } from "./modules/procurement-routes.ts";
 import { ProcurementRepository } from "./modules/procurement-repository.ts";
@@ -79,6 +83,7 @@ app.use("/inventory/imports", express.json({ limit: "25mb" }));
 app.use(express.json({ limit: "1mb" }));
 // Inventory and procurement routes require a signed identity context minted by identity-service (/auth/context).
 app.use(createTrustedRequestMiddleware({ expectedAudience: serviceName }));
+if (database) app.use(createAuditMiddleware(INVENTORY_AUDIT_RULES, createAuditRecorder(database, logger)));
 app.get("/health/live", (_request, response) => response.json({ status: "ok", service: serviceName }));
 app.get("/health/ready", (_request, response) =>
   response.status(database ? 200 : 503).json({ status: database ? "ok" : "degraded", service: serviceName }),
@@ -88,8 +93,11 @@ app.use(createInventoryRouter(repository));
 app.use(createProcurementRouter(procurementRepository, { catalogServiceUrl }));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+  if (error instanceof BusinessRuleError) {
+    return response.status(409).json({ title: error.message, status: 409, code: "business_rule" });
+  }
   logger.error({ error }, "unhandled request error");
-  response.status(500).json({ title: "Internal Server Error", status: 500 });
+  return response.status(500).json({ title: "Internal Server Error", status: 500 });
 });
 
 const server = createServer(app);

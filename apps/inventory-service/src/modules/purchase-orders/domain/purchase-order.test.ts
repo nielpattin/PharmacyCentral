@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { BusinessRuleError } from "../../../shared/business-rule-error.ts";
+
 import { applyReceipt, transitionPurchaseOrder, type PurchaseOrder } from "./purchase-order.ts";
 
 const order = (status: PurchaseOrder["status"]): PurchaseOrder => ({
@@ -13,7 +15,8 @@ const order = (status: PurchaseOrder["status"]): PurchaseOrder => ({
 describe("procurement lifecycle", () => {
   it("approves only Draft orders and rejects invalid cancellation", () => {
     expect(transitionPurchaseOrder(order("Draft"), "approve")).toBe("Approved");
-    expect(() => transitionPurchaseOrder(order("Received"), "cancel")).toThrow();
+    // A rule violation is a conflict (409), not a fault (500), so it must be this error type.
+    expect(() => transitionPurchaseOrder(order("Received"), "cancel")).toThrow(BusinessRuleError);
   });
 
   it("moves orders through partial and complete receipt states", () => {

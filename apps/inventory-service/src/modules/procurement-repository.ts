@@ -1,5 +1,6 @@
 import { and, desc, eq, ilike, inArray, sql, type SQL } from "drizzle-orm";
 
+import { BusinessRuleError } from "../shared/business-rule-error.ts";
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import {
   goodsReceiptLines,
@@ -151,9 +152,9 @@ export class ProcurementRepository {
     const current = (await this.database.db.select().from(purchaseOrders).where(eq(purchaseOrders.id, id)).limit(1))[0];
     if (!current) return undefined;
     if (action === "approve" && current.status !== "Draft")
-      throw new Error("Only Draft purchase orders can be approved");
+      throw new BusinessRuleError("Only Draft purchase orders can be approved");
     if (action === "cancel" && ["Received", "Cancelled"].includes(current.status))
-      throw new Error("Purchase order cannot be cancelled in its current state");
+      throw new BusinessRuleError("Purchase order cannot be cancelled in its current state");
     const now = new Date();
     const [order] = await this.database.db
       .update(purchaseOrders)
@@ -204,7 +205,7 @@ export class ProcurementRepository {
           await transaction.select().from(purchaseOrders).where(eq(purchaseOrders.id, input.purchaseOrderId)).limit(1)
         )[0];
         if (!order || !["Approved", "PartiallyReceived"].includes(order.status))
-          throw new Error("Purchase order is not receivable");
+          throw new BusinessRuleError("Purchase order is not receivable");
         const orderedLines = await transaction
           .select()
           .from(purchaseOrderLines)
@@ -212,7 +213,7 @@ export class ProcurementRepository {
         for (const line of input.lines) {
           const orderLine = orderedLines.find((candidate) => candidate.productId === line.productId);
           if (!orderLine || orderLine.receivedQuantity + line.quantity > orderLine.orderedQuantity)
-            throw new Error("Receipt exceeds ordered quantity");
+            throw new BusinessRuleError("Receipt exceeds ordered quantity");
         }
       }
       const [receipt] = await transaction

@@ -126,11 +126,14 @@ export class InventoryOutboxPublisher {
 
   private async publishConfirmed(channel: ConfirmChannel, message: typeof outboxMessages.$inferSelect): Promise<void> {
     const { promise, resolve, reject } = Promise.withResolvers<void>();
+    const payload = JSON.parse(message.payload) as Record<string, unknown>;
     const envelope = {
       eventId: message.id,
       eventType: message.eventType,
       occurredAt: message.occurredAt.toISOString(),
-      payload: JSON.parse(message.payload) as Record<string, unknown>,
+      // An audit entry names the person who made the write; the other events are the system's own.
+      ...(typeof payload.actorId === "string" ? { actorId: payload.actorId } : {}),
+      payload,
     };
     // Parent the producer span on the request that wrote the row, not on the relay timer's context.
     withTraceparent(message.traceparent, () =>

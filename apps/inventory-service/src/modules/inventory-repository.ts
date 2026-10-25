@@ -914,7 +914,7 @@ export class InventoryRepository {
         const available = balance ? Number(balance.quantityOnHand) - Number(balance.quantityReserved) : 0;
         if (!balance || available < line.quantity)
           throw new StockDispenseError(
-            `Batch ${batch.batchNumber} has ${available} available at this location, ${line.quantity} were dispensed`,
+            `Batch ${batch.batchNumber} has ${available} available at this location, ${line.quantity} needed`,
           );
         const nextOnHand = Number(balance.quantityOnHand) - line.quantity;
         await transaction
