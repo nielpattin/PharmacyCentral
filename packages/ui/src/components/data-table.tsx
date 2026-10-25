@@ -84,6 +84,7 @@ const DEFAULT_LABELS = {
   bulkActions: "Bulk actions",
   exportCsv: "Export CSV",
   showingRows: "Showing {count} rows",
+  showingOneRow: "Showing 1 row",
   showingOfTotal: "Showing {count} of {total} rows",
   moreAvailable: "More available",
   loadMore: "Load more",
@@ -695,9 +696,11 @@ export const DataTable = <T,>({
   const serverFooter = paging ? (
     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
       <span aria-live="polite">
-        {paging.total !== undefined
-          ? fill(text("showingOfTotal"), { count: rows.length, total: paging.total })
-          : fill(text("showingRows"), { count: rows.length })}
+        {rows.length === 1 && (paging.total === undefined || paging.total === 1)
+          ? text("showingOneRow")
+          : paging.total !== undefined
+            ? fill(text("showingOfTotal"), { count: rows.length, total: paging.total })
+            : fill(text("showingRows"), { count: rows.length })}
       </span>
       <div className="flex items-center gap-2">
         {paging.hasMore ? <span className="text-xs font-medium text-primary-dark">{text("moreAvailable")}</span> : null}

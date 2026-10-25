@@ -2,20 +2,19 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "../cn.ts";
 
-export type StatusTone = "success" | "warning" | "danger" | "info" | "neutral" | "accent";
+export type StatusTone = "success" | "warning" | "danger" | "info" | "neutral";
 
-// Every tone maps to an existing theme token. `accent` uses the chart-3 identity colour, never a raw hex value.
+// Every tone maps to a semantic theme token and keeps at least 4.5:1 for its 12px text. Chart colours never signal status.
 const statusBadgeVariants = cva(
-  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap",
+  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap",
   {
     variants: {
       tone: {
         success: "bg-success-soft text-success",
         warning: "bg-warning-soft text-warning",
-        danger: "bg-danger-soft text-danger",
+        danger: "bg-danger-soft text-danger-ink",
         info: "bg-primary-soft text-primary-dark",
-        neutral: "bg-surface-soft text-muted ring-1 ring-line",
-        accent: "bg-chart-3/10 text-chart-3",
+        neutral: "bg-surface-soft text-muted",
       },
     },
     defaultVariants: { tone: "neutral" },
@@ -24,10 +23,28 @@ const statusBadgeVariants = cva(
 
 export type StatusBadgeProps = React.HTMLAttributes<HTMLSpanElement> & VariantProps<typeof statusBadgeVariants>;
 
-/** Status label. The text carries the meaning; the dot only reinforces the tone. */
+/** Status label. The text carries the meaning; the colour only marks the tone. */
 export const StatusBadge = ({ tone, className, children, ...props }: StatusBadgeProps): React.JSX.Element => (
   <span data-tone={tone ?? "neutral"} className={cn(statusBadgeVariants({ tone }), className)} {...props}>
-    <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
     {children}
   </span>
 );
+
+/**
+ * Status inside a list or table cell. Colour is kept for what needs a look (warning, danger, info); the settled
+ * states, `success` and `neutral`, are plain text so a column of mostly-done rows stays calm.
+ */
+export const StatusCell = ({ tone, className, children, ...props }: StatusBadgeProps): React.JSX.Element =>
+  tone === undefined || tone === "success" || tone === "neutral" ? (
+    <span
+      data-tone={tone ?? "neutral"}
+      className={cn("text-sm", tone === "success" ? "text-ink" : "text-muted", className)}
+      {...props}
+    >
+      {children}
+    </span>
+  ) : (
+    <StatusBadge tone={tone} className={className} {...props}>
+      {children}
+    </StatusBadge>
+  );

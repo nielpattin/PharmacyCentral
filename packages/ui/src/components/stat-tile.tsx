@@ -1,8 +1,7 @@
 import { cn } from "../cn.ts";
 import type { StatusTone } from "./status-badge.tsx";
 
-/** `accent` is left out: it borrows a chart identity colour, and chart colours must not signal status. */
-export type StatTileTone = Exclude<StatusTone, "accent">;
+export type StatTileTone = StatusTone;
 
 const TONE_EDGE: Record<StatTileTone, string> = {
   success: "bg-success",

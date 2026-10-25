@@ -29,6 +29,8 @@ export {
   toggleSelectionKey,
   type SelectionState,
 } from "./data-table/selection.ts";
+export { ActionMenu, type ActionMenuItem, type ActionMenuProps } from "./components/action-menu.tsx";
+export { CheckboxGroup, type CheckboxGroupProps, type CheckboxOption } from "./components/checkbox-group.tsx";
 export { Dialog } from "./components/dialog.tsx";
 export { Disclosure } from "./components/disclosure.tsx";
 export { Field } from "./components/field.tsx";
@@ -39,7 +41,7 @@ export { Select } from "./components/select.tsx";
 export { Sheet } from "./components/sheet.tsx";
 export { Skeleton } from "./components/skeleton.tsx";
 export { StatTile, type StatTileProps } from "./components/stat-tile.tsx";
-export { StatusBadge, type StatusBadgeProps, type StatusTone } from "./components/status-badge.tsx";
+export { StatusBadge, StatusCell, type StatusBadgeProps, type StatusTone } from "./components/status-badge.tsx";
 export { StatusDot } from "./components/status-dot.tsx";
 export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/table.tsx";
 export { ToastProvider, useToast, type ToastApi, type ToastLabels } from "./components/toast.tsx";
