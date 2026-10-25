@@ -88,7 +88,8 @@ export class OperationsRepository {
           .insert(auditEvents)
           .values({
             eventId: event.eventId,
-            actorId: firstUuid(event.actorId),
+            // The publisher of an audit event names the actor on the envelope; the older sales events carry it in the payload.
+            actorId: firstUuid(event.actorId) ?? firstUuid(event.payload.actorId),
             action,
             entityType,
             entityId,
@@ -119,17 +120,19 @@ export class OperationsRepository {
         firstUuid(event.payload.orderId) ??
         firstUuid(event.payload.productId) ??
         firstUuid(event.payload.prescriptionId);
-      await transaction
-        .insert(reportRows)
-        .values({
-          eventId: event.eventId,
-          reportType: event.eventType,
-          subjectId,
-          value: Number.isFinite(amount) ? String(amount) : "0",
-          payload: payloadJson,
-          occurredAt: eventDate,
-        })
-        .onConflictDoNothing();
+      // An audit event is a record of who did what, shown in the audit log; it is not a figure for a report.
+      if (!event.eventType.endsWith(".audit.v1"))
+        await transaction
+          .insert(reportRows)
+          .values({
+            eventId: event.eventId,
+            reportType: event.eventType,
+            subjectId,
+            value: Number.isFinite(amount) ? String(amount) : "0",
+            payload: payloadJson,
+            occurredAt: eventDate,
+          })
+          .onConflictDoNothing();
       return true;
     });
   }
@@ -190,19 +193,24 @@ export class OperationsRepository {
     // network-wide reader falls back to them only when the owning service did not answer its count.
     const counters: Record<string, number> = siteIds ? {} : Object.fromEntries(rows.map((row) => [row.key, row.value]));
     const recentRows = await this.database.db
-      .select({ eventId: auditEvents.eventId, eventType: auditEvents.action, occurredAt: auditEvents.occurredAt })
+      .select({
+        eventId: auditEvents.eventId,
+        action: auditEvents.action,
+        entityType: auditEvents.entityType,
+        entityId: auditEvents.entityId,
+        actorId: auditEvents.actorId,
+        siteId: auditEvents.siteId,
+        occurredAt: auditEvents.occurredAt,
+      })
       .from(auditEvents)
       .where(siteIds ? inArray(auditEvents.siteId, siteIds) : undefined)
       .orderBy(desc(auditEvents.occurredAt))
       .limit(10);
-    const recentActivity = recentRows.map((row) => ({
+    const recentActivity = recentRows.map(({ actorId, ...row }) => ({
       ...row,
       id: row.eventId,
-      action: row.eventType,
-      entityType: row.eventType,
-      entityId: null,
-      userId: null,
-      siteId: null,
+      eventType: row.action,
+      userId: actorId,
       summary: null,
       occurredAtUtc: row.occurredAt,
     }));
@@ -327,8 +335,11 @@ export class OperationsRepository {
     options: { limit?: number; cursor?: PageCursor } = {},
   ): Promise<KeysetPage<ReportRow>> {
     const limit = Math.min(Math.max(Math.floor(options.limit ?? DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE);
+    // A report type is an event type such as `sales.order.created.v1`; the start of one (`sales`) selects the family.
     const conditions = [
-      reportType ? eq(reportRows.reportType, reportType) : undefined,
+      reportType
+        ? ilike(reportRows.reportType, `${reportType.replace(/[\\%_]/g, (character) => `\\${character}`)}%`)
+        : undefined,
       options.cursor
         ? sql`(${reportRows.occurredAt}, ${reportRows.id}) < (${options.cursor.sortAt}::timestamptz, ${options.cursor.id}::uuid)`
         : undefined,

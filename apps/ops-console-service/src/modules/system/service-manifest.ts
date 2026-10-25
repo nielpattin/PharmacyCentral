@@ -35,7 +35,10 @@ const PAYMENT_EVENTS = [
   "payment.invoice.refunded.v1",
 ] as const;
 
-const INVENTORY_EVENTS = ["inventory.availability.changed.v1"] as const;
+const AVAILABILITY_EVENTS = ["inventory.availability.changed.v1"] as const;
+const INVENTORY_EVENTS = [...AVAILABILITY_EVENTS, "inventory.audit.v1"] as const;
+const IDENTITY_EVENTS = ["identity.audit.v1"] as const;
+const CATALOG_EVENTS = ["catalog.audit.v1"] as const;
 
 export const SERVICE_MANIFEST: readonly ServiceManifestEntry[] = [
   {
@@ -44,7 +47,7 @@ export const SERVICE_MANIFEST: readonly ServiceManifestEntry[] = [
     port: 3001,
     database: "identity_service",
     dependsOn: [],
-    events: { published: [], consumed: [] },
+    events: { published: IDENTITY_EVENTS, consumed: [] },
   },
   {
     name: "catalog-service",
@@ -52,7 +55,7 @@ export const SERVICE_MANIFEST: readonly ServiceManifestEntry[] = [
     port: 3002,
     database: "catalog_service",
     dependsOn: [],
-    events: { published: [], consumed: INVENTORY_EVENTS },
+    events: { published: CATALOG_EVENTS, consumed: AVAILABILITY_EVENTS },
   },
   {
     name: "search-service",
@@ -100,6 +103,9 @@ export const SERVICE_MANIFEST: readonly ServiceManifestEntry[] = [
     port: 3007,
     database: "operations_query_service",
     dependsOn: ["catalog-service", "inventory-service", "sales-service"],
-    events: { published: [], consumed: [...INVENTORY_EVENTS, ...SALES_EVENTS, ...PAYMENT_EVENTS] },
+    events: {
+      published: [],
+      consumed: [...IDENTITY_EVENTS, ...CATALOG_EVENTS, ...INVENTORY_EVENTS, ...SALES_EVENTS, ...PAYMENT_EVENTS],
+    },
   },
 ];

@@ -356,7 +356,7 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
       // The goods leave the shelf when the order is handed over: out for delivery, or collected at the store.
       if (parsed.data.status === "Delivering" || parsed.data.status === "Completed")
         await orderStock.consume(id.data.id);
-      const transitioned = await repository.transitionOrder(id.data.id, parsed.data.status);
+      const transitioned = await repository.transitionOrder(id.data.id, parsed.data.status, actor(request));
       if (parsed.data.status === "Cancelled") await orderStock.releaseQuietly(id.data.id);
       return response.json(transitioned);
     } catch (error) {

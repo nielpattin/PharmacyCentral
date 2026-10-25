@@ -227,6 +227,7 @@ export class PrescriptionConsultationRepository {
           entityId: updated.id,
           siteId: updated.siteId,
           answeredBy,
+          actorId: answeredBy,
         }),
       });
       return { kind: "answered", consultation: toConsultation(updated) };

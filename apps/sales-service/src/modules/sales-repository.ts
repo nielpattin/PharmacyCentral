@@ -232,6 +232,7 @@ export class SalesRepository {
         payload: JSON.stringify({
           orderId: order.id,
           customerId: order.customerId,
+          ...(order.customerId ? { actorId: order.customerId } : {}),
           selectedStoreId: order.selectedStoreId,
           fulfillmentType: order.fulfillmentType,
         }),
@@ -288,7 +289,8 @@ export class SalesRepository {
     };
   }
 
-  public async transitionOrder(id: string, next: OrderStatus) {
+  /** `actorId` is the member of staff or shopper who made the move; the sweepers and the payment webhook leave it out. */
+  public async transitionOrder(id: string, next: OrderStatus, actorId?: string) {
     const current = (await this.database.db.select().from(orders).where(eq(orders.id, id)).limit(1))[0];
     if (!current) return undefined;
     transitionOrder(current.status as OrderStatus, next);
@@ -298,7 +300,11 @@ export class SalesRepository {
       .where(eq(orders.id, id))
       .returning();
     if (order)
-      await this.appendEvent("sales.order.status-changed.v1", order.id, { orderId: order.id, status: order.status });
+      await this.appendEvent("sales.order.status-changed.v1", order.id, {
+        orderId: order.id,
+        status: order.status,
+        ...(actorId ? { actorId } : {}),
+      });
     return order;
   }
 
@@ -594,7 +600,11 @@ export class SalesRepository {
       await transaction.insert(outboxMessages).values({
         eventType: "sales.prescription.created.v1",
         aggregateId: prescription.id,
-        payload: JSON.stringify({ prescriptionId: prescription.id, siteId: prescription.siteId }),
+        payload: JSON.stringify({
+          prescriptionId: prescription.id,
+          siteId: prescription.siteId,
+          actorId: input.createdBy,
+        }),
       });
       const result = { ...prescription, lines };
       if (input.idempotencyKey)
@@ -717,6 +727,7 @@ export class SalesRepository {
       await this.appendEvent("sales.prescription.cancelled.v1", prescription.id, {
         prescriptionId: prescription.id,
         cancelledBy,
+        actorId: cancelledBy,
       });
     return prescription;
   }
@@ -814,7 +825,7 @@ export class SalesRepository {
       await transaction.insert(outboxMessages).values({
         eventType: "sales.prescription.dispensed.v1",
         aggregateId: id,
-        payload: JSON.stringify({ prescriptionId: id, dispensedBy, lineIds: [...requestedIds] }),
+        payload: JSON.stringify({ prescriptionId: id, dispensedBy, actorId: dispensedBy, lineIds: [...requestedIds] }),
       });
       const result = updated ? { ...updated, lines: refreshed } : undefined;
       if (result && idempotencyKey)

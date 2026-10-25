@@ -181,4 +181,11 @@ describe("OperationsRepository audit and report pages", () => {
     expect(third.rows.map((row) => row.id)).toStrictEqual([eventId(1)]);
     expect(third.next).toBeUndefined();
   });
+
+  it("treats a report type as the start of an event type, ignoring case and wildcards", async () => {
+    expect((await repository.report("PAYMENT.invoice")).rows).toHaveLength(4);
+    expect((await repository.report("payment.invoice.ref")).rows.map((row) => row.id)).toStrictEqual([eventId(3)]);
+    expect((await repository.report("%")).rows).toStrictEqual([]);
+    expect((await repository.report("sales")).rows).toStrictEqual([]);
+  });
 });

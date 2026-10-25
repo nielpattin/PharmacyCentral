@@ -143,6 +143,7 @@ describe("PrescriptionConsultationRepository", () => {
       entityId: consultation.id,
       siteId: site,
       answeredBy: pharmacist,
+      actorId: pharmacist,
     });
   });
 
