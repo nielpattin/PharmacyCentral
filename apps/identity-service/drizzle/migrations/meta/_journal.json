@@ -15,6 +15,13 @@
       "when": 1790393723943,
       "tag": "0001_deep_blur",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792913913354,
+      "tag": "0002_outbox_messages",
+      "breakpoints": true
     }
   ]
 }

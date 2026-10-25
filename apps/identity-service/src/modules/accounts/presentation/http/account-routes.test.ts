@@ -6,7 +6,13 @@ import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { AccountService } from "../../application/account-service.ts";
 import { AuthRateLimiterError, type AuthRateLimiter } from "../../domain/auth-rate-limit.ts";
 
-import { createAccountRouter, createCustomerRouter, createInternalCustomerRouter } from "./account-routes.ts";
+import { noAuditRecorder, type AuditEntry } from "../../../outbox/audit-recorder.ts";
+import {
+  createAccountRouter,
+  createAdminRouter,
+  createCustomerRouter,
+  createInternalCustomerRouter,
+} from "./account-routes.ts";
 
 const startServer = async (app: express.Express): Promise<{ server: Server; url: string }> => {
   const server = createServer(app);
@@ -32,7 +38,10 @@ describe("account csrf route", () => {
   it("issues a csrf token and readable cookie without credentials", async () => {
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter({} as unknown as AccountService, undefined, unlimitedAttempts));
+    app.use(
+      "/auth",
+      createAccountRouter({} as unknown as AccountService, undefined, unlimitedAttempts, noAuditRecorder),
+    );
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -57,7 +66,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => ({ account, session: {} }) } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -79,7 +88,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => undefined } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -111,7 +120,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => ({ account, session: {} }), updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -147,7 +156,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => ({ account, session: {} }), updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -168,7 +177,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => undefined, updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -196,7 +205,7 @@ describe("account csrf route", () => {
     const stub = { currentSession: async () => ({ account, session: {} }), updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts));
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
     const { server, url } = await startServer(app);
     activeServer = server;
 
@@ -223,7 +232,7 @@ describe("credential attempt limit", () => {
   const startAuthServer = async (service: AccountService, limiter: AuthRateLimiter): Promise<string> => {
     const app = express();
     app.use(express.json());
-    app.use("/auth", createAccountRouter(service, undefined, limiter));
+    app.use("/auth", createAccountRouter(service, undefined, limiter, noAuditRecorder));
     const { server, url } = await startServer(app);
     activeServer = server;
     return url;
@@ -502,5 +511,111 @@ describe("internal customer route", () => {
     const response = await fetch(`${url}${customerUrl}`, { headers: { "x-actor-type": "employee" } });
     expect(response.status).toBe(403);
     expect(findActiveCustomer).not.toHaveBeenCalled();
+  });
+});
+
+describe("audit entries", () => {
+  let activeServer: Server | undefined;
+  afterEach(
+    () =>
+      activeServer &&
+      new Promise<void>((resolve, reject) => activeServer?.close((error) => (error ? reject(error) : resolve()))),
+  );
+
+  const ids = {
+    admin: "00000000-0000-4000-8000-0000000000a1",
+    target: "00000000-0000-4000-8000-0000000000b2",
+    shopper: "00000000-0000-4000-8000-0000000000c3",
+  };
+  const account = (id: string, actorType: "employee" | "customer", roles: string[]) => ({
+    id,
+    actorType,
+    email: "x@example.vn",
+    displayName: "X",
+    roles,
+    siteIds: [] as string[],
+  });
+
+  const start = async (
+    service: Partial<Record<keyof AccountService, unknown>>,
+  ): Promise<{ url: string; entries: AuditEntry[] }> => {
+    const entries: AuditEntry[] = [];
+    const audit = { record: (entry: AuditEntry) => (entries.push(entry), Promise.resolve()) };
+    const stub = service as unknown as AccountService;
+    const app = express();
+    app.use(express.json());
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, audit));
+    app.use("/admin", createAdminRouter(stub, audit));
+    const started = await startServer(app);
+    activeServer = started.server;
+    return { url: started.url, entries };
+  };
+
+  const post = (url: string, path: string, body: unknown = {}) =>
+    fetch(url + path, {
+      method: "POST",
+      headers: { "content-type": "application/json", Cookie: "pharmacy_session=valid" },
+      body: JSON.stringify(body),
+    });
+
+  it("records an employee sign-in and sign-out under their own id", async () => {
+    const employee = account(ids.admin, "employee", ["Pharmacist"]);
+    const { url, entries } = await start({
+      login: async () => ({ account: employee, session: { rawToken: "t" } }),
+      currentSession: async () => ({ account: employee, session: {} }),
+      logout: async () => undefined,
+    });
+    expect((await post(url, "/auth/login", { email: "x@example.vn", password: "a-long-password-1" })).status).toBe(200);
+    expect((await post(url, "/auth/logout")).status).toBe(204);
+    expect(entries).toEqual([
+      { action: "identity.auth.login", entityType: "user", entityId: ids.admin, actorId: ids.admin },
+      { action: "identity.auth.logout", entityType: "user", entityId: ids.admin, actorId: ids.admin },
+    ]);
+  });
+
+  it("does not record a shopper signing in", async () => {
+    const shopper = account(ids.shopper, "customer", []);
+    const { url, entries } = await start({ login: async () => ({ account: shopper, session: { rawToken: "t" } }) });
+    expect((await post(url, "/auth/login", { email: "x@example.vn", password: "a-long-password-1" })).status).toBe(200);
+    expect(entries).toEqual([]);
+  });
+
+  it("records an administrator's changes against the target account, never the password", async () => {
+    const admin = account(ids.admin, "employee", ["Platform Admin"]);
+    const target = account(ids.target, "employee", ["Pharmacist"]);
+    const { url, entries } = await start({
+      currentSession: async () => ({ account: admin, session: {} }),
+      createEmployee: async () => target,
+      resetUserPassword: async () => undefined,
+      revokeAllSessions: async () => undefined,
+    });
+    await post(url, "/admin/users", {
+      email: "n@example.vn",
+      password: "a-secret-password-1",
+      displayName: "N",
+      roles: ["Pharmacist"],
+      siteIds: [],
+    });
+    await post(url, "/admin/users/" + ids.target + "/reset-password", { password: "another-secret-1" });
+    await post(url, "/admin/users/" + ids.target + "/revoke-sessions");
+    expect(entries.map((entry) => [entry.action, entry.entityId, entry.actorId])).toEqual([
+      ["identity.user.created", ids.target, ids.admin],
+      ["identity.user.password-reset", ids.target, ids.admin],
+      ["identity.user.sessions-revoked", ids.target, ids.admin],
+    ]);
+    expect(entries[0]?.details).toEqual({ roles: "Pharmacist", sites: 0 });
+    expect(JSON.stringify(entries)).not.toContain("secret");
+  });
+
+  it("records nothing when the change is refused", async () => {
+    const admin = account(ids.admin, "employee", ["Platform Admin"]);
+    const { url, entries } = await start({
+      currentSession: async () => ({ account: admin, session: {} }),
+      revokeAllSessions: async () => {
+        throw new Error("not found");
+      },
+    });
+    expect((await post(url, "/admin/users/" + ids.target + "/revoke-sessions")).status).toBeGreaterThanOrEqual(400);
+    expect(entries).toEqual([]);
   });
 });

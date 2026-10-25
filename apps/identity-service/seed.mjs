@@ -14,9 +14,14 @@ if (dryRun) {
   process.exit(0);
 }
 
-const databaseUrl = (database) => {
+// Every service connects as its own role, which can open only its own database (deploy/local/postgres/roles.sh). The
+// host and port come from DATABASE_URL; the role is named like the database and takes its password from the
+// matching variable.
+const databaseUrl = (database, passwordVariable) => {
   const url = new URL(requireEnvironmentVariable("DATABASE_URL"));
   url.pathname = `/${database}`;
+  url.username = database;
+  url.password = requireEnvironmentVariable(passwordVariable);
   return url.toString();
 };
 
@@ -74,7 +79,7 @@ const accounts = [
 // site access, because the administrator being seeded is who imports the sites afterwards.
 const siteCodes = [...new Set(accounts.flatMap((account) => account.siteCodes))];
 const siteIdsByCode = new Map();
-const catalog = new Client({ connectionString: databaseUrl("catalog_service") });
+const catalog = new Client({ connectionString: databaseUrl("catalog_service", "CATALOG_DB_PASSWORD") });
 let catalogConnected = false;
 try {
   await catalog.connect();
@@ -90,7 +95,7 @@ try {
 }
 const missingSites = siteCodes.filter((code) => !siteIdsByCode.has(code));
 
-const client = new Client({ connectionString: databaseUrl("identity_service") });
+const client = new Client({ connectionString: databaseUrl("identity_service", "IDENTITY_DB_PASSWORD") });
 await client.connect();
 
 try {

@@ -18,6 +18,7 @@ import {
 import type { AccountService } from "../../application/account-service.ts";
 import { signInternalIdentityContext } from "../../../../middleware/trusted-request.ts";
 import type { GoogleSignIn } from "../../infrastructure/security/google-oidc-client.ts";
+import type { AuditRecorder } from "../../../outbox/audit-recorder.ts";
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(200),
@@ -46,10 +47,24 @@ const csrfCookieName = "pharmacy_csrf";
 /** The counter roles that may search the customer accounts a prescription can be linked to. */
 const customerLookupRoles = ["Pharmacist", "Platform Admin"];
 
+/**
+ * Records a staff member acting on their own account: signing in or out, changing a password or a profile. Shoppers
+ * are left out, because the audit log is the staff trail and a shopper signing in is not a staff action.
+ */
+const auditOwnAccount = (
+  audit: AuditRecorder,
+  account: Pick<Account, "id" | "actorType">,
+  action: string,
+): Promise<void> =>
+  account.actorType === "employee"
+    ? audit.record({ action, entityType: "user", entityId: account.id, actorId: account.id })
+    : Promise.resolve();
+
 export const createAccountRouter = (
   service: AccountService,
   googleSignIn: GoogleSignIn | undefined,
   rateLimiter: AuthRateLimiter,
+  audit: AuditRecorder,
 ): Router => {
   const router = Router();
 
@@ -66,6 +81,12 @@ export const createAccountRouter = (
 
     try {
       const result = await service.createFirstAdmin(parsed.data);
+      await audit.record({
+        action: "identity.admin.setup",
+        entityType: "user",
+        entityId: result.account.id,
+        actorId: result.account.id,
+      });
       setSessionCookie(response, result.session.rawToken);
       response.status(201).json(toPublicAccount(result.account));
     } catch (error) {
@@ -219,6 +240,7 @@ export const createAccountRouter = (
       // A counter that cannot withdraw leaves this success counted, and the sign-in itself must not fail over it.
       await attempt.withdraw().catch(() => undefined);
       setSessionCookie(response, result.session.rawToken);
+      await auditOwnAccount(audit, result.account, "identity.auth.login");
       response.json(toPublicAccount(result.account));
     } catch (error) {
       writeServiceError(response, error, 401);
@@ -228,7 +250,9 @@ export const createAccountRouter = (
   router.post("/logout", async (request, response) => {
     const token = getSessionToken(request);
     if (token) {
+      const current = await service.currentSession(token);
       await service.logout(token);
+      if (current) await auditOwnAccount(audit, current.account, "identity.auth.logout");
     }
     clearSessionCookie(response);
     response.status(204).end();
@@ -260,7 +284,9 @@ export const createAccountRouter = (
     }
 
     try {
-      response.json(toPublicAccount(await service.updateProfile(current.account.id, parsed.data)));
+      const updated = await service.updateProfile(current.account.id, parsed.data);
+      await auditOwnAccount(audit, updated, "identity.account.profile-updated");
+      response.json(toPublicAccount(updated));
     } catch (error) {
       writeServiceError(response, error, 400);
     }
@@ -310,6 +336,7 @@ export const createAccountRouter = (
 
     try {
       await service.changePassword(current.account.id, parsed.data.currentPassword, parsed.data.nextPassword);
+      await auditOwnAccount(audit, current.account, "identity.account.password-changed");
       clearSessionCookie(response);
       response.status(204).end();
     } catch (error) {
@@ -320,8 +347,22 @@ export const createAccountRouter = (
   return router;
 };
 
-export const createAdminRouter = (service: AccountService): Router => {
+export const createAdminRouter = (service: AccountService, audit: AuditRecorder): Router => {
   const router = Router();
+  /** Records one administrator action on another account. The roles and sites are kept; passwords never are. */
+  const auditAdmin = (
+    response: Response,
+    action: string,
+    userId: string,
+    details?: Record<string, string | number | boolean | null>,
+  ): Promise<void> =>
+    audit.record({
+      action,
+      entityType: "user",
+      entityId: userId,
+      actorId: response.locals.adminId as string,
+      ...(details ? { details } : {}),
+    });
 
   router.use(async (request, response, next) => {
     const token = getSessionToken(request);
@@ -335,6 +376,7 @@ export const createAdminRouter = (service: AccountService): Router => {
       return;
     }
 
+    response.locals.adminId = current.account.id;
     next();
   });
 
@@ -349,7 +391,12 @@ export const createAdminRouter = (service: AccountService): Router => {
     }
 
     try {
-      response.status(201).json(toPublicAccount(await service.createEmployee(parsed.data)));
+      const created = await service.createEmployee(parsed.data);
+      await auditAdmin(response, "identity.user.created", created.id, {
+        roles: created.roles.join(","),
+        sites: created.siteIds.length,
+      });
+      response.status(201).json(toPublicAccount(created));
     } catch (error) {
       writeServiceError(response, error, 400);
     }
@@ -364,9 +411,12 @@ export const createAdminRouter = (service: AccountService): Router => {
     }
 
     try {
-      response.json(
-        toPublicAccount(await service.updateUserAccess(id.data.id, parsed.data.roles, parsed.data.siteIds)),
-      );
+      const updated = await service.updateUserAccess(id.data.id, parsed.data.roles, parsed.data.siteIds);
+      await auditAdmin(response, "identity.user.access-updated", updated.id, {
+        roles: updated.roles.join(","),
+        sites: updated.siteIds.length,
+      });
+      response.json(toPublicAccount(updated));
     } catch (error) {
       writeServiceError(response, error, 400);
     }
@@ -382,6 +432,7 @@ export const createAdminRouter = (service: AccountService): Router => {
 
     try {
       await service.resetUserPassword(id.data.id, password.data.password);
+      await auditAdmin(response, "identity.user.password-reset", id.data.id);
       response.status(204).end();
     } catch (error) {
       writeServiceError(response, error, 400);
@@ -397,6 +448,7 @@ export const createAdminRouter = (service: AccountService): Router => {
 
     try {
       await service.revokeAllSessions(id.data.id);
+      await auditAdmin(response, "identity.user.sessions-revoked", id.data.id);
       response.status(204).end();
     } catch (error) {
       writeServiceError(response, error, 400);

@@ -6,6 +6,8 @@ import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware, IDENTITY_PUBLIC_AUTH_PATHS } from "./middleware/trusted-request.ts";
 import { createCsrfMiddleware } from "./middleware/csrf.ts";
 
+import { createAuditRecorder, noAuditRecorder } from "./modules/outbox/audit-recorder.ts";
+import { IdentityOutboxPublisher } from "./modules/outbox/outbox-publisher.ts";
 import { createIdentityDatabase } from "./shared/infrastructure/database.ts";
 import {
   createAccountRouter,
@@ -29,7 +31,13 @@ app.set("trust proxy", readPositiveIntegerEnv("TRUST_PROXY_HOPS"));
 const portStr = process.env.PORT;
 if (!portStr) throw new Error("Missing required environment variable: PORT. Please set it in your .env file.");
 const port = Number.parseInt(portStr, 10);
+const rabbitmqUrl = process.env.RABBITMQ_URL;
+if (!rabbitmqUrl)
+  throw new Error("Missing required environment variable: RABBITMQ_URL. Please set it in your .env file.");
 const database = createIdentityDatabase();
+const outboxPublisher = database ? new IdentityOutboxPublisher(database, logger, rabbitmqUrl) : undefined;
+outboxPublisher?.start();
+const audit = database ? createAuditRecorder(database, logger) : noAuditRecorder;
 const accountService = createAccountService(database);
 const googleSignIn = createGoogleSignIn();
 const authRateLimit = createAuthRateLimit();
@@ -47,8 +55,8 @@ app.get("/health/ready", (_request, response) =>
   response.status(database ? 200 : 503).json({ status: database ? "ok" : "degraded", service: serviceName }),
 );
 app.use(createCsrfMiddleware());
-app.use("/auth", createAccountRouter(accountService, googleSignIn, authRateLimit.limiter));
-app.use("/admin", createAdminRouter(accountService));
+app.use("/auth", createAccountRouter(accountService, googleSignIn, authRateLimit.limiter, audit));
+app.use("/admin", createAdminRouter(accountService, audit));
 app.use("/customers", createCustomerRouter(accountService));
 app.use("/internal", createInternalCustomerRouter(accountService));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
@@ -59,7 +67,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 
 const server = createServer(app);
 server.on("close", () => {
-  void database?.pool.end();
+  void outboxPublisher?.close().then(() => database?.pool.end());
   authRateLimit.redis.disconnect();
 });
 const shutdown = (signal: string): void => {

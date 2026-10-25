@@ -1,4 +1,5 @@
-import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, index, integer, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 export const users = pgTable(
   "users",
@@ -57,3 +58,21 @@ export const oneTimeTokens = pgTable("one_time_tokens", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   consumedAt: timestamp("consumed_at", { withTimezone: true }),
 });
+
+export const outboxMessages = pgTable(
+  "outbox_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    eventType: varchar("event_type", { length: 200 }).notNull(),
+    schemaVersion: varchar("schema_version", { length: 20 }).notNull(),
+    payload: text("payload").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+  },
+  (table) => [
+    index("outbox_messages_unpublished_idx")
+      .on(table.occurredAt)
+      .where(sql`${table.publishedAt} is null`),
+  ],
+);
