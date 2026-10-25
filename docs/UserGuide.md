@@ -159,7 +159,7 @@ Imports are repeatable: matching codes, SKUs and batch numbers update existing r
 
 **Procurement** (Platform Admin, Pharmacy Manager) opens on **Purchase orders**.
 
-1. **Create order**: enter a purchase order number, supplier, site, and order lines, then choose **Create order**.
+1. Choose **Create order** (or press **N**). A side drawer opens: enter a purchase order number, supplier, site and the order lines, then choose **Create order**. The order lines are not kept in the autosaved draft.
 2. **Approve** a Draft purchase order from the list. Only Draft orders can be approved. **Cancel** is available until the order is received or cancelled.
 3. Goods arriving against the order are recorded in Receiving (below). The order moves to partially received or received as quantities arrive.
 
@@ -167,10 +167,12 @@ Imports are repeatable: matching codes, SKUs and batch numbers update existing r
 
 **Receiving** (Warehouse Staff) opens on **Goods receipts**.
 
-1. Choose **Receive goods** (the form is titled "Create goods receipt").
+1. Choose **Receive goods** (or press **N**). A side drawer opens with the receipt form.
 2. Select the supplier, site, storage location, and receipt number. Optionally link an approved purchase order.
 3. Enter each line's product, batch, expiry date and received quantity, then submit.
 4. New batches await quality review before they can be used for sales.
+
+The old tabs **Create order** and **Receive goods** are gone: a link with `?tab=Create order` or `?tab=Receive goods` opens the list.
 
 ## Quality
 
@@ -184,20 +186,20 @@ Only released batches that have not passed their expiry date count as sellable. 
 
 ## Inventory operations
 
-**Inventory** (Warehouse Staff) is a tabbed workspace. The sidebar items **Inventory**, **Adjustments**, **Transfers**, **Stocktake**, **Returns and removals** and **Replenishment** each open it on the matching tab.
+**Inventory** (Warehouse Staff) is a tabbed workspace. The sidebar items **Inventory**, **Adjustments**, **Transfers**, **Stocktake**, **Returns and removals** and **Replenishment** each open it on the matching tab. Two rows pick the view: the group (**Stock**, **Supply**, **Control**), then a tab inside it. A row with a single choice is hidden, so a role that reads only some tabs sees fewer.
 
-| Tab | What it does |
-| --- | --- |
-| Balances | Quantity on hand and reserved per product batch, with expiry dates |
-| Batches | Product batches and their quality status; Release and Reject live on the Quality page |
-| Create batch | Add a product batch: product, supplier, batch number, manufactured and expiry dates, manufacturer, quality notes |
-| Movements | Stock movement ledger, and **Record stock movement** |
-| Adjustments | **Submit stock adjustment**; pending adjustments can be approved or rejected |
-| Transfers | Transfer orders between sites and storage locations; create with **Create transfer** |
-| Stocktake | Stocktake sessions, the **Create stocktake** form, and **Post adjustments** for pending sessions |
-| Count line | **Record stocktake count** for counted quantities |
-| Returns | Returns and removals with reasons: Return to supplier, Damaged stock, Expired stock, Inventory removal |
-| Replenishment | Replenishment requests with Approve, Reject, Fulfill and Cancel |
+| Group | Tab | What it does |
+| --- | --- | --- |
+| Stock | Balances | Quantity on hand and reserved per product batch, with expiry dates |
+| Stock | Batches | Product batches and their quality status. **Create batch** opens a drawer (product, supplier, batch number, manufactured and expiry dates, manufacturer, quality notes). **Release** and **Reject** show only for the verdict a batch does not already have |
+| Stock | Movements | Stock movement ledger, and **Record stock movement** |
+| Supply | Transfers | Transfer orders between sites and storage locations; **Create transfer** opens a drawer |
+| Supply | Replenishment | Replenishment requests with Approve, Reject, Fulfill and Cancel |
+| Supply | Returns | Returns and removals with reasons: Return to supplier, Damaged stock, Expired stock, Inventory removal |
+| Control | Adjustments | **Submit stock adjustment**; pending adjustments can be approved or rejected |
+| Control | Stocktake | Stocktake sessions, **Create stocktake**, **Record count** for counted quantities (a drawer), and **Post adjustments** for pending sessions |
+
+The old tabs **Create batch**, **Create transfer** and **Count line** are gone: a link with `?tab=Create batch` (or the other two) opens **Balances**. Press **N** on a list to open its create drawer.
 
 **Transfers** workflow: create a transfer with its lines; approve it (`PendingApproval` to `Approved`); ship it (`InTransit`); receive it at the destination. A pending or approved transfer can be cancelled.
 
@@ -221,16 +223,21 @@ Tabs:
 
 | Tab | Who | What it does |
 | --- | --- | --- |
-| Prescriptions | Both | Prescriptions with patient, status, site and created time. Pharmacists also see **Cancel** and **Dispense** on each row |
-| Create | Pharmacist, Platform Admin | Create a prescription: patient name and phone, optional customer account (found by exact phone or email), site and storage location, doctor name and license, lines (product, unit, quantity, dosage, frequency, duration, notes), and notes. Submitting requests the stock reservation |
-| Dispense | Pharmacist, Platform Admin | Pick a prescription, then for each line pick the product batch and dispensed quantity, and choose **Dispense** |
+| Prescriptions | Both | Prescriptions with patient, status, site and created time. **View** opens the details. Pharmacists also get **Dispense** on each row, and **Create invoice** and **Cancel prescription** in the **More actions** menu (or in the details drawer) | and phone, optional customer account (found by exact phone or email), site and storage location, doctor name and license, lines (product, unit, quantity, dosage, frequency, duration, notes), and notes. Submitting requests the stock reservation |
 | Counter transactions | Both (actions for Pharmacist, Platform Admin) | Invoices and counter transactions with payment status and amount. **Create invoice**, **Confirm cash** (pending payments) and **Refund** (paid payments) |
 | Consultations | Both (replies for Pharmacist, Platform Admin) | Shopper requests from the intake page, filtered Open or Answered, showing the prescription, its lines and any shopper note. Pharmacists type a reply and choose **Send reply** |
 
+Two actions open as side drawers over the Prescriptions tab, so the queue stays in view:
+
+- **Create prescription** (header button or **N**; Pharmacist, Platform Admin): patient name and phone, optional customer account (found by exact phone or email), site and storage location, doctor name and license, lines (product, unit, quantity, dosage, frequency, duration, notes), and notes. Submitting requests the stock reservation.
+- **Dispense** (row button; Pharmacist, Platform Admin): for each line pick the product batch and dispensed quantity, then choose **Dispense**. The drawer address keeps `?prescription=<id>`, so a refresh reopens it.
+
+The old tabs **Create** and **Dispense** are gone: a link with `?tab=Create` or `?tab=Dispense` opens **Prescriptions**.
+
 Counter flow for a pharmacist:
 
-1. Create the prescription for the patient, linking a customer account if the patient has one. This reserves stock.
-2. Open **Dispense**, choose the prescription, and for each line select the batch and quantity handed over. Dispense records the movement; the service refuses a batch that cannot supply the quantity.
+1. Choose **Create prescription** for the patient, linking a customer account if the patient has one. This reserves stock.
+2. Choose **Dispense** on the prescription row, and for each line select the batch and quantity handed over. Dispense records the movement; the service refuses a batch that cannot supply the quantity.
 3. In **Counter transactions**, create the invoice and confirm cash when the customer pays. Refund a paid invoice with a reason if the sale is reversed.
 4. Cancel a prescription from its row if the customer declines.
 
@@ -246,17 +253,22 @@ External accounting ledger posting is outside the scope of these screens.
 
 ## Audit log
 
-**Audit** (Platform Admin) is the Audit tab of **Governance**. Filter by user ID, site, entity type, entity ID, action and row limit, then choose **Apply filters**. Each record shows action, entity, actor, site, time and details.
+**Audit** (Platform Admin) is the Audit tab of **Governance**. It records who changed what: every write a person makes in Sales (orders, prescriptions, consultations), Catalog (products, units, prices, sites, storage locations, suppliers, search synonyms, AI credentials), Inventory (batches, quality decisions, adjustments, movements, transfers, stocktakes, returns, replenishment), Procurement (purchase orders, goods receipts) and Identity (staff sign-in and sign-out, password and profile changes, and an administrator creating a user, changing access, resetting a password or revoking sessions).
+
+Filter by entity type (grouped by area), actor and date range, or search by action, entity ID or actor ID. Each record shows the action in words (for example "Duyệt điều chuyển"), the entity, the actor, the site, the time and the details. The actor column reads "System" for changes nobody made by hand, such as an online order that expired unpaid.
+
+The log keeps no passwords, API keys or free-text notes. Details hold only a few safe fields, such as the roles given to a user or the decision on a batch. Shopper activity is not audited, and neither is a failed sign-in. Entries appear a few seconds after the change, because they travel through RabbitMQ; a change made while the broker is down is recorded when it is back.
 
 ## Users and access
 
-**Users** (Platform Admin) is the Users tab of **Governance**. It lists employee accounts with email, name and roles, and per row:
+**Users** (Platform Admin) is the Users tab of **Governance**, next to **Audit**. It lists employee accounts only (customers sign up on the shop site and are not listed) with name, email and roles. Search by name or email, and keep a search as a saved view.
 
-- **Access**: edit roles and site access, then choose **Save access**.
-- **Reset password**: enter a new password of at least 12 characters.
-- **Revoke sessions**: sign the account out everywhere, for example after a security incident.
+Per row:
 
-**Create user** opens the form "Create employee account": email, password, display name, roles and site access, then choose **Create employee**.
+- **Edit access** opens a drawer with the account's roles and site access as checkboxes. Choose at least one role, then **Save access**.
+- The **More actions** menu (three dots) holds **Reset password** (a new password of at least 12 characters) and **Revoke sessions** (signs the account out everywhere, for example after a security incident; asks to confirm).
+
+**Create user** (or press `n`) opens the drawer "Create employee account": email, display name, password, roles and site access, then choose **Create employee**. Leaving a drawer with unsaved input asks first; Ctrl+S saves.
 
 ## AI integrations
 
@@ -345,7 +357,7 @@ Use the demo accounts above, with `pnpm run dev:data` already run.
 3. **Pharmacy Manager**: open **Procurement**, create a purchase order and approve it.
 4. **Warehouse Staff**: open **Receiving**, record the goods receipt against that order, then open **Quality** and release the new batch.
 5. **Warehouse Staff**: open **Inventory** to see balances and movements; open **Transfers** to create and ship a transfer; open **Returns and removals** and **Stocktake**; open **Adjustments** to submit and approve an adjustment.
-6. **Pharmacist**: sign in, open **Pharmacist overview**, then **Prescriptions**, create a prescription, open **Dispense**, and dispense it. In **Counter transactions**, create the invoice and confirm cash.
+6. **Pharmacist**: sign in, open **Pharmacist overview**, then **Prescriptions**, choose **Create prescription**, then **Dispense** on its row. In **Counter transactions**, create the invoice and confirm cash.
 7. **Pharmacy Manager**: open **Finance** and **Reporting** to review the summary, invoices and report rows.
 8. **Pharmacist**: open **Search synonyms**, submit a group, then sign in as another staff member to approve it.
 9. **Customer**: open Customer Web at `http://localhost:5301/`, search for a product, add it to the cart, sign in, and check out with pickup or delivery. Open **Đơn hàng của tôi** to track it, and try **Gửi đơn thuốc** and the shopping assistant.

@@ -252,7 +252,7 @@ pnpm dev            # the services must be running: the import goes through the 
 pnpm run dev:data   # in another terminal
 ```
 
-`dev:data` runs `tools/dev-import-samples.mjs` and performs the steps in order. It seeds the demo accounts, uploads the product images to SeaweedFS, and signs in as the demo admin (`admin@pharmacycentral.vn`, password `DEMO_ACCOUNT_PASSWORD`). It posts the sample CSVs from `data/import-samples/` to the same endpoints as the Data import screen. Then it seeds the accounts again, so the manager, pharmacist, and warehouse accounts get their `SITE-RTL` / `SITE-WH` access. It reuses the screen's CSV mapping from `apps/staff-web/src/import-datasets.ts`, so the two cannot drift. Every step is idempotent, so running the script again is safe. Stock rows wait for the product search index to catch up, which takes a few seconds after a product import.
+`dev:data` runs `tools/dev-import-samples.mjs` and performs the steps in order. It seeds the demo accounts, uploads the product images to SeaweedFS, and signs in as the demo admin (`admin@pharmacycentral.vn`, password `DEMO_ACCOUNT_PASSWORD`). It posts the sample CSVs from `data/import-samples/` to the same endpoints as the Data import screen. Then it seeds the accounts again, so the manager, pharmacist, and warehouse accounts get their `SITE-RTL` / `SITE-WH` access. It reuses the screen's CSV mapping from `apps/staff-web/src/import-datasets.ts`, so the two cannot drift. After the synonyms it adds demo activity through the same APIs, so the list screens have rows in every state: three transfers (waiting, in transit, received), three stock adjustments (pending, approved, rejected), three purchase orders (waiting, approved, cancelled) and five online orders (new through completed and cancelled). Each record has a fixed number and is skipped when it exists, and the opening balances are skipped once stock has moved, so running the script again is safe. Each seed connection uses its own database role and `<SERVICE>_DB_PASSWORD`, as the services do. Stock rows wait for the product search index to catch up, which takes a few seconds after a product import.
 
 Last, it creates and approves the six local search synonym groups, such as `tiêu chảy, đi ngoài, đi lỏng`. The demo admin creates them, and the demo pharmacist approves them, so live search uses them from the start. Production starts with no synonym groups. Staff add them in staff-web under Search synonyms.
 
@@ -378,13 +378,21 @@ Never use `drizzle-kit push` in shared, staging, or production environments.
 Local development uses a single RabbitMQ node.
 
 - Producers publish events using confirmation channels and the transactional outbox pattern.
-  The outbox publisher of `inventory`, `sales` and `payment` marks a row published only after the broker confirmed it,
+  The outbox publisher of `identity`, `catalog`, `inventory`, `sales` and `payment` marks a row published only after the broker confirmed it,
   so a row stays unpublished while the broker is down and goes out when it is back. An advisory lock lets one
   publisher per database send at a time. Delivery is at least once. A tick reads up to 500 rows, sends them all, waits
   for the confirms together and marks them published with one UPDATE, then reads the next batch at once while rows
   remain. If the broker refuses a row, only the rows before it are marked, so the order holds and later rows go out again.
   A partial index on `occurred_at` where `published_at` is null serves the read, and once an hour a publisher deletes
   rows published more than 7 days ago.
+- Audit entries use the same path. `identity-service`, `catalog-service` and `inventory-service` write an
+  `<service>.audit.v1` row to their outbox after each successful write a person makes (a rule table in
+  `src/modules/audit/audit-rules.ts` for catalog and inventory; explicit calls in the identity routes). The payload
+  holds `action`, `entityType`, `entityId`, `siteId`, `actorId` and a few allow-listed `details`; the publisher
+  copies `actorId` onto the event envelope, and `operations-query-service` projects the event into `audit_events`. The
+  row is written just after the response is sent, so a crash in that gap loses the entry and a failed insert is only
+  logged (`audit entry could not be recorded`). Add a route to the rule table to audit it. A request made by a system actor (a service calling another, such as the dispense that sales-service sends to inventory) is never audited at the receiving service, so a retried call cannot repeat an entry; the calling service audits its own write. `sales-service` events keep
+  their own shape and now carry `actorId` in the payload where a person acted.
 - Consumers process messages idempotently using inbox deduplication keys.
 - Consumers read durable quorum queues named `<owner>.<topic>.v2` (`sales.payment-events.v2`,
   `catalog.availability.v2`, `operations-query.events.v2`), one message at a time. All of them reconnect on their own
@@ -898,6 +906,11 @@ An online order holds stock in inventory-service from the moment it is placed.
 - Payment-service prices a shopper invoice from the order in sales-service. The request's unit prices are ignored.
 
 ## Cache policy
+
+The web containers set `Cache-Control` in `apps/nginx-entrypoint.sh`. Files under `/assets/` are named by content
+hash, so they are served `public, max-age=31536000, immutable`. Every other path, `index.html` and the single-page
+fallback included, is served `no-cache`: the browser keeps a copy but revalidates it on each load, so a deploy is
+picked up at once instead of leaving a browser on the old bundle. `curl -sI http://localhost:5302/` shows the header.
 
 Redis stores rate-limit counters and delivery route calculations.
 
