@@ -1,7 +1,7 @@
 siteCode,code,name,locationType
-SITE-HQ,HQ-MAIN,Main,Main
-SITE-WH,WH-A,Warehouse A,Warehouse
-SITE-WH,WH-B,Warehouse B,Warehouse
-SITE-HUB,HUB-MAIN,Hub storage,Warehouse
-SITE-RTL,RTL-FRONT,Retail floor,Retail
-SITE-RTL,RTL-BACK,Retail backroom,Backroom
+SITE-HQ,HQ-MAIN,Kho chính,Main
+SITE-WH,WH-A,Kho A,Warehouse
+SITE-WH,WH-B,Kho B,Warehouse
+SITE-HUB,HUB-MAIN,Kho vệ tinh,Warehouse
+SITE-RTL,RTL-FRONT,Quầy bán,Retail
+SITE-RTL,RTL-BACK,Kho sau quầy,Backroom
