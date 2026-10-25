@@ -135,7 +135,7 @@ const SuggestionRow = ({
             {unavailable ? (
               <Badge variant="danger">Hết hàng</Badge>
             ) : inStock === true ? (
-              <Badge variant="secondary">Còn hàng</Badge>
+              <span className="text-xs text-muted">Còn hàng</span>
             ) : (
               <Badge variant="outline">Đang cập nhật</Badge>
             )}

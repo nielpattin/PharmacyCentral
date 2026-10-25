@@ -1,33 +1,34 @@
-import type { BadgeProps } from "@pharmacy/ui";
+import type { StatusTone } from "@pharmacy/ui";
 
-export type StatusBadge = { label: string; variant: BadgeProps["variant"] };
+export type StatusLabel = { label: string; tone: StatusTone };
 
-const ORDER_STATUS: Record<string, StatusBadge> = {
-  pending: { label: "Chờ xác nhận", variant: "secondary" },
-  confirmed: { label: "Đã xác nhận", variant: "primary" },
-  preparing: { label: "Đang soạn thuốc", variant: "primary" },
-  ready: { label: "Sẵn sàng nhận hàng", variant: "primary" },
-  delivering: { label: "Đang giao hàng", variant: "primary" },
-  completed: { label: "Hoàn tất", variant: "outline" },
-  cancelled: { label: "Đã huỷ", variant: "danger" },
+// Settled states (done, cancelled) read as plain text; only what still needs a look keeps a coloured pill.
+const ORDER_STATUS: Record<string, StatusLabel> = {
+  pending: { label: "Chờ xác nhận", tone: "warning" },
+  confirmed: { label: "Đã xác nhận", tone: "info" },
+  preparing: { label: "Đang soạn thuốc", tone: "info" },
+  ready: { label: "Sẵn sàng nhận hàng", tone: "info" },
+  delivering: { label: "Đang giao hàng", tone: "info" },
+  completed: { label: "Hoàn tất", tone: "success" },
+  cancelled: { label: "Đã huỷ", tone: "neutral" },
 };
 
-const PAYMENT_STATUS: Record<string, StatusBadge> = {
-  pending: { label: "Chưa thanh toán", variant: "secondary" },
-  paid: { label: "Đã thanh toán", variant: "primary" },
-  failed: { label: "Thanh toán lỗi", variant: "danger" },
-  refunded: { label: "Đã hoàn tiền", variant: "outline" },
-  cancelled: { label: "Đã huỷ thanh toán", variant: "outline" },
+const PAYMENT_STATUS: Record<string, StatusLabel> = {
+  pending: { label: "Chưa thanh toán", tone: "warning" },
+  paid: { label: "Đã thanh toán", tone: "success" },
+  failed: { label: "Thanh toán lỗi", tone: "danger" },
+  refunded: { label: "Đã hoàn tiền", tone: "info" },
+  cancelled: { label: "Đã huỷ thanh toán", tone: "neutral" },
 };
 
-const describe = (table: Record<string, StatusBadge>, status: string): StatusBadge =>
-  table[status.toLowerCase()] ?? { label: status, variant: "secondary" };
+const describe = (table: Record<string, StatusLabel>, status: string): StatusLabel =>
+  table[status.toLowerCase()] ?? { label: status, tone: "neutral" };
 
 /** Sales service order lifecycle: Pending → Confirmed → Preparing → Ready/Delivering → Completed | Cancelled. */
-export const orderStatusBadge = (status: string): StatusBadge => describe(ORDER_STATUS, status);
+export const orderStatusBadge = (status: string): StatusLabel => describe(ORDER_STATUS, status);
 
 /** Payment service invoice status; the sales service mirrors it on the order. */
-export const paymentStatusBadge = (status: string): StatusBadge => describe(PAYMENT_STATUS, status);
+export const paymentStatusBadge = (status: string): StatusLabel => describe(PAYMENT_STATUS, status);
 
 /** The invoice status is capitalised on the wire, so views read this vocabulary instead of comparing strings. */
 export const invoicePaid = (status: string): boolean => status.toLowerCase() === "paid";

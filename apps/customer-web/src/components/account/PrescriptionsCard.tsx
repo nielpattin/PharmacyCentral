@@ -1,4 +1,4 @@
-import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@pharmacy/ui";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, StatusCell, type StatusTone } from "@pharmacy/ui";
 
 import type { CustomerPrescription } from "../../customer-api.ts";
 import { formatDateTime } from "../../storefront/format.ts";
@@ -18,11 +18,11 @@ const STATUS_LABELS: Record<string, string> = {
   Cancelled: "Đã huỷ",
 };
 
-const statusVariant = (status: string): "primary" | "secondary" | "outline" | "danger" => {
-  if (status === "Dispensed") return "primary";
-  if (status === "Cancelled") return "danger";
-  if (status === "PartiallyDispensed") return "outline";
-  return "secondary";
+const statusTone = (status: string): StatusTone => {
+  if (status === "Dispensed") return "success";
+  if (status === "PartiallyDispensed") return "info";
+  if (status === "Pending") return "warning";
+  return "neutral";
 };
 
 export const PrescriptionsCard = ({ prescriptions }: PrescriptionsCardProps): React.JSX.Element => (
@@ -54,9 +54,9 @@ export const PrescriptionsCard = ({ prescriptions }: PrescriptionsCardProps): Re
                   <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
                     <IconShield className="size-4 text-primary" />
                     {prescription.prescriptionNumber}
-                    <Badge variant={statusVariant(prescription.status)}>
+                    <StatusCell tone={statusTone(prescription.status)}>
                       {STATUS_LABELS[prescription.status] ?? prescription.status}
-                    </Badge>
+                    </StatusCell>
                   </p>
                   <p className="mt-1 text-xs text-muted-soft">
                     Ngày ghi: {formatDateTime(prescription.createdAt)}

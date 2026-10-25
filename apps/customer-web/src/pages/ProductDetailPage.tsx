@@ -190,7 +190,7 @@ export const ProductDetailPage = (): React.JSX.Element => {
                     {unavailable ? (
                       <Badge variant="danger">Hết hàng</Badge>
                     ) : stock === true ? (
-                      <Badge variant="secondary">Còn hàng</Badge>
+                      <span className="text-sm text-muted">Còn hàng</span>
                     ) : (
                       <Badge variant="outline">Đang cập nhật tồn kho</Badge>
                     )}
@@ -350,7 +350,7 @@ export const ProductDetailPage = (): React.JSX.Element => {
                           <p className="text-sm font-medium text-ink">{store.name}</p>
                           {row ? (
                             row.inStock ? (
-                              <Badge variant="secondary">Còn hàng</Badge>
+                              <span className="text-xs text-muted">Còn hàng</span>
                             ) : (
                               <Badge variant="danger">Tạm hết hàng</Badge>
                             )

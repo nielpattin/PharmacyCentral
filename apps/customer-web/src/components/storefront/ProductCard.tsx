@@ -34,15 +34,12 @@ export const ProductCard = ({
         <Link className="block" href={`/san-pham/${product.id}`}>
           <ProductTile name={product.name} seed={product.sku} imageUrl={product.imageUrl} />
         </Link>
-        <div className="absolute left-2 top-2">
-          {unavailable ? (
+        {/* In stock and not-yet-known are the usual states, so only a sold-out product gets a pill. */}
+        {unavailable ? (
+          <div className="absolute left-2 top-2">
             <Badge variant="danger">Hết hàng</Badge>
-          ) : inStock === true ? (
-            <Badge variant="secondary">Còn hàng</Badge>
-          ) : (
-            <Badge variant="outline">Đang cập nhật</Badge>
-          )}
-        </div>
+          </div>
+        ) : null}
       </div>
       <div className="flex flex-1 flex-col pt-3">
         <h3 className="line-clamp-2 text-sm font-medium text-ink" title={product.name}>

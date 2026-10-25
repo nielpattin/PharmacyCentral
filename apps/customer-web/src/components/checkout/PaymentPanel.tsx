@@ -1,4 +1,4 @@
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@pharmacy/ui";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, StatusCell } from "@pharmacy/ui";
 import { useState } from "react";
 
 import type { CustomerOrderDetail, PaymentInvoice } from "../../customer-api.ts";
@@ -91,7 +91,7 @@ export const PaymentPanel = ({ order, invoice, paymentMethod, storeName }: Payme
             <div className="flex items-baseline justify-between gap-3">
               <dt className="text-muted">Trạng thái</dt>
               <dd>
-                <Badge variant={payment.variant}>{payment.label}</Badge>
+                <StatusCell tone={payment.tone}>{payment.label}</StatusCell>
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-3">

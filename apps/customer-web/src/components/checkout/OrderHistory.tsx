@@ -1,4 +1,4 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle } from "@pharmacy/ui";
+import { Card, CardContent, CardHeader, CardTitle, StatusCell } from "@pharmacy/ui";
 
 import type { CatalogStore, CustomerOrder } from "../../customer-api.ts";
 import { formatDateTime, formatMoney } from "../../storefront/format.ts";
@@ -42,8 +42,8 @@ export const OrderHistory = ({
                     <p className="mt-0.5 text-xs text-muted">{formatDateTime(order.createdAt)}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={status.variant}>{status.label}</Badge>
-                    <Badge variant={payment.variant}>{payment.label}</Badge>
+                    <StatusCell tone={status.tone}>{status.label}</StatusCell>
+                    <StatusCell tone={payment.tone}>{payment.label}</StatusCell>
                   </div>
                 </div>
 
