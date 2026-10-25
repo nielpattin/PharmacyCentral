@@ -145,7 +145,9 @@ locals {
   health_check_paths = {
     search-service = "/healthz"
   }
-  migrating_services = { for name, service in local.backend_services : name => service if !contains(local.go_services, name) }
+  # search-service and ops-console-service own no database, so neither has a migration task.
+  databaseless_services = ["search-service", "ops-console-service"]
+  migrating_services    = { for name, service in local.backend_services : name => service if !contains(local.databaseless_services, name) }
 
   # Container environment and secrets per backend service. The service and the migration task definitions both use these.
   task_environment = {

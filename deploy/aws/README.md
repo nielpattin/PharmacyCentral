@@ -47,7 +47,7 @@ Terraform manages all security groups and traffic rules:
 Backend services maintain Drizzle migrations under `apps/<service>/drizzle/migrations`. Procurement tables now belong to the `inventory` database. If an environment already has a separate procurement database, copy its purchase-order and goods-receipt data into the inventory database before deleting that database. This repository has no deployed AWS environment. To prevent race conditions and schema corruption during horizontal autoscaling and deployments:
 
 - **Long-Running Service CMD Override:** The long-running Node service task definitions override the container command with `["node", "dist/main.js"]`. `search-service` is a Go binary: its task definition keeps the image's own entrypoint and user, it has no migration task, and its ECS health is the ALB target group check on `/healthz`. Multiple replicas will never execute concurrent migrations when starting or scaling up.
-- **One-Shot Migration Task Definitions:** Each Node backend service that owns a database has a dedicated migration task definition (`${environment_name}-${service}-migration`) configured with the exact same immutable container image, environment variables, Secrets Manager ARNs (`DATABASE_URL`, etc.), VPC network configuration, and CloudWatch log groups, but overriding the entry command to `["node", "dist/migrate.js"]`. `search-service` reads only Typesense and has no migration task definition.
+- **One-Shot Migration Task Definitions:** Each Node backend service that owns a database has a dedicated migration task definition (`${environment_name}-${service}-migration`) configured with the exact same immutable container image, environment variables, Secrets Manager ARNs (`DATABASE_URL`, etc.), VPC network configuration, and CloudWatch log groups, but overriding the entry command to `["node", "dist/migrate.js"]`. `search-service` reads only Typesense and `ops-console-service` has no database, so neither has a migration task definition.
 - **Infrastructure Phasing via `services_enabled`:** The `services_enabled` variable (boolean, defaults to `false`) gates the creation of long-running ECS services and Application Auto Scaling policies. This allows provisioning VPC resources, ALBs, Cloud Map namespaces, IAM roles, log groups, and task definitions before starting backend services.
 
 ## Self-hosted product search embedder
@@ -108,6 +108,7 @@ SERVICES=(
   "sales-service"
   "payment-service"
   "operations-query-service"
+  "chatbot-service"
 )
 
 for SERVICE in "${SERVICES[@]}"; do
