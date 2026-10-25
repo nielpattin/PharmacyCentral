@@ -1,10 +1,15 @@
-import { Alert, Button, RowActions, StatusBadge } from "@pharmacy/ui";
+import { useRef } from "react";
+import { Alert, Button, RowActions, StatusCell } from "@pharmacy/ui";
 
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { useConfirm, usePrompt } from "../../components/confirm.tsx";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
+import { SubTabs } from "../../components/forms.tsx";
+import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
+import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
+import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
 import { formatDateTime, text } from "../../staff-api.ts";
 import {
@@ -20,7 +25,7 @@ import {
   shortId,
   statusParam,
 } from "../sales/rules.ts";
-import { ListToolbar, moneyLocale } from "../sales/shared.tsx";
+import { moneyLocale } from "../sales/shared.tsx";
 
 const COUNTER_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
 
@@ -30,6 +35,9 @@ const COUNTER_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
  */
 export const CounterTab = ({ canOperateCounter }: { canOperateCounter: boolean }): React.JSX.Element => {
   const { values, setValues } = useListUrlState(COUNTER_DEFAULTS);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
+  useFocusSearchHotkey(rootRef);
   const status = activeStatus(values.status, INVOICE_STATUSES, ALL_STATUSES);
   const invoices = usePagedList({
     key: ["staff-counter-invoices"],
@@ -80,12 +88,17 @@ export const CounterTab = ({ canOperateCounter }: { canOperateCounter: boolean }
       truncate: true,
       render: (row) => text(row.paymentCode, shortId(row.id)),
     },
-    { key: "prescriptionId", label: "Prescription", render: (row) => shortId(row.prescriptionId) || "-" },
+    {
+      key: "prescriptionId",
+      hideBelow: "lg",
+      label: "Prescription",
+      render: (row) => shortId(row.prescriptionId) || "-",
+    },
     {
       key: "status",
       label: "Payment",
       render: (row) => (
-        <StatusBadge tone={paymentTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusBadge>
+        <StatusCell tone={paymentTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusCell>
       ),
     },
     {
@@ -94,7 +107,7 @@ export const CounterTab = ({ canOperateCounter }: { canOperateCounter: boolean }
       align: "right",
       render: (row) => formatAmount(row.amount, row.currency, moneyLocale()),
     },
-    { key: "createdAt", label: "Created", render: (row) => formatDateTime(row.createdAt) },
+    { key: "createdAt", hideBelow: "md", label: "Created", render: (row) => formatDateTime(row.createdAt) },
     {
       key: "actions",
       label: "Actions",
@@ -111,7 +124,7 @@ export const CounterTab = ({ canOperateCounter }: { canOperateCounter: boolean }
               </Button>
             ) : null}
             {canOperateCounter && canRefund(invoiceStatus) ? (
-              <Button variant="danger-soft" size="sm" onClick={() => void refund(invoiceId)}>
+              <Button variant="danger-ghost" size="sm" onClick={() => void refund(invoiceId)}>
                 {translateText("Refund")}
               </Button>
             ) : null}
@@ -122,20 +135,17 @@ export const CounterTab = ({ canOperateCounter }: { canOperateCounter: boolean }
   ];
 
   return (
-    <div className="grid gap-3">
-      <ListToolbar
-        pageKey="counter-payments"
-        defaults={COUNTER_DEFAULTS}
-        query={values.q}
-        onQueryChange={(q) => setValues({ q })}
-        searchPlaceholder="Search by invoice number"
-        statuses={INVOICE_STATUSES}
-        status={status}
-        onStatusChange={(next) => setValues({ status: next }, { history: "push" })}
+    <div ref={rootRef} className="grid gap-3">
+      <SubTabs
+        tabs={[...INVOICE_STATUSES]}
+        active={status}
+        onChange={(next) => setValues({ status: next }, { history: "push" })}
       />
       {invoices.error ? <Alert variant="danger">{translateText(invoices.error.message)}</Alert> : null}
       <DataTable
         storageKey="staff:sales:counter-payments"
+        search={{ value: draft, onChange: setDraft, placeholder: translateText("Search by invoice number") }}
+        toolbarExtra={<SavedViewsMenu pageKey="counter-payments" defaults={COUNTER_DEFAULTS} />}
         loading={invoices.isLoading}
         rows={rows}
         columns={columns}

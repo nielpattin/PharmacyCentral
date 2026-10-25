@@ -1,6 +1,6 @@
 import { useId, useState, type ReactNode } from "react";
 
-import { Sheet, StatusBadge, Tabs, type StatusTone } from "@pharmacy/ui";
+import { Sheet, StatusCell, Tabs, type StatusTone } from "@pharmacy/ui";
 
 import { translateText } from "../i18n.ts";
 
@@ -68,7 +68,7 @@ export const EntityDrawer = ({
       <div className="flex min-h-full flex-col gap-4">
         {status ? (
           <div>
-            <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+            <StatusCell tone={status.tone}>{status.label}</StatusCell>
           </div>
         ) : null}
         {hasHistory ? (

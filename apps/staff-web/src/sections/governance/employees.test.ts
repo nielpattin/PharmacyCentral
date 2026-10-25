@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { employeeLabel, filterEmployees, toEmployeeAccount } from "./employees.ts";
+import { employeeLabel, filterEmployees, isEmployeeRow, toEmployeeAccount } from "./employees.ts";
 
 const withName: Record<string, unknown> = {
   id: "11111111-aaaa-4aaa-8aaa-111111111111",
+  actorType: "employee",
   email: "an@pharmacycentral.vn",
   displayName: "Nguyễn An",
   roles: ["Pharmacist", 7],
@@ -20,6 +21,7 @@ describe("toEmployeeAccount", () => {
   it("keeps only the string roles and site ids", () => {
     expect(toEmployeeAccount(withName)).toEqual({
       id: "11111111-aaaa-4aaa-8aaa-111111111111",
+      actorType: "employee",
       email: "an@pharmacycentral.vn",
       displayName: "Nguyễn An",
       roles: ["Pharmacist"],
@@ -32,11 +34,21 @@ describe("toEmployeeAccount", () => {
   });
 });
 
+describe("isEmployeeRow", () => {
+  it("keeps employee accounts and drops customers", () => {
+    expect(isEmployeeRow(withName)).toBe(true);
+    expect(isEmployeeRow({ ...withName, actorType: "customer" })).toBe(false);
+    expect(isEmployeeRow(withoutName)).toBe(false);
+  });
+});
+
 describe("employeeLabel", () => {
   it("falls back from the display name to the email to a short id", () => {
     expect(employeeLabel(toEmployeeAccount(withName))).toBe("Nguyễn An");
     expect(employeeLabel(toEmployeeAccount(withoutName))).toBe("warehouse@pharmacycentral.vn");
-    expect(employeeLabel({ id: "22222222-bbbb", email: "", displayName: "", roles: [], siteIds: [] })).toBe("22222222");
+    expect(
+      employeeLabel({ id: "22222222-bbbb", actorType: "employee", email: "", displayName: "", roles: [], siteIds: [] }),
+    ).toBe("22222222");
   });
 });
 

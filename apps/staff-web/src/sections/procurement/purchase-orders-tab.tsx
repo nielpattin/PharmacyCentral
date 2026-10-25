@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DataTable, RowActions, Select, StatusBadge, useToast, type DataColumn } from "@pharmacy/ui";
+import { Alert, Button, DataTable, RowActions, Select, StatusCell, useToast, type DataColumn } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { useConfirm } from "../../components/confirm.tsx";
@@ -116,13 +116,12 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
     {
       key: "status",
       label: translateText("Status"),
-      render: (row) => (
-        <StatusBadge tone={purchaseOrderTone(row.status)}>{translateText(text(row.status))}</StatusBadge>
-      ),
+      render: (row) => <StatusCell tone={purchaseOrderTone(row.status)}>{translateText(text(row.status))}</StatusCell>,
       text: (row) => text(row.status, ""),
     },
     {
       key: "siteId",
+      hideBelow: "lg",
       label: translateText("Site"),
       render: (row) => referenceName(references.sites, row.siteId, ["code", "name"]),
       text: (row) => referenceName(references.sites, row.siteId, ["code", "name"]),
@@ -130,13 +129,24 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
     },
     {
       key: "supplierId",
+      hideBelow: "md",
       label: translateText("Supplier"),
       render: (row) => referenceName(references.suppliers, row.supplierId, ["code", "name"]),
       text: (row) => referenceName(references.suppliers, row.supplierId, ["code", "name"]),
       truncate: 28,
     },
-    { key: "expectedDate", label: translateText("Expected date"), render: (row) => formatDate(row.expectedDate) },
-    { key: "createdAt", label: translateText("Created"), render: (row) => formatDateTime(row.createdAt) },
+    {
+      key: "expectedDate",
+      hideBelow: "xl",
+      label: translateText("Expected date"),
+      render: (row) => formatDate(row.expectedDate),
+    },
+    {
+      key: "createdAt",
+      hideBelow: "xl",
+      label: translateText("Created"),
+      render: (row) => formatDateTime(row.createdAt),
+    },
     {
       key: "actions",
       label: translateText("Actions"),
@@ -152,7 +162,7 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
             </Button>
           ) : null}
           {cancelGate.allowed && canCancelPurchaseOrder(row.status) ? (
-            <Button size="sm" variant="danger-soft" onClick={() => void actions.cancel(row)}>
+            <Button size="sm" variant="danger-ghost" onClick={() => void actions.cancel(row)}>
               {translateText("Cancel")}
             </Button>
           ) : null}
@@ -163,28 +173,28 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
 
   return (
     <div className="grid gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          aria-label={translateText("Status")}
-          className="w-auto min-w-44"
-          value={list.values.status}
-          onChange={(event) => {
-            setSelected(new Set());
-            list.setValues({ status: event.target.value });
-          }}
-        >
-          <option value="all">{translateText("All statuses")}</option>
-          {PURCHASE_ORDER_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {translateText(status)}
-            </option>
-          ))}
-        </Select>
-        <SavedViewsMenu pageKey="purchase-orders" defaults={LIST_DEFAULTS} />
-      </div>
       {orders.error ? <Alert variant="danger">{translateText(orders.error.message)}</Alert> : null}
       <div ref={listRef}>
         <DataTable
+          toolbarStart={
+            <Select
+              aria-label={translateText("Status")}
+              className="w-auto min-w-44"
+              value={list.values.status}
+              onChange={(event) => {
+                setSelected(new Set());
+                list.setValues({ status: event.target.value });
+              }}
+            >
+              <option value="all">{translateText("All statuses")}</option>
+              {PURCHASE_ORDER_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {translateText(status)}
+                </option>
+              ))}
+            </Select>
+          }
+          toolbarExtra={<SavedViewsMenu pageKey="purchase-orders" defaults={LIST_DEFAULTS} />}
           storageKey="staff:procurement:purchase-orders"
           labels={dataTableLabels()}
           rows={orders.rows}

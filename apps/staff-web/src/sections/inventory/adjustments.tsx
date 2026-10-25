@@ -6,29 +6,29 @@ import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { Field, SelectField } from "../../components/forms.tsx";
 import { ProductPicker } from "../../components/product-picker.tsx";
+import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
+import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
+import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
 import { formatQuantity, text, writeJson } from "../../staff-api.ts";
 import { shortId } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
 import { ADJUSTMENT_STATUSES, ALL_STATUSES, statusParam } from "./status.ts";
 import {
-  CreateAction,
-  FormDrawer,
   INVENTORY_INVALIDATE,
   ListError,
-  ListToolbar,
   PAGE_SIZE,
   StatusFilter,
   statusBadge,
   useBulkWrite,
   useConfirmedAction,
-  useFocusSearchHotkey,
 } from "./shared.tsx";
+import { CreateAction } from "../../components/form-parts.tsx";
 
 const ADJUSTMENT_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
 
@@ -228,10 +228,15 @@ export const AdjustmentsTab = (): React.JSX.Element => {
       text: (row) => labels.product(text(row.productId, "")),
       truncate: 32,
     },
-    { key: "productBatchId", label: "Batch", render: (row) => labels.batch(text(row.productBatchId, "")) },
-    { key: "adjustmentType", label: "Type" },
+    {
+      key: "productBatchId",
+      hideBelow: "lg",
+      label: "Batch",
+      render: (row) => labels.batch(text(row.productBatchId, "")),
+    },
+    { key: "adjustmentType", hideBelow: "md", label: "Type" },
     { key: "quantity", label: "Quantity", align: "right", render: (row) => formatQuantity(row.quantity) },
-    { key: "reason", label: "Reason", truncate: 32 },
+    { key: "reason", hideBelow: "xl", label: "Reason", truncate: 32 },
     { key: "status", label: "Status", render: (row) => statusBadge(text(row.status, "-")) },
     {
       key: "actions",
@@ -246,7 +251,7 @@ export const AdjustmentsTab = (): React.JSX.Element => {
             <Button size="sm" onClick={() => void transition(id, "approve")}>
               {translateText("Approve")}
             </Button>
-            <Button size="sm" variant="danger-soft" onClick={() => void transition(id, "reject")}>
+            <Button size="sm" variant="danger-ghost" onClick={() => void transition(id, "reject")}>
               {translateText("Reject")}
             </Button>
           </RowActions>
@@ -258,18 +263,19 @@ export const AdjustmentsTab = (): React.JSX.Element => {
   return (
     <div ref={rootRef} className="grid gap-3">
       <CreateAction label="Create adjustment" onClick={() => setCreating(true)} />
-      <ListToolbar pageKey="inventory:adjustments" defaults={ADJUSTMENT_DEFAULTS}>
-        <StatusFilter
-          value={values.status}
-          options={ADJUSTMENT_STATUSES}
-          onChange={(status) => {
-            setSelected(new Set());
-            setValues({ status });
-          }}
-        />
-      </ListToolbar>
       <ListError error={list.error} />
       <DataTable
+        toolbarStart={
+          <StatusFilter
+            value={values.status}
+            options={ADJUSTMENT_STATUSES}
+            onChange={(status) => {
+              setSelected(new Set());
+              setValues({ status });
+            }}
+          />
+        }
+        toolbarExtra={<SavedViewsMenu pageKey="inventory:adjustments" defaults={ADJUSTMENT_DEFAULTS} />}
         rows={list.rows}
         columns={columns}
         loading={list.isLoading}

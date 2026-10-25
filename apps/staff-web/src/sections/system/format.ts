@@ -12,12 +12,12 @@ const isMissing = (value: number | null | undefined): value is null | undefined 
 export const formatMilliseconds = (ms: number | null | undefined): string =>
   isMissing(ms) ? DASH : `${formatQuantity(ms)} ms`;
 
-/** CPU as millicores (1000 m is one core), so a lightly loaded service does not read as 0. */
+/** CPU as millicores (1000 mCPU is one core), so a lightly loaded service does not read as 0. */
 export const formatMillicores = (cores: number | null | undefined): string =>
-  isMissing(cores) ? DASH : `${formatQuantity(Math.round(cores * 1000))} m`;
+  isMissing(cores) ? DASH : `${formatQuantity(Math.round(cores * 1000))} mCPU`;
 
 export const formatMebibytes = (bytes: number | null | undefined): string =>
-  isMissing(bytes) ? DASH : formatQuantity(bytes / BYTES_PER_MIB);
+  isMissing(bytes) ? DASH : `${formatQuantity(Math.round(bytes / BYTES_PER_MIB))} MiB`;
 
 const chartLocale = (): string => (getLanguage() === "vi" ? "vi-VN" : "en-US");
 

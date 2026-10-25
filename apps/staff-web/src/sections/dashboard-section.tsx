@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Alert, Card, CardContent, CardHeader, CardTitle, Skeleton, StatTile, type StatTileProps } from "@pharmacy/ui";
 
 import { translateText } from "../i18n.ts";
+import { auditActionLabel } from "./governance/audit-query.ts";
 import { formatDateTime, formatQuantity, readOne, text, type JsonRecord } from "../staff-api.ts";
 
 type Kpi = { label: string; value: string; tone?: StatTileProps["tone"] };
@@ -85,7 +86,9 @@ export const DashboardSection = (): React.JSX.Element => {
                   key={text(item.eventId, String(index))}
                   className="flex flex-wrap gap-x-2 border-b border-line pb-2 last:border-0"
                 >
-                  <span className="font-medium text-ink">{translateText(text(item.eventType))}</span>
+                  <span className="font-medium text-ink">
+                    {auditActionLabel(text(item.action, ""), text(item.entityType, ""), translateText)}
+                  </span>
                   <span className="text-muted">
                     {translateText("at")} {formatDateTime(item.occurredAt)}
                   </span>

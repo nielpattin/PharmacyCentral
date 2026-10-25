@@ -95,11 +95,14 @@ export const UnitsPage = (): React.JSX.Element => {
 
   return (
     <>
-      <PageActions>
-        <Button size="sm" disabled={productId === ""} onClick={() => setDrawer({ kind: "create" })}>
-          {translateText("Add product unit")}
-        </Button>
-      </PageActions>
+      {/* Only offered once a product is chosen: a disabled button gives no hint why it cannot be used. */}
+      {productId === "" ? null : (
+        <PageActions>
+          <Button size="sm" onClick={() => setDrawer({ kind: "create" })}>
+            {translateText("Add product unit")}
+          </Button>
+        </PageActions>
+      )}
       <div className="mb-3 max-w-md">
         <ProductPicker
           label={translateText("Product")}

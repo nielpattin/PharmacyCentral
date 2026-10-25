@@ -1,4 +1,4 @@
-import { Alert, Button, Input, RowActions, Select, StatusBadge } from "@pharmacy/ui";
+import { Alert, Button, Input, RowActions, Select, StatusCell } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { useConfirm } from "../../components/confirm.tsx";
@@ -67,7 +67,14 @@ export const ProductsPage = (): React.JSX.Element => {
   const columns: Column[] = [
     { key: "sku", label: translateText("SKU"), truncate: 18 },
     { key: "name", label: translateText("Name"), truncate: 40 },
-    { key: "category", label: translateText("Category"), truncate: 24, hideBelow: "lg" },
+    {
+      key: "category",
+      label: translateText("Category"),
+      truncate: 24,
+      hideBelow: "lg",
+      render: (row) => translateText(text(row.category, "")),
+      text: (row) => translateText(text(row.category, "")),
+    },
     { key: "manufacturer", label: translateText("Manufacturer"), truncate: 28, hideBelow: "xl" },
     {
       key: "prescriptionRequired",
@@ -80,9 +87,9 @@ export const ProductsPage = (): React.JSX.Element => {
       label: translateText("Status"),
       text: (row) => text(row.status, ""),
       render: (row) => (
-        <StatusBadge tone={text(row.status, "") === "Active" ? "success" : "neutral"}>
+        <StatusCell tone={text(row.status, "") === "Active" ? "success" : "neutral"}>
           {translateText(text(row.status))}
-        </StatusBadge>
+        </StatusCell>
       ),
     },
     {

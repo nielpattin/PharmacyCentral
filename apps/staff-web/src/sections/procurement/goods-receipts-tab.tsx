@@ -1,4 +1,4 @@
-import { Alert, Button, DataTable, RowActions, StatusBadge, type DataColumn } from "@pharmacy/ui";
+import { Alert, Button, DataTable, RowActions, StatusCell, type DataColumn } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { dataTableLabels } from "../../components/data-table-labels.ts";
@@ -49,11 +49,12 @@ export const GoodsReceiptsTab = (): React.JSX.Element => {
     {
       key: "status",
       label: translateText("Status"),
-      render: (row) => <StatusBadge tone="neutral">{translateText(text(row.status))}</StatusBadge>,
+      render: (row) => <StatusCell tone="neutral">{translateText(text(row.status))}</StatusCell>,
       text: (row) => text(row.status, ""),
     },
     {
       key: "siteId",
+      hideBelow: "lg",
       label: translateText("Site"),
       render: (row) => referenceName(references.sites, row.siteId, ["code", "name"]),
       text: (row) => referenceName(references.sites, row.siteId, ["code", "name"]),
@@ -61,6 +62,7 @@ export const GoodsReceiptsTab = (): React.JSX.Element => {
     },
     {
       key: "supplierId",
+      hideBelow: "md",
       label: translateText("Supplier"),
       render: (row) => referenceName(references.suppliers, row.supplierId, ["code", "name"]),
       text: (row) => referenceName(references.suppliers, row.supplierId, ["code", "name"]),
@@ -83,12 +85,10 @@ export const GoodsReceiptsTab = (): React.JSX.Element => {
 
   return (
     <div className="grid gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <SavedViewsMenu pageKey="goods-receipts" defaults={LIST_DEFAULTS} />
-      </div>
       {receipts.error ? <Alert variant="danger">{translateText(receipts.error.message)}</Alert> : null}
       <div ref={listRef}>
         <DataTable
+          toolbarExtra={<SavedViewsMenu pageKey="goods-receipts" defaults={LIST_DEFAULTS} />}
           storageKey="staff:procurement:goods-receipts"
           labels={dataTableLabels()}
           rows={receipts.rows}

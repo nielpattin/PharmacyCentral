@@ -5,32 +5,32 @@ import { useRef, useState } from "react";
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { Field, SelectField } from "../../components/forms.tsx";
+import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
+import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
+import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
+import { useCan } from "../../permissions/use-can.ts";
+import { CountLineDrawer } from "./count-line.tsx";
 import { formatQuantity, text, type JsonRecord } from "../../staff-api.ts";
 import { asRecord } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
 import { ALL_STATUSES, STOCKTAKE_STATUSES, statusParam, statusTone } from "./status.ts";
 import {
-  AddLineButton,
-  CreateAction,
   Fact,
   FactList,
-  FormDrawer,
   INVENTORY_INVALIDATE,
-  LineCard,
   ListError,
-  ListToolbar,
   PAGE_SIZE,
   StatusFilter,
   statusBadge,
   useConfirmedAction,
-  useFocusSearchHotkey,
 } from "./shared.tsx";
+import { AddLineButton, CreateAction, LineCard } from "../../components/form-parts.tsx";
 
 const STOCKTAKE_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
 
@@ -204,7 +204,9 @@ export const StocktakeTab = (): React.JSX.Element => {
   const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
   useFocusSearchHotkey(rootRef);
   const [creating, setCreating] = useState(false);
-  useHotkey("n", () => setCreating(true), { label: "Create new", when: !creating });
+  const [counting, setCounting] = useState(false);
+  const countGate = useCan("inventory.stocktake.count");
+  useHotkey("n", () => setCreating(true), { label: "Create new", when: !creating && !counting });
   const list = usePagedList({
     key: ["staff-inventory", "stocktakes"],
     path: "/api/inventory/stocktakes",
@@ -263,11 +265,17 @@ export const StocktakeTab = (): React.JSX.Element => {
   return (
     <div ref={rootRef} className="grid gap-3">
       <CreateAction label="Create stocktake" onClick={() => setCreating(true)} />
-      <ListToolbar pageKey="inventory:stocktakes" defaults={STOCKTAKE_DEFAULTS}>
-        <StatusFilter value={values.status} options={STOCKTAKE_STATUSES} onChange={(status) => setValues({ status })} />
-      </ListToolbar>
+      <CreateAction label="Record count" variant="secondary" gate={countGate} onClick={() => setCounting(true)} />
       <ListError error={list.error} />
       <DataTable
+        toolbarStart={
+          <StatusFilter
+            value={values.status}
+            options={STOCKTAKE_STATUSES}
+            onChange={(status) => setValues({ status })}
+          />
+        }
+        toolbarExtra={<SavedViewsMenu pageKey="inventory:stocktakes" defaults={STOCKTAKE_DEFAULTS} />}
         rows={list.rows}
         columns={columns}
         loading={list.isLoading}
@@ -285,6 +293,7 @@ export const StocktakeTab = (): React.JSX.Element => {
         />
       ) : null}
       {creating ? <StocktakeDrawer onClose={() => setCreating(false)} /> : null}
+      {counting ? <CountLineDrawer onClose={() => setCounting(false)} /> : null}
     </div>
   );
 };

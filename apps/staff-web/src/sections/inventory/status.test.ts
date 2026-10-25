@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ALL_STATUSES, statusParam, statusTone } from "./status.ts";
+import { ALL_STATUSES, qualityDecisionsFor, statusParam, statusTone } from "./status.ts";
 
 describe("statusTone", () => {
   it("maps the backend status words to badge tones", () => {
@@ -8,6 +8,8 @@ describe("statusTone", () => {
     expect(statusTone("PendingApproval")).toBe("warning");
     expect(statusTone("InTransit")).toBe("info");
     expect(statusTone("Rejected")).toBe("danger");
+    // A cancelled record is settled, not an error, so it stays quiet.
+    expect(statusTone("Cancelled")).toBe("neutral");
   });
 
   it("shows an unknown status as neutral", () => {
@@ -24,5 +26,16 @@ describe("statusParam", () => {
 
   it("passes a concrete status through", () => {
     expect(statusParam("PendingApproval")).toBe("PendingApproval");
+  });
+});
+
+describe("qualityDecisionsFor", () => {
+  it("offers only the opposite verdict once a batch is decided", () => {
+    expect(qualityDecisionsFor("Released")).toEqual(["reject"]);
+    expect(qualityDecisionsFor("Rejected")).toEqual(["release"]);
+  });
+
+  it("offers both verdicts while the batch waits for QC", () => {
+    expect(qualityDecisionsFor("PendingQc")).toEqual(["release", "reject"]);
   });
 });

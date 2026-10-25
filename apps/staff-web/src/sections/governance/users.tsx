@@ -1,38 +1,40 @@
-import { Alert, Button, RowActions } from "@pharmacy/ui";
-import { useNavigate } from "@tanstack/react-router";
+import { ActionMenu, Alert, Button, RowActions } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
-import { DataTable, type Column } from "../../components/data-table.tsx";
 import { useConfirm, usePrompt } from "../../components/confirm.tsx";
+import { DataTable, type Column } from "../../components/data-table.tsx";
 import { PageActions } from "../../components/page-actions.tsx";
+import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
+import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { useHotkey } from "../../hooks/useHotkey.ts";
+import { useListUrlState } from "../../hooks/useListUrlState.ts";
+import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { translateText } from "../../i18n.ts";
-import { governanceTabPaths } from "../../router.ts";
 import { text } from "../../staff-api.ts";
+import { CreateUserDrawer } from "./create-user.tsx";
+import { EditAccessDrawer } from "./edit-access.tsx";
 import { filterEmployees, toEmployeeAccount, type EmployeeAccount } from "./employees.ts";
 import { useEmployees } from "./queries.ts";
 
+const USERS_DEFAULTS = { q: "" } as const;
+
 /** Employee accounts: search, access, password reset, and session revocation. */
 export const UsersTab = (): React.JSX.Element => {
-  const navigate = useNavigate();
   const employees = useEmployees();
   const run = useStaffAction();
   const confirm = useConfirm();
   const prompt = usePrompt();
-  const [query, setQuery] = useState("");
+  const { values, setValues } = useListUrlState(USERS_DEFAULTS);
+  const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
-  useHotkey(
-    "/",
-    (event) => {
-      event.preventDefault();
-      rootRef.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
-    },
-    { label: "Focus search" },
-  );
-  useHotkey("n", () => void navigate({ to: governanceTabPaths.createUser }), { label: "Create new" });
+  useFocusSearchHotkey(rootRef);
+  useHotkey("n", () => setCreating(true), { label: "Create new" });
 
-  const rows = filterEmployees(employees.data ?? [], query);
+  const rows = filterEmployees(employees.data ?? [], values.q);
+  const editing = (employees.data ?? []).map(toEmployeeAccount).find((account) => account.id === editingId);
 
   const resetPassword = async (account: EmployeeAccount): Promise<void> => {
     const password = await prompt({
@@ -65,14 +67,15 @@ export const UsersTab = (): React.JSX.Element => {
 
   const columns: Column[] = [
     { key: "displayName", label: "Name" },
-    { key: "email", label: "Email", truncate: 32 },
+    { key: "email", hideBelow: "md", label: "Email", truncate: 32 },
     {
       key: "roles",
+      hideBelow: "lg",
       label: "Roles",
-      render: (row) =>
-        toEmployeeAccount(row)
-          .roles.map((role) => translateText(role))
-          .join(", "),
+      render: (row) => {
+        const roles = toEmployeeAccount(row).roles;
+        return roles.length === 0 ? "—" : roles.map((role) => translateText(role)).join(", ");
+      },
       text: (row) => toEmployeeAccount(row).roles.join(", "),
     },
     {
@@ -84,19 +87,21 @@ export const UsersTab = (): React.JSX.Element => {
         const account = toEmployeeAccount(row);
         return (
           <RowActions label={translateText("Employee actions")}>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void navigate({ to: governanceTabPaths.editAccess, search: { user: account.id } })}
-            >
+            <Button variant="ghost" size="sm" onClick={() => setEditingId(account.id)}>
               {translateText("Edit access")}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => void resetPassword(account)}>
-              {translateText("Reset password")}
-            </Button>
-            <Button variant="danger-soft" size="sm" onClick={() => void revokeSessions(account)}>
-              {translateText("Revoke sessions")}
-            </Button>
+            <ActionMenu
+              label={translateText("More actions")}
+              items={[
+                { id: "reset", label: translateText("Reset password"), onSelect: () => void resetPassword(account) },
+                {
+                  id: "revoke",
+                  label: translateText("Revoke sessions"),
+                  tone: "danger",
+                  onSelect: () => void revokeSessions(account),
+                },
+              ]}
+            />
           </RowActions>
         );
       },
@@ -104,9 +109,9 @@ export const UsersTab = (): React.JSX.Element => {
   ];
 
   return (
-    <div ref={rootRef} className="grid gap-4">
+    <div ref={rootRef} className="grid gap-3">
       <PageActions>
-        <Button size="sm" onClick={() => void navigate({ to: governanceTabPaths.createUser })}>
+        <Button size="sm" onClick={() => setCreating(true)}>
           {translateText("Create user")}
         </Button>
       </PageActions>
@@ -116,11 +121,14 @@ export const UsersTab = (): React.JSX.Element => {
         columns={columns}
         getKey={(row, index) => text(row.id, String(index))}
         loading={employees.isPending}
-        empty={query.trim() ? "No employees match this search." : "No employees found."}
-        search={{ value: query, onChange: setQuery, placeholder: translateText("Search name or email") }}
+        empty={values.q.trim() ? "No employees match this search." : "No employees found."}
+        search={{ value: draft, onChange: setDraft, placeholder: translateText("Search name or email") }}
+        toolbarExtra={<SavedViewsMenu pageKey="governance-users" defaults={USERS_DEFAULTS} />}
         storageKey="staff:governance:users"
         exportCsv={{ filename: "employees.csv", columns: ["displayName", "email", "roles"] }}
       />
+      {creating ? <CreateUserDrawer onClose={() => setCreating(false)} /> : null}
+      {editing ? <EditAccessDrawer key={editing.id} account={editing} onClose={() => setEditingId(undefined)} /> : null}
     </div>
   );
 };

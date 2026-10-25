@@ -14,7 +14,7 @@ const STATUS_TONE: Readonly<Record<string, StatusTone | undefined>> = {
   Approved: "info",
   PartiallyReceived: "warning",
   Received: "success",
-  Cancelled: "danger",
+  Cancelled: "neutral",
 };
 
 export const purchaseOrderTone = (status: unknown): StatusTone => STATUS_TONE[text(status, "")] ?? "neutral";

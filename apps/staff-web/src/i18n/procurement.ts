@@ -1,6 +1,10 @@
 // Supplier orders, goods receipts, and the finance area (invoices, refunds, reports, valuation).
 export const procurementLiterals: Record<string, string> = {
   "Purchase orders": "Đơn đặt hàng",
+  "Only Draft purchase orders can be approved": "Chỉ đơn nháp mới duyệt được.",
+  "Purchase order cannot be cancelled in its current state": "Đơn đặt hàng ở trạng thái này không thể hủy.",
+  "Purchase order is not receivable": "Đơn đặt hàng này chưa duyệt hoặc đã nhận đủ, không nhận thêm được.",
+  "Receipt exceeds ordered quantity": "Số lượng nhận vượt quá số lượng đã đặt.",
   "Create order": "Tạo đơn đặt hàng",
   "Goods receipts": "Phiếu nhập hàng",
   "Receive goods": "Nhận hàng",
@@ -51,6 +55,7 @@ export const procurementLiterals: Record<string, string> = {
   Loose: "Thoáng",
   "Sorting applies to loaded rows only": "Sắp xếp chỉ áp dụng cho các dòng đã tải",
   "Showing {count} rows": "Hiển thị {count} bản ghi",
+  "Showing 1 row": "Hiển thị 1 bản ghi",
   "Showing {count} of {total} rows": "Hiển thị {count} trên {total} bản ghi",
   "Load more": "Tải thêm",
   "Loading more…": "Đang tải thêm…",
@@ -63,6 +68,7 @@ export const procurementLiterals: Record<string, string> = {
   "Reserved value": "Giá trị đang giữ",
   "Missing prices": "Thiếu giá",
   Dispensed: "Đã cấp phát",
+  PartiallyDispensed: "Cấp phát một phần",
   "On hand": "Tồn kho",
   Value: "Giá trị",
   Invoice: "Hóa đơn",

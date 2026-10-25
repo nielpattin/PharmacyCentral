@@ -4,29 +4,24 @@ import { useMemo, useRef, useState } from "react";
 import { useConfirm, usePrompt } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
+import { GatedButton } from "../../components/gated-button.tsx";
+import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
+import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
+import { useCan } from "../../permissions/use-can.ts";
 import { formatDate, formatQuantity, text, type JsonRecord } from "../../staff-api.ts";
 import { asRecord } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
 import { MOVEMENT_HISTORY_COLUMNS } from "./movements.tsx";
-import { statusTone } from "./status.ts";
-import type { InventoryTab } from "./tabs.ts";
-import {
-  CreateAction,
-  Fact,
-  FactList,
-  INVENTORY_INVALIDATE,
-  ListError,
-  ListToolbar,
-  PAGE_SIZE,
-  statusBadge,
-  useFocusSearchHotkey,
-} from "./shared.tsx";
+import { qualityDecisionsFor, statusTone, type QualityDecision } from "./status.ts";
+import { CreateBatchDrawer } from "./create-batch.tsx";
+import { Fact, FactList, INVENTORY_INVALIDATE, ListError, PAGE_SIZE, statusBadge } from "./shared.tsx";
+import { CreateAction } from "../../components/form-parts.tsx";
 
 const BALANCE_DEFAULTS = { q: "" } as const;
 const BATCH_DEFAULTS = { q: "" } as const;
@@ -60,6 +55,7 @@ export const BalancesTab = (): React.JSX.Element => {
     { key: "batchNumber", label: "Batch" },
     {
       key: "storageLocationId",
+      hideBelow: "lg",
       label: "Location",
       render: (row) => labels.location(text(row.storageLocationId, "")),
       text: (row) => labels.location(text(row.storageLocationId, "")),
@@ -68,6 +64,7 @@ export const BalancesTab = (): React.JSX.Element => {
     { key: "quantityOnHand", label: "On hand", align: "right", render: (row) => formatQuantity(row.quantityOnHand) },
     {
       key: "quantityReserved",
+      hideBelow: "md",
       label: "Reserved",
       align: "right",
       render: (row) => formatQuantity(row.quantityReserved),
@@ -77,9 +74,9 @@ export const BalancesTab = (): React.JSX.Element => {
 
   return (
     <div ref={rootRef} className="grid gap-3">
-      <ListToolbar pageKey="inventory:balances" defaults={BALANCE_DEFAULTS} />
       <ListError error={list.error} />
       <DataTable
+        toolbarExtra={<SavedViewsMenu pageKey="inventory:balances" defaults={BALANCE_DEFAULTS} />}
         rows={balances}
         columns={columns}
         loading={list.isLoading}
@@ -117,14 +114,14 @@ const BatchHistory = ({ batchId }: { batchId: string }): React.JSX.Element => {
   );
 };
 
-type QualityDecision = "release" | "reject";
-
-export const BatchesTab = ({ onNavigate }: { onNavigate: (tab: InventoryTab) => void }): React.JSX.Element => {
+export const BatchesTab = (): React.JSX.Element => {
   const rootRef = useRef<HTMLDivElement>(null);
   const { values, setValues } = useListUrlState(BATCH_DEFAULTS);
   const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
   useFocusSearchHotkey(rootRef);
-  useHotkey("n", () => onNavigate("Create batch"), { label: "Create new" });
+  const createGate = useCan("inventory.batch.create");
+  const [creating, setCreating] = useState(false);
+  useHotkey("n", () => setCreating(true), { label: "Create new", when: createGate.allowed && !creating });
   const list = usePagedList({
     key: ["staff-inventory", "batches"],
     path: "/api/inventory/batches",
@@ -135,6 +132,7 @@ export const BatchesTab = ({ onNavigate }: { onNavigate: (tab: InventoryTab) => 
   const run = useStaffAction();
   const confirm = useConfirm();
   const prompt = usePrompt();
+  const reviewGate = useCan("inventory.batch.quality");
   const [selectedId, setSelectedId] = useState<string>();
   const selected = selectedId === undefined ? undefined : list.rows.find((row) => text(row.id, "") === selectedId);
 
@@ -170,7 +168,7 @@ export const BatchesTab = ({ onNavigate }: { onNavigate: (tab: InventoryTab) => 
       label: "Product",
       render: (row) => labels.product(text(row.productId, "")),
       text: (row) => labels.product(text(row.productId, "")),
-      truncate: 32,
+      truncate: 56,
     },
     {
       key: "qualityStatus",
@@ -183,29 +181,43 @@ export const BatchesTab = ({ onNavigate }: { onNavigate: (tab: InventoryTab) => 
       key: "actions",
       label: "Actions",
       pinned: "right",
+      align: "right",
+      width: 220,
       enableSorting: false,
-      render: (row) => (
-        <RowActions label={translateText("Actions")}>
-          <Button size="sm" variant="ghost" onClick={() => setSelectedId(text(row.id, ""))}>
-            {translateText("View")}
-          </Button>
-          <Button size="sm" onClick={() => void quality(row, "release")}>
-            {translateText("Release")}
-          </Button>
-          <Button size="sm" variant="danger-soft" onClick={() => void quality(row, "reject")}>
-            {translateText("Reject")}
-          </Button>
-        </RowActions>
-      ),
+      render: (row) => {
+        const decisions = qualityDecisionsFor(text(row.qualityStatus, ""));
+        return (
+          <RowActions label={translateText("Actions")}>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedId(text(row.id, ""))}>
+              {translateText("View")}
+            </Button>
+            {decisions.includes("release") ? (
+              <GatedButton gate={reviewGate} size="sm" variant="secondary" onClick={() => void quality(row, "release")}>
+                {translateText("Release")}
+              </GatedButton>
+            ) : null}
+            {decisions.includes("reject") ? (
+              <GatedButton
+                gate={reviewGate}
+                size="sm"
+                variant="danger-ghost"
+                onClick={() => void quality(row, "reject")}
+              >
+                {translateText("Reject")}
+              </GatedButton>
+            ) : null}
+          </RowActions>
+        );
+      },
     },
   ];
 
   return (
     <div ref={rootRef} className="grid gap-3">
-      <CreateAction label="Create batch" onClick={() => onNavigate("Create batch")} />
-      <ListToolbar pageKey="inventory:batches" defaults={BATCH_DEFAULTS} />
+      <CreateAction label="Create batch" gate={createGate} onClick={() => setCreating(true)} />
       <ListError error={list.error} />
       <DataTable
+        toolbarExtra={<SavedViewsMenu pageKey="inventory:batches" defaults={BATCH_DEFAULTS} />}
         rows={list.rows}
         columns={columns}
         loading={list.isLoading}
@@ -236,16 +248,26 @@ export const BatchesTab = ({ onNavigate }: { onNavigate: (tab: InventoryTab) => 
           history={<BatchHistory batchId={text(selected.id, "")} />}
           footer={
             <>
-              <Button size="sm" onClick={() => void quality(selected, "release")}>
-                {translateText("Release")}
-              </Button>
-              <Button size="sm" variant="danger-soft" onClick={() => void quality(selected, "reject")}>
-                {translateText("Reject")}
-              </Button>
+              {qualityDecisionsFor(text(selected.qualityStatus, "")).includes("release") ? (
+                <GatedButton gate={reviewGate} size="sm" onClick={() => void quality(selected, "release")}>
+                  {translateText("Release")}
+                </GatedButton>
+              ) : null}
+              {qualityDecisionsFor(text(selected.qualityStatus, "")).includes("reject") ? (
+                <GatedButton
+                  gate={reviewGate}
+                  size="sm"
+                  variant="danger-ghost"
+                  onClick={() => void quality(selected, "reject")}
+                >
+                  {translateText("Reject")}
+                </GatedButton>
+              ) : null}
             </>
           }
         />
       ) : null}
+      {creating ? <CreateBatchDrawer onClose={() => setCreating(false)} /> : null}
     </div>
   );
 };

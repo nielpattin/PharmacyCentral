@@ -1,8 +1,7 @@
-import { Alert, DataTable } from "@pharmacy/ui";
+import { Alert, DataTable, Input } from "@pharmacy/ui";
 
 import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
-import { Field } from "../../components/forms.tsx";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
@@ -31,14 +30,18 @@ export const ReportsTab = (): React.JSX.Element => {
 
   return (
     <div className="grid gap-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-64 flex-1">
-          <Field label="Report type" value={reportType} onChange={setReportType} />
-        </div>
-        <SavedViewsMenu pageKey="finance-reports" defaults={LIST_DEFAULTS} />
-      </div>
       {reports.error ? <Alert variant="danger">{translateText(reports.error.message)}</Alert> : null}
       <DataTable
+        toolbarStart={
+          <Input
+            aria-label={translateText("Report type")}
+            placeholder={translateText("Report type")}
+            className="w-56"
+            value={reportType}
+            onChange={(event) => setReportType(event.target.value)}
+          />
+        }
+        toolbarExtra={<SavedViewsMenu pageKey="finance-reports" defaults={LIST_DEFAULTS} />}
         storageKey="staff:finance:reports"
         labels={dataTableLabels()}
         rows={reports.rows}

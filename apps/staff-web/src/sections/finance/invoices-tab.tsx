@@ -4,7 +4,7 @@ import {
   DataTable,
   RowActions,
   Select,
-  StatusBadge,
+  StatusCell,
   type DataColumn,
   type StatusTone,
 } from "@pharmacy/ui";
@@ -120,12 +120,14 @@ export const InvoicesTab = (): React.JSX.Element => {
     },
     {
       key: "orderId",
+      hideBelow: "lg",
       label: translateText("Order"),
       render: (row) => (row.orderId ? orderLabel(row.orderId) : "-"),
       text: (row) => (row.orderId ? orderLabel(row.orderId) : ""),
     },
     {
       key: "customerId",
+      hideBelow: "xl",
       label: translateText("Customer"),
       render: (row) => (row.customerId ? (customers.get(text(row.customerId, "")) ?? shortId(row.customerId)) : "-"),
       text: (row) => (row.customerId ? (customers.get(text(row.customerId, "")) ?? shortId(row.customerId)) : ""),
@@ -142,13 +144,18 @@ export const InvoicesTab = (): React.JSX.Element => {
       key: "status",
       label: translateText("Status"),
       render: (row) => (
-        <StatusBadge tone={INVOICE_TONE[text(row.status, "")] ?? "neutral"}>
+        <StatusCell tone={INVOICE_TONE[text(row.status, "")] ?? "neutral"}>
           {translateText(text(row.status))}
-        </StatusBadge>
+        </StatusCell>
       ),
       text: (row) => text(row.status, ""),
     },
-    { key: "createdAt", label: translateText("Created"), render: (row) => formatDateTime(row.createdAt) },
+    {
+      key: "createdAt",
+      hideBelow: "lg",
+      label: translateText("Created"),
+      render: (row) => formatDateTime(row.createdAt),
+    },
     {
       key: "actions",
       label: translateText("Actions"),
@@ -169,7 +176,7 @@ export const InvoicesTab = (): React.JSX.Element => {
             </Button>
           ) : null}
           {refundGate.allowed && text(row.status, "") === "Paid" ? (
-            <Button size="sm" variant="danger-soft" onClick={() => void refund(row)}>
+            <Button size="sm" variant="danger-ghost" onClick={() => void refund(row)}>
               {translateText("Refund")}
             </Button>
           ) : null}
@@ -180,24 +187,24 @@ export const InvoicesTab = (): React.JSX.Element => {
 
   return (
     <div ref={listRef} className="grid gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          aria-label={translateText("Status")}
-          className="w-auto min-w-44"
-          value={list.values.status}
-          onChange={(event) => list.setValues({ status: event.target.value })}
-        >
-          <option value="all">{translateText("All statuses")}</option>
-          {INVOICE_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {translateText(status)}
-            </option>
-          ))}
-        </Select>
-        <SavedViewsMenu pageKey="finance-invoices" defaults={LIST_DEFAULTS} />
-      </div>
       {invoices.error ? <Alert variant="danger">{translateText(invoices.error.message)}</Alert> : null}
       <DataTable
+        toolbarStart={
+          <Select
+            aria-label={translateText("Status")}
+            className="w-auto min-w-44"
+            value={list.values.status}
+            onChange={(event) => list.setValues({ status: event.target.value })}
+          >
+            <option value="all">{translateText("All statuses")}</option>
+            {INVOICE_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {translateText(status)}
+              </option>
+            ))}
+          </Select>
+        }
+        toolbarExtra={<SavedViewsMenu pageKey="finance-invoices" defaults={LIST_DEFAULTS} />}
         storageKey="staff:finance:invoices"
         labels={dataTableLabels()}
         rows={invoices.rows}

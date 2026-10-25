@@ -1,5 +1,5 @@
-import { Alert, Button, RowActions, StatusBadge } from "@pharmacy/ui";
-import { useState } from "react";
+import { ActionMenu, Alert, Button, RowActions, StatusCell, type ActionMenuItem } from "@pharmacy/ui";
+import { useRef, useState } from "react";
 
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
@@ -7,6 +7,10 @@ import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { productLabel, useProductLookup } from "../../hooks/useProductLookup.ts";
 import { referenceLabel, useStaffReferences } from "../../hooks/useStaffReferences.ts";
+import { SubTabs } from "../../components/forms.tsx";
+import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
+import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
+import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
 import { formatDateTime, formatQuantity, text, type JsonRecord } from "../../staff-api.ts";
 import {
@@ -22,7 +26,7 @@ import {
   shortId,
   statusParam,
 } from "../sales/rules.ts";
-import { DetailField, ListToolbar, SalesAuditHistory } from "../sales/shared.tsx";
+import { DetailField, SalesAuditHistory } from "../sales/shared.tsx";
 import { usePrescriptionActions } from "./prescription-actions.ts";
 
 const QUEUE_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
@@ -36,6 +40,9 @@ export const PrescriptionQueueTab = ({
   onDispense: (prescriptionId: string) => void;
 }): React.JSX.Element => {
   const { values, setValues } = useListUrlState(QUEUE_DEFAULTS);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
+  useFocusSearchHotkey(rootRef);
   const status = activeStatus(values.status, PRESCRIPTION_STATUSES, ALL_STATUSES);
   const queue = usePagedList({
     key: ["staff-prescriptions"],
@@ -48,29 +55,57 @@ export const PrescriptionQueueTab = ({
   const [openId, setOpenId] = useState<string>();
   const openRow = queue.rows.find((row) => text(row.id, "") === openId);
 
-  const renderActions = (row: JsonRecord, withView: boolean): React.JSX.Element => {
+  /** A table row shows View, one main action, and the rest in a menu. The drawer footer has room for all of them. */
+  const renderActions = (row: JsonRecord, inTable: boolean): React.JSX.Element => {
     const id = text(row.id, "");
     const rowStatus = text(row.status, "");
-    return (
-      <RowActions label={translateText("Prescription actions")}>
-        {withView ? (
+    const dispensable = canOperateCounter && canDispense(rowStatus);
+    const invoiceable = canOperateCounter && canCreateInvoice(rowStatus);
+    const cancellable = canOperateCounter && canCancelPrescription(rowStatus);
+    const invoice = (): void => void actions.createInvoice(id);
+    const cancel = (): void => void actions.cancel(id);
+    if (inTable) {
+      const menu: ActionMenuItem[] = [
+        ...(dispensable && invoiceable
+          ? [{ id: "invoice", label: translateText("Create invoice"), onSelect: invoice }]
+          : []),
+        ...(cancellable
+          ? [{ id: "cancel", label: translateText("Cancel prescription"), tone: "danger" as const, onSelect: cancel }]
+          : []),
+      ];
+      return (
+        <RowActions label={translateText("Prescription actions")}>
           <Button variant="ghost" size="sm" onClick={() => setOpenId(id)}>
             {translateText("View")}
           </Button>
-        ) : null}
-        {canOperateCounter && canDispense(rowStatus) ? (
-          <Button size="sm" onClick={() => onDispense(id)}>
-            {translateText("Dispense")}
+          {dispensable ? (
+            <Button size="sm" onClick={() => onDispense(id)}>
+              {translateText("Dispense")}
+            </Button>
+          ) : invoiceable ? (
+            <Button variant="secondary" size="sm" onClick={invoice}>
+              {translateText("Create invoice")}
+            </Button>
+          ) : null}
+          {menu.length > 0 ? <ActionMenu label={translateText("More actions")} items={menu} /> : null}
+        </RowActions>
+      );
+    }
+    return (
+      <RowActions label={translateText("Prescription actions")}>
+        {cancellable ? (
+          <Button variant="danger-ghost" size="sm" onClick={cancel}>
+            {translateText("Cancel prescription")}
           </Button>
         ) : null}
-        {canOperateCounter && canCreateInvoice(rowStatus) ? (
-          <Button variant="secondary" size="sm" onClick={() => void actions.createInvoice(id)}>
+        {invoiceable ? (
+          <Button variant="secondary" size="sm" onClick={invoice}>
             {translateText("Create invoice")}
           </Button>
         ) : null}
-        {canOperateCounter && canCancelPrescription(rowStatus) ? (
-          <Button variant="danger-soft" size="sm" onClick={() => void actions.cancel(id)}>
-            {translateText("Cancel prescription")}
+        {dispensable ? (
+          <Button size="sm" onClick={() => onDispense(id)}>
+            {translateText("Dispense")}
           </Button>
         ) : null}
       </RowActions>
@@ -89,23 +124,25 @@ export const PrescriptionQueueTab = ({
       key: "status",
       label: "Status",
       render: (row) => (
-        <StatusBadge tone={prescriptionTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusBadge>
+        <StatusCell tone={prescriptionTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusCell>
       ),
     },
     {
       key: "siteId",
+      hideBelow: "lg",
       label: "Site",
       truncate: true,
       render: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
     },
     {
       key: "lines",
+      hideBelow: "md",
       label: "Lines",
       align: "right",
       enableSorting: false,
       render: (row) => recordList(row.lines).length,
     },
-    { key: "createdAt", label: "Created", render: (row) => formatDateTime(row.createdAt) },
+    { key: "createdAt", hideBelow: "lg", label: "Created", render: (row) => formatDateTime(row.createdAt) },
     {
       key: "actions",
       label: "Actions",
@@ -116,20 +153,21 @@ export const PrescriptionQueueTab = ({
   ];
 
   return (
-    <div className="grid gap-3">
-      <ListToolbar
-        pageKey="prescriptions"
-        defaults={QUEUE_DEFAULTS}
-        query={values.q}
-        onQueryChange={(q) => setValues({ q })}
-        searchPlaceholder="Search by prescription number, patient name, or phone"
-        statuses={PRESCRIPTION_STATUSES}
-        status={status}
-        onStatusChange={(next) => setValues({ status: next }, { history: "push" })}
+    <div ref={rootRef} className="grid gap-3">
+      <SubTabs
+        tabs={[...PRESCRIPTION_STATUSES]}
+        active={status}
+        onChange={(next) => setValues({ status: next }, { history: "push" })}
       />
       {queue.error ? <Alert variant="danger">{translateText(queue.error.message)}</Alert> : null}
       <DataTable
         storageKey="staff:sales:prescriptions"
+        search={{
+          value: draft,
+          onChange: setDraft,
+          placeholder: translateText("Search by prescription number, patient name, or phone"),
+        }}
+        toolbarExtra={<SavedViewsMenu pageKey="prescriptions" defaults={QUEUE_DEFAULTS} />}
         loading={queue.isLoading}
         rows={queue.rows}
         columns={columns}

@@ -192,12 +192,13 @@ export const ServiceDetailSheet = ({
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <span className="inline-flex items-center gap-2">
                 <StatusDot tone={health ? DOT_TONE[health.tone] : "ok"} />
-                <span>{translateText(service.status === "up" ? "Ready" : "Down")}</span>
+                <span>
+                  {translateText(
+                    service.status !== "up" ? "Down" : service.liveStatus !== "up" ? "Live down" : "Ready",
+                  )}
+                </span>
               </span>
-              <Badge variant={service.liveStatus === "up" ? "success" : "danger"}>
-                {translateText(service.liveStatus === "up" ? "Live" : "Live down")}
-              </Badge>
-              {service.version ? <Badge variant="outline">{service.version}</Badge> : null}
+              {service.version ? <span className="text-muted">{service.version}</span> : null}
               <span className="text-muted">
                 {service.instances === null
                   ? DASH

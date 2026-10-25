@@ -4,13 +4,15 @@ import { useState } from "react";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { Field, SelectField } from "../../components/forms.tsx";
 import { ProductPicker } from "../../components/product-picker.tsx";
+import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { translateText } from "../../i18n.ts";
 import { formatDateTime, formatQuantity, text } from "../../staff-api.ts";
 import { useInventoryLabels } from "./labels.ts";
-import { CreateAction, FormDrawer, INVENTORY_INVALIDATE, ListError, PAGE_SIZE } from "./shared.tsx";
+import { INVENTORY_INVALIDATE, ListError, PAGE_SIZE } from "./shared.tsx";
+import { CreateAction } from "../../components/form-parts.tsx";
 
 /** Columns shared by the movements list and a batch's history: change, balance after, type, time. */
 export const MOVEMENT_HISTORY_COLUMNS: Column[] = [

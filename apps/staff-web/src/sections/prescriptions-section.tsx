@@ -1,24 +1,26 @@
 import { Alert } from "@pharmacy/ui";
+import { useState } from "react";
 
+import { CreateAction } from "../components/form-parts.tsx";
 import { SubTabs } from "../components/forms.tsx";
+import { useHotkey } from "../hooks/useHotkey.ts";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { useCan } from "../permissions/use-can.ts";
 import { translateText } from "../i18n.ts";
 import { ConsultationsTab } from "./prescriptions/consultations-tab.tsx";
 import { CounterTab } from "./prescriptions/counter-tab.tsx";
-import { CreatePrescriptionTab } from "./prescriptions/create-tab.tsx";
-import { DispenseTab } from "./prescriptions/dispense-tab.tsx";
+import { CreatePrescriptionDrawer } from "./prescriptions/create-drawer.tsx";
+import { DispenseDrawer } from "./prescriptions/dispense-drawer.tsx";
 import { PrescriptionQueueTab } from "./prescriptions/queue-tab.tsx";
 
-/** Tab names are the URL values, so a bookmarked `?tab=` keeps working. */
-const ALL_TABS = ["Prescriptions", "Create", "Dispense", "Counter transactions", "Consultations"] as const;
-type PrescriptionTab = (typeof ALL_TABS)[number];
-
-const VIEW_ONLY_TABS: readonly PrescriptionTab[] = ["Prescriptions", "Counter transactions", "Consultations"];
+/** Tab names are the URL values, so a bookmarked `?tab=` keeps working. Old `Create` and `Dispense` links open the queue. */
+const TABS = ["Prescriptions", "Counter transactions", "Consultations"] as const;
+type PrescriptionTab = (typeof TABS)[number];
 
 /**
- * Prescriptions queue, create, dispense, counter payments, and consultations. The active tab and the prescription being
- * dispensed live in the URL. `initialTab` is the tab a route opens on when the URL names none.
+ * Prescriptions queue, counter payments, and consultations. Creating a prescription and dispensing one are side
+ * drawers over the queue. The active tab and the prescription being dispensed live in the URL. `initialTab` is the tab a
+ * route opens on when the URL names none.
  */
 export const PrescriptionsSection = ({
   initialTab = "Prescriptions",
@@ -29,14 +31,18 @@ export const PrescriptionsSection = ({
   // supervises the same records read-only, which is what the edge policy grants that role on these routes.
   const canOperateCounter = useCan("prescription.dispense").allowed;
   const { values, setValues } = useListUrlState({ tab: initialTab, prescription: "" } as const);
-  const visibleTabs = canOperateCounter ? ALL_TABS : VIEW_ONLY_TABS;
-  const tab: PrescriptionTab = (ALL_TABS as readonly string[]).includes(values.tab)
+  const [creating, setCreating] = useState(false);
+  const activeTab: PrescriptionTab = (TABS as readonly string[]).includes(values.tab)
     ? (values.tab as PrescriptionTab)
-    : initialTab;
-  const activeTab: PrescriptionTab = visibleTabs.includes(tab) ? tab : "Prescriptions";
+    : "Prescriptions";
+  const onQueue = activeTab === "Prescriptions";
+  useHotkey("n", () => setCreating(true), {
+    label: "Create new",
+    when: canOperateCounter && onQueue && !creating && values.prescription === "",
+  });
 
   const openDispense = (prescriptionId: string): void =>
-    setValues({ tab: "Dispense", prescription: prescriptionId }, { history: "push" });
+    setValues({ tab: "Prescriptions", prescription: prescriptionId }, { history: "push" });
 
   return (
     <section className="grid gap-3">
@@ -46,22 +52,23 @@ export const PrescriptionsSection = ({
         </Alert>
       )}
       <SubTabs
-        tabs={[...visibleTabs]}
+        tabs={[...TABS]}
         active={activeTab}
-        onChange={(next) => setValues({ tab: next }, { history: "push" })}
+        onChange={(next) => setValues({ tab: next, prescription: "" }, { history: "push" })}
       />
-      {activeTab === "Prescriptions" ? (
-        <PrescriptionQueueTab canOperateCounter={canOperateCounter} onDispense={openDispense} />
-      ) : null}
-      {activeTab === "Create" ? <CreatePrescriptionTab /> : null}
-      {activeTab === "Dispense" ? (
-        <DispenseTab
-          prescriptionId={values.prescription}
-          onBackToQueue={() => setValues({ tab: "Prescriptions", prescription: "" }, { history: "push" })}
-        />
+      {onQueue ? <PrescriptionQueueTab canOperateCounter={canOperateCounter} onDispense={openDispense} /> : null}
+      {onQueue && canOperateCounter ? (
+        <CreateAction label="Create prescription" onClick={() => setCreating(true)} />
       ) : null}
       {activeTab === "Counter transactions" ? <CounterTab canOperateCounter={canOperateCounter} /> : null}
       {activeTab === "Consultations" ? <ConsultationsTab canOperateCounter={canOperateCounter} /> : null}
+      {creating ? <CreatePrescriptionDrawer onClose={() => setCreating(false)} /> : null}
+      {canOperateCounter && onQueue && values.prescription !== "" ? (
+        <DispenseDrawer
+          prescriptionId={values.prescription}
+          onClose={() => setValues({ prescription: "" }, { history: "push" })}
+        />
+      ) : null}
     </section>
   );
 };

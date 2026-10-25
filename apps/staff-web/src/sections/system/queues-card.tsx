@@ -1,4 +1,4 @@
-import { Alert, Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@pharmacy/ui";
+import { Alert, StatusCell, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@pharmacy/ui";
 
 import { translateText } from "../../i18n.ts";
 import { formatQuantity, type SystemQueue, type SystemSectionResult } from "../../staff-api.ts";
@@ -14,9 +14,9 @@ const STATUS_LABEL: Record<QueueStatus, string> = {
 };
 
 const QueueStatusBadge = ({ row }: { row: QueueRow }): React.JSX.Element => (
-  <Badge variant={row.tone === "danger" ? "danger" : row.tone === "warning" ? "warning" : "success"}>
+  <StatusCell tone={row.tone === "danger" ? "danger" : row.tone === "warning" ? "warning" : "success"}>
     {translateText(STATUS_LABEL[row.status])}
-  </Badge>
+  </StatusCell>
 );
 
 // Messages waiting and consumers per queue, with the queues that need attention first.

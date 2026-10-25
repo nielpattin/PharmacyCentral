@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { useSession } from "../auth.ts";
 import { PageActions } from "../components/page-actions.tsx";
 import { SubTabs } from "../components/forms.tsx";
@@ -6,11 +8,12 @@ import { useHotkey } from "../hooks/useHotkey.ts";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { translateText } from "../i18n.ts";
 import { tabGate } from "../permissions/staff-permissions.ts";
-import { CreatePurchaseOrderTab } from "./procurement/create-purchase-order-tab.tsx";
+import { CreatePurchaseOrderDrawer } from "./procurement/create-purchase-order-drawer.tsx";
 import { GoodsReceiptsTab } from "./procurement/goods-receipts-tab.tsx";
 import { PurchaseOrdersTab } from "./procurement/purchase-orders-tab.tsx";
-import { ReceiveGoodsTab } from "./procurement/receive-goods-tab.tsx";
+import { ReceiveGoodsDrawer } from "./procurement/receive-goods-drawer.tsx";
 import {
+  PROCUREMENT_CREATE,
   PROCUREMENT_TAB_ACTIONS,
   PROCUREMENT_TABS,
   toProcurementTab,
@@ -20,7 +23,8 @@ import {
 /**
  * Purchase orders and goods receipts. The active tab lives in the URL (`?tab=`), so refresh and Back keep it. A route
  * may mount this section for a role that reads only some tabs (the receiving route is Warehouse Staff, procurement is
- * Pharmacy Manager), so only the tabs that role may use are listed.
+ * Pharmacy Manager), so only the tabs that role may use are listed. Creating an order and receiving goods are side
+ * drawers over the list, opened by the header button or the `n` key.
  */
 export const ProcurementSection = ({
   initialTab = "Purchase orders",
@@ -29,40 +33,34 @@ export const ProcurementSection = ({
 }): React.JSX.Element => {
   const list = useListUrlState({ q: "", status: "all", tab: initialTab });
   const session = useSession();
+  const [creating, setCreating] = useState(false);
   const visibleTabs = PROCUREMENT_TABS.filter((item) => tabGate(PROCUREMENT_TAB_ACTIONS[item], session).allowed);
   const requestedTab = toProcurementTab(list.values.tab, initialTab);
   const tab = visibleTabs.includes(requestedTab) ? requestedTab : (visibleTabs[0] ?? initialTab);
-  const isListTab = tab === "Purchase orders" || tab === "Goods receipts";
-  const createTab: ProcurementTab = tab === "Goods receipts" ? "Receive goods" : "Create order";
-  const createGate = tabGate(PROCUREMENT_TAB_ACTIONS[createTab], session);
+  const create = PROCUREMENT_CREATE[tab];
+  const createGate = tabGate(create.action, session);
 
-  useHotkey("n", () => list.setValues({ tab: createTab, q: "", status: "all" }, { history: "push" }), {
-    label: "Create new",
-    when: isListTab && createGate.allowed,
-  });
+  useHotkey("n", () => setCreating(true), { label: "Create new", when: createGate.allowed && !creating });
 
   return (
     <div className="grid gap-4">
-      {isListTab ? (
-        <PageActions>
-          <GatedButton
-            gate={createGate}
-            size="sm"
-            onClick={() => list.setValues({ tab: createTab, q: "", status: "all" }, { history: "push" })}
-          >
-            {translateText(createTab)}
-          </GatedButton>
-        </PageActions>
-      ) : null}
+      <PageActions>
+        <GatedButton gate={createGate} size="sm" onClick={() => setCreating(true)}>
+          {translateText(create.label)}
+        </GatedButton>
+      </PageActions>
       <SubTabs
         tabs={visibleTabs}
         active={tab}
         onChange={(next) => list.setValues({ tab: next, q: "", status: "all" }, { history: "push" })}
       />
-      {tab === "Purchase orders" ? <PurchaseOrdersTab /> : null}
-      {tab === "Create order" ? <CreatePurchaseOrderTab /> : null}
-      {tab === "Goods receipts" ? <GoodsReceiptsTab /> : null}
-      {tab === "Receive goods" ? <ReceiveGoodsTab /> : null}
+      {tab === "Purchase orders" ? <PurchaseOrdersTab /> : <GoodsReceiptsTab />}
+      {creating && createGate.allowed && tab === "Purchase orders" ? (
+        <CreatePurchaseOrderDrawer onClose={() => setCreating(false)} />
+      ) : null}
+      {creating && createGate.allowed && tab === "Goods receipts" ? (
+        <ReceiveGoodsDrawer onClose={() => setCreating(false)} />
+      ) : null}
     </div>
   );
 };

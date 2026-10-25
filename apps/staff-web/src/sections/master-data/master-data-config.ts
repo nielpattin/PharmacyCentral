@@ -15,7 +15,12 @@ export type MasterField =
   | { kind: "select"; name: string; label: string; options: Readonly<Record<string, string>> };
 
 // Sites, storage locations and suppliers share these two statuses; the server only requires a string up to 30 characters.
+// The form shows only Status; `isActive` is derived from it, so the two can never disagree.
 const STATUS_LABELS = { Active: "Active", Inactive: "Inactive" } as const;
+
+// A row is inactive when either its status or its `isActive` flag says so.
+const statusOf = (row: Record<string, unknown>): string =>
+  row.isActive === false || row.status === "Inactive" ? "Inactive" : "Active";
 
 // The site types the catalog stores, with the label shown for each.
 const SITE_TYPE_LABELS = {
@@ -104,7 +109,6 @@ const siteConfig: MasterDataConfig = {
     { kind: "select", name: "status", label: "Status", options: STATUS_LABELS },
     { kind: "text", name: "address", label: "Address" },
     { kind: "text", name: "notes", label: "Notes" },
-    { kind: "boolean", name: "isActive", label: "Active" },
     { kind: "boolean", name: "isCustomerFacing", label: "Customer facing" },
     { kind: "number", name: "latitude", label: "Latitude", min: -90, max: 90 },
     { kind: "number", name: "longitude", label: "Longitude", min: -180, max: 180 },
@@ -116,7 +120,6 @@ const siteConfig: MasterDataConfig = {
     status: "Active",
     address: "",
     notes: "",
-    isActive: "true",
     isCustomerFacing: "true",
     latitude: "",
     longitude: "",
@@ -125,10 +128,9 @@ const siteConfig: MasterDataConfig = {
     code: text(row.code),
     name: text(row.name),
     siteType: text(row.siteType),
-    status: text(row.status) || "Active",
+    status: statusOf(row),
     address: text(row.address),
     notes: text(row.notes),
-    isActive: flag(row.isActive, true),
     isCustomerFacing: flag(row.isCustomerFacing, true),
     latitude: text(row.latitude),
     longitude: text(row.longitude),
@@ -140,7 +142,7 @@ const siteConfig: MasterDataConfig = {
     status: values.status,
     address: optionalText(values.address ?? ""),
     notes: optionalText(values.notes ?? ""),
-    isActive: values.isActive === "true",
+    isActive: values.status === "Active",
     isCustomerFacing: values.isCustomerFacing === "true",
     latitude: optionalNumber(values.latitude ?? ""),
     longitude: optionalNumber(values.longitude ?? ""),
@@ -174,7 +176,6 @@ const locationConfig: MasterDataConfig = {
     { kind: "text", name: "locationType", label: "Location type", required: true },
     { kind: "select", name: "status", label: "Status", options: STATUS_LABELS },
     { kind: "number", name: "capacity", label: "Capacity", min: 0 },
-    { kind: "boolean", name: "isActive", label: "Active" },
   ],
   initialValues: () => ({
     siteId: "",
@@ -183,16 +184,14 @@ const locationConfig: MasterDataConfig = {
     locationType: "Warehouse",
     status: "Active",
     capacity: "",
-    isActive: "true",
   }),
   valuesFromRow: (row) => ({
     siteId: text(row.siteId),
     code: text(row.code),
     name: text(row.name),
     locationType: text(row.locationType) || "Warehouse",
-    status: text(row.status) || "Active",
+    status: statusOf(row),
     capacity: text(row.capacity),
-    isActive: flag(row.isActive, true),
   }),
   toBody: (values) => ({
     siteId: values.siteId,
@@ -201,7 +200,7 @@ const locationConfig: MasterDataConfig = {
     locationType: values.locationType,
     status: values.status,
     capacity: optionalNumber(values.capacity ?? ""),
-    isActive: values.isActive === "true",
+    isActive: values.status === "Active",
   }),
   codeOf: (row) => text(row.code),
 };
@@ -234,7 +233,6 @@ const supplierConfig: MasterDataConfig = {
     { kind: "text", name: "address", label: "Address" },
     { kind: "select", name: "status", label: "Status", options: STATUS_LABELS },
     { kind: "text", name: "notes", label: "Notes" },
-    { kind: "boolean", name: "isActive", label: "Active" },
   ],
   initialValues: () => ({
     code: "",
@@ -245,7 +243,6 @@ const supplierConfig: MasterDataConfig = {
     address: "",
     status: "Active",
     notes: "",
-    isActive: "true",
   }),
   valuesFromRow: (row) => ({
     code: text(row.code),
@@ -254,9 +251,8 @@ const supplierConfig: MasterDataConfig = {
     email: text(row.email),
     phone: text(row.phone),
     address: text(row.address),
-    status: text(row.status) || "Active",
+    status: statusOf(row),
     notes: text(row.notes),
-    isActive: flag(row.isActive, true),
   }),
   toBody: (values) => ({
     code: values.code,
@@ -267,7 +263,7 @@ const supplierConfig: MasterDataConfig = {
     address: optionalText(values.address ?? ""),
     status: values.status,
     notes: optionalText(values.notes ?? ""),
-    isActive: values.isActive === "true",
+    isActive: values.status === "Active",
   }),
   codeOf: (row) => text(row.code),
 };

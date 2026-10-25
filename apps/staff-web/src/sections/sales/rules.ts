@@ -84,7 +84,7 @@ const PRESCRIPTION_TONES: Readonly<Record<string, StatusTone>> = {
   Pending: "warning",
   PartiallyDispensed: "info",
   Dispensed: "success",
-  Cancelled: "danger",
+  Cancelled: "neutral",
 };
 
 const PAYMENT_TONES: Readonly<Record<string, StatusTone>> = {
@@ -99,10 +99,10 @@ const ORDER_TONES: Readonly<Record<string, StatusTone>> = {
   Pending: "warning",
   Confirmed: "info",
   Preparing: "info",
-  Ready: "accent",
+  Ready: "info",
   Delivering: "info",
   Completed: "success",
-  Cancelled: "danger",
+  Cancelled: "neutral",
 };
 
 export const prescriptionTone = (status: string): StatusTone => PRESCRIPTION_TONES[status] ?? "neutral";
@@ -198,6 +198,23 @@ export type DispenseLineDraft = {
   /** Still to dispense when the form opened. */
   remaining: number;
 };
+
+/**
+ * The batches of one product that a prescription can be dispensed from: released by quality control and not expired on
+ * `today` (an ISO date). The server checks both again, so this only keeps the picker free of batches it would refuse.
+ */
+export const dispensableBatches = (
+  batches: readonly Readonly<Record<string, unknown>>[],
+  productId: string,
+  today: string,
+): Readonly<Record<string, unknown>>[] =>
+  batches.filter(
+    (batch) =>
+      batch.productId === productId &&
+      batch.qualityStatus === "Released" &&
+      typeof batch.expiryDate === "string" &&
+      batch.expiryDate.slice(0, 10) >= today,
+  );
 
 /** Lines that still have something to dispense, each pre-filled with the whole remaining quantity. */
 export const openDispenseLines = (lines: readonly Readonly<Record<string, unknown>>[]): DispenseLineDraft[] =>

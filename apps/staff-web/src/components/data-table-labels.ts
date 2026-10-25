@@ -28,6 +28,7 @@ export const dataTableLabels = (): DataTableLabels => ({
   bulkActions: translateText("Bulk actions"),
   exportCsv: translateText("Export CSV"),
   showingRows: translateText("Showing {count} rows"),
+  showingOneRow: translateText("Showing 1 row"),
   showingOfTotal: translateText("Showing {count} of {total} rows"),
   moreAvailable: translateText("More available"),
   loadMore: translateText("Load more"),

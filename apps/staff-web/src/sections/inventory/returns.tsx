@@ -3,21 +3,15 @@ import { useState } from "react";
 
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { Field, SelectField } from "../../components/forms.tsx";
+import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { formatDateTime, text } from "../../staff-api.ts";
 import { shortId } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
-import {
-  AddLineButton,
-  CreateAction,
-  FormDrawer,
-  INVENTORY_INVALIDATE,
-  LineCard,
-  ListError,
-  PAGE_SIZE,
-} from "./shared.tsx";
+import { INVENTORY_INVALIDATE, ListError, PAGE_SIZE } from "./shared.tsx";
+import { AddLineButton, CreateAction, LineCard } from "../../components/form-parts.tsx";
 
 const returnLineInitial = () => ({
   productBatchId: "",

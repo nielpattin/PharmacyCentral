@@ -74,11 +74,7 @@ export const sectionPaths = {
 export const governanceTabPaths = {
   audit: "/audit",
   users: "/users",
-  createUser: "/users/create",
-  editAccess: "/users/access",
 } as const;
-
-export type GovernancePath = (typeof governanceTabPaths)[keyof typeof governanceTabPaths];
 
 export type StaffPath = (typeof sectionPaths)[Section];
 
@@ -111,8 +107,6 @@ const sectionsByPath: Record<string, Section> = {
   "/reporting": "reporting",
   "/finance": "finance",
   "/users": "users",
-  "/users/create": "users",
-  "/users/access": "users",
   "/audit": "audit",
   "/ai-integrations": "aiIntegrations",
   "/system": "system",
@@ -175,9 +169,6 @@ const auditRoute = sectionRoute("/audit");
 const aiIntegrationsRoute = sectionRoute("/ai-integrations");
 const systemRoute = sectionRoute("/system");
 
-const createUserRoute = sectionRoute("/users/create");
-const editAccessRoute = sectionRoute("/users/access");
-
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   pharmacistOverviewRoute,
@@ -207,8 +198,6 @@ const routeTree = rootRoute.addChildren([
   reportingRoute,
   financeRoute,
   usersRoute,
-  createUserRoute,
-  editAccessRoute,
   auditRoute,
   aiIntegrationsRoute,
   systemRoute,

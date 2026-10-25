@@ -25,16 +25,16 @@ describe("master data request bodies", () => {
     });
   });
 
-  it("turns the boolean selects into booleans", () => {
+  it("derives isActive from the Status select", () => {
     const body = masterDataConfigs.suppliers.toBody({
       ...masterDataConfigs.suppliers.initialValues(),
       code: "SUP-9",
       name: "Supplier nine",
       email: " buyer@example.com ",
-      isActive: "false",
+      status: "Inactive",
     });
 
-    expect(body).toMatchObject({ email: "buyer@example.com", isActive: false, contactName: null });
+    expect(body).toMatchObject({ email: "buyer@example.com", status: "Inactive", isActive: false, contactName: null });
   });
 
   it("sends the location capacity as a number or null", () => {
@@ -59,8 +59,9 @@ describe("master data request bodies", () => {
     const config = masterDataConfigs.locations;
     const values = config.valuesFromRow(row);
 
-    expect(values).toMatchObject({ capacity: "40", isActive: "false", siteId: "site-1" });
-    expect(config.toBody(values)).toMatchObject({ capacity: 40, isActive: false, code: "HQ-MAIN" });
+    // A row whose flag and status disagree opens as Inactive, and saves consistently.
+    expect(values).toMatchObject({ capacity: "40", status: "Inactive", siteId: "site-1" });
+    expect(config.toBody(values)).toMatchObject({ capacity: 40, status: "Inactive", isActive: false, code: "HQ-MAIN" });
     expect(config.codeOf(row)).toBe("HQ-MAIN");
   });
 });

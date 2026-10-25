@@ -2552,11 +2552,34 @@ const literalTranslations: Record<string, string> = {
   ...commonLiterals,
 };
 
+/**
+ * Service messages that name a record, so no literal can cover them. Each rule is tried only on a text that starts
+ * with its first word, which keeps the common case (a plain label) off the regex path.
+ */
+export const dynamicMessageRules: ReadonlyArray<readonly [RegExp, (match: RegExpMatchArray) => string]> = [
+  [
+    /^Batch (.+) has not been released by quality control$/,
+    ([, batch]) => `Lô ${batch} chưa được kiểm soát chất lượng duyệt`,
+  ],
+  [/^Batch (.+) has expired$/, ([, batch]) => `Lô ${batch} đã hết hạn`],
+  [
+    /^Batch (.+) has (\d+(?:\.\d+)?) available at this location, (\d+(?:\.\d+)?) needed$/,
+    ([, batch, available, needed]) => `Lô ${batch} chỉ còn ${available} tại vị trí này, cần ${needed}`,
+  ],
+];
+
 export function translateText(value: string): string {
   if (currentLanguage === "en") return value;
   if (literalTranslations[value]) return literalTranslations[value];
   const key = Object.keys(translations.en).find((candidate) => translations.en[candidate] === value);
-  return key ? (translations.vi[key] ?? value) : value;
+  if (key) return translations.vi[key] ?? value;
+  if (value.startsWith("Batch ")) {
+    for (const [pattern, render] of dynamicMessageRules) {
+      const match = pattern.exec(value);
+      if (match) return render(match);
+    }
+  }
+  return value;
 }
 
 const validationTypeNames: Record<string, string> = {

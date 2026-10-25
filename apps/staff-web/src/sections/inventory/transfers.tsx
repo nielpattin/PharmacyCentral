@@ -6,41 +6,35 @@ import { useRef, useState } from "react";
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
 import { Field } from "../../components/forms.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
+import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
+import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
+import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
+import { useCan } from "../../permissions/use-can.ts";
 import { formatDateTime, formatQuantity, numberValue, readOne, text, type JsonRecord } from "../../staff-api.ts";
 import { asRecord } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
 import { ALL_STATUSES, statusParam, statusTone, TRANSFER_STATUSES } from "./status.ts";
-import type { InventoryTab } from "./tabs.ts";
-import {
-  CreateAction,
-  Fact,
-  FactList,
-  FormDrawer,
-  LineCard,
-  ListError,
-  ListToolbar,
-  PAGE_SIZE,
-  StatusFilter,
-  statusBadge,
-  useConfirmedAction,
-  useFocusSearchHotkey,
-} from "./shared.tsx";
+import { CreateTransferDrawer } from "./create-transfer.tsx";
+import { Fact, FactList, ListError, PAGE_SIZE, StatusFilter, statusBadge, useConfirmedAction } from "./shared.tsx";
+import { CreateAction, LineCard } from "../../components/form-parts.tsx";
 
 const TRANSFER_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
 
 type TransferView = { id: string; mode?: "ship" | "receive" };
 
-export const TransfersTab = ({ onNavigate }: { onNavigate: (tab: InventoryTab) => void }): React.JSX.Element => {
+export const TransfersTab = (): React.JSX.Element => {
   const rootRef = useRef<HTMLDivElement>(null);
   const { values, setValues } = useListUrlState(TRANSFER_DEFAULTS);
   const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
   useFocusSearchHotkey(rootRef);
-  useHotkey("n", () => onNavigate("Create transfer"), { label: "Create new" });
+  const createGate = useCan("inventory.transfer.create");
+  const [creating, setCreating] = useState(false);
+  useHotkey("n", () => setCreating(true), { label: "Create new", when: createGate.allowed && !creating });
   const list = usePagedList({
     key: ["staff-inventory", "transfers"],
     path: "/api/inventory/transfers",
@@ -96,7 +90,7 @@ export const TransfersTab = ({ onNavigate }: { onNavigate: (tab: InventoryTab) =
                 <Button size="sm" onClick={() => void transition(row, "approve")}>
                   {translateText("Approve")}
                 </Button>
-                <Button size="sm" variant="danger-soft" onClick={() => void transition(row, "cancel")}>
+                <Button size="sm" variant="danger-ghost" onClick={() => void transition(row, "cancel")}>
                   {translateText("Cancel")}
                 </Button>
               </>
@@ -106,7 +100,7 @@ export const TransfersTab = ({ onNavigate }: { onNavigate: (tab: InventoryTab) =
                 <Button size="sm" variant="ghost" onClick={() => setView({ id, mode: "ship" })}>
                   {translateText("Ship")}
                 </Button>
-                <Button size="sm" variant="danger-soft" onClick={() => void transition(row, "cancel")}>
+                <Button size="sm" variant="danger-ghost" onClick={() => void transition(row, "cancel")}>
                   {translateText("Cancel")}
                 </Button>
               </>
@@ -124,12 +118,17 @@ export const TransfersTab = ({ onNavigate }: { onNavigate: (tab: InventoryTab) =
 
   return (
     <div ref={rootRef} className="grid gap-3">
-      <CreateAction label="Create transfer" onClick={() => onNavigate("Create transfer")} />
-      <ListToolbar pageKey="inventory:transfers" defaults={TRANSFER_DEFAULTS}>
-        <StatusFilter value={values.status} options={TRANSFER_STATUSES} onChange={(status) => setValues({ status })} />
-      </ListToolbar>
+      <CreateAction label="Create transfer" gate={createGate} onClick={() => setCreating(true)} />
       <ListError error={list.error} />
       <DataTable
+        toolbarStart={
+          <StatusFilter
+            value={values.status}
+            options={TRANSFER_STATUSES}
+            onChange={(status) => setValues({ status })}
+          />
+        }
+        toolbarExtra={<SavedViewsMenu pageKey="inventory:transfers" defaults={TRANSFER_DEFAULTS} />}
         rows={list.rows}
         columns={columns}
         loading={list.isLoading}
@@ -139,6 +138,7 @@ export const TransfersTab = ({ onNavigate }: { onNavigate: (tab: InventoryTab) =
         storageKey="staff:inventory:transfers"
         exportCsv={{ filename: "inventory-transfers.csv" }}
       />
+      {creating ? <CreateTransferDrawer onClose={() => setCreating(false)} /> : null}
       {view ? (
         <TransferDrawer key={`${view.id}:${view.mode ?? "view"}`} view={view} onClose={() => setView(undefined)} />
       ) : null}
@@ -150,8 +150,20 @@ const transferLineColumns = (product: (id: string) => string, batch: (id: string
   { key: "productId", label: "Product", render: (row) => product(text(row.productId, "")) },
   { key: "productBatchId", label: "Batch", render: (row) => batch(text(row.productBatchId, "")) },
   { key: "quantity", label: "Quantity", align: "right", render: (row) => formatQuantity(row.quantity) },
-  { key: "shippedQuantity", label: "Shipped", align: "right", render: (row) => formatQuantity(row.shippedQuantity) },
-  { key: "receivedQuantity", label: "Received", align: "right", render: (row) => formatQuantity(row.receivedQuantity) },
+  {
+    key: "shippedQuantity",
+    hideBelow: "lg",
+    label: "Shipped",
+    align: "right",
+    render: (row) => formatQuantity(row.shippedQuantity),
+  },
+  {
+    key: "receivedQuantity",
+    hideBelow: "lg",
+    label: "Received",
+    align: "right",
+    render: (row) => formatQuantity(row.receivedQuantity),
+  },
 ];
 
 const TransferDrawer = ({ view, onClose }: { view: TransferView; onClose: () => void }): React.JSX.Element => {

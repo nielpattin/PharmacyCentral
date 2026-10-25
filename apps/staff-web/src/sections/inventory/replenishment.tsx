@@ -6,31 +6,29 @@ import { DataTable, type Column } from "../../components/data-table.tsx";
 import { useConfirm } from "../../components/confirm.tsx";
 import { Field, SelectField } from "../../components/forms.tsx";
 import { ProductPicker } from "../../components/product-picker.tsx";
+import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
+import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
+import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
 import { formatQuantity, numberValue, text, writeJson, type JsonRecord } from "../../staff-api.ts";
 import { asRecord, shortId } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
 import { ALL_STATUSES, REPLENISHMENT_STATUSES, statusParam } from "./status.ts";
 import {
-  AddLineButton,
-  CreateAction,
   INVENTORY_INVALIDATE,
-  FormDrawer,
-  LineCard,
   ListError,
-  ListToolbar,
   PAGE_SIZE,
   StatusFilter,
   statusBadge,
   useBulkWrite,
   useConfirmedAction,
-  useFocusSearchHotkey,
 } from "./shared.tsx";
+import { AddLineButton, CreateAction, LineCard } from "../../components/form-parts.tsx";
 
 const REPLENISHMENT_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
 
@@ -318,7 +316,7 @@ export const ReplenishmentTab = (): React.JSX.Element => {
               <Button size="sm" onClick={() => void transition(id, "approve")}>
                 {translateText("Approve")}
               </Button>
-              <Button size="sm" variant="danger-soft" onClick={() => void transition(id, "reject")}>
+              <Button size="sm" variant="danger-ghost" onClick={() => void transition(id, "reject")}>
                 {translateText("Reject")}
               </Button>
             </RowActions>
@@ -330,7 +328,7 @@ export const ReplenishmentTab = (): React.JSX.Element => {
               <Button size="sm" onClick={() => void transition(id, "fulfill")}>
                 {translateText("Fulfill")}
               </Button>
-              <Button size="sm" variant="danger-soft" onClick={() => void transition(id, "cancel")}>
+              <Button size="sm" variant="danger-ghost" onClick={() => void transition(id, "cancel")}>
                 {translateText("Cancel")}
               </Button>
             </RowActions>
@@ -344,18 +342,19 @@ export const ReplenishmentTab = (): React.JSX.Element => {
   return (
     <div ref={rootRef} className="grid gap-3">
       <CreateAction label="Request stock" onClick={() => setCreating(true)} />
-      <ListToolbar pageKey="inventory:replenishment" defaults={REPLENISHMENT_DEFAULTS}>
-        <StatusFilter
-          value={values.status}
-          options={REPLENISHMENT_STATUSES}
-          onChange={(status) => {
-            setSelected(new Set());
-            setValues({ status });
-          }}
-        />
-      </ListToolbar>
       <ListError error={list.error} />
       <DataTable
+        toolbarStart={
+          <StatusFilter
+            value={values.status}
+            options={REPLENISHMENT_STATUSES}
+            onChange={(status) => {
+              setSelected(new Set());
+              setValues({ status });
+            }}
+          />
+        }
+        toolbarExtra={<SavedViewsMenu pageKey="inventory:replenishment" defaults={REPLENISHMENT_DEFAULTS} />}
         rows={list.rows}
         columns={columns}
         loading={list.isLoading}

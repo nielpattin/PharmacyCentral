@@ -9,8 +9,10 @@ type FieldProps = {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  type?: "text" | "email" | "date" | "number" | "datetime-local";
+  type?: "text" | "email" | "password" | "date" | "number" | "datetime-local";
   required?: boolean;
+  minLength?: number;
+  autoComplete?: string;
   placeholder?: string;
   hint?: string | undefined;
   onBlur?: (() => void) | undefined;
@@ -22,6 +24,8 @@ export const Field = ({
   onChange,
   type = "text",
   required,
+  minLength,
+  autoComplete,
   placeholder,
   hint,
   onBlur,
@@ -31,6 +35,8 @@ export const Field = ({
       type={type}
       value={value}
       required={required}
+      minLength={minLength}
+      autoComplete={autoComplete}
       placeholder={placeholder ? translateText(placeholder) : undefined}
       onBlur={onBlur}
       onChange={(event) => onChange(event.target.value)}

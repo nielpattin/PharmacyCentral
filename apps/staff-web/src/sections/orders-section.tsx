@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
-import { Alert, Button, RowActions, StatusBadge } from "@pharmacy/ui";
+import { Alert, Button, RowActions, StatusCell } from "@pharmacy/ui";
 
 import { DataTable, type Column } from "../components/data-table.tsx";
 import { EntityDrawer } from "../components/entity-drawer.tsx";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { usePagedList } from "../hooks/usePagedList.ts";
 import { referenceLabel, useStaffReferences } from "../hooks/useStaffReferences.ts";
+import { SubTabs } from "../components/forms.tsx";
+import { SavedViewsMenu } from "../components/saved-views-menu.tsx";
+import { useSearchDraft } from "../hooks/useSearchDraft.ts";
+import { useFocusSearchHotkey } from "../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../i18n.ts";
 import { formatDateTime, numberValue, text, type JsonRecord } from "../staff-api.ts";
 import {
@@ -19,7 +23,7 @@ import {
   shortId,
   statusParam,
 } from "./sales/rules.ts";
-import { DetailField, ListToolbar, moneyLocale, SalesAuditHistory } from "./sales/shared.tsx";
+import { DetailField, moneyLocale, SalesAuditHistory } from "./sales/shared.tsx";
 
 const ORDERS_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
 
@@ -34,6 +38,9 @@ const orderCode = (row: JsonRecord): string => `#${shortId(row.id).toUpperCase()
  */
 export const OrdersSection = (): React.JSX.Element => {
   const { values, setValues } = useListUrlState(ORDERS_DEFAULTS);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
+  useFocusSearchHotkey(rootRef);
   const status = activeStatus(values.status, ORDER_STATUSES, ALL_STATUSES);
   const orders = usePagedList({
     key: ["staff-orders"],
@@ -49,12 +56,14 @@ export const OrdersSection = (): React.JSX.Element => {
     { key: "id", label: "Order", render: (row) => orderCode(row) },
     {
       key: "selectedStoreId",
+      hideBelow: "lg",
       label: "Store",
       truncate: true,
       render: (row) => referenceLabel(references.sites, row.selectedStoreId, ["code", "name"]),
     },
     {
       key: "fulfillmentType",
+      hideBelow: "md",
       label: "Fulfillment",
       render: (row) => translateText(text(row.fulfillmentType, "") === "pickup" ? "Pickup" : "Delivery"),
     },
@@ -62,11 +71,12 @@ export const OrdersSection = (): React.JSX.Element => {
       key: "status",
       label: "Status",
       render: (row) => (
-        <StatusBadge tone={orderTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusBadge>
+        <StatusCell tone={orderTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusCell>
       ),
     },
     {
       key: "paymentStatus",
+      hideBelow: "md",
       label: "Payment",
       render: (row) => translateText(text(row.paymentStatus, "-")),
     },
@@ -76,7 +86,7 @@ export const OrdersSection = (): React.JSX.Element => {
       align: "right",
       render: (row) => formatAmount(orderTotal(row), row.currency, moneyLocale()),
     },
-    { key: "createdAt", label: "Placed", render: (row) => formatDateTime(row.createdAt) },
+    { key: "createdAt", hideBelow: "xl", label: "Placed", render: (row) => formatDateTime(row.createdAt) },
     {
       key: "actions",
       label: "Actions",
@@ -93,20 +103,17 @@ export const OrdersSection = (): React.JSX.Element => {
   ];
 
   return (
-    <section className="grid gap-3">
-      <ListToolbar
-        pageKey="orders"
-        defaults={ORDERS_DEFAULTS}
-        query={values.q}
-        onQueryChange={(q) => setValues({ q })}
-        searchPlaceholder="Search by order ID"
-        statuses={ORDER_STATUSES}
-        status={status}
-        onStatusChange={(next) => setValues({ status: next }, { history: "push" })}
+    <section ref={rootRef} className="grid gap-3">
+      <SubTabs
+        tabs={[...ORDER_STATUSES]}
+        active={status}
+        onChange={(next) => setValues({ status: next }, { history: "push" })}
       />
       {orders.error ? <Alert variant="danger">{translateText(orders.error.message)}</Alert> : null}
       <DataTable
         storageKey="staff:sales:orders"
+        search={{ value: draft, onChange: setDraft, placeholder: translateText("Search by order ID") }}
+        toolbarExtra={<SavedViewsMenu pageKey="orders" defaults={ORDERS_DEFAULTS} />}
         loading={orders.isLoading}
         rows={orders.rows}
         columns={columns}

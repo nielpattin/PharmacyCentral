@@ -1,17 +1,18 @@
-import { Alert, Button, useToast } from "@pharmacy/ui";
+import { Alert, Card, useToast } from "@pharmacy/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
+import { EntityDrawer } from "../../components/entity-drawer.tsx";
 import { Field, SelectField } from "../../components/forms.tsx";
-import { useHotkey } from "../../hooks/useHotkey.ts";
+import { FormDrawer } from "../../components/form-drawer.tsx";
 import { productLabel, useProductLookup } from "../../hooks/useProductLookup.ts";
 import { referenceOptions, useStaffReferences } from "../../hooks/useStaffReferences.ts";
-import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard.ts";
 import { translateText } from "../../i18n.ts";
 import { ApiProblemError, formatQuantity, readOne, request, text, type JsonRecord } from "../../staff-api.ts";
 import {
   canDispense,
   dispenseBody,
+  dispensableBatches,
   isDispenseQuantityValid,
   linesChanged,
   newIdempotencyKey,
@@ -23,37 +24,38 @@ import {
 import { DetailField } from "../sales/shared.tsx";
 
 /**
- * Dispenses the prescription chosen in the queue. The prescription id comes from the URL, so a refresh keeps the form.
+ * Dispenses one prescription in a side drawer. The prescription id comes from the URL, so a refresh keeps the drawer.
+ * Mount it only while a prescription is chosen.
  */
-export const DispenseTab = ({
+export const DispenseDrawer = ({
   prescriptionId,
-  onBackToQueue,
+  onClose,
 }: {
   prescriptionId: string;
-  onBackToQueue: () => void;
+  onClose: () => void;
 }): React.JSX.Element => {
   const detail = useQuery({
     queryKey: ["staff-prescription", prescriptionId],
     queryFn: () => readOne(`/api/prescriptions/${encodeURIComponent(prescriptionId)}`),
-    enabled: prescriptionId !== "",
   });
-
-  if (prescriptionId === "") {
-    return (
-      <div className="grid gap-3 rounded-lg border border-dashed border-line p-6 text-center text-sm text-muted">
-        <p>{translateText("Choose a prescription in the queue to dispense it.")}</p>
-        <div>
-          <Button variant="outline" size="sm" onClick={onBackToQueue}>
-            {translateText("Open the queue")}
-          </Button>
-        </div>
-      </div>
-    );
+  if (detail.data) {
+    // Keyed by prescription: each prescription opens with its own form state and its own idempotency key.
+    return <DispenseForm key={prescriptionId} prescription={detail.data} onDone={onClose} />;
   }
-  if (detail.error) return <Alert variant="danger">{translateText(detail.error.message)}</Alert>;
-  if (!detail.data) return <p className="text-sm text-muted">{translateText("Loading…")}</p>;
-  // Keyed by prescription: each prescription opens with its own form state and its own idempotency key.
-  return <DispenseForm key={prescriptionId} prescription={detail.data} onDone={onBackToQueue} />;
+  return (
+    <EntityDrawer
+      open
+      onClose={onClose}
+      title={translateText("Dispense")}
+      details={
+        detail.error ? (
+          <Alert variant="danger">{translateText(detail.error.message)}</Alert>
+        ) : (
+          <p className="text-sm text-muted">{translateText("Loading…")}</p>
+        )
+      }
+    />
+  );
 };
 
 const DispenseForm = ({
@@ -70,22 +72,13 @@ const DispenseForm = ({
   const status = text(prescription.status, "");
   const dispensable = canDispense(status);
   const [lines, setLines] = useState<DispenseLineDraft[]>(() => openDispenseLines(recordList(prescription.lines)));
+  const today = new Date().toISOString().slice(0, 10);
   const [formError, setFormError] = useState<string>();
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
-  const formRef = useRef<HTMLFormElement>(null);
   const products = useProductLookup(lines.map((line) => line.productId));
   // Dirty once a batch is picked or a quantity is changed from the amount the form opened with.
   const initialLines = openDispenseLines(recordList(prescription.lines));
   const dirty = linesChanged(lines, initialLines);
-  useUnsavedChangesGuard(dirty);
-  useHotkey(
-    "mod+s",
-    (event) => {
-      event.preventDefault();
-      formRef.current?.requestSubmit();
-    },
-    { label: "Save", allowWhileEditing: true },
-  );
 
   const updateLine = (index: number, patch: Partial<DispenseLineDraft>): void =>
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)));
@@ -118,31 +111,40 @@ const DispenseForm = ({
   };
 
   return (
-    <form
-      ref={formRef}
-      onSubmit={(event) => {
-        event.preventDefault();
-        void submit();
-      }}
-      className="grid gap-4 rounded-lg border border-line bg-surface p-4"
+    <FormDrawer
+      title="Dispense"
+      subtitle={text(prescription.prescriptionNumber, shortId(prescriptionId))}
+      formId="prescription-dispense-form"
+      submitLabel="Dispense"
+      isDirty={dirty}
+      onSubmit={() => void submit()}
+      onClose={onDone}
     >
-      <dl className="grid gap-3 sm:grid-cols-3">
+      <dl className="grid gap-3 sm:col-span-2 sm:grid-cols-3">
         <DetailField label="Patient" value={text(prescription.patientName)} />
         <DetailField label="Prescription" value={text(prescription.prescriptionNumber, shortId(prescriptionId))} />
         <DetailField label="Status" value={translateText(status === "" ? "-" : status)} />
       </dl>
       {dispensable ? null : (
-        <Alert variant="info">{translateText("This prescription cannot be dispensed in its current state.")}</Alert>
+        <div className="sm:col-span-2">
+          <Alert variant="info">{translateText("This prescription cannot be dispensed in its current state.")}</Alert>
+        </div>
       )}
       {lines.length === 0 && dispensable ? (
-        <Alert variant="info">{translateText("Every line of this prescription is already dispensed.")}</Alert>
+        <div className="sm:col-span-2">
+          <Alert variant="info">{translateText("Every line of this prescription is already dispensed.")}</Alert>
+        </div>
       ) : null}
-      {formError ? <Alert variant="danger">{translateText(formError)}</Alert> : null}
+      {formError ? (
+        <div className="sm:col-span-2">
+          <Alert variant="danger">{translateText(formError)}</Alert>
+        </div>
+      ) : null}
       {lines.map((line, index) => {
-        const productBatches = references.batches.filter((batch) => text(batch.productId, "") === line.productId);
+        const productBatches = dispensableBatches(references.batches, line.productId, today);
         return (
-          <div key={line.prescriptionLineId} className="grid gap-3 rounded-md border border-line p-3 sm:grid-cols-3">
-            <div className="sm:col-span-3">
+          <Card key={line.prescriptionLineId} className="grid gap-3 p-4 sm:col-span-2 sm:grid-cols-2">
+            <div className="sm:col-span-2">
               <strong className="text-sm text-ink">
                 {productLabel(products.get(line.productId), shortId(line.productId))}
               </strong>{" "}
@@ -164,17 +166,9 @@ const DispenseForm = ({
               onChange={(value) => updateLine(index, { dispensedQuantity: value })}
               required
             />
-          </div>
+          </Card>
         );
       })}
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="outline" type="button" onClick={onDone}>
-          {translateText("Back to queue")}
-        </Button>
-        <Button type="submit" disabled={!dispensable || lines.length === 0}>
-          {translateText("Dispense")}
-        </Button>
-      </div>
-    </form>
+    </FormDrawer>
   );
 };

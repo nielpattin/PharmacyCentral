@@ -14,7 +14,7 @@ const TONE_BY_STATUS: Readonly<Record<string, StatusTone>> = {
   InProgress: "warning",
   InTransit: "info",
   Rejected: "danger",
-  Cancelled: "danger",
+  Cancelled: "neutral",
 };
 
 export const statusTone = (status: string): StatusTone => TONE_BY_STATUS[status] ?? "neutral";
@@ -31,6 +31,15 @@ export const TRANSFER_STATUSES = [
 ] as const;
 export const STOCKTAKE_STATUSES = ["Pending", "InProgress", "Completed", "Cancelled"] as const;
 export const REPLENISHMENT_STATUSES = ["Pending", "Approved", "Fulfilled", "Rejected", "Cancelled"] as const;
+
+export type QualityDecision = "release" | "reject";
+
+/** A review moves a batch to the verdict it does not already have; a batch still in QC can go either way. */
+export const qualityDecisionsFor = (qualityStatus: string): readonly QualityDecision[] => {
+  if (qualityStatus === "Released") return ["reject"];
+  if (qualityStatus === "Rejected") return ["release"];
+  return ["release", "reject"];
+};
 
 export const ALL_STATUSES = "all";
 

@@ -1,8 +1,13 @@
 // Inventory, stock movements, transfers, adjustments, stocktake, returns, and quality.
 export const inventoryLiterals: Record<string, string> = {
+  "A batch no longer holds the quantity that was reserved on it": "Một lô không còn đủ số lượng đã được giữ chỗ",
+  "The stock reservation for this prescription is no longer active":
+    "Phần tồn kho giữ cho đơn thuốc này không còn hiệu lực",
+  "The dispensed batch does not belong to the prescribed product": "Lô được chọn không thuộc sản phẩm trong đơn thuốc",
   "Create batch": "Tạo lô",
   "Create transfer": "Tạo điều chuyển",
-  "Count line": "Ghi nhận số đếm",
+  Supply: "Cung ứng",
+  Control: "Kiểm soát",
   "Batch created.": "Đã tạo lô.",
   "Stock movement recorded.": "Đã ghi nhận biến động tồn kho.",
   "Adjustment submitted for approval.": "Đã gửi điều chỉnh chờ duyệt.",

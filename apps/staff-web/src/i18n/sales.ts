@@ -37,6 +37,7 @@ export const salesLiterals: Record<string, string> = {
   "Invalid request": "Yêu cầu không hợp lệ",
   Clear: "Bỏ chọn",
   "Counter transactions": "Giao dịch tại quầy",
+  Consultations: "Tư vấn",
   "Counter payments": "Thanh toán tại quầy",
   "Search by invoice number": "Tìm theo số hóa đơn",
   "Search by patient name or prescription code": "Tìm theo tên bệnh nhân hoặc mã đơn thuốc",
@@ -62,9 +63,7 @@ export const salesLiterals: Record<string, string> = {
   "Reserved stock is released, and the prescription can no longer be dispensed.":
     "Tồn kho đã giữ sẽ được giải phóng, và đơn thuốc không thể xuất nữa.",
   "Prescription queue": "Hàng đợi đơn thuốc",
-  "Choose a prescription in the queue to dispense it.": "Chọn một đơn thuốc trong hàng đợi để xuất thuốc.",
-  "Open the queue": "Mở hàng đợi",
-  "Back to queue": "Quay lại hàng đợi",
+  "Create prescription": "Tạo đơn thuốc",
   "Still due": "Còn phải xuất",
   Prescribed: "Kê",
   "Every line of this prescription is already dispensed.": "Mọi dòng của đơn thuốc này đã được xuất đủ.",

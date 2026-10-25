@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { AUDIT_DEFAULTS, auditEntityLabel, auditPayloadText, auditRequestParams } from "./audit-query.ts";
+import {
+  AUDIT_DEFAULTS,
+  AUDIT_ENTITY_TYPES,
+  auditActionLabel,
+  auditEntityLabel,
+  auditPayloadText,
+  auditRequestParams,
+} from "./audit-query.ts";
 
 describe("auditRequestParams", () => {
   it("leaves every param out for the default filters", () => {
@@ -38,7 +45,42 @@ describe("auditRequestParams", () => {
 describe("auditEntityLabel", () => {
   it("names the known entity types and keeps any other value", () => {
     expect(auditEntityLabel("prescription-consultation")).toBe("Prescription consultation");
-    expect(auditEntityLabel("site")).toBe("site");
+    expect(auditEntityLabel("site")).toBe("Site");
+    expect(auditEntityLabel("something-new")).toBe("something-new");
+  });
+
+  it("lists each entity type once, so the filter has no duplicate option", () => {
+    const values = AUDIT_ENTITY_TYPES.map((item) => item.value);
+    expect(new Set(values).size).toBe(values.length);
+  });
+});
+
+describe("auditActionLabel", () => {
+  const same = (text: string): string => text;
+
+  it("joins the verb and the entity, whichever tense the action uses", () => {
+    expect(auditActionLabel("inventory.transfer.approve", "transfer", same)).toBe("Approve transfer");
+    expect(auditActionLabel("sales.order.status-changed.v1", "order", same)).toBe("Change order status");
+    expect(auditActionLabel("sales.order.status-changed.v1", "prescription", same)).toBe("Change status prescription");
+    expect(auditActionLabel("catalog.product.created", "product", same)).toBe("Create product");
+  });
+
+  it("translates the verb and the entity separately", () => {
+    const vietnamese = (text: string): string => ({ Approve: "Duyệt", Transfer: "Điều chuyển" })[text] ?? text;
+    expect(auditActionLabel("inventory.transfer.approve", "transfer", vietnamese)).toBe("Duyệt điều chuyển");
+  });
+
+  it("keeps an acronym at the start of the entity in capitals", () => {
+    expect(auditActionLabel("catalog.ai-credential.replaced", "ai-credential", same)).toBe("Replace AI credential");
+  });
+
+  it("shows sign-in and similar actions without an entity", () => {
+    expect(auditActionLabel("identity.auth.login", "user", same)).toBe("Signed in");
+    expect(auditActionLabel("identity.account.password-changed", "user", same)).toBe("Changed password");
+  });
+
+  it("keeps an action with an unknown verb as recorded, minus the version", () => {
+    expect(auditActionLabel("billing.invoice.frobnicated.v1", "invoice", same)).toBe("billing.invoice.frobnicated");
   });
 });
 

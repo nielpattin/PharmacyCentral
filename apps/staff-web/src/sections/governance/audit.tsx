@@ -12,7 +12,8 @@ import { translateText } from "../../i18n.ts";
 import { formatDateTime, text } from "../../staff-api.ts";
 import {
   AUDIT_DEFAULTS,
-  AUDIT_ENTITY_TYPES,
+  AUDIT_ENTITY_GROUPS,
+  auditActionLabel,
   auditEntityLabel,
   auditPayloadText,
   auditRequestParams,
@@ -70,7 +71,13 @@ export const AuditTab = (): React.JSX.Element => {
       render: (row) => formatDateTime(row.occurredAt),
       text: (row) => text(row.occurredAt, ""),
     },
-    { key: "action", label: "Action", truncate: 32 },
+    {
+      key: "action",
+      label: "Action",
+      truncate: 32,
+      render: (row) => auditActionLabel(text(row.action, ""), text(row.entityType, ""), translateText),
+      text: (row) => auditActionLabel(text(row.action, ""), text(row.entityType, ""), translateText),
+    },
     {
       key: "entityType",
       label: "Entity",
@@ -120,10 +127,14 @@ export const AuditTab = (): React.JSX.Element => {
         <Field label={translateText("Entity type")}>
           <Select value={values.entityType} onChange={(event) => setValues({ entityType: event.target.value })}>
             <option value="">{translateText("All entity types")}</option>
-            {AUDIT_ENTITY_TYPES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {translateText(item.label)}
-              </option>
+            {AUDIT_ENTITY_GROUPS.map((group) => (
+              <optgroup key={group.label} label={translateText(group.label)}>
+                {group.types.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {translateText(item.label)}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </Select>
         </Field>
@@ -153,15 +164,13 @@ export const AuditTab = (): React.JSX.Element => {
             onChange={(event) => setValues({ to: event.target.value })}
           />
         </Field>
-        <div className="flex flex-wrap items-center gap-2">
-          <SavedViewsMenu pageKey="governance-audit" defaults={AUDIT_DEFAULTS} />
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            {translateText("Clear filters")}
-          </Button>
-        </div>
+        <Button variant="ghost" size="sm" onClick={clearFilters}>
+          {translateText("Clear filters")}
+        </Button>
       </div>
       {audit.error ? <Alert variant="danger">{translateText(audit.error.message)}</Alert> : null}
       <DataTable
+        toolbarExtra={<SavedViewsMenu pageKey="governance-audit" defaults={AUDIT_DEFAULTS} />}
         rows={audit.rows}
         columns={columns}
         getKey={(row, index) => text(row.eventId, String(index))}

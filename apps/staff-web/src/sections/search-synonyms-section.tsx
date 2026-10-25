@@ -289,7 +289,7 @@ export const SearchSynonymsSection = (): React.JSX.Element => {
               </GatedButton>
             ) : null}
             {writeGate.allowed ? (
-              <Button variant="danger-soft" size="sm" disabled={busy} onClick={() => void remove(group)}>
+              <Button variant="danger-ghost" size="sm" disabled={busy} onClick={() => void remove(group)}>
                 {translateText("Delete")}
               </Button>
             ) : null}

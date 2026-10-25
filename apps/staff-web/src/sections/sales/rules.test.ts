@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dispensableBatches,
   activeStatus,
   canCancelPrescription,
   canConfirmCash,
@@ -163,5 +164,30 @@ describe("idempotency keys", () => {
     const second = newIdempotencyKey();
     expect(first).toMatch(/^[0-9a-f]{32}$/);
     expect(second).not.toBe(first);
+  });
+});
+
+describe("dispensableBatches", () => {
+  const batch = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    productId: "p1",
+    qualityStatus: "Released",
+    expiryDate: "2027-01-01",
+    ...over,
+  });
+
+  it("keeps released, unexpired batches of the product only", () => {
+    const rows = [
+      batch("ok"),
+      batch("pending", { qualityStatus: "PendingQc" }),
+      batch("rejected", { qualityStatus: "Rejected" }),
+      batch("expired", { expiryDate: "2026-10-24" }),
+      batch("other-product", { productId: "p2" }),
+    ];
+    expect(dispensableBatches(rows, "p1", "2026-10-25").map((row) => row.id)).toEqual(["ok"]);
+  });
+
+  it("accepts a batch that expires today, as the server does", () => {
+    expect(dispensableBatches([batch("today", { expiryDate: "2026-10-25" })], "p1", "2026-10-25")).toHaveLength(1);
   });
 });

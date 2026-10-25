@@ -33,10 +33,7 @@ export const credentialsQueryKey = ["ai-credentials"] as const;
 // `view` is undefined when the feature's status could not be loaded.
 export type FeatureStatus = { feature: AiFeature; view: CredentialView | undefined };
 
-const sourceBadges = {
-  stored: { label: "Saved key", variant: "primary" },
-  environment: { label: "Environment key", variant: "outline" },
-} as const;
+const sourceLabels = { stored: "Saved key", environment: "Environment key" } as const;
 
 const LoadedCredentialForm = ({ feature, view }: { feature: AiFeature; view: CredentialView }): React.JSX.Element => {
   const [baseline, setBaseline] = useState<FormState>(() => initialFormState(view));
@@ -185,11 +182,11 @@ export const AiCredentialCard = ({
           {view === undefined ? (
             <Badge variant="danger">{translateText("Unavailable")}</Badge>
           ) : view.current.configured ? (
-            <Badge variant={sourceBadges[view.current.source].variant}>
-              {translateText(sourceBadges[view.current.source].label)}
-            </Badge>
+            <span className="shrink-0 whitespace-nowrap text-sm text-muted">
+              {translateText(sourceLabels[view.current.source])}
+            </span>
           ) : (
-            <Badge variant="secondary">{translateText("Not configured")}</Badge>
+            <span className="shrink-0 whitespace-nowrap text-sm text-muted">{translateText("Not configured")}</span>
           )}
         </div>
       </CardHeader>

@@ -1,5 +1,5 @@
 import {
-  Badge,
+  StatusCell,
   Card,
   CardContent,
   CardDescription,
@@ -37,25 +37,17 @@ const ServiceRow = ({ row, onOpen }: { row: ServiceTableRow; onOpen: (name: stri
       >
         <StatusDot tone={DOT_TONE[row.tone]} />
         <span className="truncate font-medium">{row.name}</span>
-        {row.version ? (
-          <Badge variant="outline" className="shrink-0">
-            {row.version}
-          </Badge>
-        ) : null}
+        {row.version ? <span className="shrink-0 text-xs text-muted">{row.version}</span> : null}
         <span className="shrink-0 text-xs tabular-nums text-muted">
           {row.instances === null ? DASH : `${formatQuantity(row.instances)} ${translateText("instances")}`}
         </span>
       </button>
     </TableCell>
     <TableCell>
-      <div className="flex flex-wrap gap-1.5">
-        <Badge variant={row.status === "up" ? "success" : "danger"}>
-          {translateText(row.status === "up" ? "Ready" : "Down")}
-        </Badge>
-        <Badge variant={row.liveStatus === "up" ? "success" : "danger"}>
-          {translateText(row.liveStatus === "up" ? "Live" : "Live down")}
-        </Badge>
-      </div>
+      {/* One state per service: not ready beats not live, and a healthy service reads as plain "Ready". */}
+      <StatusCell tone={row.status === "up" && row.liveStatus === "up" ? "success" : "danger"}>
+        {translateText(row.status !== "up" ? "Down" : row.liveStatus !== "up" ? "Live down" : "Ready")}
+      </StatusCell>
     </TableCell>
     <TableCell className="tabular-nums">{formatMillicores(row.cpuCores)}</TableCell>
     <TableCell className="tabular-nums">{formatMebibytes(row.memoryBytes)}</TableCell>

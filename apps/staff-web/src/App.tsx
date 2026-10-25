@@ -48,7 +48,9 @@ import { DashboardSection } from "./sections/dashboard-section.tsx";
 import { FinanceSection } from "./sections/finance-section.tsx";
 import { GovernanceSection } from "./sections/governance-section.tsx";
 import { ImportSection } from "./sections/import-section.tsx";
+import { INVENTORY_TAB_ACTIONS, isInventoryTab, type InventoryTab } from "./sections/inventory/tabs.ts";
 import { InventorySection } from "./sections/inventory-section.tsx";
+import { tabGate } from "./permissions/staff-permissions.ts";
 import { MasterDataSection } from "./sections/master-data-section.tsx";
 import { OrdersSection } from "./sections/orders-section.tsx";
 import { PrescriptionsSection } from "./sections/prescriptions-section.tsx";
@@ -100,6 +102,29 @@ const sectionRoles: Record<Section, readonly string[]> = {
 
 export const canAccessSection = (section: Section, roles: readonly string[]): boolean =>
   roles.includes("Platform Admin") || sectionRoles[section].some((role) => roles.includes(role));
+
+/** Sections that open the inventory workspace, each on its own first tab. */
+const INVENTORY_SECTIONS: ReadonlySet<Section> = new Set([
+  "transfers",
+  "replenishment",
+  "stocktake",
+  "inventory",
+  "adjustments",
+  "returns",
+  "quality",
+]);
+
+/** The sidebar item that stands for each inventory tab, so the highlight follows the tab on screen. */
+const INVENTORY_TAB_SECTION: Record<InventoryTab, Section> = {
+  Balances: "inventory",
+  Batches: "quality",
+  Movements: "inventory",
+  Transfers: "transfers",
+  Replenishment: "replenishment",
+  Returns: "returns",
+  Adjustments: "adjustments",
+  Stocktake: "stocktake",
+};
 
 const navGroups: NavGroup[] = [
   {
@@ -194,14 +219,7 @@ const StaffApp = (): React.JSX.Element => {
   const activeSection =
     requestedSection && canAccessSection(requestedSection, roles) ? requestedSection : firstVisibleSection;
 
-  const governanceTab =
-    location.pathname === governanceTabPaths.createUser
-      ? "Create user"
-      : location.pathname === governanceTabPaths.editAccess
-        ? "Edit access"
-        : location.pathname === governanceTabPaths.users
-          ? "Users"
-          : "Audit";
+  const governanceTab = location.pathname === governanceTabPaths.users ? "Users" : "Audit";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>();
@@ -301,14 +319,30 @@ const StaffApp = (): React.JSX.Element => {
   if (!requestedSection) return <StaffNotFoundPage />;
   if (requestedSection !== activeSection) return <Navigate to={pathForSection(activeSection)} replace />;
 
-  const activeGroup = visibleNavGroups.find((group) => group.items.some((item) => item.key === activeSection));
-  const activeLabel = activeGroup?.items.find((item) => item.key === activeSection)?.label ?? "Dashboard";
   const governanceTabLabel = activeSection === "users" || activeSection === "audit" ? governanceTab : undefined;
-  const tabValue = typeof search.tab === "string" && search.tab !== "" ? search.tab : governanceTabLabel;
+  // Several sidebar items open the one inventory workspace, and its tab can move to another item's subject. The tab
+  // then names the page, so the title and the breadcrumb leaf agree with what is on screen.
+  const inventoryTab =
+    INVENTORY_SECTIONS.has(activeSection) &&
+    typeof search.tab === "string" &&
+    isInventoryTab(search.tab) &&
+    tabGate(INVENTORY_TAB_ACTIONS[search.tab], session).allowed
+      ? search.tab
+      : undefined;
+  const searchTab = typeof search.tab === "string" && search.tab !== "" ? search.tab : governanceTabLabel;
+  const tabSection = inventoryTab === undefined ? undefined : INVENTORY_TAB_SECTION[inventoryTab];
+  // The item shown as current: the tab's own item when this role has it, else the one that was opened.
+  const navSection =
+    tabSection !== undefined && visibleNavGroups.some((group) => group.items.some((item) => item.key === tabSection))
+      ? tabSection
+      : activeSection;
+  const activeGroup = visibleNavGroups.find((group) => group.items.some((item) => item.key === navSection));
+  const activeLabel = activeGroup?.items.find((item) => item.key === navSection)?.label ?? "Dashboard";
+  const tabValue = INVENTORY_SECTIONS.has(activeSection) ? inventoryTab : searchTab;
   const currentTab = tabValue && tabValue !== activeLabel ? tabValue : undefined;
   const breadcrumbItems: BreadcrumbItem[] = [
     ...(activeGroup ? [{ label: translateText(activeGroup.label) }] : []),
-    { label: translateText(activeLabel), ...(currentTab ? { href: pathForSection(activeSection) } : {}) },
+    { label: translateText(activeLabel), ...(currentTab ? { href: pathForSection(navSection) } : {}) },
     ...(currentTab ? [{ label: translateText(currentTab) }] : []),
   ];
 
@@ -416,14 +450,22 @@ const StaffApp = (): React.JSX.Element => {
                 <div className="sidebar-group-label">{translateText(group.label)}</div>
                 <nav className="sidebar-nav" aria-label={translateText(group.label)}>
                   {group.items.map((item) => {
-                    const active = activeSection === item.key;
+                    // A plain anchor, not a router Link: the router marks the link whose path matches as current,
+                    // which would ignore the tab-aware navSection.
+                    const active = navSection === item.key;
                     return (
-                      <RouterLink
+                      <a
                         key={item.key}
-                        to={pathForSection(item.key)}
+                        href={pathForSection(item.key)}
                         className={active ? "active" : undefined}
                         title={sidebarCollapsed ? translateText(item.label) : undefined}
-                        onClick={() => setMobileNavOpen(false)}
+                        onClick={(event) => {
+                          setMobileNavOpen(false);
+                          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)
+                            return;
+                          event.preventDefault();
+                          void navigate({ to: pathForSection(item.key) });
+                        }}
                         {...(active ? { "aria-current": "page" as const } : {})}
                       >
                         {active ? <span className="sidebar-nav-active-indicator" aria-hidden="true" /> : null}
@@ -431,7 +473,7 @@ const StaffApp = (): React.JSX.Element => {
                           {item.icon}
                         </span>
                         <span className="sidebar-nav-label">{translateText(item.label)}</span>
-                      </RouterLink>
+                      </a>
                     );
                   })}
                 </nav>
@@ -472,7 +514,9 @@ const StaffApp = (): React.JSX.Element => {
               <summary className="profile-trigger">
                 <span className="profile-copy">
                   <strong>{email || translateText("Staff account")}</strong>
-                  <span>{translateText("Employee")}</span>
+                  <span>
+                    {roles.length > 0 ? roles.map((role) => translateText(role)).join(", ") : translateText("Employee")}
+                  </span>
                 </span>
                 <ChevronDown className="profile-chevron" size={16} strokeWidth={2} aria-hidden="true" />
               </summary>
@@ -493,7 +537,7 @@ const StaffApp = (): React.JSX.Element => {
           <PageActionsContext.Provider value={actionsTarget}>
             <div className="content-panel">
               <PageHeader
-                title={translateText(activeLabel)}
+                title={translateText(inventoryTab ?? activeLabel)}
                 breadcrumb={
                   <Breadcrumb
                     items={breadcrumbItems}
