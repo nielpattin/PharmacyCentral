@@ -2,6 +2,7 @@
   "name": "pharmacy-central",
   "version": "0.1.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "build": "nx run-many -t build --all",

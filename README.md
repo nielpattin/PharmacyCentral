@@ -18,6 +18,24 @@ Pharmacy Central is a Node.js 24 pharmacy platform split into an Express 5 micro
 
 PostgreSQL/PostGIS stores are service-owned databases. RabbitMQ carries integration events. Redis provides delivery caching. OpenRouteService supplies server-side delivery address resolution, Matrix, Directions, distance, duration, and GeoJSON route data.
 
+## Documentation
+
+- [Architecture](docs/architecture.md): services, boundaries, and data flow.
+- [Architecture diagrams](docs/diagrams/README.md): LikeC4 model (`pnpm diagrams:serve`).
+- [Runbook](docs/runbook.md): operating steps, named URLs, and troubleshooting.
+- [API Guide](docs/api-guide.md): HTTP API reference.
+- [User Guide](docs/user-guide.md): customer and staff workflows.
+- [Business rules](docs/business-rules.md): domain rules (in Vietnamese; rule IDs `BR-*` are stable).
+- [ADRs](docs/adr/README.md): recorded architecture decisions.
+- [Design docs](docs/design/README.md): specs written before large work.
+- [Contributing](CONTRIBUTING.md), [changelog](CHANGELOG.md), [security policy](SECURITY.md).
+- [Agent instructions](AGENTS.md).
+
+## Ownership
+
+Code owners are listed in `.github/CODEOWNERS` (currently `@nielpattin`).
+The license is in `LICENSE`: all rights reserved.
+
 ## Prerequisites
 
 - Node.js `24.19.0`, within `>=24.16.0 <25`.
@@ -42,7 +60,7 @@ docker compose up -d --build
 
 The Compose web containers proxy `/api` requests through the local Nginx gateway. AWS deployment configuration is separate and remains configuration-only until provisioned.
 
-Run `pnpm run urls:up` once per session to get the named URLs (see Named local URLs in `docs/Runbooks.md`). Use them rather than `localhost`: the customer and staff sessions then live in separate browser origins.
+Run `pnpm run urls:up` once per session to get the named URLs (see Named local URLs in `docs/runbook.md`). Use them rather than `localhost`: the customer and staff sessions then live in separate browser origins.
 
 The default endpoints are:
 
@@ -68,7 +86,7 @@ pnpm --dir apps/payment-service db:migrate
 pnpm --dir apps/operations-query-service db:migrate
 ```
 
-Demo credentials are documented in `docs/Runbooks.md` and are for local use only.
+Demo credentials are documented in `docs/runbook.md` and are for local use only.
 
 Load the demo accounts, product images, and sample master data (development only):
 
@@ -92,7 +110,7 @@ pnpm run build
 pnpm test
 ```
 
-Load and chaos tests run against the container stack (`pnpm run stack:up`) and are described in `docs/Runbooks.md`:
+Load and chaos tests run against the container stack (`pnpm run stack:up`) and are described in `docs/runbook.md`:
 
 ```bash
 pnpm run load -e PROFILE=smoke /scripts/scenarios/checkout.js   # k6 in Docker, results in Grafana
@@ -107,10 +125,3 @@ Copy `.env.example` to a local environment file and replace development secrets.
 AWS deployment configuration is located under `deploy/aws`, defining AWS API Gateway HTTP API, Lambda authorizer, VPC Link, internal Application Load Balancer, and ECS Fargate services. This AWS configuration is configuration-only and no AWS resources were deployed.
 
 GitHub Actions validates affected projects on pull requests and on demand through the `Workspace validation` workflow. Releases run on demand through the `Release application images` workflow, which validates the workspace and publishes digest-addressed GHCR application images for the requested version.
-
-## Documentation
-
-- [Architecture diagrams](docs/diagrams/README.md) (LikeC4 model; `pnpm diagrams:serve`)
-- [API Guide](docs/ApiGuide.md)
-- [User Guide](docs/UserGuide.md)
-- [Runbooks](docs/Runbooks.md)

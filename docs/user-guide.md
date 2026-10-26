@@ -13,8 +13,8 @@ Screens are described as the code renders them. A sidebar item lists only for ro
 
 ### Staff Web
 
-1. Start the local system with Docker Compose (`docker compose up -d`) or start the development servers.
-2. Open `http://localhost:5302/`.
+1. Start the local system: `pnpm run stack:up` for the full stack in containers, or `pnpm run infra:up` followed by `pnpm dev` for development mode. Run `pnpm run urls:up` once per session to enable the named URLs.
+2. Open `http://staff.pharmacy.localhost/`.
 3. Enter your employee email and password, then choose **Sign in**.
 4. The sidebar shows only the workspaces permitted for your roles.
 
@@ -48,7 +48,7 @@ Shortcuts other than `Ctrl`/`Cmd` + `S` and `Esc` are ignored while you type in 
 
 ### Customer Web
 
-1. Open `http://localhost:5301/`.
+1. Open `http://customer.pharmacy.localhost/`.
 2. Choose **Tài khoản** (Account) in the header. Signed-out visitors see the sign-in form there.
 3. Sign in with **Đăng nhập**, or choose **Tạo tài khoản mới** to register with a display name, an email and a password of at least 8 characters.
 
@@ -82,12 +82,11 @@ Staff Web has four business roles. Access is decided by role, and non-admin user
 | Pharmacist | Pharmacist overview, Prescriptions, Online orders, Replenishment, Search synonyms |
 | Warehouse Staff | Dashboard, Transfers, Replenishment, Receiving, Stocktake, Inventory, Adjustments, Returns and removals, Quality, Reporting, Data import (Stock only) |
 
-Points to note:
+Permissions per role, including which actions each role may perform, are defined in [Business rules](business-rules.md#4-quy-t%E1%BA%AFc-role-v%C3%A0-ph%C3%A2n-quy%E1%BB%81n).
 
-- Dispensing, taking payment, refunding, and replying to consultations are pharmacist work. Platform Admins can also do them; a Pharmacy Manager sees the same prescription, counter and consultation records as a read-only view with the notice "View only: dispensing, payments and consultation replies need the Pharmacist role."
-- Pharmacy Managers do not see Inventory, Transfers, Stocktake, Adjustments, Returns, Receiving or Quality in the sidebar; those belong to Warehouse Staff.
-- A user who holds only the Pharmacist role lands on **Pharmacist overview** after sign-in. Dashboard is the landing page for Platform Admins, Pharmacy Managers and Warehouse Staff.
-- A page's tab bar is the same for everyone who can open that page. Where a tab is marked "Dispense", "Refund" or "Confirm cash" in the sections below, the button only appears for the roles stated.
+A user who holds only the Pharmacist role lands on **Pharmacist overview** after sign-in. Dashboard is the landing page for Platform Admins, Pharmacy Managers and Warehouse Staff.
+
+A Pharmacy Manager sees the prescription, counter and consultation records as a read-only view with the notice "View only: dispensing, payments and consultation replies need the Pharmacist role."
 
 ## Dashboard and Reporting
 
@@ -173,8 +172,6 @@ Imports are repeatable: matching codes, SKUs and batch numbers update existing r
 3. Enter each line's product, batch, expiry date and received quantity, then submit.
 4. New batches await quality review before they can be used for sales.
 
-The old tabs **Create order** and **Receive goods** are gone: a link with `?tab=Create order` or `?tab=Receive goods` opens the list.
-
 ## Quality
 
 **Quality** (Warehouse Staff) opens the Batches list.
@@ -200,7 +197,7 @@ Only released batches that have not passed their expiry date count as sellable. 
 | Control | Adjustments | **Submit stock adjustment**; pending adjustments can be approved or rejected |
 | Control | Stocktake | Stocktake sessions, **Create stocktake**, **Record count** for counted quantities (a drawer), and **Post adjustments** for pending sessions |
 
-The old tabs **Create batch**, **Create transfer** and **Count line** are gone: a link with `?tab=Create batch` (or the other two) opens **Balances**. Press **N** on a list to open its create drawer.
+Press **N** on a list to open its create drawer.
 
 **Transfers** workflow: create a transfer with its lines; approve it (`PendingApproval` to `Approved`); ship it (`InTransit`); receive it at the destination. A pending or approved transfer can be cancelled.
 
@@ -224,7 +221,7 @@ Tabs:
 
 | Tab | Who | What it does |
 | --- | --- | --- |
-| Prescriptions | Both | Prescriptions with patient, status, site and created time. **View** opens the details. Pharmacists also get **Dispense** on each row, and **Create invoice** and **Cancel prescription** in the **More actions** menu (or in the details drawer) | and phone, optional customer account (found by exact phone or email), site and storage location, doctor name and license, lines (product, unit, quantity, dosage, frequency, duration, notes), and notes. Submitting requests the stock reservation |
+| Prescriptions | Both | Prescriptions with patient, status, site and created time. **View** opens the details. Pharmacists also get **Dispense** on each row, and **Create invoice** and **Cancel prescription** in the **More actions** menu (or in the details drawer) |
 | Counter transactions | Both (actions for Pharmacist, Platform Admin) | Invoices and counter transactions with payment status and amount. **Create invoice**, **Confirm cash** (pending payments) and **Refund** (paid payments) |
 | Consultations | Both (replies for Pharmacist, Platform Admin) | Shopper requests from the intake page, filtered Open or Answered, showing the prescription, its lines and any shopper note. Pharmacists type a reply and choose **Send reply** |
 
@@ -232,8 +229,6 @@ Two actions open as side drawers over the Prescriptions tab, so the queue stays 
 
 - **Create prescription** (header button or **N**; Pharmacist, Platform Admin): patient name and phone, optional customer account (found by exact phone or email), site and storage location, doctor name and license, lines (product, unit, quantity, dosage, frequency, duration, notes), and notes. Submitting requests the stock reservation.
 - **Dispense** (row button; Pharmacist, Platform Admin): for each line pick the product batch and dispensed quantity, then choose **Dispense**. The drawer address keeps `?prescription=<id>`, so a refresh reopens it.
-
-The old tabs **Create** and **Dispense** are gone: a link with `?tab=Create` or `?tab=Dispense` opens **Prescriptions**.
 
 Counter flow for a pharmacist:
 
@@ -315,7 +310,7 @@ After an order is placed, the payment panel shows the order number, payment code
 
 ### Orders
 
-The **Đơn của tôi** tab (`/don-hang?tab=don-cua-toi`) lists the signed-in customer's orders. The order the customer most likely came for sits at the top as a large block: the newest order whose medicine is ready or on its way, otherwise the newest order still being handled, otherwise the newest one. It shows the package photo, the status as a sentence (for example "Thuốc của bạn đã sẵn sàng để nhận"), a five-step progress bar with labels (Chờ xác nhận, Đã xác nhận, Đang lấy thuốc, Sẵn sàng nhận hàng or Đang giao hàng, Hoàn tất), the pharmacy to collect from, the total and **Xem chi tiết đơn**, which opens every medicine with quantity and price, subtotal, delivery fee, the pharmacy address and the payment status. **Các đơn khác** lists the rest, newest first, each with its photo, status, date, total and a **Chi tiết** button; the tabs Tất cả, Đang xử lý, Hoàn tất and Đã huỷ filter that list. A cancelled order shows no payment note. The tab refreshes itself every 10 seconds. The old address `/don-hang-cua-toi` no longer exists.
+**Đơn của tôi** tab (`/don-hang?tab=don-cua-toi`) lists the signed-in customer's orders. The order the customer most likely came for sits at the top as a large block: the newest order whose medicine is ready or on its way, otherwise the newest order still being handled, otherwise the newest one. It shows the package photo, the status as a sentence (for example "Thuốc của bạn đã sẵn sàng để nhận"), a five-step progress bar with labels (Chờ xác nhận, Đã xác nhận, Đang lấy thuốc, Sẵn sàng nhận hàng or Đang giao hàng, Hoàn tất), the pharmacy to collect from, the total and **Xem chi tiết đơn**, which opens every medicine with quantity and price, subtotal, delivery fee, the pharmacy address and the payment status. **Các đơn khác** lists the rest, newest first, each with its photo, status, date, total and a **Chi tiết** button; the tabs Tất cả, Đang xử lý, Hoàn tất and Đã huỷ filter that list. A cancelled order shows no payment note. The tab refreshes itself every 10 seconds.
 
 ### Account
 
@@ -361,7 +356,7 @@ Use the demo accounts above, with `pnpm run dev:data` already run.
 6. **Pharmacist**: sign in, open **Pharmacist overview**, then **Prescriptions**, choose **Create prescription**, then **Dispense** on its row. In **Counter transactions**, create the invoice and confirm cash.
 7. **Pharmacy Manager**: open **Finance** and **Reporting** to review the summary, invoices and report rows.
 8. **Pharmacist**: open **Search synonyms**, submit a group, then sign in as another staff member to approve it.
-9. **Customer**: open Customer Web at `http://localhost:5301/`, search for a product, add it to the cart, sign in, and check out with pickup or delivery. Open **Đơn hàng của tôi** to track it, and try **Gửi đơn thuốc** and the shopping assistant.
+9. **Customer**: open Customer Web at `http://customer.pharmacy.localhost/`, search for a product, add it to the cart, sign in, and check out with pickup or delivery. Open **Đơn hàng** (`/don-hang`) and the **Đơn của tôi** tab to track it, and try **Gửi đơn thuốc** and the shopping assistant.
 
 ## Demonstration guidelines
 

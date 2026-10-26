@@ -33,7 +33,7 @@ pnpm run dev:data
 ```
 
 It seeds the demo accounts, uploads every file in `product-images/images/` to SeaweedFS, imports the five CSVs above through
-the API, and gives the staff accounts their site access. See "Local sample data" in `docs/Runbooks.md` for the prerequisites.
+the API, and gives the staff accounts their site access. See "Local sample data" in `docs/runbook.md` for the prerequisites.
 
 The images keep their source formats (PNG, JPEG, or WebP all work: add a file named `<SKU>.<ext>` to the folder). Each one is
 uploaded under the content-hash key `product-images/<SKU>/<sha256>.<ext>`, so the URL is the same for everyone and is exactly

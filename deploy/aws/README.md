@@ -59,7 +59,7 @@ The embedder is a separate ECS Fargate service, not a backend service. It has no
 - **API key:** `embedder_api_key_secret_arn` is a Secrets Manager ARN. The task reads it as `API_KEY`, and catalog-service and search-service read the same secret as `AI_EMBEDDING_API_KEY`. No value appears in Terraform.
 - **Health:** the container health check calls `/health` on port 80 and has a 300 second start period for the model load.
 
-The operating steps (building and pushing the image, creating the secret, checking the health endpoint, and the fallback to keyword search) are in `docs/Runbooks.md`, section "Self-hosted product search embeddings", subsection "On AWS".
+The operating steps (building and pushing the image, creating the secret, checking the health endpoint, and the fallback to keyword search) are in `docs/runbook.md`, section "Self-hosted product search embeddings", subsection "On AWS".
 
 ## OpenTelemetry collector and metrics
 

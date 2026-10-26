@@ -109,9 +109,15 @@ coverage/
 *.tfstate.*
 docs/*
 !docs/
-!docs/ApiGuide.md
-!docs/UserGuide.md
-!docs/Runbooks.md
+!docs/api-guide.md
+!docs/user-guide.md
+!docs/business-rules.md
+!docs/architecture.md
+!docs/adr/
+!docs/adr/**
+!docs/design/
+!docs/design/**
+!docs/runbook.md
 !docs/diagrams/
 !docs/diagrams/**
 docs/diagrams/png/
@@ -122,7 +128,6 @@ bin-build
 
 tsconfig.tsbuildinfo
 
-AGENTS.md
 credentials.json
 plans/
 .omp/

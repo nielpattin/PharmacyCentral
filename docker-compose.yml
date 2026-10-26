@@ -120,7 +120,7 @@ services:
     ports:
       - "${TYPESENSE_PORT}:8108"
 
-  # Self-hosted text embeddings for the product search, so it needs no quota (see docs/Runbooks.md). The model
+  # Self-hosted text embeddings for the product search, so it needs no quota (see docs/runbook.md). The model
   # downloads on first start. catalog-service and search-service reach it at http://embedder:80/v1; services under
   # pnpm dev use http://localhost:${EMBEDDER_PORT}/v1 from .env.
   embedder:

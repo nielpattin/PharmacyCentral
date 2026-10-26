@@ -219,7 +219,7 @@ pnpm run dev:data
 pnpm --dir apps/identity-service seed -- --dry-run
 ```
 
-`DEMO_ACCOUNT_PASSWORD` from `.env` becomes the password for the seeded accounts. The seed creates one account per role (Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff, Customer), each holding only that role, and resets their roles and site access on every run. Site access is looked up by code from the imported sites (`SITE-RTL` for the manager and pharmacist, `SITE-WH` for warehouse staff); before the sites import the seed warns which are missing, and `dev:data` seeds again after it imports `data/import-samples/sites.csv`. The account list is in `docs/UserGuide.md`.
+`DEMO_ACCOUNT_PASSWORD` from `.env` becomes the password for the seeded accounts. The seed creates one account per role (Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff, Customer), each holding only that role, and resets their roles and site access on every run. Site access is looked up by code from the imported sites (`SITE-RTL` for the manager and pharmacist, `SITE-WH` for warehouse staff); before the sites import the seed warns which are missing, and `dev:data` seeds again after it imports `data/import-samples/sites.csv`. The account list is in `docs/user-guide.md`.
 
 ### Import staff-managed data
 

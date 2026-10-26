@@ -100,7 +100,7 @@ export default {
       if (baseline.status !== 200) {
         throw new Error(
           baseline.status === 429
-            ? "The demo customer used its 30 photos of the day (5 a minute): wait, or clear its counter, see docs/Runbooks.md"
+            ? "The demo customer used its 30 photos of the day (5 a minute): wait, or clear its counter, see docs/runbook.md"
             : "The stack never reached the mock reader; later results would be meaningless",
         );
       }
