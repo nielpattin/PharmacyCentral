@@ -9,7 +9,7 @@ Pharmacy Central is a Node.js 24 pharmacy platform split into an Express 5 micro
 - `apps/catalog-service`: products, units, suppliers, prices, retail sites, PostGIS coordinates, and availability projections. It also owns the product search index that `search-service` reads.
 - `apps/search-service`: Go read path of `GET /api/products` (the product list only). It answers from the Typesense index, falls back to `catalog-service` when Typesense is unavailable, and never reads PostgreSQL.
 - `apps/inventory-service`: batches, quality, FEFO reservations, movements, transfers, returns, replenishment, stocktakes, purchase orders, goods receipts, and availability events.
-- `apps/sales-service`: guest and customer carts, orders, prescriptions, counter transactions, delivery calculation, and order events.
+- `apps/sales-service`: customer carts, orders, prescriptions, counter transactions, delivery calculation, and order events.
 - `apps/payment-service`: provider-neutral invoices, QR attempts, cash payments, SePay webhooks, refunds, and reconciliation.
 - `apps/operations-query-service`: RabbitMQ-fed dashboard, finance, reporting, and audit projections.
 - `apps/ops-console-service`: read-only backend of the staff-web System page (Platform Admin only). It reads service health, Prometheus, the RabbitMQ management API and Typesense. It owns no database.
@@ -26,6 +26,7 @@ PostgreSQL/PostGIS stores are service-owned databases. RabbitMQ carries integrat
 - [API Guide](docs/api-guide.md): HTTP API reference.
 - [User Guide](docs/user-guide.md): customer and staff workflows.
 - [Business rules](docs/business-rules.md): domain rules (in Vietnamese; rule IDs `BR-*` are stable).
+- [Product specs](docs/product/README.md): what each page or user-facing feature contains, for whom, and why.
 - [ADRs](docs/adr/README.md): recorded architecture decisions.
 - [Design docs](docs/design/README.md): specs written before large work.
 - [Contributing](CONTRIBUTING.md), [changelog](CHANGELOG.md), [security policy](SECURITY.md).

@@ -16,6 +16,7 @@
 
 - Issue:
 - Design doc (`docs/design/`):
+- Product spec (`docs/product/`):
 - ADR (`docs/adr/`):
 
 ## Verification
@@ -36,6 +37,7 @@ Checks not run, and why:
 ## Docs and changelog
 
 - [ ] Affected docs are updated, or no doc change is needed
+- [ ] `docs/business-rules.md` has the new or changed business rules, or none changed
 - [ ] `CHANGELOG.md` has an entry under `Unreleased`, or none is needed
 
 ## AI assistance

@@ -117,6 +117,8 @@ docs/*
 !docs/adr/**
 !docs/design/
 !docs/design/**
+!docs/product/
+!docs/product/**
 !docs/runbook.md
 !docs/diagrams/
 !docs/diagrams/**

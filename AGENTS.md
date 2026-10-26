@@ -137,12 +137,12 @@ There are two local modes (details in `docs/runbook.md`). **Ask the user which o
 Then follow the same loop in both modes:
 
 1. **Classify the request.** If it says talk, research, suggest, or "do not edit", answer only and change nothing.
-2. **Orient.** Read `docs/architecture.md`, the ADRs in `docs/adr`, and any draft in `docs/design`. Reuse the existing pattern. A big change (new service, new integration event, a schema change across services, a new external dependency) starts as a draft in `docs/design`; stop for review before building.
+2. **Orient.** Read `docs/architecture.md`, the ADRs in `docs/adr`, any draft in `docs/design`, and the spec in `docs/product` of every page you change. Reuse the existing pattern. A big change (new service, new integration event, a schema change across services, a new external dependency) starts as a draft in `docs/design`; stop for review before building. A new page or user-facing feature, or a change to what a page contains or why, starts with its spec in `docs/product`. When an open question in that spec decides the work, ask the owner instead of guessing.
 3. **Implement in small slices.** Delegate disjoint slices to sub-agents in parallel and set shared contracts (types, schema, events) first. Sub-agents only edit; they do not run gates, formatters, or commit. Build UI only from `@pharmacy/ui`, with no custom in-place styles.
 4. **Run the gates once** (see Verification workflow). Use pnpm only.
 5. **Run the change in the chosen mode.** After a migration change run `pnpm run db:migrate`; Compose does not run it. In container mode rebuild with `pnpm run stack:up` and confirm every container in `docker compose ps` is healthy. Run `pnpm run urls:up` once per session for the named URLs.
 6. **Verify the real surface** (the `verify-pharmacy-central` skill in `.agents/skills` scripts the checks for both modes). Open the named URLs at 1920x1080 with the saved role state (see Browser testing) and exercise the changed path. For an API change, call it through `http://api.pharmacy.localhost`. Report only what you ran. Dev data is disposable: reseed with `pnpm run dev:data` instead of preserving it.
-7. **Update docs in the same change.** `docs/` (user guide, API guide, runbook), the LikeC4 diagrams, `CHANGELOG.md` under Unreleased, and an ADR when you made a lasting decision.
+7. **Update docs in the same change.** `docs/` (user guide, API guide, runbook), `docs/product` for the spec of every page or user-facing feature you added or changed, `docs/business-rules.md` for every new or changed business rule (its section 25 requires this), the LikeC4 diagrams, `CHANGELOG.md` under Unreleased, and an ADR when you made a lasting decision.
 8. **Report and stop.** Commit only when asked. When asked: split by concern, use `type(scope): summary` with a short body, amend the last commit when told to fix it, and never push.
 
 ## Verification workflow
@@ -185,6 +185,7 @@ docker compose ps
 
 - Read first: [Architecture](docs/architecture.md), [diagrams](docs/diagrams/README.md), [runbook](docs/runbook.md), [API Guide](docs/api-guide.md), [User Guide](docs/user-guide.md), [Business rules](docs/business-rules.md), [Contributing](CONTRIBUTING.md).
 - Big work: write a design doc in [docs/design](docs/design/README.md) first.
+- Pages and user-facing features: write or update the spec in [docs/product](docs/product/README.md): what the page contains, for whom, and why.
 - After a decision: record an ADR in [docs/adr](docs/adr/README.md).
 - Add a [CHANGELOG](CHANGELOG.md) entry under `Unreleased`.
 - Keep `docs/runbook.md` and the LikeC4 diagrams in step with your changes.

@@ -61,9 +61,11 @@ Do not claim container validation passed until `docker compose ps` shows the con
 
 ## Where documentation goes
 
+- **Product spec for pages and features**: when you add or change a page or a user-facing feature, write or update its spec in [docs/product/](docs/product/README.md) in the same pull request: what it contains, for whom, and why. Tag what is the owner's word and what is only observed from code.
 - **Design doc before big work**: write it in [docs/design/](docs/design/README.md) before you start a large or cross-service change. Start from [docs/design/0000-template.md](docs/design/0000-template.md).
 - **Decision records**: after a decision is made, record it in [docs/adr/](docs/adr/README.md).
 - **Changelog**: add an entry under `Unreleased` in [CHANGELOG.md](CHANGELOG.md) for every user-visible or permanent change.
+- **Business rules**: a new or changed rule of product behavior goes into [docs/business-rules.md](docs/business-rules.md) in the same pull request, under a stable `BR-*` ID (section 25 of that file). Record a gap there too when the server does not enforce a rule.
 - **Docs live next to code**: update the matching document in the same pull request. The API contract is in [docs/api-guide.md](docs/api-guide.md), user-facing behavior in [docs/user-guide.md](docs/user-guide.md), operations in [docs/runbook.md](docs/runbook.md), and architecture diagrams in [docs/diagrams/README.md](docs/diagrams/README.md).
 
 ## Rules that matter
