@@ -14,6 +14,7 @@ const order = (overrides: Partial<PayableOrder> = {}): PayableOrder => ({
   status: "Pending",
   paymentStatus: "Pending",
   currency: "VND",
+  deliveryFee: "0.00",
   lines: [
     {
       productId: product,
@@ -52,6 +53,23 @@ describe("pricing an invoice", () => {
         currency: "VND",
       },
     ]);
+  });
+
+  it("adds the delivery fee as a line without a product, so the invoice is the whole order total", async () => {
+    const priced = await price(request(), order({ deliveryFee: "13000.00" }));
+    expect(priced.lines).toHaveLength(2);
+    expect(priced.lines[1]).toStrictEqual({
+      description: "Phí giao hàng",
+      quantity: 1,
+      unitPrice: 13000,
+      currency: "VND",
+    });
+    const total = priced.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+    expect(total).toBe(2 * 45000 + 13000);
+  });
+
+  it("adds no fee line for an order with no delivery fee", async () => {
+    expect((await price(request(), order())).lines).toHaveLength(1);
   });
 
   it("reads the order as the shopper who asked", async () => {

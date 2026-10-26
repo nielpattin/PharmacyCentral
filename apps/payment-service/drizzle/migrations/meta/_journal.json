@@ -57,6 +57,13 @@
       "when": 1792810000000,
       "tag": "0007_invoice_list_keyset_index",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792985105379,
+      "tag": "0008_invoice_line_without_product",
+      "breakpoints": true
     }
   ]
 }

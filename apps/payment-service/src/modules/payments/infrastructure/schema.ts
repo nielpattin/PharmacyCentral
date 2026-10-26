@@ -31,8 +31,8 @@ export const paymentInvoiceLines = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     paymentInvoiceId: uuid("payment_invoice_id").notNull(),
-    productId: uuid("product_id").notNull(),
-    productUnitId: uuid("product_unit_id").notNull(),
+    productId: uuid("product_id"),
+    productUnitId: uuid("product_unit_id"),
     description: varchar("description", { length: 500 }).notNull(),
     quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),

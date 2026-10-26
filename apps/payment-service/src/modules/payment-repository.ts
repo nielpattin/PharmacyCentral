@@ -52,8 +52,9 @@ export class PaymentRepository {
     prescriptionId?: string | undefined;
     paymentMethod: InvoicePaymentMethod;
     lines: Array<{
-      productId: string;
-      productUnitId: string;
+      /** Absent on a line that is not a product, such as the delivery fee. */
+      productId?: string | undefined;
+      productUnitId?: string | undefined;
       description: string;
       quantity: number;
       unitPrice: number;
@@ -86,8 +87,8 @@ export class PaymentRepository {
       await transaction.insert(paymentInvoiceLines).values(
         input.lines.map((line) => ({
           paymentInvoiceId: invoice.id,
-          productId: line.productId,
-          productUnitId: line.productUnitId,
+          productId: line.productId ?? null,
+          productUnitId: line.productUnitId ?? null,
           description: line.description,
           quantity: String(line.quantity),
           unitPrice: String(line.unitPrice),
