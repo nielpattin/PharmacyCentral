@@ -33,6 +33,9 @@ const ids = {
   location: "00000000-0000-4000-8000-000000000012",
 };
 
+/** What the trusted layer stamps on a Pharmacist's request: the employee type and the verified roles. */
+const pharmacistHeaders = { "X-Actor-Type": "employee", "x-actor-roles": "Pharmacist" };
+
 const createTestServer = async (
   repository: SalesRepository,
   orderStock: Partial<OrderStock> = {},
@@ -91,7 +94,7 @@ describe("sales prescription API", () => {
 
     const response = await httpFetch(`${testServer.url}/prescriptions`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...pharmacistHeaders },
       body: JSON.stringify({
         siteId: ids.site,
         storageLocationId: ids.location,
@@ -127,6 +130,7 @@ describe("sales prescription API", () => {
         "content-type": "application/json",
         "X-Actor-Id": ids.actor,
         "Idempotency-Key": "prescription-create-key",
+        ...pharmacistHeaders,
       },
       body: JSON.stringify({
         siteId: ids.site,
@@ -152,7 +156,7 @@ describe("sales prescription API", () => {
 
     const response = await httpFetch(`${testServer.url}/prescriptions`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...pharmacistHeaders },
       body: JSON.stringify({
         siteId: ids.site,
         storageLocationId: ids.location,
@@ -176,6 +180,7 @@ describe("sales prescription API", () => {
   // The mocked repository hands the router's stock callback the goods it would take off the shelf.
   const dispensingRepository = () =>
     ({
+      getPrescription: vi.fn(async (id: string) => ({ id, siteId: ids.site, customerId: null, status: "Pending" })),
       dispensePrescription: vi.fn(
         async (
           id: string,
@@ -200,6 +205,7 @@ describe("sales prescription API", () => {
       headers: {
         "content-type": "application/json",
         "X-Actor-Id": ids.actor,
+        ...pharmacistHeaders,
         ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
       },
       body: JSON.stringify({
@@ -292,7 +298,7 @@ describe("sales prescription API", () => {
 
     const response = await httpFetch(`${testServer.url}/prescriptions`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...pharmacistHeaders },
       body: JSON.stringify({
         siteId: ids.site,
         storageLocationId: ids.location,
@@ -356,7 +362,7 @@ describe("sales prescription API", () => {
 
     const response = await httpFetch(`${testServer.url}/prescriptions`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...pharmacistHeaders },
       body: JSON.stringify({
         siteId: ids.site,
         storageLocationId: ids.location,
@@ -390,7 +396,7 @@ describe("sales order listing API", () => {
     server = testServer.server;
 
     const staffResponse = await httpFetch(`${testServer.url}/orders?status=Confirmed&paymentStatus=Paid&limit=25`, {
-      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      headers: { "X-Actor-Id": ids.actor, ...pharmacistHeaders },
     });
     const staffFilter = listOrders.mock.calls[0]?.[0];
     expect(staffResponse.status).toBe(200);
@@ -444,7 +450,7 @@ describe("sales prescription ownership API", () => {
     expect(shopperFilter?.siteIds).toBeUndefined();
 
     const staffResponse = await httpFetch(`${testServer.url}/prescriptions?status=Pending&siteId=${ids.site}`, {
-      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      headers: { "X-Actor-Id": ids.actor, ...pharmacistHeaders },
     });
     const staffFilter = listPrescriptions.mock.calls[1]?.[0];
     expect(staffResponse.status).toBe(200);
@@ -513,7 +519,7 @@ describe("sales prescription ownership API", () => {
 
     const response = await httpFetch(`${testServer.url}/prescriptions`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...pharmacistHeaders },
       body: JSON.stringify({
         siteId: ids.site,
         storageLocationId: ids.location,
@@ -545,7 +551,7 @@ describe("sales prescription ownership API", () => {
 
     const response = await httpFetch(`${testServer.url}/prescriptions`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...pharmacistHeaders },
       body: JSON.stringify({
         siteId: ids.site,
         storageLocationId: ids.location,
@@ -652,7 +658,7 @@ describe("sales counter transaction API", () => {
     server = testServer.server;
 
     const response = await httpFetch(`${testServer.url}/counter-transactions?siteId=${ids.site}&limit=25`, {
-      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      headers: { "X-Actor-Id": ids.actor, ...pharmacistHeaders },
     });
 
     expect(response.status).toBe(200);
@@ -687,18 +693,22 @@ describe("sales paged lists and count API", () => {
       .fn<(input: Parameters<SalesRepository["listOrders"]>[0]) => Promise<unknown>>()
       .mockResolvedValueOnce({ rows: [{ id: ids.prescription }], nextCursor: encodeCursor(position) })
       .mockResolvedValueOnce({ rows: [{ id: ids.actor }], nextCursor: undefined });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response('{"customers":[]}', { status: 200 })),
+    );
     const testServer = await createTestServer({ listOrders } as unknown as SalesRepository);
     server = testServer.server;
 
     const first = await httpFetch(`${testServer.url}/orders?limit=1`, {
-      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      headers: { "X-Actor-Id": ids.actor, ...pharmacistHeaders },
     });
-    expect(await first.json()).toEqual([{ id: ids.prescription }]);
+    expect(await first.json()).toEqual([{ id: ids.prescription, customer: null }]);
     expect(first.headers.get("x-next-cursor")).toBe(encodeCursor(position));
     expect(listOrders.mock.calls[0]?.[0]).toMatchObject({ limit: 1, after: undefined });
 
     const last = await httpFetch(`${testServer.url}/orders?limit=1&cursor=${encodeCursor(position)}&q=abc`, {
-      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      headers: { "X-Actor-Id": ids.actor, ...pharmacistHeaders },
     });
     expect(last.headers.has("x-next-cursor")).toBe(false);
     expect(listOrders.mock.calls[1]?.[0]).toMatchObject({ limit: 1, q: "abc", after: position });
@@ -717,7 +727,7 @@ describe("sales paged lists and count API", () => {
     expect(await tampered.json()).toEqual({ title: "Invalid cursor", status: 400, code: "invalid_cursor" });
 
     const repeated = await httpFetch(`${testServer.url}/counter-transactions?cursor=a&cursor=b`, {
-      headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee" },
+      headers: { "X-Actor-Id": ids.actor, ...pharmacistHeaders },
     });
     expect(repeated.status).toBe(400);
     expect(await repeated.json()).toMatchObject({ code: "invalid_cursor" });
@@ -733,7 +743,7 @@ describe("sales paged lists and count API", () => {
 
     const response = await httpFetch(
       `${testServer.url}/prescriptions/count?status=Pending&excludeStatus=Dispensed,Cancelled`,
-      { headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "employee", "x-actor-site-ids": ids.site } },
+      { headers: { "X-Actor-Id": ids.actor, ...pharmacistHeaders, "x-actor-site-ids": ids.site } },
     );
 
     expect(response.status).toBe(200);
@@ -984,9 +994,179 @@ describe("sales order stock API", () => {
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
     });
-  const staff = { "X-Actor-Id": "00000000-0000-4000-8000-0000000000aa", "X-Actor-Type": "employee" };
+  const staff = {
+    "X-Actor-Id": "00000000-0000-4000-8000-0000000000aa",
+    "X-Actor-Type": "employee",
+    "x-actor-roles": "Pharmacist",
+  };
   const shopper = { "X-Actor-Id": ids.actor, "X-Actor-Type": "customer" };
+  describe("sales staff role and site access", () => {
+    let server: Server | undefined;
 
+    afterEach(async () => {
+      if (server) await closeServer(server);
+      server = undefined;
+      vi.unstubAllGlobals();
+    });
+
+    const otherSite = "00000000-0000-4000-8000-0000000000ff";
+    const scopedPharmacist = {
+      "X-Actor-Id": ids.actor,
+      "X-Actor-Type": "employee",
+      "x-actor-roles": "Pharmacist",
+      "x-actor-site-ids": ids.site,
+    };
+    const prescriptionBody = {
+      siteId: ids.site,
+      storageLocationId: ids.location,
+      patientName: "Bệnh nhân",
+      lines: [{ productId: ids.productA, productUnitId: ids.unitA, prescribedQuantity: 1 }],
+    };
+    const dispenseBody = {
+      lines: [{ prescriptionLineId: ids.lineA, productBatchId: ids.batchA, dispensedQuantity: 1 }],
+    };
+    const orderAt = (siteId: string) => ({
+      id: ids.prescription,
+      customerId: ids.actor,
+      selectedStoreId: siteId,
+      status: "Pending",
+      paymentStatus: "Pending",
+    });
+    const post = (url: string, path: string, headers: Record<string, string>, body?: unknown) =>
+      httpFetch(`${url}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    const identityContacts = () =>
+      vi.fn(async (url: string) => {
+        if (String(url).endsWith("/internal/customers/batch"))
+          return new Response(
+            JSON.stringify({ customers: [{ id: ids.actor, displayName: "Nguyễn Văn A", phoneNumber: "0901234567" }] }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        return new Response(null, { status: 500 });
+      });
+
+    it("refuses dispense and cancel at another site before any write", async () => {
+      const dispensePrescription = vi.fn();
+      const cancelPrescription = vi.fn();
+      const repository = {
+        getPrescription: vi.fn().mockResolvedValue({ id: ids.prescription, siteId: otherSite, status: "Pending" }),
+        dispensePrescription,
+        cancelPrescription,
+      } as unknown as SalesRepository;
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      const testServer = await createTestServer(repository);
+      server = testServer.server;
+
+      const dispensed = await post(
+        testServer.url,
+        `/prescriptions/${ids.prescription}/dispense`,
+        scopedPharmacist,
+        dispenseBody,
+      );
+      const cancelled = await post(testServer.url, `/prescriptions/${ids.prescription}/cancel`, scopedPharmacist);
+
+      for (const response of [dispensed, cancelled]) {
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ code: "site_access_denied" });
+      }
+      expect(dispensePrescription).not.toHaveBeenCalled();
+      expect(cancelPrescription).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("answers another site's prescription as not found to a pharmacist and reads its own site's", async () => {
+      const getPrescription = vi.fn().mockResolvedValue({ id: ids.prescription, siteId: otherSite, lines: [] });
+      const testServer = await createTestServer({ getPrescription } as unknown as SalesRepository);
+      server = testServer.server;
+
+      const hidden = await httpFetch(`${testServer.url}/prescriptions/${ids.prescription}`, {
+        headers: scopedPharmacist,
+      });
+      expect(hidden.status).toBe(404);
+
+      getPrescription.mockResolvedValue({ id: ids.prescription, siteId: ids.site, lines: [] });
+      const visible = await httpFetch(`${testServer.url}/prescriptions/${ids.prescription}`, {
+        headers: scopedPharmacist,
+      });
+      expect(visible.status).toBe(200);
+    });
+
+    it("lists a pharmacist's own site's orders with the shopper's name and phone, and hides another site's order", async () => {
+      const listOrders = vi.fn().mockResolvedValue({ rows: [orderAt(ids.site)], nextCursor: undefined });
+      const getOrder = vi.fn().mockResolvedValue(orderAt(otherSite));
+      const fetchMock = identityContacts();
+      vi.stubGlobal("fetch", fetchMock);
+      const testServer = await createTestServer({ listOrders, getOrder } as unknown as SalesRepository);
+      server = testServer.server;
+
+      const list = await httpFetch(`${testServer.url}/orders`, { headers: scopedPharmacist });
+      const page = (await list.json()) as { rows?: unknown[] } | unknown[];
+      const hidden = await httpFetch(`${testServer.url}/orders/${ids.prescription}`, { headers: scopedPharmacist });
+
+      expect(list.status).toBe(200);
+      expect(listOrders.mock.calls[0]?.[0]).toMatchObject({ siteIds: [ids.site] });
+      expect(JSON.stringify(page)).toContain("0901234567");
+      expect(hidden.status).toBe(404);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://identity.test/internal/customers/batch",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
+    it("hides the shopper's contact from a shopper's own order read", async () => {
+      const fetchMock = identityContacts();
+      vi.stubGlobal("fetch", fetchMock);
+      const testServer = await createTestServer({
+        getOrder: vi.fn().mockResolvedValue(orderAt(ids.site)),
+      } as unknown as SalesRepository);
+      server = testServer.server;
+
+      const own = await httpFetch(`${testServer.url}/orders/${ids.prescription}`, {
+        headers: { "X-Actor-Id": ids.actor, "X-Actor-Type": "customer" },
+      });
+
+      expect(own.status).toBe(200);
+      expect(await own.json()).not.toHaveProperty("customer");
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("fails closed with 503 when identity cannot give the contacts, and shows no order without them", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("identity-service is unreachable")));
+      const testServer = await createTestServer({
+        listOrders: vi.fn().mockResolvedValue({ rows: [orderAt(ids.site)], nextCursor: undefined }),
+      } as unknown as SalesRepository);
+      server = testServer.server;
+
+      const response = await httpFetch(`${testServer.url}/orders`, { headers: scopedPharmacist });
+
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ code: "identity_unavailable" });
+    });
+
+    it("refuses a move on an order at another site before any write", async () => {
+      const transitionOrder = vi.fn();
+      const consume = vi.fn();
+      const repository = {
+        getOrder: vi.fn().mockResolvedValue(orderAt(otherSite)),
+        transitionOrder,
+      } as unknown as SalesRepository;
+      const testServer = await createTestServer(repository, { consume });
+      server = testServer.server;
+
+      const response = await post(testServer.url, `/orders/${ids.prescription}/transition`, scopedPharmacist, {
+        status: "Confirmed",
+      });
+
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ code: "site_access_denied" });
+      expect(transitionOrder).not.toHaveBeenCalled();
+      expect(consume).not.toHaveBeenCalled();
+    });
+  });
   it("never lets a shopper confirm or hand over their own order", async () => {
     const consume = vi.fn();
     const transitionOrder = vi.fn();

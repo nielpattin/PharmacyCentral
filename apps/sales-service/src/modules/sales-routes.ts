@@ -23,10 +23,12 @@ import {
   type DeliveryCalculation,
   type DeliveryCalculator,
 } from "./delivery/domain/delivery-calculator.ts";
+import { CustomerContactUnavailableError, lookupCustomerContacts } from "./customer-contact.ts";
 import type { OrderStock } from "./orders/application/order-stock.ts";
 import { transitionOrder as assertOrderTransition, type OrderStatus } from "./orders/domain/order-status.ts";
 import { InsufficientStockError, InventoryRequestError } from "./orders/infrastructure/inventory-reservations.ts";
 import { PrescriptionDispenseError, SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
+import { actorMaySeeSite, siteAccessDenied } from "./staff-access.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
 /** `PATCH /carts/selection` ticks or unticks the named lines, or every line when `lineIds` is left out. */
@@ -49,10 +51,27 @@ const excludeStatusParam = z
   )
   .pipe(z.array(z.enum(prescriptionStatuses)));
 const actor = (request: Request): string | undefined => request.header("X-Actor-Id") ?? undefined;
-/** Pharmacy staff and internal services read every customer's orders; a shopper only reads their own. */
-const readsEveryOrder = (request: Request): boolean => {
+/** Pharmacy staff and internal services work across customers; a shopper only ever reads their own rows. */
+const isStaffActor = (request: Request): boolean => {
   const type = request.header("X-Actor-Type");
   return type === "employee" || type === "system";
+};
+/** Adds each row's shopper name and phone, read from identity, for a caller who may see them. Throws when identity fails. */
+const withCustomerContacts = async <T extends { customerId: string }>(
+  rows: readonly T[],
+  baseUrl: string | undefined,
+) => {
+  const contacts = await lookupCustomerContacts(
+    rows.map((row) => row.customerId),
+    baseUrl,
+  );
+  return rows.map((row) => {
+    const contact = contacts.get(row.customerId);
+    return {
+      ...row,
+      customer: contact ? { displayName: contact.displayName, phoneNumber: contact.phoneNumber } : null,
+    };
+  });
 };
 
 export type SalesRouterOptions = {
@@ -248,25 +267,30 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     const status = queryString(request.query.status);
     const { limit, q } = query.data;
     try {
-      // The staff portal reviews every shopper's order, optionally narrowed to one site or payment state.
-      if (readsEveryOrder(request)) {
-        return sendPage(
-          response,
-          await repository.listOrders({
-            status,
-            limit,
-            q,
-            after: cursor.cursor,
-            paymentStatus: queryString(request.query.paymentStatus),
-            selectedStoreId: queryString(request.query.siteId),
-          }),
-        );
+      // Staff see the orders of their assigned sites (Platform Admin: all), optionally narrowed to one site or payment
+      // state. A shopper only reads their own orders.
+      if (isStaffActor(request)) {
+        const page = await repository.listOrders({
+          status,
+          limit,
+          q,
+          after: cursor.cursor,
+          paymentStatus: queryString(request.query.paymentStatus),
+          siteIds: listSiteIds(request),
+        });
+        // A shopper's name and phone reach an employee only (Decision 14); the edge and trusted layer set the roles.
+        if (request.header("X-Actor-Type") !== "employee") return sendPage(response, page);
+        return sendPage(response, {
+          ...page,
+          rows: await withCustomerContacts(page.rows, options.identityServiceUrl),
+        });
       }
       return sendPage(
         response,
         await repository.listOrders({ customerId: requesterId, status, limit, q, after: cursor.cursor }),
       );
     } catch (error) {
+      if (error instanceof CustomerContactUnavailableError) return identityUnavailable(response);
       return next(error);
     }
   });
@@ -279,10 +303,19 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     if (!customerId) return unauthorized(response);
     try {
       const order = await repository.getOrder(id.data.id);
+      if (isStaffActor(request)) {
+        // An order at another site is not found to this staff member, the same answer as a missing order.
+        if (!order || !actorMaySeeSite(request, order.selectedStoreId))
+          return response.status(404).json({ title: "Order not found", status: 404 });
+        if (request.header("X-Actor-Type") !== "employee") return response.json(order);
+        const [withContact] = await withCustomerContacts([order], options.identityServiceUrl);
+        return response.json(withContact);
+      }
       if (!order || order.customerId !== customerId)
         return response.status(404).json({ title: "Order not found", status: 404 });
       return response.json(order);
     } catch (error) {
+      if (error instanceof CustomerContactUnavailableError) return identityUnavailable(response);
       return next(error);
     }
   });
@@ -381,9 +414,12 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     try {
       const current = await repository.getOrder(id.data.id);
       if (!current) return response.status(404).json({ title: "Order not found", status: 404 });
-      const staff = readsEveryOrder(request);
-      if (!staff && current.customerId !== actor(request))
+      const staff = isStaffActor(request);
+      if (staff) {
+        if (!actorMaySeeSite(request, current.selectedStoreId)) return siteAccessDenied(response);
+      } else if (current.customerId !== actor(request)) {
         return response.status(404).json({ title: "Order not found", status: 404 });
+      }
       // Staff run an order through its states. A shopper may only withdraw an order they have not paid for: any other
       // move would confirm or hand over an order without the money, and a hand over takes the stock off the shelf.
       if (
@@ -420,7 +456,7 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
       // The staff portal reviews the prescriptions of the caller's sites, optionally narrowed to one site or state, and
       // an internal reader such as the operations dashboard needs no actor of its own for that. A shopper only ever
       // sees the records linked to their own account, so the owner filter is never optional there.
-      if (readsEveryOrder(request)) {
+      if (isStaffActor(request)) {
         return sendPage(
           response,
           await repository.listPrescriptions({ siteIds: listSiteIds(request), status, limit, q, after: cursor.cursor }),
@@ -443,7 +479,7 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
   router.get("/prescriptions/count", async (request, response, next) => {
     if (!repository) return unavailable(response);
     const requesterId = actor(request);
-    if (!readsEveryOrder(request)) {
+    if (!isStaffActor(request)) {
       if (!requesterId) return unauthorized(response);
       return response.status(403).json({ title: "Forbidden", status: 403, code: "forbidden" });
     }
@@ -468,10 +504,17 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     if (!id.success) return invalid(response);
     if (!requesterId) return unauthorized(response);
     try {
+      if (isStaffActor(request)) {
+        const prescription = await repository.getPrescription(id.data.id);
+        // A record at another site is not found to this staff member.
+        if (!prescription || !actorMaySeeSite(request, prescription.siteId))
+          return response.status(404).json({ title: "Prescription not found", status: 404 });
+        return response.json(prescription);
+      }
       const prescription = await repository.getPrescription(id.data.id);
       // A prescription carries the patient's name, phone, doctor and medicines, so a shopper asking for someone
       // else's record gets the same 404 as a missing one rather than a hint that it exists.
-      if (!prescription || (prescription.customerId ?? requesterId) !== requesterId) {
+      if (!prescription || prescription.customerId !== requesterId) {
         return response.status(404).json({ title: "Prescription not found", status: 404 });
       }
       return response.json(prescription);
@@ -486,6 +529,7 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     const parsed = createPrescriptionRequestSchema.safeParse(request.body);
     if (!createdBy) return unauthorized(response);
     if (!parsed.success) return invalid(response);
+    if (!actorMaySeeSite(request, parsed.data.siteId)) return siteAccessDenied(response);
     try {
       // A linked prescription belongs to a real customer account: a stale or invented id would file the record
       // against nobody, so the account is resolved before anything is written.
@@ -552,6 +596,7 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     try {
       const prescription = await repository.getPrescription(id.data.id);
       if (!prescription) return response.status(404).json({ title: "Prescription not found", status: 404 });
+      if (!actorMaySeeSite(request, prescription.siteId)) return siteAccessDenied(response);
       if (prescription.reservationId)
         await postInventoryRelease(prescription.reservationId, options.inventoryServiceUrl);
       return response.json(await repository.cancelPrescription(id.data.id, cancelledBy));
@@ -567,6 +612,10 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     const dispensedBy = actor(request);
     if (!id.success || !parsed.success || !dispensedBy) return invalid(response);
     try {
+      // The site is judged on the stored prescription before the locked dispense writes anything.
+      const prescription = await repository.getPrescription(id.data.id);
+      if (!prescription) return response.status(404).json({ title: "Prescription not found", status: 404 });
+      if (!actorMaySeeSite(request, prescription.siteId)) return siteAccessDenied(response);
       const idempotencyKey = request.header("Idempotency-Key") ?? undefined;
       const dispensed = await repository.dispensePrescription(
         id.data.id,
@@ -594,7 +643,7 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     if (!repository) return unavailable(response);
     if (!actor(request)) return unauthorized(response);
     // The day's takings behind the counter are a staff read; a shopper's receipts are the orders they placed.
-    if (!readsEveryOrder(request))
+    if (!isStaffActor(request))
       return response.status(403).json({ title: "Forbidden", status: 403, code: "forbidden" });
     const query = pagedListQuery.safeParse(request.query);
     const cursor = readCursorParam(request.query.cursor);
@@ -824,4 +873,9 @@ const invalid = (response: Response) =>
 const invalidCustomer = (response: Response) =>
   response.status(400).json({ title: "Customer account not found", status: 400, code: "invalid_customer" });
 const identityUnavailable = (response: Response) =>
-  response.status(503).json({ title: "Identity service is unavailable", status: 503, code: "identity_unavailable" });
+  response.status(503).json({
+    title: "Identity service is unavailable",
+    status: 503,
+    code: "identity_unavailable",
+    detail: "Không lấy được thông tin khách hàng, vui lòng thử lại.",
+  });

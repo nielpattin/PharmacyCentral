@@ -283,7 +283,8 @@ export class SalesRepository {
     customerId?: string | undefined;
     status?: string | undefined;
     paymentStatus?: string | undefined;
-    selectedStoreId?: string | undefined;
+    /** The sites an order may belong to; an empty list matches nothing. Omitted means no site restriction. */
+    siteIds?: string[] | undefined;
     q?: string | undefined;
     after?: PageCursor | undefined;
     limit: number;
@@ -292,7 +293,7 @@ export class SalesRepository {
       input.customerId ? eq(orders.customerId, input.customerId) : undefined,
       input.status ? eq(orders.status, input.status) : undefined,
       input.paymentStatus ? eq(orders.paymentStatus, input.paymentStatus) : undefined,
-      input.selectedStoreId ? eq(orders.selectedStoreId, input.selectedStoreId) : undefined,
+      input.siteIds ? inArray(orders.selectedStoreId, input.siteIds) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
     const limit = clampLimit(input.limit);
     const fetched = await this.database.db

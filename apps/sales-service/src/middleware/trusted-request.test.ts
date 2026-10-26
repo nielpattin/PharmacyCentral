@@ -62,9 +62,12 @@ const createApp = (): express.Express => {
       actorType: request.header("x-actor-type") ?? null,
       siteIds: request.header("x-actor-site-ids") ?? null,
       requestId: request.header("x-request-id") ?? null,
+      roles: request.header("x-actor-roles") ?? null,
     });
   app.all("/delivery/calculate", echoActorHeaders);
   app.all("/orders", echoActorHeaders);
+  app.all("/orders/:id/transition", echoActorHeaders);
+  app.all("/prescriptions", echoActorHeaders);
   app.all("/health/live", echoActorHeaders);
   return app;
 };
@@ -101,6 +104,7 @@ describe("sales trusted request middleware", () => {
       actorId: null,
       actorType: null,
       siteIds: null,
+      roles: null,
       requestId: "req-from-client",
     });
     expect(warn).toHaveBeenCalledTimes(1);
@@ -214,5 +218,110 @@ describe("sales trusted request middleware", () => {
 
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ code: "trusted_request_required" });
+  });
+
+  it("hands the verified roles of an employee to the route handlers, Platform Admin included", async () => {
+    const { server, url } = await startServer(createApp());
+    activeServer = server;
+
+    const header = signInternalIdentityContext(
+      createTestContext({ roles: ["Platform Admin"], siteIds: [] }),
+      identitySecret,
+    );
+    const response = await fetch(`${url}/delivery/calculate`, {
+      headers: { "x-internal-identity-context": header, "x-actor-roles": "Pharmacist" },
+    });
+
+    expect(await response.json()).toMatchObject({ roles: "Platform Admin" });
+  });
+
+  it("drops client-sent roles on a request with no verified context", async () => {
+    const { server, url } = await startServer(createApp());
+    activeServer = server;
+
+    const response = await fetch(`${url}/delivery/calculate`, {
+      headers: { "x-actor-roles": "Platform Admin" },
+    });
+
+    expect(await response.json()).toMatchObject({ roles: null });
+  });
+
+  it("keeps the roles a service forwards with a valid service secret and no identity context", async () => {
+    const { server, url } = await startServer(createApp());
+    activeServer = server;
+
+    const response = await fetch(`${url}/delivery/calculate`, {
+      headers: { "x-internal-service-secret": serviceSecret, "x-actor-roles": "Pharmacist" },
+    });
+
+    expect(await response.json()).toMatchObject({ roles: "Pharmacist" });
+  });
+
+  it("refuses a Warehouse Staff member the orders list, which is a Pharmacist or Pharmacy Manager read", async () => {
+    const { server, url } = await startServer(createApp());
+    activeServer = server;
+
+    const header = signInternalIdentityContext(createTestContext({ roles: ["Warehouse Staff"] }), identitySecret);
+    const response = await fetch(`${url}/orders`, { headers: { "x-internal-identity-context": header } });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("lets a Pharmacist move an order and refuses a Warehouse Staff member the same move", async () => {
+    const { server, url } = await startServer(createApp());
+    activeServer = server;
+
+    const pharmacist = signInternalIdentityContext(createTestContext({ roles: ["Pharmacist"] }), identitySecret);
+    const allowed = await fetch(`${url}/orders/00000000-0000-4000-8000-0000000000bb/transition`, {
+      method: "POST",
+      headers: { "x-internal-identity-context": pharmacist, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(allowed.status).toBe(200);
+
+    const warehouse = signInternalIdentityContext(createTestContext({ roles: ["Warehouse Staff"] }), identitySecret);
+    const refused = await fetch(`${url}/orders/00000000-0000-4000-8000-0000000000bb/transition`, {
+      method: "POST",
+      headers: { "x-internal-identity-context": warehouse, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("refuses Platform Admin a counter write, which only a Pharmacist may make", async () => {
+    const { server, url } = await startServer(createApp());
+    activeServer = server;
+
+    const admin = signInternalIdentityContext(
+      createTestContext({ roles: ["Platform Admin"], siteIds: [] }),
+      identitySecret,
+    );
+    const response = await fetch(`${url}/prescriptions`, {
+      method: "POST",
+      headers: { "x-internal-identity-context": admin, "content-type": "application/json" },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("lets a shopper post a consultation, which carries no staff role", async () => {
+    const { server, url } = await startServer(createApp());
+    activeServer = server;
+
+    const customer = signInternalIdentityContext(
+      createTestContext({ actorType: "customer", roles: [], siteIds: [] }),
+      identitySecret,
+    );
+    const response = await fetch(`${url}/prescriptions/consultations`, {
+      method: "POST",
+      headers: { "x-internal-identity-context": customer, "content-type": "application/json" },
+      body: "{}",
+    });
+
+    expect(response.status).not.toBe(403);
   });
 });

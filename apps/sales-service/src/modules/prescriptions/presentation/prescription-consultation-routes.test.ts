@@ -25,6 +25,7 @@ const pharmacistHeaders = {
   "content-type": "application/json",
   "X-Actor-Id": ids.pharmacist,
   "X-Actor-Type": "employee",
+  "x-actor-roles": "Pharmacist",
 };
 
 const consultation = (overrides: Partial<PrescriptionConsultation> = {}): PrescriptionConsultation => ({
@@ -311,7 +312,7 @@ describe("prescription consultation API", () => {
 
     const response = await httpFetch(
       `${started.url}/prescriptions/consultations?siteId=${ids.site}&status=Answered&limit=25`,
-      { headers: { "X-Actor-Id": ids.pharmacist, "X-Actor-Type": "employee" } },
+      { headers: { "X-Actor-Id": ids.pharmacist, "X-Actor-Type": "employee", "x-actor-roles": "Pharmacist" } },
     );
 
     expect(response.status).toBe(200);
@@ -327,7 +328,7 @@ describe("prescription consultation API", () => {
       .mockResolvedValueOnce({ rows: [consultation({ id: ids.other })], nextCursor: undefined });
     const started = await createTestServer(repository);
     server = started.server;
-    const staffHeaders = { "X-Actor-Id": ids.pharmacist, "X-Actor-Type": "employee" };
+    const staffHeaders = { "X-Actor-Id": ids.pharmacist, "X-Actor-Type": "employee", "x-actor-roles": "Pharmacist" };
 
     const first = await httpFetch(`${started.url}/prescriptions/consultations?q=nguyen&limit=1`, {
       headers: staffHeaders,
