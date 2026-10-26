@@ -7,10 +7,56 @@ import {
   extractCsrfCookie,
   extractHeader,
   generateCsrfToken,
+  readCookieSecure,
   validateCsrfToken,
 } from "../csrf.mjs";
 
 describe("csrf - tokens, cookies, and validation", () => {
+  it("reads COOKIE_SECURE as a required true or false flag", () => {
+    assert.equal(readCookieSecure("true"), true);
+    assert.equal(readCookieSecure("false"), false);
+    assert.throws(() => readCookieSecure(undefined), {
+      message: "Missing required environment variable: COOKIE_SECURE",
+    });
+    assert.throws(() => readCookieSecure(""), {
+      message: "Missing required environment variable: COOKIE_SECURE",
+    });
+    assert.throws(() => readCookieSecure("TRUE"), {
+      message: 'Invalid COOKIE_SECURE: expected "true" or "false"',
+    });
+    assert.throws(() => readCookieSecure("1"), {
+      message: 'Invalid COOKIE_SECURE: expected "true" or "false"',
+    });
+  });
+
+  it("fails handler creation when COOKIE_SECURE is unset and no flag is passed", () => {
+    const previous = process.env.COOKIE_SECURE;
+    delete process.env.COOKIE_SECURE;
+    try {
+      assert.throws(() => createCsrfHandler(), {
+        message: "Missing required environment variable: COOKIE_SECURE",
+      });
+    } finally {
+      if (previous !== undefined) process.env.COOKIE_SECURE = previous;
+    }
+  });
+
+  it("takes the cookie flag from COOKIE_SECURE when no option is passed", async () => {
+    const previous = process.env.COOKIE_SECURE;
+    process.env.COOKIE_SECURE = "true";
+    try {
+      const handler = createCsrfHandler({ randomBytesFn: () => "env-token" });
+      const response = await handler({});
+      assert.equal(
+        response.headers["set-cookie"],
+        "pharmacy_csrf=env-token; SameSite=Lax; Path=/; Max-Age=3600; Secure",
+      );
+    } finally {
+      if (previous === undefined) delete process.env.COOKIE_SECURE;
+      else process.env.COOKIE_SECURE = previous;
+    }
+  });
+
   it("generates 32-byte base64url csrf tokens", () => {
     const token = generateCsrfToken();
     assert.equal(typeof token, "string");
@@ -68,7 +114,7 @@ describe("csrf - tokens, cookies, and validation", () => {
 
   it("csrf handler returns APIGW 2.0 payload format response", async () => {
     const handler = createCsrfHandler({
-      isProduction: false,
+      cookieSecure: false,
       randomBytesFn: () => "mock-csrf-token",
     });
 

@@ -17,7 +17,7 @@ export const createIdentityContext = ({
     version: "v1",
     requestId: safeRequestId,
     correlationId: safeCorrelationId,
-    actorType: identity?.actorType ?? "system",
+    actorType: identity?.actorType ?? "anonymous",
     roles: Array.isArray(identity?.roles) ? identity.roles.slice(0, 32) : [],
     siteIds: Array.isArray(identity?.siteIds) ? identity.siteIds.slice(0, 500) : [],
     issuedAt,

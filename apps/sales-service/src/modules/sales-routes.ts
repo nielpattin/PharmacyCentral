@@ -49,7 +49,7 @@ const readsEveryOrder = (request: Request): boolean => {
   return type === "employee" || type === "system";
 };
 const guestToken = (request: Request): string | undefined =>
-  request.header("X-Guest-Cart-Token") ?? request.headers.cookie?.match(/(?:^|;\s*)pharmacy_guest_cart=([^;]+)/)?.[1];
+  request.headers.cookie?.match(/(?:^|;\s*)pharmacy_guest_cart=([^;]+)/)?.[1];
 
 export type SalesRouterOptions = {
   /** Both URLs are validated at boot by main.ts, so a missing one is a type error and never a localhost guess. */
@@ -60,16 +60,19 @@ export type SalesRouterOptions = {
   identityServiceUrl?: string | undefined;
   deliveryCalculator?: DeliveryCalculator | undefined;
   lookupStore?: (storeId: string) => Promise<{ id: string; latitude: number; longitude: number } | undefined>;
+  /** From COOKIE_SECURE in main.ts: `Secure` is added to the guest cart cookie only when true. */
+  cookieSecure: boolean;
 };
 
 export const createSalesRouter = (repository: SalesRepository | undefined, options: SalesRouterOptions): Router => {
   const router = Router();
+  const { cookieSecure } = options;
 
   router.get("/carts", async (request, response, next) => {
     if (!repository) return unavailable(response);
     const customerId = actor(request);
     const token = guestToken(request) ?? (customerId ? undefined : randomBytes(24).toString("base64url"));
-    if (!customerId && token && !guestToken(request)) setGuestCookie(response, token);
+    if (!customerId && token) setGuestCookie(response, token, GUEST_CART_MAX_AGE_SECONDS, cookieSecure);
     try {
       return response.json(await repository.getOrCreateCart(customerId, token));
     } catch (error) {
@@ -83,7 +86,7 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     if (!parsed.success) return invalid(response);
     const customerId = actor(request);
     const token = guestToken(request) ?? (customerId ? undefined : randomBytes(24).toString("base64url"));
-    if (!customerId && token && !guestToken(request)) setGuestCookie(response, token);
+    if (!customerId && token) setGuestCookie(response, token, GUEST_CART_MAX_AGE_SECONDS, cookieSecure);
     try {
       return response.status(201).json(await repository.addCartLine(customerId, token, parsed.data));
     } catch (error) {
@@ -93,8 +96,11 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
 
   router.delete("/carts", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const customerId = actor(request);
+    const token = guestToken(request);
+    if (!customerId && token) setGuestCookie(response, token, GUEST_CART_MAX_AGE_SECONDS, cookieSecure);
     try {
-      return response.json(await repository.clearCart(actor(request), guestToken(request)));
+      return response.json(await repository.clearCart(customerId, token));
     } catch (error) {
       return next(error);
     }
@@ -105,13 +111,11 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     const id = idSchema.safeParse(request.params);
     const parsed = z.object({ quantity: z.number().nonnegative() }).safeParse(request.body);
     if (!id.success || !parsed.success) return invalid(response);
+    const customerId = actor(request);
+    const token = guestToken(request);
+    if (!customerId && token) setGuestCookie(response, token, GUEST_CART_MAX_AGE_SECONDS, cookieSecure);
     try {
-      const cart = await repository.updateCartLine(
-        actor(request),
-        guestToken(request),
-        id.data.id,
-        parsed.data.quantity,
-      );
+      const cart = await repository.updateCartLine(customerId, token, id.data.id, parsed.data.quantity);
       return cart ? response.json(cart) : response.status(404).json({ title: "Cart not found", status: 404 });
     } catch (error) {
       return next(error);
@@ -125,7 +129,9 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     if (!customerId || !token)
       return response.status(400).json({ title: "Customer and guest cart token are required", status: 400 });
     try {
-      return response.json(await repository.mergeGuestCart(customerId, token));
+      const cart = await repository.mergeGuestCart(customerId, token);
+      setGuestCookie(response, "", 0, cookieSecure);
+      return response.json(cart);
     } catch (error) {
       return next(error);
     }
@@ -738,8 +744,17 @@ const roundMoney = (value: number): number => Math.round(value * 100) / 100;
 const queryString = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
 
-const setGuestCookie = (response: Response, token: string): void => {
-  response.setHeader("Set-Cookie", `pharmacy_guest_cart=${token}; SameSite=Lax; Path=/; Max-Age=2592000`);
+/** How long a guest cart's cookie lives; every guest response re-issues it, so an active cart keeps sliding. */
+const GUEST_CART_MAX_AGE_SECONDS = 2592000;
+/**
+ * HttpOnly keeps script from reading the bearer token. Secure is added only where the site is served over HTTPS.
+ * Clearing the cookie is the same call with an empty value and a zero max-age.
+ */
+const setGuestCookie = (response: Response, value: string, maxAgeSeconds: number, cookieSecure: boolean): void => {
+  response.setHeader(
+    "Set-Cookie",
+    `pharmacy_guest_cart=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${cookieSecure ? "; Secure" : ""}`,
+  );
 };
 const unauthorized = (response: Response) =>
   response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });

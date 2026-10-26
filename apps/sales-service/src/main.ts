@@ -51,6 +51,12 @@ const portResult = z.coerce.number().int().min(1).max(65535).safeParse(requireEn
 if (!portResult.success) throw new Error("PORT must be an integer from 1 to 65535.");
 const port = portResult.data;
 const identitySecret = requireEnv("INTERNAL_IDENTITY_SECRET");
+/** Required, with no default: `Secure` on the guest cart cookie follows it, so a plain-HTTP local stack must say `false`. */
+const cookieSecureSetting = requireEnv("COOKIE_SECURE");
+if (cookieSecureSetting !== "true" && cookieSecureSetting !== "false") {
+  throw new Error('Invalid COOKIE_SECURE: expected "true" or "false"');
+}
+const cookieSecure = cookieSecureSetting === "true";
 /**
  * Every URL this service calls out to is required at boot, so a missing one stops the service instead of sending
  * the request to a hard-coded localhost. The same goes for the shared secret of the outbound internal headers.
@@ -184,6 +190,7 @@ app.use(
     identityServiceUrl,
     deliveryCalculator,
     lookupStore,
+    cookieSecure,
   }),
 );
 app.use(createDeliveryRouter(deliveryCalculator, lookupStore, addressGeocoder));

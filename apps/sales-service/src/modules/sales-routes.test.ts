@@ -36,6 +36,7 @@ const ids = {
 const createTestServer = async (
   repository: SalesRepository,
   orderStock: Partial<OrderStock> = {},
+  cookieSecure = false,
 ): Promise<{ server: Server; url: string }> => {
   const app = express();
   app.use(express.json());
@@ -45,6 +46,7 @@ const createTestServer = async (
       inventoryServiceUrl: "http://inventory.test",
       identityServiceUrl: "http://identity.test",
       orderStock: orderStock as OrderStock,
+      cookieSecure,
     }),
   );
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
@@ -915,5 +917,165 @@ describe("sales order stock API", () => {
 
     expect(response.status).toBe(502);
     expect(transitionOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe("sales guest cart API", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) await closeServer(server);
+    server = undefined;
+  });
+
+  const emptyCart = { id: ids.site, lines: [] };
+  const cartLine = { productId: ids.productA, productUnitId: ids.unitA, quantity: 2 };
+  const guestCartRepository = () => ({
+    getOrCreateCart: vi.fn().mockResolvedValue(emptyCart),
+    addCartLine: vi.fn().mockResolvedValue(emptyCart),
+    clearCart: vi.fn().mockResolvedValue(emptyCart),
+    updateCartLine: vi.fn().mockResolvedValue(emptyCart),
+    mergeGuestCart: vi.fn().mockResolvedValue(emptyCart),
+  });
+  const startCartServer = async (repository: object, cookieSecure = false) => {
+    const testServer = await createTestServer(repository as SalesRepository, {}, cookieSecure);
+    server = testServer.server;
+    return testServer;
+  };
+
+  it("issues an HttpOnly, SameSite=Lax guest cookie without Secure when cookieSecure is false", async () => {
+    const repository = guestCartRepository();
+    const testServer = await startCartServer(repository);
+
+    const response = await httpFetch(`${testServer.url}/carts`);
+
+    const setCookie = response.headers.get("set-cookie") ?? "";
+    const token = setCookie.match(/^pharmacy_guest_cart=([^;]+);/)?.[1];
+    expect(response.status).toBe(200);
+    expect(token).toBeDefined();
+    expect(setCookie).toBe(`pharmacy_guest_cart=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`);
+    expect(repository.getOrCreateCart).toHaveBeenCalledWith(undefined, token);
+  });
+
+  it("adds Secure to the guest cookie when cookieSecure is true", async () => {
+    const testServer = await startCartServer(guestCartRepository(), true);
+
+    const response = await httpFetch(`${testServer.url}/carts`);
+
+    expect(response.headers.get("set-cookie")).toMatch(
+      /^pharmacy_guest_cart=[^;]+; HttpOnly; SameSite=Lax; Path=\/; Max-Age=2592000; Secure$/,
+    );
+  });
+
+  it("re-issues an existing guest cookie so cookies set before this change are rewritten", async () => {
+    const repository = guestCartRepository();
+    const testServer = await startCartServer(repository);
+
+    const response = await httpFetch(`${testServer.url}/carts`, {
+      headers: { cookie: "pharmacy_guest_cart=existing-token" },
+    });
+
+    expect(response.headers.get("set-cookie")).toBe(
+      "pharmacy_guest_cart=existing-token; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000",
+    );
+    expect(repository.getOrCreateCart).toHaveBeenCalledWith(undefined, "existing-token");
+  });
+
+  it("issues the guest cookie when a guest adds a line", async () => {
+    const repository = guestCartRepository();
+    const testServer = await startCartServer(repository);
+
+    const response = await httpFetch(`${testServer.url}/carts/lines`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(cartLine),
+    });
+
+    const token = response.headers.get("set-cookie")?.match(/^pharmacy_guest_cart=([^;]+);/)?.[1];
+    expect(response.status).toBe(201);
+    expect(response.headers.get("set-cookie")).toContain("; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000");
+    expect(repository.addCartLine).toHaveBeenCalledWith(undefined, token, cartLine);
+  });
+
+  it("ignores the retired X-Guest-Cart-Token header and issues a fresh token", async () => {
+    const repository = guestCartRepository();
+    const testServer = await startCartServer(repository);
+
+    const response = await httpFetch(`${testServer.url}/carts`, {
+      headers: { "X-Guest-Cart-Token": "header-token" },
+    });
+
+    const token = response.headers.get("set-cookie")?.match(/^pharmacy_guest_cart=([^;]+);/)?.[1];
+    expect(token).toBeDefined();
+    expect(token).not.toBe("header-token");
+    expect(repository.getOrCreateCart).toHaveBeenCalledWith(undefined, token);
+    expect(repository.getOrCreateCart).not.toHaveBeenCalledWith(undefined, "header-token");
+  });
+
+  it("does not issue a guest cookie to a signed-in customer", async () => {
+    const repository = guestCartRepository();
+    const testServer = await startCartServer(repository);
+
+    const response = await httpFetch(`${testServer.url}/carts`, {
+      headers: { "X-Actor-Id": ids.actor },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(repository.getOrCreateCart).toHaveBeenCalledWith(ids.actor, undefined);
+  });
+
+  it("clears the guest cookie when a customer merges the guest cart", async () => {
+    const repository = guestCartRepository();
+    const testServer = await startCartServer(repository);
+
+    const response = await httpFetch(`${testServer.url}/carts/merge`, {
+      method: "POST",
+      headers: { "X-Actor-Id": ids.actor, cookie: "pharmacy_guest_cart=guest-token" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toBe("pharmacy_guest_cart=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
+    expect(repository.mergeGuestCart).toHaveBeenCalledWith(ids.actor, "guest-token");
+  });
+
+  it("clears the merge cookie with Secure when cookieSecure is true", async () => {
+    const testServer = await startCartServer(guestCartRepository(), true);
+
+    const response = await httpFetch(`${testServer.url}/carts/merge`, {
+      method: "POST",
+      headers: { "X-Actor-Id": ids.actor, cookie: "pharmacy_guest_cart=guest-token" },
+    });
+
+    expect(response.headers.get("set-cookie")).toBe(
+      "pharmacy_guest_cart=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0; Secure",
+    );
+  });
+
+  it("refuses a merge that only carries the retired X-Guest-Cart-Token header", async () => {
+    const repository = guestCartRepository();
+    const testServer = await startCartServer(repository);
+
+    const response = await httpFetch(`${testServer.url}/carts/merge`, {
+      method: "POST",
+      headers: { "X-Actor-Id": ids.actor, "X-Guest-Cart-Token": "header-token" },
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(repository.mergeGuestCart).not.toHaveBeenCalled();
+  });
+
+  it("leaves the guest cookie in place when the merge fails", async () => {
+    const repository = { ...guestCartRepository(), mergeGuestCart: vi.fn().mockRejectedValue(new Error("db down")) };
+    const testServer = await startCartServer(repository);
+
+    const response = await httpFetch(`${testServer.url}/carts/merge`, {
+      method: "POST",
+      headers: { "X-Actor-Id": ids.actor, cookie: "pharmacy_guest_cart=guest-token" },
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 });

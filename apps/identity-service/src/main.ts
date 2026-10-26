@@ -30,6 +30,12 @@ const app = express();
 app.set("trust proxy", readPositiveIntegerEnv("TRUST_PROXY_HOPS"));
 const portStr = process.env.PORT;
 if (!portStr) throw new Error("Missing required environment variable: PORT. Please set it in your .env file.");
+const cookieSecureEnv = process.env.COOKIE_SECURE;
+if (!cookieSecureEnv)
+  throw new Error("Missing required environment variable: COOKIE_SECURE. Please set it in your .env file.");
+if (cookieSecureEnv !== "true" && cookieSecureEnv !== "false")
+  throw new Error('Invalid COOKIE_SECURE: expected "true" or "false".');
+const cookieSecure = cookieSecureEnv === "true";
 const port = Number.parseInt(portStr, 10);
 const rabbitmqUrl = process.env.RABBITMQ_URL;
 if (!rabbitmqUrl)
@@ -55,7 +61,7 @@ app.get("/health/ready", (_request, response) =>
   response.status(database ? 200 : 503).json({ status: database ? "ok" : "degraded", service: serviceName }),
 );
 app.use(createCsrfMiddleware());
-app.use("/auth", createAccountRouter(accountService, googleSignIn, authRateLimit.limiter, audit));
+app.use("/auth", createAccountRouter(accountService, googleSignIn, authRateLimit.limiter, audit, cookieSecure));
 app.use("/admin", createAdminRouter(accountService, audit));
 app.use("/customers", createCustomerRouter(accountService));
 app.use("/internal", createInternalCustomerRouter(accountService));

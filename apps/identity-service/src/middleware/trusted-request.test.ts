@@ -256,6 +256,32 @@ describe("service-request-enforcement", () => {
       expect(capturedActorId).toBe("00000000-0000-4000-8000-000000000099");
     });
 
+    it("drops client actor headers on a public request without a verified context", async () => {
+      const app = express();
+      let capturedActorId: string | undefined;
+      let capturedActorType: string | undefined;
+
+      app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret, isPublic: () => true }));
+      app.get("/public-check", (req, res) => {
+        capturedActorId = req.header("x-actor-id") ?? undefined;
+        capturedActorType = req.header("x-actor-type") ?? undefined;
+        res.json({ ok: true });
+      });
+
+      const { server, url } = await startServer(app);
+      activeServer = server;
+
+      const response = await fetch(`${url}/public-check`, {
+        headers: {
+          "x-actor-id": "00000000-0000-4000-8000-000000000099",
+          "x-actor-type": "employee",
+        },
+      });
+      expect(response.status).toBe(200);
+      expect(capturedActorId).toBeUndefined();
+      expect(capturedActorType).toBeUndefined();
+    });
+
     it("derives and overwrites actor headers from signed context, stripping spoofed headers", async () => {
       const app = express();
       let capturedActorId: string | undefined;

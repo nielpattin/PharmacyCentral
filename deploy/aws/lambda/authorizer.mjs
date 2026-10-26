@@ -26,7 +26,7 @@ const allow = (signedIdentityContext, identity) => ({
   context: {
     signedIdentityContext,
     actorId: identity?.id ?? "",
-    actorType: identity?.actorType ?? "system",
+    actorType: identity?.actorType ?? "anonymous",
   },
 });
 

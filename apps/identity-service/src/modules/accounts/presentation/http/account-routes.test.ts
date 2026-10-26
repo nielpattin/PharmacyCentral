@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { AccountService } from "../../application/account-service.ts";
 import { AuthRateLimiterError, type AuthRateLimiter } from "../../domain/auth-rate-limit.ts";
 
-import { noAuditRecorder, type AuditEntry } from "../../../outbox/audit-recorder.ts";
+import { noAuditRecorder, type AuditEntry, type AuditRecorder } from "../../../outbox/audit-recorder.ts";
 import {
-  createAccountRouter,
+  createAccountRouter as createAccountRouterFor,
   createAdminRouter,
   createCustomerRouter,
   createInternalCustomerRouter,
@@ -25,6 +25,53 @@ const startServer = async (app: express.Express): Promise<{ server: Server; url:
 const unlimitedAttempts: AuthRateLimiter = {
   admit: async () => ({ admitted: true, withdraw: async () => undefined }),
 };
+
+// The cookie flag is asserted in its own block below; these route tests run with plain-HTTP cookies.
+const createAccountRouter = (
+  service: AccountService,
+  googleSignIn: undefined,
+  rateLimiter: AuthRateLimiter,
+  audit: AuditRecorder,
+) => createAccountRouterFor(service, googleSignIn, rateLimiter, audit, false);
+
+describe("auth cookie Secure attribute", () => {
+  const csrfSetCookieFor = async (cookieSecure: boolean): Promise<string> => {
+    const app = express();
+    app.use(
+      "/auth",
+      createAccountRouterFor(
+        {} as unknown as AccountService,
+        undefined,
+        unlimitedAttempts,
+        noAuditRecorder,
+        cookieSecure,
+      ),
+    );
+    const { server, url } = await startServer(app);
+    try {
+      const response = await fetch(`${url}/auth/csrf`);
+      return response.headers.get("set-cookie") ?? "";
+    } finally {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      server.close(() => resolve());
+      await promise;
+    }
+  };
+
+  it("sets Secure on auth cookies only when COOKIE_SECURE is true", async () => {
+    expect(await csrfSetCookieFor(true)).toContain("; Secure");
+    expect(await csrfSetCookieFor(false)).not.toContain("Secure");
+  });
+
+  it("ignores NODE_ENV when deciding Secure", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      expect(await csrfSetCookieFor(false)).not.toContain("Secure");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
 
 describe("account csrf route", () => {
   let activeServer: Server | undefined;

@@ -2,12 +2,15 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { trace } from "@opentelemetry/api";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
+import { createLogger } from "../logger.ts";
 import {
   internalIdentityContextSchema,
   signedInternalIdentityContextSchema,
   type InternalIdentityContext,
   type SignedInternalIdentityContext,
 } from "../contracts/common.ts";
+
+const logger = createLogger({ name: "inventory-service" });
 
 export interface TrustedRequestEnforcementOptions {
   /**
@@ -429,6 +432,16 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       if (!request.headers["x-actor-type"]) {
         request.headers["x-actor-type"] = "system";
       }
+    } else {
+      // Neither a verified context nor a service secret: the caller is a public client, so nothing it sent may name an actor.
+      if (request.headers["x-actor-id"] !== undefined) {
+        logger.warn(
+          { requestId: request.header("x-request-id"), path: request.path },
+          "dropped client actor headers without verified identity context",
+        );
+      }
+      delete request.headers["x-actor-id"];
+      delete request.headers["x-actor-type"];
     }
 
     // A shopper's own paths stay open; anything behind the counter stops here even though the context verifies.

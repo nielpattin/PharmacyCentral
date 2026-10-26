@@ -17,6 +17,21 @@ import {
 } from "./index.ts";
 
 describe("inventory-service contracts", () => {
+  it("accepts the anonymous actor type in internal identity context", () => {
+    const anonymous = internalIdentityContextSchema.safeParse({
+      version: "v1",
+      requestId: "req-1",
+      correlationId: "corr-1",
+      actorType: "anonymous",
+      roles: [],
+      siteIds: [],
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+      audience: "inventory-service",
+    });
+    expect(anonymous.success).toBe(true);
+  });
+
   it("exports contract versions v1", () => {
     expect(inventoryContractVersion).toBe("v1");
     expect(procurementContractVersion).toBe("v1");

@@ -65,6 +65,7 @@ export const createAccountRouter = (
   googleSignIn: GoogleSignIn | undefined,
   rateLimiter: AuthRateLimiter,
   audit: AuditRecorder,
+  cookieSecure: boolean,
 ): Router => {
   const router = Router();
 
@@ -87,7 +88,7 @@ export const createAccountRouter = (
         entityId: result.account.id,
         actorId: result.account.id,
       });
-      setSessionCookie(response, result.session.rawToken);
+      setSessionCookie(response, result.session.rawToken, cookieSecure);
       response.status(201).json(toPublicAccount(result.account));
     } catch (error) {
       writeServiceError(response, error, 409);
@@ -143,7 +144,7 @@ export const createAccountRouter = (
 
   router.get("/csrf", async (_request, response) => {
     const token = randomBytes(32).toString("hex");
-    setReadableCookie(response, csrfCookieName, token, 3600);
+    setReadableCookie(response, csrfCookieName, token, 3600, cookieSecure);
     response.json({ csrfToken: token });
   });
 
@@ -189,7 +190,7 @@ export const createAccountRouter = (
 
     try {
       const authorization = await googleSignIn.client.beginAuthorization();
-      setCookie(response, "oauth_state", authorization.state, 600);
+      setCookie(response, "oauth_state", authorization.state, 600, cookieSecure);
       response.redirect(authorization.url.href);
     } catch (error) {
       writeServiceError(response, error, 503);
@@ -217,7 +218,7 @@ export const createAccountRouter = (
       const callbackUrl = new URL(request.originalUrl, googleSignIn.redirectUri);
       const profile = await googleSignIn.client.completeAuthorization(callbackUrl, state);
       const result = await service.loginWithGoogle(profile);
-      setSessionCookie(response, result.session.rawToken);
+      setSessionCookie(response, result.session.rawToken, cookieSecure);
       clearCookie(response, "oauth_state");
       response.json(toPublicAccount(result.account));
     } catch (error) {
@@ -239,7 +240,7 @@ export const createAccountRouter = (
       // Only failed sign-ins spend the budget: the attempt admitted above is withdrawn once the password checks out.
       // A counter that cannot withdraw leaves this success counted, and the sign-in itself must not fail over it.
       await attempt.withdraw().catch(() => undefined);
-      setSessionCookie(response, result.session.rawToken);
+      setSessionCookie(response, result.session.rawToken, cookieSecure);
       await auditOwnAccount(audit, result.account, "identity.auth.login");
       response.json(toPublicAccount(result.account));
     } catch (error) {
@@ -575,17 +576,23 @@ const getCookie = (request: Request, name: string): string | undefined => {
   return match?.[1];
 };
 
-const setReadableCookie = (response: Response, name: string, value: string, maxAge: number): void => {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+const setReadableCookie = (
+  response: Response,
+  name: string,
+  value: string,
+  maxAge: number,
+  cookieSecure: boolean,
+): void => {
+  const secure = cookieSecure ? "; Secure" : "";
   response.setHeader("Set-Cookie", `${name}=${value}; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`);
 };
 
-const setSessionCookie = (response: Response, token: string): void => {
-  setCookie(response, sessionCookieName, token, 604800);
+const setSessionCookie = (response: Response, token: string, cookieSecure: boolean): void => {
+  setCookie(response, sessionCookieName, token, 604800, cookieSecure);
 };
 
-const setCookie = (response: Response, name: string, value: string, maxAge: number): void => {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+const setCookie = (response: Response, name: string, value: string, maxAge: number, cookieSecure: boolean): void => {
+  const secure = cookieSecure ? "; Secure" : "";
   response.setHeader("Set-Cookie", `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`);
 };
 

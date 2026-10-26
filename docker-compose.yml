@@ -362,6 +362,7 @@ services:
       <<: *backend-environment
       PORT: 3001
       DATABASE_URL: postgres://identity_service:${IDENTITY_DB_PASSWORD}@postgres:5432/identity_service
+      COOKIE_SECURE: ${COOKIE_SECURE}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       PUBLIC_APP_URL: ${PUBLIC_APP_URL}
@@ -484,6 +485,7 @@ services:
       <<: *backend-environment
       PORT: 3005
       DATABASE_URL: postgres://sales_service:${SALES_DB_PASSWORD}@postgres:5432/sales_service
+      COOKIE_SECURE: ${COOKIE_SECURE}
       CATALOG_SERVICE_URL: http://catalog-service:3002
       INVENTORY_SERVICE_URL: http://inventory-service:3004
       IDENTITY_SERVICE_URL: http://identity-service:3001

@@ -8,6 +8,9 @@ import {
   type InternalIdentityContext,
   type SignedInternalIdentityContext,
 } from "../contracts/common.ts";
+import { createLogger } from "../logger.ts";
+
+const logger = createLogger({ name: "sales-service" });
 
 export interface TrustedRequestEnforcementOptions {
   /**
@@ -429,6 +432,17 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       if (!request.headers["x-actor-type"]) {
         request.headers["x-actor-type"] = "system";
       }
+    } else {
+      // Nothing vouches for this caller (a public or health route with no valid context or secret), so the actor
+      // headers it sent are dropped before any handler can act for the actor it names.
+      if (request.headers["x-actor-id"] !== undefined) {
+        logger.warn(
+          { requestId: request.header("x-request-id") },
+          "dropped client x-actor-id on a request without verified context",
+        );
+      }
+      delete request.headers["x-actor-id"];
+      delete request.headers["x-actor-type"];
     }
 
     // A shopper's own paths stay open; anything behind the counter stops here even though the context verifies.

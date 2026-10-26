@@ -137,6 +137,10 @@ locals {
   # search-service is a Go binary: no node entrypoint, no Drizzle migration, and its own health endpoint.
   go_services = ["search-service"]
 
+  # sales-service and identity-service set the guest cart and session cookies with Secure. AWS serves them over HTTPS
+  # only, and both services refuse to start without COOKIE_SECURE (ADR 0010).
+  cookie_secure_services = ["identity-service", "sales-service"]
+
   # Services that need more than the shared task size. sales-service writes every order and runs its outbox relay
   # in the same process; at 0.5 vCPU it was the first container to hit its CPU cap under the checkout load test.
   task_sizes = {
@@ -154,6 +158,7 @@ locals {
     for name in keys(local.backend_services) :
     name => merge(
       lookup(var.service_environment, name, {}),
+      contains(local.cookie_secure_services, name) ? { COOKIE_SECURE = "true" } : {},
       contains(local.embedder_clients, name) ? local.embedder_client_environment : {}
     )
   }
@@ -996,7 +1001,7 @@ resource "aws_lambda_function" "csrf" {
 
   environment {
     variables = {
-      NODE_ENV = "production"
+      COOKIE_SECURE = "true"
     }
   }
 
@@ -1139,8 +1144,11 @@ resource "aws_apigatewayv2_integration" "sepay_webhook" {
   payload_format_version = "1.0"
 
   request_parameters = {
-    "overwrite:path"                = "/payments/sepay/webhook"
-    "overwrite:header.x-request-id" = "$context.requestId"
+    "overwrite:path"                               = "/payments/sepay/webhook"
+    "overwrite:header.x-actor-id"                  = ""
+    "overwrite:header.x-actor-type"                = ""
+    "overwrite:header.x-internal-identity-context" = ""
+    "overwrite:header.x-request-id"                = "$context.requestId"
   }
 }
 

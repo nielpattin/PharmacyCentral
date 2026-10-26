@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 
 import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware } from "./middleware/trusted-request.ts";
+import { stripIdentityHeaders } from "./middleware/strip-identity-headers.ts";
 
 import { PaymentOutboxPublisher } from "./modules/outbox-publisher.ts";
 import {
@@ -48,6 +49,7 @@ outboxPublisher?.start();
 app.disable("x-powered-by");
 app.post(
   "/payments/sepay/webhook",
+  stripIdentityHeaders,
   express.raw({ type: "application/json", limit: "1mb" }),
   async (request, response, next) => {
     const signature =

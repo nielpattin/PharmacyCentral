@@ -113,4 +113,20 @@ describe("sales-service contracts", () => {
     });
     expect(validEnvelope.success).toBe(true);
   });
+
+  it("accepts the anonymous actor type and still rejects unknown ones", () => {
+    const identity = {
+      version: "v1",
+      requestId: "req-1",
+      correlationId: "corr-1",
+      actorType: "anonymous",
+      roles: [],
+      siteIds: [],
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+      audience: "sales-service",
+    };
+    expect(internalIdentityContextSchema.safeParse(identity).success).toBe(true);
+    expect(internalIdentityContextSchema.safeParse({ ...identity, actorType: "guest" }).success).toBe(false);
+  });
 });

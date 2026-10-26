@@ -39,5 +39,11 @@ server {
     proxy_set_header Connection close;
     proxy_set_header X-Forwarded-For $remote_addr;
 
+    # Client-supplied actor headers never reach a service. An empty value makes nginx omit the header. Services take
+    # identity only from the signed x-internal-identity-context, so that header is left alone here.
+    proxy_set_header X-Actor-Id "";
+    proxy_set_header X-Actor-Type "";
+    proxy_set_header X-Actor-Site-Ids "";
+
     include /etc/nginx/pharmacy-routes.conf;
 }

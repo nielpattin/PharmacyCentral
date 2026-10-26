@@ -12,7 +12,7 @@ describe("identity - create, sign, and verify context", () => {
   const secret = "test-internal-identity-secret";
   const fixedNow = new Date("2026-01-01T00:00:00.000Z");
 
-  it("creates default system identity context", () => {
+  it("creates default anonymous identity context", () => {
     const context = createIdentityContext({
       requestId: "req-123",
       now: fixedNow,
@@ -22,7 +22,7 @@ describe("identity - create, sign, and verify context", () => {
     assert.equal(context.version, "v1");
     assert.equal(context.requestId, "req-123");
     assert.equal(context.correlationId, "req-123");
-    assert.equal(context.actorType, "system");
+    assert.equal(context.actorType, "anonymous");
     assert.equal(context.actorId, undefined);
     assert.deepEqual(context.roles, []);
     assert.deepEqual(context.siteIds, []);

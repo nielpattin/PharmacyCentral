@@ -35,17 +35,30 @@ export const validateCsrfToken = (cookieHeader, headers) => {
 
 export const generateCsrfToken = (byteLength = 32) => randomBytes(byteLength).toString("base64url");
 
-export const createCsrfCookie = (token, isProduction = false) => {
-  return `pharmacy_csrf=${token}; SameSite=Lax; Path=/; Max-Age=3600${isProduction ? "; Secure" : ""}`;
+/**
+ * Reads the required COOKIE_SECURE flag. It has no default, so a missing or misspelt value stops the handler from
+ * being created instead of silently dropping `Secure` from the cookie (ADR 0010).
+ */
+export const readCookieSecure = (value) => {
+  if (value === undefined || value === "") {
+    throw new Error("Missing required environment variable: COOKIE_SECURE");
+  }
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error('Invalid COOKIE_SECURE: expected "true" or "false"');
+};
+
+export const createCsrfCookie = (token, cookieSecure) => {
+  return `pharmacy_csrf=${token}; SameSite=Lax; Path=/; Max-Age=3600${cookieSecure ? "; Secure" : ""}`;
 };
 
 export const createCsrfHandler = (options = {}) => {
-  const isProduction = options.isProduction ?? process.env.NODE_ENV === "production";
+  const cookieSecure = options.cookieSecure ?? readCookieSecure(process.env.COOKIE_SECURE);
   const randomBytesFn = options.randomBytesFn ?? generateCsrfToken;
 
   return async (_event = {}) => {
     const token = randomBytesFn();
-    const cookie = createCsrfCookie(token, isProduction);
+    const cookie = createCsrfCookie(token, cookieSecure);
 
     return {
       statusCode: 200,
@@ -59,5 +72,11 @@ export const createCsrfHandler = (options = {}) => {
   };
 };
 
-export const handler = createCsrfHandler();
-export const csrfHandler = handler;
+let lambdaHandler;
+
+// The package also loads for the authorizer Lambda, which has no COOKIE_SECURE. Creating the handler on first
+// invocation keeps that import safe, and a missing flag still fails every CSRF request loudly.
+export const csrfHandler = async (event = {}) => {
+  lambdaHandler ??= createCsrfHandler();
+  return lambdaHandler(event);
+};

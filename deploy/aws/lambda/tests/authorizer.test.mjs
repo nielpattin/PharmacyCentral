@@ -94,12 +94,12 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
 
       const result = await authorizer(event);
       assert.equal(result.isAuthorized, true);
-      assert.equal(result.context.actorType, "system");
+      assert.equal(result.context.actorType, "anonymous");
       assert.equal(result.context.actorId, "");
 
       const verified = decodeAndVerifyIdentityContext(result.context.signedIdentityContext, testSecret, fixedNow);
       assert.ok(verified);
-      assert.equal(verified.actorType, "system");
+      assert.equal(verified.actorType, "anonymous");
       assert.equal(verified.audience, "catalog-service");
     });
 
@@ -111,7 +111,7 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
 
       const result = await authorizer(event);
       assert.equal(result.isAuthorized, true);
-      assert.equal(result.context.actorType, "system");
+      assert.equal(result.context.actorType, "anonymous");
     });
   });
 
@@ -124,7 +124,7 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
 
       const result = await authorizer(event);
       assert.equal(result.isAuthorized, true);
-      assert.equal(result.context.actorType, "system");
+      assert.equal(result.context.actorType, "anonymous");
       assert.equal(result.context.actorId, "");
     });
 
@@ -150,7 +150,7 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
 
       const result = await authorizer(event);
       assert.equal(result.isAuthorized, true);
-      assert.equal(result.context.actorType, "system");
+      assert.equal(result.context.actorType, "anonymous");
     });
 
     it("fails when identity-service is down on optional route with cookie", async () => {
@@ -896,7 +896,7 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
         fixedNow,
       );
       assert.ok(verified);
-      assert.equal(verified.actorType, "system");
+      assert.equal(verified.actorType, "anonymous");
 
       // Protected customer route verification with service secret header check
       const protectedEvent = {
