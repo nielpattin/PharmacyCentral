@@ -33,6 +33,17 @@ export const setIdentityContextsEnabled = (enabled: boolean): void => {
   if (!enabled) identityContextCache.invalidate();
 };
 
+let sessionEndedListener: (() => void) | undefined;
+
+/**
+ * Called for a 401 that the identity-context retry did not clear. The app registers it to end the session at once and
+ * open the sign-in dialog over the current page (customer-web shopper flows). `/api/auth/*` is excluded: the sign-in
+ * refusal and the session probe answer 401 by design.
+ */
+export const setSessionEndedListener = (listener: (() => void) | undefined): void => {
+  sessionEndedListener = listener;
+};
+
 /**
  * A non-2xx answer from a service. It carries the problem body's `code` and, when the service sent a numeric
  * `Retry-After`, the seconds to wait, so a caller can act on the reason instead of the wording; every caller that
@@ -69,6 +80,7 @@ export const request = async <T>(url: string, options: ApiRequestOptions = {}): 
       identityContextCache.invalidate();
       return attempt(true);
     }
+    if (response.status === 401 && !url.startsWith("/api/auth/")) sessionEndedListener?.();
     if (!response.ok) {
       let detail = `Không thực hiện được yêu cầu (mã ${response.status})`;
       let code: string | undefined;
@@ -577,6 +589,16 @@ export const logoutCustomer = async (): Promise<void> => {
   await request("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
   forgetSessionProbe();
   setSessionSnapshot({ authenticated: false, resolved: true });
+  setIdentityContextsEnabled(false);
+};
+
+/** The Vietnamese text of `auth.sessionExpired`, as the staff app shows it. */
+export const SESSION_EXPIRED_NOTICE = "Phiên đã hết hạn. Vui lòng đăng nhập lại.";
+
+/** Ends a session that a 401 revoked: the probe is forgotten, and the sign-in dialog opens with the notice. */
+export const endCustomerSessionAfter401 = (): void => {
+  forgetSessionProbe();
+  setSessionSnapshot({ authenticated: false, resolved: true, sessionEndedNotice: SESSION_EXPIRED_NOTICE });
   setIdentityContextsEnabled(false);
 };
 

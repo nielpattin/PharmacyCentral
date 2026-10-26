@@ -50,7 +50,7 @@ export const UsersTab = (): React.JSX.Element => {
     await run({
       path: `/api/admin/users/${account.id}/reset-password`,
       body: { password },
-      success: "Password reset.",
+      success: "Password reset. The employee's sessions have been signed out.",
     });
   };
 

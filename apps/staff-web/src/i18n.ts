@@ -2418,7 +2418,7 @@ const translations: Record<Language, Record<string, string>> = {
     "notFound.title": "Không tìm thấy trang",
     "notFound.description": "Trang này chưa khả dụng.",
     "notFound.goHome": "Về trang chủ",
-    "notFound.goDashboard": "Vào bảng điều khiển",
+    "notFound.goDashboard": "Về trang làm việc",
 
     "errors.loadDashboard": "Không tải được dữ liệu bảng điều khiển.",
     "errors.loadAuditLogs": "Không tải được dữ liệu nhật ký kiểm toán.",

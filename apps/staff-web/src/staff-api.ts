@@ -32,6 +32,16 @@ export class ApiProblemError extends Error {
 
 let identityContextsEnabled = false;
 
+let sessionEndedListener: (() => void) | undefined;
+
+/**
+ * Called for a 401 that the identity-context retry did not clear. The shell registers it to end the session at once
+ * (shell US4, Decision 6). `/api/auth/*` is excluded: the sign-in refusal and the session probe answer 401 by design.
+ */
+export const setSessionEndedListener = (listener: (() => void) | undefined): void => {
+  sessionEndedListener = listener;
+};
+
 const identityContextCache = createIdentityContextCache(async () => {
   const response = await fetch("/api/auth/context", {
     credentials: "include",
@@ -67,6 +77,7 @@ const send = async <T>(url: string, options: ApiRequestOptions): Promise<SentRes
       identityContextCache.invalidate();
       return attempt(true);
     }
+    if (response.status === 401 && !url.startsWith("/api/auth/")) sessionEndedListener?.();
     if (!response.ok) {
       let detail = `API request failed with status ${response.status}`;
       let problem: ApiProblem = { status: response.status };

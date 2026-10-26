@@ -47,4 +47,15 @@ export const shellLiterals: Record<string, string> = {
   "Close navigation": "Đóng điều hướng",
   "Open navigation": "Mở điều hướng",
   Breadcrumb: "Đường dẫn",
+  "Employee account required": "Cần tài khoản nhân viên để vào khu vực này.",
+  "This account has no role assigned. Contact an administrator.":
+    "Tài khoản này chưa được gán vai trò. Hãy liên hệ quản trị viên.",
+  "Change your password": "Đổi mật khẩu",
+  "Change your password before you continue. You cannot open any page until the change is saved.":
+    "Bạn cần đổi mật khẩu trước khi tiếp tục. Chưa thể mở trang nào cho đến khi đổi mật khẩu thành công.",
+  "Current password": "Mật khẩu hiện tại",
+  "At least 12 characters.": "Tối thiểu 12 ký tự.",
+  "Change password": "Đổi mật khẩu",
+  "Unable to change the password.": "Không đổi được mật khẩu.",
+  "Password changed. Sign in again with the new password.": "Đã đổi mật khẩu. Hãy đăng nhập lại bằng mật khẩu mới.",
 };

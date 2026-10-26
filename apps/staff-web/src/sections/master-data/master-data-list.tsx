@@ -15,6 +15,8 @@ import { referenceLabel, referenceOptions } from "../../hooks/useStaffReferences
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard.ts";
 import { translateText } from "../../i18n.ts";
+import { useSession } from "../../auth.ts";
+import { can, canAtSite } from "../../permissions/staff-permissions.ts";
 import { idOf, readRows, text, type JsonRecord } from "../../staff-api.ts";
 import { sameValues, type MasterDataConfig, type RecordValues } from "./master-data-config.ts";
 import { MasterRecordForm } from "./master-record-form.tsx";
@@ -55,6 +57,16 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
   const siteOptions = referenceOptions(sites, ["code", "name"]);
 
   const [editor, setEditor] = useState<Editor>();
+  const session = useSession();
+  const isSiteRecord = config.id === "sites";
+  // Site create and delete are Platform Admin only (master-data Decision 11); other records need `catalog.write`.
+  const createGate = isSiteRecord ? can("catalog.site.create", session) : can("catalog.write", session);
+  // Edit and delete on a record of one site need `catalog.write` and that site in scope (master-data Decision 10).
+  // A site is its own scope, so a Pharmacy Manager edits only assigned sites. A record with no site needs the role.
+  const siteOf = (row: JsonRecord): string | undefined => {
+    const id = isSiteRecord ? text(row.id, "") : text(row.siteId, "");
+    return id === "" ? undefined : id;
+  };
   const dirty = editor !== undefined && !sameValues(editor.values, editor.baseline);
   useUnsavedChangesGuard(dirty, "Your changes have not been saved.");
 
@@ -125,7 +137,7 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
     },
     { label: "Focus search" },
   );
-  useHotkey("n", openCreate, { label: "Create new", when: editor === undefined });
+  useHotkey("n", openCreate, { label: "Create new", when: editor === undefined && createGate.allowed });
   useHotkey(
     "mod+s",
     (event) => {
@@ -160,25 +172,37 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
       pinned: "right",
       align: "right",
       width: 170,
-      render: (row) => (
-        <RowActions label={translateText("Actions")}>
-          <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>
-            {translateText("Edit")}
-          </Button>
-          <Button variant="danger-ghost" size="sm" onClick={() => void remove(row)}>
-            {translateText("Delete")}
-          </Button>
-        </RowActions>
-      ),
+      render: (row) => {
+        const siteId = siteOf(row);
+        const editGate =
+          siteId === undefined ? can("catalog.write", session) : canAtSite("catalog.write", session, siteId);
+        const deleteGate = isSiteRecord ? can("catalog.site.delete", session) : editGate;
+        return (
+          <RowActions label={translateText("Actions")}>
+            {editGate.allowed ? (
+              <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>
+                {translateText("Edit")}
+              </Button>
+            ) : null}
+            {deleteGate.allowed ? (
+              <Button variant="danger-ghost" size="sm" onClick={() => void remove(row)}>
+                {translateText("Delete")}
+              </Button>
+            ) : null}
+          </RowActions>
+        );
+      },
     },
   ];
 
   return (
     <>
       <PageActions>
-        <Button size="sm" onClick={openCreate}>
-          {translateText(config.createLabel)}
-        </Button>
+        {createGate.allowed ? (
+          <Button size="sm" onClick={openCreate}>
+            {translateText(config.createLabel)}
+          </Button>
+        ) : null}
       </PageActions>
       {list.error ? (
         <Alert variant="danger" heading={translateText("Unable to load the list.")}>

@@ -11,6 +11,7 @@ import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
+import { useCan } from "../../permissions/use-can.ts";
 import { formatDateTime, text } from "../../staff-api.ts";
 import {
   ALL_STATUSES,
@@ -33,8 +34,11 @@ const COUNTER_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
  * Counter payments: the invoices raised at the counter, newest first. Online order invoices are left out, since the
  * orders screen owns them. Cash is confirmed and payments refunded here.
  */
-export const CounterTab = ({ canOperateCounter }: { canOperateCounter: boolean }): React.JSX.Element => {
+export const CounterTab = (): React.JSX.Element => {
   const { values, setValues } = useListUrlState(COUNTER_DEFAULTS);
+  // Cash and refunds are the Pharmacist's. Platform Admin reads the counter and acts on nothing here (shell Decision 14).
+  const confirmGate = useCan("payment.confirmCash");
+  const refundGate = useCan("payment.refund.counter");
   const rootRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
   useFocusSearchHotkey(rootRef);
@@ -118,12 +122,12 @@ export const CounterTab = ({ canOperateCounter }: { canOperateCounter: boolean }
         const invoiceStatus = text(row.status, "");
         return (
           <RowActions label={translateText("Payment actions")}>
-            {canOperateCounter && canConfirmCash(invoiceStatus) ? (
+            {confirmGate.allowed && canConfirmCash(invoiceStatus) ? (
               <Button size="sm" onClick={() => void confirmCash(invoiceId)}>
                 {translateText("Confirm cash")}
               </Button>
             ) : null}
-            {canOperateCounter && canRefund(invoiceStatus) ? (
+            {refundGate.allowed && canRefund(invoiceStatus) ? (
               <Button variant="danger-ghost" size="sm" onClick={() => void refund(invoiceId)}>
                 {translateText("Refund")}
               </Button>

@@ -18,8 +18,8 @@ type AuthMode = "login" | "register";
 
 type CustomerAuthFormProps = {
   /** Told what the page gained, so it can announce it without owning the session itself. */
-  onSignedIn: (notice: string) => void;
-  onSignedUp: (notice: string) => void;
+  onSignedIn?: (notice: string) => void;
+  onSignedUp?: (notice: string) => void;
 };
 
 /**
@@ -41,7 +41,7 @@ export const CustomerAuthForm = ({ onSignedIn, onSignedUp }: CustomerAuthFormPro
       try {
         if (mode === "register") {
           await registerCustomer(value.email, value.password, value.displayName);
-          onSignedUp("Đã tạo tài khoản. Kiểm tra email để xác thực rồi đăng nhập để tiếp tục.");
+          onSignedUp?.("Đã tạo tài khoản. Kiểm tra email để xác thực rồi đăng nhập để tiếp tục.");
           return;
         }
 
@@ -58,7 +58,7 @@ export const CustomerAuthForm = ({ onSignedIn, onSignedUp }: CustomerAuthFormPro
             ? { ...current, profile: { displayName: customer.displayName, email: customer.email } }
             : current,
         );
-        onSignedIn(`Xin chào ${customer.displayName}, giỏ thuốc của bạn đã được đồng bộ.`);
+        onSignedIn?.(`Xin chào ${customer.displayName}, giỏ thuốc của bạn đã được đồng bộ.`);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Đăng nhập thất bại");
       } finally {

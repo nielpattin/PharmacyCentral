@@ -6,6 +6,8 @@ import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { GatedButton } from "../../components/gated-button.tsx";
 import { useProductLookup, productLabel } from "../../hooks/useProductLookup.ts";
 import { useStaffReferences } from "../../hooks/useStaffReferences.ts";
+import { useSession } from "../../auth.ts";
+import { can, ownerOf } from "../../permissions/staff-permissions.ts";
 import { translateText } from "../../i18n.ts";
 import { useCan } from "../../permissions/use-can.ts";
 import { asRows, formatDate, formatQuantity, readOne, text, type JsonRecord } from "../../staff-api.ts";
@@ -34,8 +36,8 @@ export const PurchaseOrderDrawer = ({
 }): React.JSX.Element => {
   const references = useStaffReferences();
   const actions = usePurchaseOrderActions();
-  const approveGate = useCan("purchaseOrder.approve");
   const cancelGate = useCan("purchaseOrder.cancel");
+  const session = useSession();
   const detail = useQuery({
     queryKey: [...PURCHASE_ORDERS_KEY, "detail", orderId],
     queryFn: () => readOne<JsonRecord>(`/api/procurement/purchase-orders/${encodeURIComponent(orderId ?? "")}`),
@@ -114,7 +116,10 @@ export const PurchaseOrderDrawer = ({
         order ? (
           <>
             {canApprovePurchaseOrder(order.status) ? (
-              <GatedButton gate={approveGate} onClick={() => void actions.approve(order)}>
+              <GatedButton
+                gate={can("purchaseOrder.approve", session, ownerOf(order.createdBy))}
+                onClick={() => void actions.approve(order)}
+              >
                 {translateText("Approve")}
               </GatedButton>
             ) : null}

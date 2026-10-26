@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
+import { GatedButton } from "../../components/gated-button.tsx";
 import { Field, SelectField } from "../../components/forms.tsx";
 import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
@@ -14,6 +15,8 @@ import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
+import { useSession } from "../../auth.ts";
+import { can, ownerOf, type AccessResult, type PermissionSession } from "../../permissions/staff-permissions.ts";
 import { useCan } from "../../permissions/use-can.ts";
 import { CountLineDrawer } from "./count-line.tsx";
 import { formatQuantity, text, type JsonRecord } from "../../staff-api.ts";
@@ -150,12 +153,26 @@ const stocktakeLineColumns = (product: (id: string) => string, batch: (id: strin
   { key: "status", label: "Status", render: (row) => statusBadge(text(row.status, "-")) },
 ];
 
+/**
+ * Posting turns the counts into stock variances, so the creator of the session and anyone who counted one of its lines
+ * may not post it (BR-STK-007); the role is Pharmacy Manager (inventory operations Decision 3).
+ */
+const postGate = (session: PermissionSession, stocktake: JsonRecord): AccessResult => {
+  const lines = Array.isArray(stocktake.lines) ? stocktake.lines.map(asRecord) : [];
+  const countedByMe = lines.some((line) => line.countedBy === session.userId);
+  const role = can("inventory.stocktake.post", session, ownerOf(stocktake.createdBy));
+  if (!role.allowed || !countedByMe) return role;
+  return { allowed: false, reason: translateText("You cannot approve your own change") };
+};
+
 const StocktakeDetail = ({
   stocktake,
+  gate,
   onClose,
   onPost,
 }: {
   stocktake: JsonRecord;
+  gate: AccessResult;
   onClose: () => void;
   onPost: () => void;
 }): React.JSX.Element => {
@@ -189,9 +206,9 @@ const StocktakeDetail = ({
       }
       footer={
         canPost ? (
-          <Button size="sm" onClick={onPost}>
+          <GatedButton gate={gate} size="sm" onClick={onPost}>
             {translateText("Post adjustments")}
-          </Button>
+          </GatedButton>
         ) : undefined
       }
     />
@@ -203,10 +220,12 @@ export const StocktakeTab = (): React.JSX.Element => {
   const { values, setValues } = useListUrlState(STOCKTAKE_DEFAULTS);
   const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
   useFocusSearchHotkey(rootRef);
+  const createGate = useCan("inventory.stocktake.create");
+  const countGate = useCan("inventory.stocktake.count");
+  const session = useSession();
   const [creating, setCreating] = useState(false);
   const [counting, setCounting] = useState(false);
-  const countGate = useCan("inventory.stocktake.count");
-  useHotkey("n", () => setCreating(true), { label: "Create new", when: !creating && !counting });
+  useHotkey("n", () => setCreating(true), { label: "Create new", when: createGate.allowed && !creating && !counting });
   const list = usePagedList({
     key: ["staff-inventory", "stocktakes"],
     path: "/api/inventory/stocktakes",
@@ -253,9 +272,9 @@ export const StocktakeTab = (): React.JSX.Element => {
             {translateText("View")}
           </Button>
           {text(row.status, "") === "Pending" ? (
-            <Button size="sm" onClick={() => void post(row)}>
+            <GatedButton gate={postGate(session, row)} size="sm" onClick={() => void post(row)}>
               {translateText("Post adjustments")}
-            </Button>
+            </GatedButton>
           ) : null}
         </RowActions>
       ),
@@ -264,7 +283,7 @@ export const StocktakeTab = (): React.JSX.Element => {
 
   return (
     <div ref={rootRef} className="grid gap-3">
-      <CreateAction label="Create stocktake" onClick={() => setCreating(true)} />
+      <CreateAction label="Create stocktake" gate={createGate} onClick={() => setCreating(true)} />
       <CreateAction label="Record count" variant="secondary" gate={countGate} onClick={() => setCounting(true)} />
       <ListError error={list.error} />
       <DataTable
@@ -288,6 +307,7 @@ export const StocktakeTab = (): React.JSX.Element => {
       {selected ? (
         <StocktakeDetail
           stocktake={selected}
+          gate={postGate(session, selected)}
           onClose={() => setSelected(undefined)}
           onPost={() => void post(selected).then((ok) => ok && setSelected(undefined))}
         />

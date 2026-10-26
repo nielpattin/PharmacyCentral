@@ -31,8 +31,16 @@ import {
 
 import { Alert, Breadcrumb, Button, Field, Input, PageHeader, ToastProvider, type BreadcrumbItem } from "@pharmacy/ui";
 
-import { setSessionSnapshot, useSession } from "./auth.ts";
+import {
+  currentSession,
+  PASSWORD_CHANGED_MESSAGE,
+  SESSION_EXPIRED_MESSAGE,
+  setSessionSnapshot,
+  staffAccessRefusal,
+  useSession,
+} from "./auth.ts";
 import { ConfirmProvider } from "./components/confirm.tsx";
+import { ForcedPasswordChange } from "./components/forced-password-change.tsx";
 import { HotkeysListener } from "./components/hotkeys-listener.tsx";
 import { PageActionsContext } from "./components/page-actions.tsx";
 import { ShortcutsDialog } from "./components/shortcuts-dialog.tsx";
@@ -50,6 +58,7 @@ import { GovernanceSection } from "./sections/governance-section.tsx";
 import { ImportSection } from "./sections/import-section.tsx";
 import { INVENTORY_TAB_ACTIONS, isInventoryTab, type InventoryTab } from "./sections/inventory/tabs.ts";
 import { InventorySection } from "./sections/inventory-section.tsx";
+import { canAccessSection } from "./permissions/section-access.ts";
 import { tabGate } from "./permissions/staff-permissions.ts";
 import { MasterDataSection } from "./sections/master-data-section.tsx";
 import { OrdersSection } from "./sections/orders-section.tsx";
@@ -57,51 +66,24 @@ import { PrescriptionsSection } from "./sections/prescriptions-section.tsx";
 import { ProcurementSection } from "./sections/procurement-section.tsx";
 import { SearchSynonymsSection } from "./sections/search-synonyms-section.tsx";
 import { SystemSection } from "./sections/system-section.tsx";
-import { request, setIdentityContextsEnabled } from "./staff-api.ts";
+import { request, setIdentityContextsEnabled, setSessionEndedListener } from "./staff-api.ts";
 import { governanceTabPaths, pathForSection, sectionFromPath, type Section, type StaffPath } from "./router.ts";
 import "./styles.css";
 
 export type NavItem = { key: Section; label: string; icon: React.JSX.Element };
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
-const sidebarCollapsedStorageKey = "pharmacy-central:sidebar-collapsed";
-
-const sectionRoles: Record<Section, readonly string[]> = {
-  dashboard: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
-  pharmacistOverview: ["Pharmacist", "Pharmacy Manager"],
-  prescriptions: ["Pharmacist", "Pharmacy Manager"],
-  orders: ["Pharmacist", "Pharmacy Manager"],
-  transfers: ["Warehouse Staff"],
-  replenishment: ["Pharmacist", "Warehouse Staff"],
-  sites: ["Platform Admin", "Pharmacy Manager"],
-  storageLocations: ["Platform Admin", "Pharmacy Manager"],
-  catalog: ["Platform Admin", "Pharmacy Manager"],
-  searchSynonyms: ["Platform Admin", "Pharmacy Manager", "Pharmacist"],
-  units: ["Platform Admin", "Pharmacy Manager"],
-  pricing: ["Platform Admin", "Pharmacy Manager"],
-  supplier: ["Platform Admin", "Pharmacy Manager"],
-  importProducts: ["Platform Admin", "Pharmacy Manager"],
-  importSites: ["Platform Admin", "Pharmacy Manager"],
-  importLocations: ["Platform Admin", "Pharmacy Manager"],
-  importSuppliers: ["Platform Admin", "Pharmacy Manager"],
-  importStock: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
-  receiving: ["Warehouse Staff"],
-  procurement: ["Platform Admin", "Pharmacy Manager"],
-  stocktake: ["Warehouse Staff"],
-  inventory: ["Warehouse Staff"],
-  adjustments: ["Warehouse Staff"],
-  returns: ["Warehouse Staff"],
-  quality: ["Warehouse Staff"],
-  reporting: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
-  finance: ["Platform Admin", "Pharmacy Manager"],
-  users: ["Platform Admin"],
-  audit: ["Platform Admin"],
-  aiIntegrations: ["Platform Admin"],
-  system: ["Platform Admin"],
+/** A staff account as `/api/auth/me` and `/api/auth/login` answer it. */
+type StaffAccount = {
+  id: string;
+  actorType: "employee" | "customer";
+  email?: string;
+  roles: string[];
+  siteIds: string[];
+  passwordChangeRequired: boolean;
 };
 
-export const canAccessSection = (section: Section, roles: readonly string[]): boolean =>
-  roles.includes("Platform Admin") || sectionRoles[section].some((role) => roles.includes(role));
+const sidebarCollapsedStorageKey = "pharmacy-central:sidebar-collapsed";
 
 /** Sections that open the inventory workspace, each on its own first tab. */
 const INVENTORY_SECTIONS: ReadonlySet<Section> = new Set([
@@ -239,15 +221,46 @@ const StaffApp = (): React.JSX.Element => {
     allowWhileEditing: true,
   });
 
+  // Ends the session in this tab and shows the sign-in card, with `message` when given. Every cached response goes, so
+  // the next employee on this browser sees none of this one's rows (shell US4, Decision 8).
+  const endSession = (message: string | undefined): void => {
+    setIdentityContextsEnabled(false);
+    setSessionSnapshot({ authenticated: false });
+    queryClient.clear();
+    setEmail("");
+    setPassword("");
+    setError(message);
+  };
+
+  // A 401 that the identity-context retry did not clear ends the session. The URL is kept, so the same page opens
+  // once the employee signs in again (shell Decision 6).
+  useMountEffect(() => {
+    setSessionEndedListener(() => {
+      if (currentSession().authenticated) endSession(SESSION_EXPIRED_MESSAGE);
+    });
+    return () => setSessionEndedListener(undefined);
+  });
+
+  // A refused account keeps no session: the server ends it before the notice shows (shell Decision 7).
+  const refuseSession = async (message: string): Promise<void> => {
+    await request("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    endSession(message);
+  };
+
   useMountEffect(() => {
     void request("/api/auth/csrf")
-      .then(() =>
-        request<{ id: string; actorType: "employee" | "customer"; email?: string; roles: string[] }>("/api/auth/me"),
-      )
-      .then((current) => {
-        if (current.actorType !== "employee") throw new Error("Employee account required");
+      .then(() => request<StaffAccount>("/api/auth/me"))
+      .then(async (current) => {
+        const refusal = staffAccessRefusal(current);
+        if (refusal) return refuseSession(refusal);
         setEmail(current.email ?? "");
-        setSessionSnapshot({ authenticated: true, userId: current.id, roles: current.roles });
+        setSessionSnapshot({
+          authenticated: true,
+          userId: current.id,
+          roles: current.roles,
+          siteIds: current.siteIds,
+          passwordChangeRequired: current.passwordChangeRequired,
+        });
         setIdentityContextsEnabled(true);
       })
       .catch(() => setSessionSnapshot({ authenticated: false }))
@@ -257,15 +270,23 @@ const StaffApp = (): React.JSX.Element => {
   const login = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     try {
-      const response = await request<{ id: string; actorType: "employee" | "customer"; roles: string[] }>(
-        "/api/auth/login",
-        {
-          method: "POST",
-          body: JSON.stringify({ email, password }),
-        },
-      );
-      if (response.actorType !== "employee") throw new Error("Employee account required");
-      setSessionSnapshot({ authenticated: true, userId: response.id, roles: response.roles });
+      // `audience: "employee"` makes identity refuse a customer account before it sets any session cookie.
+      const account = await request<StaffAccount>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password, audience: "employee" }),
+      });
+      const refusal = staffAccessRefusal(account);
+      if (refusal) {
+        await refuseSession(refusal);
+        return;
+      }
+      setSessionSnapshot({
+        authenticated: true,
+        userId: account.id,
+        roles: account.roles,
+        siteIds: account.siteIds,
+        passwordChangeRequired: account.passwordChangeRequired,
+      });
       setIdentityContextsEnabled(true);
       setError(undefined);
     } catch (reason) {
@@ -277,10 +298,7 @@ const StaffApp = (): React.JSX.Element => {
     try {
       await request("/api/auth/logout", { method: "POST" });
     } finally {
-      setIdentityContextsEnabled(false);
-      setSessionSnapshot({ authenticated: false });
-      setEmail("");
-      setPassword("");
+      endSession(undefined);
       void navigate({ to: pathForSection("dashboard") });
     }
   };
@@ -295,6 +313,9 @@ const StaffApp = (): React.JSX.Element => {
       </div>
     );
   }
+
+  // An unknown page shows the same message to anyone, signed in or out (shell Decision 10).
+  if (!requestedSection) return <StaffNotFoundPage />;
 
   if (!session.authenticated) {
     return (
@@ -316,7 +337,13 @@ const StaffApp = (): React.JSX.Element => {
     );
   }
 
-  if (!requestedSection) return <StaffNotFoundPage />;
+  // Until the password is changed no section opens: identity refuses every other call (shell Decision 9).
+  if (session.passwordChangeRequired) {
+    return (
+      <ForcedPasswordChange onChanged={() => endSession(PASSWORD_CHANGED_MESSAGE)} onSignOut={() => void signOut()} />
+    );
+  }
+
   if (requestedSection !== activeSection) return <Navigate to={pathForSection(activeSection)} replace />;
 
   const governanceTabLabel = activeSection === "users" || activeSection === "audit" ? governanceTab : undefined;

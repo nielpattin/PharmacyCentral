@@ -13,6 +13,7 @@ import { formatDateTime, formatQuantity, text } from "../../staff-api.ts";
 import { useInventoryLabels } from "./labels.ts";
 import { INVENTORY_INVALIDATE, ListError, PAGE_SIZE } from "./shared.tsx";
 import { CreateAction } from "../../components/form-parts.tsx";
+import { useCan } from "../../permissions/use-can.ts";
 
 /** Columns shared by the movements list and a batch's history: change, balance after, type, time. */
 export const MOVEMENT_HISTORY_COLUMNS: Column[] = [
@@ -161,8 +162,9 @@ export const MovementsTab = (): React.JSX.Element => {
     limit: PAGE_SIZE,
   });
   const labels = useInventoryLabels(list.rows.map((row) => text(row.productId, "")));
+  const createGate = useCan("inventory.movement.create");
   const [creating, setCreating] = useState(false);
-  useHotkey("n", () => setCreating(true), { label: "Create new", when: !creating });
+  useHotkey("n", () => setCreating(true), { label: "Create new", when: createGate.allowed && !creating });
 
   const columns: Column[] = [
     {
@@ -178,7 +180,7 @@ export const MovementsTab = (): React.JSX.Element => {
 
   return (
     <div className="grid gap-3">
-      <CreateAction label="Record movement" onClick={() => setCreating(true)} />
+      <CreateAction label="Record movement" gate={createGate} onClick={() => setCreating(true)} />
       <ListError error={list.error} />
       <DataTable
         rows={list.rows}

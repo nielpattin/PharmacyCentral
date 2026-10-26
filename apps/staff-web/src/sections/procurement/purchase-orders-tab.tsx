@@ -13,6 +13,8 @@ import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffReferences } from "../../hooks/useStaffReferences.ts";
 import { translateText } from "../../i18n.ts";
 import { useCan } from "../../permissions/use-can.ts";
+import { useSession } from "../../auth.ts";
+import { can, ownerOf } from "../../permissions/staff-permissions.ts";
 import { formatDate, formatDateTime, idOf, text, writeJson, type JsonRecord } from "../../staff-api.ts";
 import { fillText, summarizeBulk, type BulkOutcome } from "./bulk-summary.ts";
 import { referenceName } from "./labels.ts";
@@ -36,6 +38,7 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
   const actions = usePurchaseOrderActions();
   const approveGate = useCan("purchaseOrder.approve");
   const cancelGate = useCan("purchaseOrder.cancel");
+  const session = useSession();
   const confirm = useConfirm();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -68,7 +71,10 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
   });
 
   const approveSelected = async (): Promise<void> => {
-    const chosen = orders.rows.filter((row) => selected.has(idOf(row)));
+    // An order the signed-in user created is left out: the server refuses its own approval (BR-PROC-005).
+    const chosen = orders.rows.filter(
+      (row) => selected.has(idOf(row)) && can("purchaseOrder.approve", session, ownerOf(row.createdBy)).allowed,
+    );
     if (chosen.length === 0) return;
     const accepted = await confirm({
       title: "Approve the selected purchase orders?",
@@ -156,7 +162,8 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
           <Button size="sm" variant="ghost" onClick={() => setOpenId(idOf(row))}>
             {translateText("View")}
           </Button>
-          {approveGate.allowed && canApprovePurchaseOrder(row.status) ? (
+          {can("purchaseOrder.approve", session, ownerOf(row.createdBy)).allowed &&
+          canApprovePurchaseOrder(row.status) ? (
             <Button size="sm" onClick={() => void actions.approve(row)}>
               {translateText("Approve")}
             </Button>

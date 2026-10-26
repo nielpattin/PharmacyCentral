@@ -8,7 +8,7 @@ import { SummaryTab } from "./finance/summary-tab.tsx";
 
 const FINANCE_TABS = ["Summary", "Invoices", "Reports"] as const;
 
-/** The reporting route mounts this section for Warehouse Staff too, who read only the reports. */
+/** Reports has no action; the other tabs need the role that reads them. */
 const FINANCE_TAB_ACTIONS: Record<(typeof FINANCE_TABS)[number], StaffAction | undefined> = {
   Summary: "finance.summary.view",
   Invoices: "payment.invoices.view",
@@ -26,7 +26,11 @@ export const FinanceSection = ({
 }): React.JSX.Element => {
   const list = useListUrlState({ q: "", status: "all", tab: initialTab });
   const session = useSession();
-  const visibleTabs = FINANCE_TABS.filter((item) => tabGate(FINANCE_TAB_ACTIONS[item], session).allowed);
+  // `/reporting` opens Reports only, whatever `?tab=` says (reporting Decision 8); `/finance` also shows the others.
+  const reportsOnly = initialTab === "Reports";
+  const visibleTabs = FINANCE_TABS.filter(
+    (item) => (!reportsOnly || item === "Reports") && tabGate(FINANCE_TAB_ACTIONS[item], session).allowed,
+  );
   const requestedTab = (FINANCE_TABS as readonly string[]).includes(list.values.tab) ? list.values.tab : initialTab;
   const tab = (visibleTabs as readonly string[]).includes(requestedTab) ? requestedTab : (visibleTabs[0] ?? initialTab);
 

@@ -1,9 +1,10 @@
 import { useForm, useStore } from "@tanstack/react-form";
-import { Button, RowActions, useToast } from "@pharmacy/ui";
+import { RowActions, useToast } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { useConfirm } from "../../components/confirm.tsx";
+import { GatedButton } from "../../components/gated-button.tsx";
 import { Field, SelectField } from "../../components/forms.tsx";
 import { ProductPicker } from "../../components/product-picker.tsx";
 import { FormDrawer } from "../../components/form-drawer.tsx";
@@ -15,6 +16,9 @@ import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
+import { useSession } from "../../auth.ts";
+import { can, ownerOf } from "../../permissions/staff-permissions.ts";
+import { useCan } from "../../permissions/use-can.ts";
 import { formatQuantity, numberValue, text, writeJson, type JsonRecord } from "../../staff-api.ts";
 import { asRecord, shortId } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
@@ -187,8 +191,11 @@ export const ReplenishmentTab = (): React.JSX.Element => {
   const { values, setValues } = useListUrlState(REPLENISHMENT_DEFAULTS);
   const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
   useFocusSearchHotkey(rootRef);
+  const createGate = useCan("replenishment.create");
+  const decideGate = useCan("replenishment.decide");
+  const session = useSession();
   const [creating, setCreating] = useState(false);
-  useHotkey("n", () => setCreating(true), { label: "Create new", when: !creating });
+  useHotkey("n", () => setCreating(true), { label: "Create new", when: createGate.allowed && !creating });
   const list = usePagedList({
     key: ["staff-inventory", "replenishment"],
     path: "/api/inventory/replenishment",
@@ -252,9 +259,15 @@ export const ReplenishmentTab = (): React.JSX.Element => {
   };
 
   const bulkTransition = async (action: "approve" | "reject"): Promise<void> => {
-    const targets = list.rows.filter((row) => selected.has(text(row.id, "")) && text(row.status, "") === "Pending");
+    // A request the signed-in user made is left out: the server refuses its own approval (shell Decision 2).
+    const targets = list.rows.filter(
+      (row) =>
+        selected.has(text(row.id, "")) &&
+        text(row.status, "") === "Pending" &&
+        can("replenishment.decide", session, ownerOf(row.requestedBy)).allowed,
+    );
     if (targets.length === 0) {
-      toast.info(translateText("Select pending requests first."));
+      toast.info(translateText("Select pending requests you did not make first."));
       return;
     }
     const approve = action === "approve";
@@ -310,27 +323,46 @@ export const ReplenishmentTab = (): React.JSX.Element => {
       render: (row) => {
         const id = text(row.id, "");
         const status = text(row.status, "");
+        const owner = ownerOf(row.requestedBy);
         if (status === "Pending") {
           return (
             <RowActions label={translateText("Actions")}>
-              <Button size="sm" onClick={() => void transition(id, "approve")}>
+              <GatedButton
+                gate={can("replenishment.decide", session, owner)}
+                size="sm"
+                onClick={() => void transition(id, "approve")}
+              >
                 {translateText("Approve")}
-              </Button>
-              <Button size="sm" variant="danger-ghost" onClick={() => void transition(id, "reject")}>
+              </GatedButton>
+              <GatedButton
+                gate={can("replenishment.decide", session, owner)}
+                size="sm"
+                variant="danger-ghost"
+                onClick={() => void transition(id, "reject")}
+              >
                 {translateText("Reject")}
-              </Button>
+              </GatedButton>
             </RowActions>
           );
         }
         if (status === "Approved") {
           return (
             <RowActions label={translateText("Actions")}>
-              <Button size="sm" onClick={() => void transition(id, "fulfill")}>
+              <GatedButton
+                gate={can("replenishment.decide", session, owner)}
+                size="sm"
+                onClick={() => void transition(id, "fulfill")}
+              >
                 {translateText("Fulfill")}
-              </Button>
-              <Button size="sm" variant="danger-ghost" onClick={() => void transition(id, "cancel")}>
+              </GatedButton>
+              <GatedButton
+                gate={can("replenishment.cancel", session, owner)}
+                size="sm"
+                variant="danger-ghost"
+                onClick={() => void transition(id, "cancel")}
+              >
                 {translateText("Cancel")}
-              </Button>
+              </GatedButton>
             </RowActions>
           );
         }
@@ -341,7 +373,7 @@ export const ReplenishmentTab = (): React.JSX.Element => {
 
   return (
     <div ref={rootRef} className="grid gap-3">
-      <CreateAction label="Request stock" onClick={() => setCreating(true)} />
+      <CreateAction label="Request stock" gate={createGate} onClick={() => setCreating(true)} />
       <ListError error={list.error} />
       <DataTable
         toolbarStart={
@@ -364,12 +396,17 @@ export const ReplenishmentTab = (): React.JSX.Element => {
         selection={{ keys: selected, onChange: setSelected }}
         bulkActions={
           <>
-            <Button size="sm" onClick={() => void bulkTransition("approve")}>
+            <GatedButton gate={decideGate} size="sm" onClick={() => void bulkTransition("approve")}>
               {translateText("Approve selected")}
-            </Button>
-            <Button size="sm" variant="danger-soft" onClick={() => void bulkTransition("reject")}>
+            </GatedButton>
+            <GatedButton
+              gate={decideGate}
+              size="sm"
+              variant="danger-soft"
+              onClick={() => void bulkTransition("reject")}
+            >
               {translateText("Reject selected")}
-            </Button>
+            </GatedButton>
           </>
         }
         storageKey="staff:inventory:replenishment"

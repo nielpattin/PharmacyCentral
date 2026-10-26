@@ -72,7 +72,8 @@ export const governanceLiterals: Record<string, string> = {
   "Warehouse Staff": "Nhân viên kho",
   Pharmacist: "Dược sĩ",
   "Sessions revoked.": "Đã đăng xuất các phiên.",
-  "Password reset.": "Đã đặt lại mật khẩu.",
+  "Password reset. The employee's sessions have been signed out.":
+    "Đã đặt lại mật khẩu. Các phiên đăng nhập của nhân viên đã bị đăng xuất.",
   "Payment status, reconciliation, and operational reports.": "Trạng thái thanh toán, đối soát và báo cáo vận hành.",
   "Reset password": "Đặt lại mật khẩu",
   "Revoke sessions": "Đăng xuất các phiên",

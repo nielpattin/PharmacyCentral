@@ -5,6 +5,8 @@ export type SessionSnapshot = {
   /** False until a probe confirms the session, so the UI never guesses "signed out" before it knows. */
   resolved: boolean;
   userId?: string;
+  /** Set when a 401 ended the session, so the sign-in dialog says why it opened (auth.sessionExpired). */
+  sessionEndedNotice?: string;
 };
 
 const emptySnapshot: SessionSnapshot = { authenticated: false, resolved: false };
@@ -22,6 +24,9 @@ export const setSessionSnapshot = (nextSnapshot: SessionSnapshot): void => {
     listener();
   }
 };
+
+/** The session as it is now, for callers outside React (the 401 listener) that must not act on a stale render. */
+export const currentSession = (): SessionSnapshot => snapshot;
 
 export const useSession = (): SessionSnapshot =>
   useSyncExternalStore(

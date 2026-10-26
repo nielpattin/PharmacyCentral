@@ -17,9 +17,9 @@ export const catalogLiterals: Record<string, string> = {
   Submitted: "Gửi lúc",
   "You proposed this": "Bạn đề xuất",
   "Another staff member proposed this": "Nhân viên khác đề xuất",
-  "You cannot approve your own change": "Bạn không thể duyệt thay đổi của chính mình",
   "You cannot approve your own change. Another staff member must approve it.":
-    "Bạn không thể duyệt thay đổi của chính mình. Cần một nhân viên khác duyệt.",
+    "Bạn không thể duyệt thay đổi của chính mình. Một nhân viên khác phải duyệt.",
+  "You cannot approve your own change": "Bạn không thể tự duyệt thay đổi của mình.",
   "This group changed after you opened it. The list has been reloaded. Check it and try again.":
     "Nhóm đã thay đổi sau khi bạn mở. Danh sách đã được tải lại. Hãy kiểm tra và thử lại.",
   "This group is already approved.": "Nhóm này đã được duyệt.",

@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
 import { Field } from "../../components/forms.tsx";
+import { GatedButton } from "../../components/gated-button.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
@@ -14,6 +15,8 @@ import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
+import { useSession } from "../../auth.ts";
+import { can, ownerOf, type StaffAction } from "../../permissions/staff-permissions.ts";
 import { useCan } from "../../permissions/use-can.ts";
 import { formatDateTime, formatQuantity, numberValue, readOne, text, type JsonRecord } from "../../staff-api.ts";
 import { asRecord } from "./format.ts";
@@ -33,6 +36,8 @@ export const TransfersTab = (): React.JSX.Element => {
   const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
   useFocusSearchHotkey(rootRef);
   const createGate = useCan("inventory.transfer.create");
+  const session = useSession();
+  const gateFor = (action: StaffAction, row: JsonRecord) => can(action, session, ownerOf(row.createdBy));
   const [creating, setCreating] = useState(false);
   useHotkey("n", () => setCreating(true), { label: "Create new", when: createGate.allowed && !creating });
   const list = usePagedList({
@@ -87,28 +92,52 @@ export const TransfersTab = (): React.JSX.Element => {
             </Button>
             {status === "PendingApproval" ? (
               <>
-                <Button size="sm" onClick={() => void transition(row, "approve")}>
+                <GatedButton
+                  gate={gateFor("inventory.transfer.approve", row)}
+                  size="sm"
+                  onClick={() => void transition(row, "approve")}
+                >
                   {translateText("Approve")}
-                </Button>
-                <Button size="sm" variant="danger-ghost" onClick={() => void transition(row, "cancel")}>
+                </GatedButton>
+                <GatedButton
+                  gate={gateFor("inventory.transfer.cancel", row)}
+                  size="sm"
+                  variant="danger-ghost"
+                  onClick={() => void transition(row, "cancel")}
+                >
                   {translateText("Cancel")}
-                </Button>
+                </GatedButton>
               </>
             ) : null}
             {status === "Approved" ? (
               <>
-                <Button size="sm" variant="ghost" onClick={() => setView({ id, mode: "ship" })}>
+                <GatedButton
+                  gate={gateFor("inventory.transfer.transition", row)}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setView({ id, mode: "ship" })}
+                >
                   {translateText("Ship")}
-                </Button>
-                <Button size="sm" variant="danger-ghost" onClick={() => void transition(row, "cancel")}>
+                </GatedButton>
+                <GatedButton
+                  gate={gateFor("inventory.transfer.cancel", row)}
+                  size="sm"
+                  variant="danger-ghost"
+                  onClick={() => void transition(row, "cancel")}
+                >
                   {translateText("Cancel")}
-                </Button>
+                </GatedButton>
               </>
             ) : null}
             {status === "InTransit" ? (
-              <Button size="sm" variant="ghost" onClick={() => setView({ id, mode: "receive" })}>
+              <GatedButton
+                gate={gateFor("inventory.transfer.transition", row)}
+                size="sm"
+                variant="ghost"
+                onClick={() => setView({ id, mode: "receive" })}
+              >
                 {translateText("Receive")}
-              </Button>
+              </GatedButton>
             ) : null}
           </RowActions>
         );

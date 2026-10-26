@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { setLanguage, translateText } from "../i18n.ts";
-import { can, staffActions, STAFF_ROLES, type StaffAction, type StaffRole } from "./staff-permissions.ts";
+import { can, canAtSite, staffActions, STAFF_ROLES, type StaffAction, type StaffRole } from "./staff-permissions.ts";
 
+const PA = "Platform Admin";
 const PM = "Pharmacy Manager";
 const PHARMACIST = "Pharmacist";
 const WAREHOUSE = "Warehouse Staff";
 
-// Who the authorizer admits for each action, without Platform Admin (it admits everyone; tested separately). Written
-// from deploy/aws/lambda/policy.mjs, not read back from the map, so a wrong map entry fails here.
+// Who the role contract admits for each action, without Platform Admin (handled below). Written from the inventory and
+// shell specs and deploy/aws/lambda/policy.mjs, not read back from the map, so a wrong map entry fails here.
 const admitted: Record<StaffAction, readonly StaffRole[]> = {
   "prescription.create": [PHARMACIST],
   "prescription.dispense": [PHARMACIST],
@@ -16,53 +17,81 @@ const admitted: Record<StaffAction, readonly StaffRole[]> = {
   "prescription.createInvoice": [PHARMACIST],
   "consultation.answer": [PHARMACIST],
   "payment.confirmCash": [PHARMACIST],
-  "payment.refund": [PHARMACIST],
+  "payment.refund.counter": [PHARMACIST],
+  "payment.refund": [PM],
   "payment.invoices.view": [PHARMACIST, PM],
   "customer.lookup": [PHARMACIST],
   "finance.summary.view": [PM],
   "purchaseOrder.create": [PM],
   "purchaseOrder.approve": [PM],
   "purchaseOrder.cancel": [PM],
+  "price.publish": [PM],
   "goodsReceipt.view": [WAREHOUSE],
   "goodsReceipt.create": [WAREHOUSE],
-  "inventory.records.view": [WAREHOUSE],
+  "inventory.balances.view": [PHARMACIST, PM, WAREHOUSE],
+  "inventory.batches.view": [PHARMACIST, PM, WAREHOUSE],
+  "inventory.movements.view": [PM, WAREHOUSE],
+  "inventory.adjustments.view": [PM, WAREHOUSE],
+  "inventory.transfers.view": [PM, WAREHOUSE],
+  "inventory.stocktake.view": [PM, WAREHOUSE],
+  "inventory.returns.view": [PM, WAREHOUSE],
   "inventory.batch.create": [WAREHOUSE],
-  "inventory.batch.quality": [WAREHOUSE],
+  "inventory.batch.quality": [PHARMACIST, PM],
   "inventory.movement.create": [WAREHOUSE],
   "inventory.adjustment.create": [WAREHOUSE],
-  "inventory.adjustment.decide": [WAREHOUSE],
+  "inventory.adjustment.decide": [PM],
   "inventory.transfer.create": [WAREHOUSE],
+  "inventory.transfer.approve": [PM],
   "inventory.transfer.transition": [WAREHOUSE],
+  "inventory.transfer.cancel": [PM],
   "inventory.stocktake.create": [WAREHOUSE],
   "inventory.stocktake.count": [WAREHOUSE],
-  "inventory.stocktake.post": [WAREHOUSE],
+  "inventory.stocktake.post": [PM],
   "inventory.return.create": [WAREHOUSE],
-  "replenishment.view": [PHARMACIST, WAREHOUSE],
-  "replenishment.create": [PHARMACIST, WAREHOUSE],
-  "replenishment.decide": [PHARMACIST, WAREHOUSE],
+  "replenishment.view": [PHARMACIST, PM, WAREHOUSE],
+  "replenishment.create": [PHARMACIST, PM],
+  "replenishment.decide": [WAREHOUSE],
+  "replenishment.cancel": [WAREHOUSE],
   "catalog.write": [PM],
+  "catalog.site.create": [],
+  "catalog.site.delete": [],
   "catalog.import": [PM],
-  "stock.import": [PHARMACIST, PM, WAREHOUSE, "Platform Admin"],
-  "synonym.write": [PM],
-  "synonym.approve": [PM],
+  "stock.import": [WAREHOUSE],
+  "synonym.write": [PHARMACIST, PM],
+  "synonym.approve": [PHARMACIST, PM],
   "governance.user.write": [],
   "ai.credential.write": [],
 };
 
+// Actions Platform Admin is refused by name, not by role: counter work, cash, customer lookup and synonym approval.
+const platformAdminExcluded: readonly StaffAction[] = [
+  "prescription.create",
+  "prescription.dispense",
+  "prescription.cancel",
+  "prescription.createInvoice",
+  "consultation.answer",
+  "payment.confirmCash",
+  "payment.refund.counter",
+  "customer.lookup",
+  "synonym.approve",
+];
+
 const sessionWith = (...roles: string[]) => ({ roles, userId: "user-1" });
+const ownedBy = (ownerId: string) => ({ ownerId });
 
 describe("staff permission map", () => {
   afterEach(() => setLanguage("vi"));
 
-  it.each(Object.keys(staffActions) as StaffAction[])("admits the roles the authorizer admits for %s", (action) => {
-    for (const role of STAFF_ROLES.filter((candidate) => candidate !== "Platform Admin")) {
+  it.each(Object.keys(staffActions) as StaffAction[])("admits the roles the contract admits for %s", (action) => {
+    for (const role of STAFF_ROLES.filter((candidate) => candidate !== PA)) {
       const allowed = can(action, sessionWith(role)).allowed;
       expect(allowed, `${role} on ${action}`).toBe(admitted[action].includes(role));
     }
   });
 
-  it.each(Object.keys(staffActions) as StaffAction[])("lets Platform Admin through %s", (action) => {
-    expect(can(action, sessionWith("Platform Admin"))).toEqual({ allowed: true });
+  it.each(Object.keys(staffActions) as StaffAction[])("lets Platform Admin through %s unless excluded", (action) => {
+    const result = can(action, sessionWith(PA));
+    expect(result.allowed, action).toBe(!platformAdminExcluded.includes(action));
   });
 
   it("refuses every action to a session with no roles", () => {
@@ -71,30 +100,144 @@ describe("staff permission map", () => {
     }
   });
 
-  it("refuses a Platform Admin who approves their own search synonym group, as the server does", () => {
-    const own = { ownerId: "user-1" };
-    expect(can("synonym.approve", sessionWith("Platform Admin"), own)).toEqual({
+  it("refuses a Platform Admin the counter and cash actions with a Pharmacist reason", () => {
+    expect(can("payment.confirmCash", sessionWith(PA))).toEqual({
       allowed: false,
-      reason: "Bạn không thể duyệt thay đổi của chính mình",
+      reason: "Chỉ Dược sĩ được xác nhận thanh toán tiền mặt.",
+    });
+  });
+});
+
+describe("separation of duties", () => {
+  it.each<[StaffAction, StaffRole]>([
+    ["synonym.approve", PM],
+    ["purchaseOrder.approve", PM],
+    ["inventory.adjustment.decide", PM],
+    ["inventory.transfer.approve", PM],
+    ["inventory.stocktake.post", PM],
+    ["replenishment.decide", WAREHOUSE],
+  ])("refuses %s to the creator of the record (%s)", (action, role) => {
+    expect(can(action, { roles: [role], userId: "user-1" }, ownedBy("user-1")).allowed).toBe(false);
+  });
+
+  it.each<[StaffAction, StaffRole]>([
+    ["synonym.approve", PM],
+    ["purchaseOrder.approve", PM],
+    ["inventory.adjustment.decide", PM],
+    ["inventory.transfer.approve", PM],
+    ["inventory.stocktake.post", PM],
+    ["replenishment.decide", WAREHOUSE],
+  ])("allows %s to another person of the same role (%s)", (action, role) => {
+    expect(can(action, { roles: [role], userId: "user-1" }, ownedBy("user-2"))).toEqual({ allowed: true });
+  });
+
+  it("refuses a Platform Admin who decides an adjustment they proposed", () => {
+    expect(can("inventory.adjustment.decide", sessionWith(PA), ownedBy("user-1"))).toEqual({
+      allowed: false,
+      reason: "Bạn không thể tự duyệt thay đổi của mình.",
     });
   });
 
   it("refuses a Pharmacy Manager who approves their own search synonym group", () => {
-    expect(can("synonym.approve", sessionWith(PM), { ownerId: "user-1" }).allowed).toBe(false);
+    expect(can("synonym.approve", sessionWith(PM), ownedBy("user-1")).allowed).toBe(false);
   });
 
-  it("allows a Pharmacy Manager to approve a search synonym group someone else submitted", () => {
-    expect(can("synonym.approve", sessionWith(PM), { ownerId: "user-2" })).toEqual({ allowed: true });
+  it("allows a Pharmacist to approve a search synonym group someone else submitted", () => {
+    expect(can("synonym.approve", sessionWith(PHARMACIST), ownedBy("user-2"))).toEqual({ allowed: true });
+  });
+
+  it("refuses a Platform Admin the search synonym approval whoever submitted it", () => {
+    expect(can("synonym.approve", sessionWith(PA), ownedBy("user-2"))).toEqual({
+      allowed: false,
+      reason: "Chỉ Dược sĩ hoặc Quản lý nhà thuốc được duyệt từ đồng nghĩa tìm kiếm.",
+    });
   });
 
   it("reports the role before the owner when both refuse", () => {
-    const result = can("synonym.approve", sessionWith(PHARMACIST), { ownerId: "user-1" });
-    expect(result).toEqual({ allowed: false, reason: "Chỉ Quản lý nhà thuốc được duyệt từ đồng nghĩa tìm kiếm." });
+    const result = can("synonym.approve", sessionWith(WAREHOUSE), ownedBy("user-1"));
+    expect(result).toEqual({
+      allowed: false,
+      reason: "Chỉ Dược sĩ hoặc Quản lý nhà thuốc được duyệt từ đồng nghĩa tìm kiếm.",
+    });
   });
 
-  it("does not block a purchase order approval by its creator, because the server does not refuse it", () => {
-    expect(can("purchaseOrder.approve", sessionWith(PM), { ownerId: "user-1" })).toEqual({ allowed: true });
+  it("refuses a Warehouse Staff member the approval of a transfer, whoever created it", () => {
+    expect(can("inventory.transfer.approve", sessionWith(WAREHOUSE), ownedBy("user-2")).allowed).toBe(false);
   });
+
+  it("lets the creator of a transfer cancel it, as Warehouse Staff", () => {
+    expect(can("inventory.transfer.cancel", sessionWith(WAREHOUSE), ownedBy("user-1"))).toEqual({ allowed: true });
+  });
+
+  it("refuses another Warehouse Staff member the cancellation of a transfer", () => {
+    expect(can("inventory.transfer.cancel", sessionWith(WAREHOUSE), ownedBy("user-2")).allowed).toBe(false);
+  });
+
+  it("lets a Pharmacy Manager cancel any transfer", () => {
+    expect(can("inventory.transfer.cancel", sessionWith(PM), ownedBy("user-2"))).toEqual({ allowed: true });
+  });
+
+  it("lets a Pharmacist cancel their own replenishment request only", () => {
+    expect(can("replenishment.cancel", sessionWith(PHARMACIST), ownedBy("user-1"))).toEqual({ allowed: true });
+    expect(can("replenishment.cancel", sessionWith(PHARMACIST), ownedBy("user-2")).allowed).toBe(false);
+  });
+
+  it("lets Warehouse Staff cancel a replenishment request made by someone else", () => {
+    expect(can("replenishment.cancel", sessionWith(WAREHOUSE), ownedBy("user-2"))).toEqual({ allowed: true });
+  });
+
+  it("refuses a Pharmacist a replenishment cancellation when the record has no owner", () => {
+    expect(can("replenishment.cancel", sessionWith(PHARMACIST)).allowed).toBe(false);
+  });
+
+  it("allows a Pharmacy Manager to approve a purchase order someone else created", () => {
+    expect(can("purchaseOrder.approve", sessionWith(PM), ownedBy("user-2"))).toEqual({ allowed: true });
+  });
+
+  it("refuses the creator of a price draft its publish, with the catalog's own reason", () => {
+    expect(can("price.publish", sessionWith(PM), ownedBy("user-1"))).toEqual({
+      allowed: false,
+      reason: "Người tạo bản nháp không được phát hành bản nháp đó.",
+    });
+  });
+
+  it("allows a Pharmacy Manager to publish a price draft someone else created", () => {
+    expect(can("price.publish", sessionWith(PM), ownedBy("user-2"))).toEqual({ allowed: true });
+  });
+});
+
+describe("site scope", () => {
+  const manager = { roles: [PM], userId: "user-1", siteIds: ["site-a"] };
+
+  it("allows a manager a write at an assigned site", () => {
+    expect(canAtSite("catalog.write", manager, "site-a")).toEqual({ allowed: true });
+  });
+
+  it("refuses a manager a write at a site they are not assigned", () => {
+    expect(canAtSite("catalog.write", manager, "site-b")).toEqual({
+      allowed: false,
+      reason: "Chỉ sửa được bản ghi thuộc cơ sở được gán cho bạn.",
+    });
+  });
+
+  it("refuses a manager a write on a record with no site", () => {
+    expect(canAtSite("catalog.write", manager, undefined).allowed).toBe(false);
+  });
+
+  it("gives Platform Admin every site, with no assignment", () => {
+    expect(canAtSite("catalog.write", { roles: [PA], userId: "user-1" }, "site-z")).toEqual({ allowed: true });
+  });
+
+  it("reports the role before the site when the role is refused", () => {
+    expect(canAtSite("catalog.write", { roles: [WAREHOUSE], userId: "u", siteIds: ["site-a"] }, "site-a")).toEqual({
+      allowed: false,
+      reason: "Chỉ Quản lý nhà thuốc được thay đổi danh mục và dữ liệu nền.",
+    });
+  });
+});
+
+describe("staff permission texts", () => {
+  afterEach(() => setLanguage("vi"));
 
   it("returns a translated sentence for a refused role", () => {
     expect(can("purchaseOrder.approve", sessionWith(WAREHOUSE))).toEqual({

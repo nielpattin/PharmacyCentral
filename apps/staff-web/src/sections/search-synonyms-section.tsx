@@ -64,7 +64,7 @@ const successMessages: Record<SynonymMutation["kind"], string> = {
 const problemMessage = (reason: unknown): string => {
   if (reason instanceof ApiProblemError) {
     switch (reason.problem.code) {
-      case "self_review_forbidden":
+      case "self_approval_forbidden":
         return translateText("You cannot approve your own change. Another staff member must approve it.");
       case "version_conflict":
         return translateText(

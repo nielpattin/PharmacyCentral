@@ -29,14 +29,14 @@ export const INVENTORY_GROUPS: ReadonlyArray<{ id: string; tabs: readonly Invent
 
 /** The action behind each tab. A tab the signed-in role cannot use is not shown; `undefined` is open to all staff. */
 export const INVENTORY_TAB_ACTIONS: Record<InventoryTab, StaffAction | undefined> = {
-  Balances: undefined,
-  Batches: "inventory.records.view",
-  Movements: "inventory.records.view",
-  Transfers: "inventory.records.view",
+  Balances: "inventory.balances.view",
+  Batches: "inventory.batches.view",
+  Movements: "inventory.movements.view",
+  Transfers: "inventory.transfers.view",
   Replenishment: "replenishment.view",
-  Returns: "inventory.records.view",
-  Adjustments: "inventory.records.view",
-  Stocktake: "inventory.records.view",
+  Returns: "inventory.returns.view",
+  Adjustments: "inventory.adjustments.view",
+  Stocktake: "inventory.stocktake.view",
 };
 
 export type VisibleGroup = { id: string; tabs: InventoryTab[] };

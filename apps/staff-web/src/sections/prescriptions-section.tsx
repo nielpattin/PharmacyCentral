@@ -60,7 +60,7 @@ export const PrescriptionsSection = ({
       {onQueue && canOperateCounter ? (
         <CreateAction label="Create prescription" onClick={() => setCreating(true)} />
       ) : null}
-      {activeTab === "Counter transactions" ? <CounterTab canOperateCounter={canOperateCounter} /> : null}
+      {activeTab === "Counter transactions" ? <CounterTab /> : null}
       {activeTab === "Consultations" ? <ConsultationsTab canOperateCounter={canOperateCounter} /> : null}
       {creating ? <CreatePrescriptionDrawer onClose={() => setCreating(false)} /> : null}
       {canOperateCounter && onQueue && values.prescription !== "" ? (

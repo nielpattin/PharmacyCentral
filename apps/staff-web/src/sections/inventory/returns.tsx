@@ -12,6 +12,7 @@ import { shortId } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
 import { INVENTORY_INVALIDATE, ListError, PAGE_SIZE } from "./shared.tsx";
 import { AddLineButton, CreateAction, LineCard } from "../../components/form-parts.tsx";
+import { useCan } from "../../permissions/use-can.ts";
 
 const returnLineInitial = () => ({
   productBatchId: "",
@@ -146,8 +147,9 @@ export const ReturnsTab = (): React.JSX.Element => {
     limit: PAGE_SIZE,
   });
   const labels = useInventoryLabels();
+  const createGate = useCan("inventory.return.create");
   const [creating, setCreating] = useState(false);
-  useHotkey("n", () => setCreating(true), { label: "Create new", when: !creating });
+  useHotkey("n", () => setCreating(true), { label: "Create new", when: createGate.allowed && !creating });
 
   const columns: Column[] = [
     { key: "id", label: "Return", render: (row) => shortId(text(row.id, "")) },
@@ -163,7 +165,7 @@ export const ReturnsTab = (): React.JSX.Element => {
 
   return (
     <div className="grid gap-3">
-      <CreateAction label="Record return or removal" onClick={() => setCreating(true)} />
+      <CreateAction label="Record return or removal" gate={createGate} onClick={() => setCreating(true)} />
       <ListError error={list.error} />
       <DataTable
         rows={list.rows}

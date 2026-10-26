@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
+import { GatedButton } from "../../components/gated-button.tsx";
 import { PageActions } from "../../components/page-actions.tsx";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
@@ -13,6 +14,8 @@ import { productLabel, productUnits, useProductLookup } from "../../hooks/usePro
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { getLanguage, translateText } from "../../i18n.ts";
+import { useSession } from "../../auth.ts";
+import { can, ownerOf } from "../../permissions/staff-permissions.ts";
 import { formatDate, idOf, text, writeJson, type JsonRecord } from "../../staff-api.ts";
 import { type BulkOutcome, formatFailures, summarizeBulk } from "./bulk-summary.ts";
 import { fillTemplate, formatPrice } from "./catalog-format.ts";
@@ -63,6 +66,7 @@ export const PricingPage = (): React.JSX.Element => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const session = useSession();
   const confirm = useConfirm();
   const run = useStaffAction();
   const queryClient = useQueryClient();
@@ -114,7 +118,13 @@ export const PricingPage = (): React.JSX.Element => {
 
   const runBulk = async (action: BulkAction): Promise<void> => {
     const config = BULK[action];
-    const eligible = list.rows.filter((row) => selected.has(idOf(row)) && config.eligible(text(row.status, "")));
+    // A draft the signed-in user created is left out of publishing: the server refuses it (shell Decision 2).
+    const eligible = list.rows.filter(
+      (row) =>
+        selected.has(idOf(row)) &&
+        config.eligible(text(row.status, "")) &&
+        (action !== "publish" || can("price.publish", session, ownerOf(row.createdBy)).allowed),
+    );
     if (eligible.length === 0) return;
     const accepted = await confirm({
       title: config.title,
@@ -152,7 +162,10 @@ export const PricingPage = (): React.JSX.Element => {
   };
 
   const selectedRows = list.rows.filter((row) => selected.has(idOf(row)));
-  const publishable = selectedRows.filter((row) => BULK.publish.eligible(text(row.status, ""))).length;
+  const publishable = selectedRows.filter(
+    (row) =>
+      BULK.publish.eligible(text(row.status, "")) && can("price.publish", session, ownerOf(row.createdBy)).allowed,
+  ).length;
   const archivable = selectedRows.filter((row) => BULK.archive.eligible(text(row.status, ""))).length;
 
   const columns: Column[] = [
@@ -211,9 +224,13 @@ export const PricingPage = (): React.JSX.Element => {
         return (
           <RowActions label={`${translateText("Actions")}: ${productFor(row).label}`}>
             {BULK.publish.eligible(status) ? (
-              <Button size="sm" onClick={() => void transitionOne(row, "publish")}>
+              <GatedButton
+                gate={can("price.publish", session, ownerOf(row.createdBy))}
+                size="sm"
+                onClick={() => void transitionOne(row, "publish")}
+              >
                 {translateText("Publish")}
-              </Button>
+              </GatedButton>
             ) : null}
             {BULK.archive.eligible(status) ? (
               <Button variant="outline" size="sm" onClick={() => void transitionOne(row, "archive")}>
