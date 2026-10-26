@@ -22,7 +22,10 @@ const TRUST_POINTS = [
 export type CartState = "loading" | "failed" | "ready";
 
 type OrderSummaryProps = {
+  /** The ticked lines only: they are what the order, the totals and the button below act on. */
   lines: CheckoutLine[];
+  /** Every line in the cart, so the summary can tell "nothing ticked" apart from "nothing in the cart". */
+  cartLineCount: number;
   totals: CheckoutTotals;
   fulfillmentType: "pickup" | "delivery";
   destinationLabel: string | undefined;
@@ -40,6 +43,7 @@ type OrderSummaryProps = {
 };
 export const OrderSummary = ({
   lines,
+  cartLineCount,
   totals,
   fulfillmentType,
   destinationLabel,
@@ -66,7 +70,13 @@ export const OrderSummary = ({
     <Card>
       <CardHeader className="flex items-center justify-between gap-2">
         <CardTitle>Đơn hàng của bạn</CardTitle>
-        {cartState === "ready" ? <span className="text-xs text-muted">{totals.productCount} sản phẩm</span> : null}
+        {cartState === "ready" ? (
+          <span className="text-xs text-muted">
+            {totals.productCount === cartLineCount
+              ? `${totals.productCount} sản phẩm`
+              : `Đã chọn ${totals.productCount}/${cartLineCount} sản phẩm`}
+          </span>
+        ) : null}
       </CardHeader>
       <CardContent className="grid gap-4">
         {cartState === "loading" ? (
@@ -75,7 +85,7 @@ export const OrderSummary = ({
             <Skeleton className="h-4 w-4/5" />
             <Skeleton className="h-4 w-2/3" />
           </div>
-        ) : cartState === "failed" ? null : lines.length === 0 ? (
+        ) : cartState === "failed" ? null : cartLineCount === 0 ? (
           <div className="grid gap-3">
             <p className="rounded-md bg-surface-soft px-3 py-4 text-center text-sm text-muted">
               Chưa có sản phẩm nào trong giỏ. Chọn thuốc để bắt đầu đơn hàng.
@@ -84,6 +94,10 @@ export const OrderSummary = ({
               Chọn thuốc vào giỏ
             </Button>
           </div>
+        ) : lines.length === 0 ? (
+          <p className="rounded-md bg-surface-soft px-3 py-4 text-center text-sm text-muted">
+            Chưa chọn sản phẩm nào để đặt. Tick các sản phẩm trong giỏ thuốc bạn muốn đặt lần này.
+          </p>
         ) : (
           <>
             <ul className="grid max-h-64 gap-2.5 overflow-y-auto pr-1 text-sm">
@@ -120,8 +134,8 @@ export const OrderSummary = ({
               </p>
               {totals.unpricedCount > 0 ? (
                 <p className="text-danger">
-                  {totals.unpricedCount} sản phẩm chưa có giá niêm yết nên không thể đặt online. Gỡ khỏi giỏ hoặc nhờ
-                  dược sĩ tư vấn.
+                  {totals.unpricedCount} sản phẩm chưa có giá niêm yết nên không thể đặt online. Bỏ chọn, gỡ khỏi giỏ
+                  hoặc nhờ dược sĩ tư vấn.
                 </p>
               ) : null}
               <p>Giá và phí giao hàng được hệ thống tính lại khi bạn xác nhận đặt hàng.</p>

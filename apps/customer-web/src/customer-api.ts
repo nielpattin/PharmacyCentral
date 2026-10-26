@@ -2,6 +2,14 @@ import { apiServiceForPath, createIdentityContextCache, type IdentityContexts } 
 import { z } from "zod";
 
 import { setSessionSnapshot } from "./auth.ts";
+import {
+  addGuestCartLine,
+  readGuestCart,
+  removeGuestCartLines,
+  setGuestCartSelection,
+  storedGuestLines,
+  updateGuestCartLine,
+} from "./storefront/guest-cart.ts";
 import { newUuid } from "./storefront/ids.ts";
 
 export type ApiRequestOptions = RequestInit & {
@@ -137,7 +145,14 @@ export type CatalogStore = {
   coordinates: { latitude: number; longitude: number } | null;
   straightLineMeters?: number;
 };
-export type CartLine = { id: string; productId: string; productUnitId: string; quantity: string };
+export type CartLine = {
+  id: string;
+  productId: string;
+  productUnitId: string;
+  quantity: string;
+  /** Ticked for the next order. Kept by the server for a signed-in shopper and by this browser otherwise. */
+  selected: boolean;
+};
 export type Cart = { id: string; lines: CartLine[] };
 export type DeliveryCalculation = {
   selectedStoreId: string;
@@ -251,6 +266,8 @@ export const listProducts = (query: ProductQuery = {}): Promise<CatalogProduct[]
   return request(`/api/products?${params.toString()}`);
 };
 export const getProduct = (id: string): Promise<CatalogProduct> => request(`/api/products/${id}`);
+/** Shown wherever a prescription-only product is refused; sales-service sends the same text. */
+export const PRESCRIPTION_ONLY_MESSAGE = "Thuốc kê đơn không đặt online. Hãy gửi đơn thuốc hoặc nhờ dược sĩ tư vấn.";
 export const listStores = (): Promise<CatalogStore[]> => request("/api/stores?limit=50");
 export const listNearestStores = (latitude: number, longitude: number, limit = 5): Promise<CatalogStore[]> =>
   request(`/api/stores/nearest?latitude=${latitude}&longitude=${longitude}&limit=${limit}`);
@@ -267,14 +284,82 @@ export const getActivePrice = (productId: string, productUnitId: string): Promis
   request(
     `/api/pricing/active?productId=${productId}&productUnitId=${productUnitId}&effectiveDate=${new Date().toISOString().slice(0, 10)}`,
   );
-export const getCart = (): Promise<Cart> => request("/api/carts");
-export const clearCart = (): Promise<Cart> => request("/api/carts", { method: "DELETE", body: JSON.stringify({}) });
-export const addCartLine = (productId: string, productUnitId: string, quantity: number): Promise<Cart> =>
-  request("/api/carts/lines", { method: "POST", body: JSON.stringify({ productId, productUnitId, quantity }) });
-export const updateCartLine = (lineId: string, quantity: number): Promise<Cart> =>
-  request(`/api/carts/lines/${lineId}`, { method: "PATCH", body: JSON.stringify({ quantity }) });
-export const mergeGuestCart = (): Promise<Cart> =>
-  request("/api/carts/merge", { method: "POST", body: JSON.stringify({}) });
+/**
+ * Cart calls wait for the session to be known. A signed-in shopper's cart is the sales service's; a signed-out
+ * shopper's cart is this browser's, and those calls make no `/api/carts` request at all.
+ */
+const signedIn = async (): Promise<boolean> => (await resolveCustomerSession()) !== undefined;
+
+/** The merge in flight, if any. Reads that start while it runs wait for it rather than sending the same lines again. */
+let lineMerge: Promise<void> | undefined;
+
+/**
+ * Hands the browser's lines to the account cart. The browser keeps the lines unless the server accepts them, so a
+ * failed request leaves them for the next read to send again.
+ */
+const sendStoredLines = async (): Promise<void> => {
+  const lines = storedGuestLines();
+  if (lines.length === 0) return;
+  await request("/api/carts/merge", {
+    method: "POST",
+    body: JSON.stringify({
+      lines: lines.map((line) => ({
+        productId: line.productId,
+        productUnitId: line.productUnitId,
+        quantity: line.quantity,
+        selected: line.selected,
+      })),
+    }),
+  });
+  // Only the lines that were sent leave the browser, so a line added while the request ran is not lost.
+  removeGuestCartLines(lines.map((line) => line.id));
+};
+
+/**
+ * Two reads on one page can both see the lines before either has cleared them. Sending them twice would sum every
+ * quantity twice, so a read that finds a merge running waits for that merge instead of starting another.
+ */
+const mergeStoredLines = (): Promise<void> => {
+  lineMerge ??= sendStoredLines().finally(() => {
+    lineMerge = undefined;
+  });
+  return lineMerge;
+};
+
+/**
+ * The account cart as the signed-in shopper sees it. Lines the browser kept while signed out are merged in first;
+ * a failed merge does not hide the account cart, the lines simply stay in the browser for the next read to retry.
+ */
+export const getCart = async (): Promise<Cart> => {
+  if (!(await signedIn())) return readGuestCart();
+  await mergeStoredLines().catch(() => undefined);
+  return request<Cart>("/api/carts");
+};
+export const addCartLine = async (productId: string, productUnitId: string, quantity: number): Promise<Cart> => {
+  if (!(await signedIn())) {
+    // The signed-out cart never reaches sales-service, so the prescription-only rule is checked against catalog here
+    // (BR-ORD-011). A signed-in shopper is checked by sales-service itself.
+    if ((await getProduct(productId)).prescriptionRequired)
+      throw new ApiError(409, PRESCRIPTION_ONLY_MESSAGE, "prescription_required");
+    return addGuestCartLine(productId, productUnitId, quantity);
+  }
+  return request<Cart>("/api/carts/lines", {
+    method: "POST",
+    body: JSON.stringify({ productId, productUnitId, quantity }),
+  });
+};
+export const updateCartLine = async (lineId: string, quantity: number): Promise<Cart> => {
+  if (!(await signedIn())) return updateGuestCartLine(lineId, quantity);
+  return request<Cart>(`/api/carts/lines/${lineId}`, { method: "PATCH", body: JSON.stringify({ quantity }) });
+};
+/** Ticks or unticks these lines for the next order, or every line when `lineIds` is left out. */
+export const setCartSelection = async (selected: boolean, lineIds?: string[]): Promise<Cart> => {
+  if (!(await signedIn())) return setGuestCartSelection(selected, lineIds);
+  return request<Cart>("/api/carts/selection", {
+    method: "PATCH",
+    body: JSON.stringify(lineIds ? { selected, lineIds } : { selected }),
+  });
+};
 export const calculateDelivery = (
   selectedStoreId: string,
   destination: { latitude: number; longitude: number },
@@ -299,7 +384,8 @@ export const createOrder = (input: {
   selectedStoreId: string;
   fulfillmentType: "pickup" | "delivery";
   paymentMethod: "sepay_qr" | "cash_on_delivery";
-  lines: Array<{ productId: string; productUnitId: string; quantity: number }>;
+  /** Orders the ticked lines of the signed-in shopper's cart; the server reads them and removes them once ordered. */
+  fromCart: true;
   delivery?: { destination: { latitude: number; longitude: number }; addressNote?: string };
 }): Promise<CustomerOrderDetail> =>
   request("/api/orders", { method: "POST", body: JSON.stringify(input), idempotencyKey: newUuid() });
@@ -477,12 +563,19 @@ export const updateProfile = (input: { displayName?: string; phoneNumber?: strin
   request("/api/auth/me", { method: "PATCH", body: JSON.stringify(input) });
 export const registerCustomer = (email: string, password: string, displayName: string) =>
   request("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password, displayName }) });
-export const loginCustomer = (email: string, password: string) =>
-  request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+export const loginCustomer = async (email: string, password: string): Promise<Customer> => {
+  const customer = await request<Customer>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  forgetSessionProbe();
+  return customer;
+};
 
-/** Signing out also drops the signed internal-context cache, so a later guest call cannot replay the old identity. */
+/** Signing out also drops the signed internal-context cache, so a later signed-out call cannot replay the old identity. */
 export const logoutCustomer = async (): Promise<void> => {
   await request("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
+  forgetSessionProbe();
   setSessionSnapshot({ authenticated: false, resolved: true });
   setIdentityContextsEnabled(false);
 };
@@ -496,6 +589,7 @@ export const changePassword = async (currentPassword: string, nextPassword: stri
     method: "POST",
     body: JSON.stringify({ currentPassword, nextPassword }),
   });
+  forgetSessionProbe();
   setSessionSnapshot({ authenticated: false, resolved: true });
   setIdentityContextsEnabled(false);
 };
@@ -503,12 +597,24 @@ export const changePassword = async (currentPassword: string, nextPassword: stri
 export const currentUser = (): Promise<Customer | undefined> => request("/api/auth/me");
 
 /**
- * Resolves the shopper's session for a page that can be opened directly: probes the session cookie and publishes the
- * answer, so a deep link or a reload shows the right UI instead of guessing "signed out".
+ * The session answer shared by every caller until the browser's sign-in state changes. A page load asks at once from
+ * the header, the layout, the checkout and the cart, and each of them must get the same answer from one probe.
  */
-export const resolveCustomerSession = async (): Promise<Customer | undefined> => {
+let sessionProbe: Promise<Customer | undefined> | undefined;
+
+/** Sign-in and sign-out change the answer, and so does a failed probe: the next caller asks the server again. */
+const forgetSessionProbe = (): void => {
+  sessionProbe = undefined;
+};
+
+const probeCustomerSession = async (): Promise<Customer | undefined> => {
   await request("/api/auth/csrf");
-  const customer = await currentUser().catch(() => undefined);
+  // Only a 401 means "signed out". Any other failure must not be remembered as signed out, or a signed-in shopper's
+  // cart would stay hidden until the next sign-in.
+  const customer = await currentUser().catch((reason: unknown) => {
+    if (reason instanceof ApiError && reason.status === 401) return undefined;
+    throw reason;
+  });
   if (!customer) {
     setSessionSnapshot({ authenticated: false, resolved: true });
     return undefined;
@@ -516,6 +622,18 @@ export const resolveCustomerSession = async (): Promise<Customer | undefined> =>
   setSessionSnapshot({ authenticated: true, resolved: true, userId: customer.id });
   setIdentityContextsEnabled(true);
   return customer;
+};
+
+/**
+ * Resolves the shopper's session for a page that can be opened directly: probes the session cookie and publishes the
+ * answer, so a deep link or a reload shows the right UI instead of guessing "signed out".
+ */
+export const resolveCustomerSession = (): Promise<Customer | undefined> => {
+  sessionProbe ??= probeCustomerSession().catch((reason: unknown) => {
+    forgetSessionProbe();
+    throw reason;
+  });
+  return sessionProbe;
 };
 
 /** The service rejects a shorter prefix, and one letter matches most Vietnamese street names. */

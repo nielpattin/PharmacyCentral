@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { addCartLine } from "../customer-api.ts";
+import { addCartLine, setCartSelection } from "../customer-api.ts";
 import { writeCart } from "../storefront/cart-cache.ts";
 
 type AddToCartInput = {
@@ -10,6 +10,8 @@ type AddToCartInput = {
   quantity: number;
   /** Only used for the confirmation message shown to the shopper. */
   productName: string;
+  /** Tick the line once it is in the cart, for a shopper who means to order it now ("Mua ngay"). */
+  selectAfterAdding?: boolean;
 };
 
 type Feedback = { kind: "notice" | "error"; message: string };
@@ -42,8 +44,16 @@ export const useAddToCart = (): AddToCart => {
   const inFlightProductId = useRef<string | undefined>(undefined);
 
   const mutation = useMutation({
-    mutationFn: ({ productId, productUnitId, quantity }: AddToCartInput) =>
-      addCartLine(productId, productUnitId, quantity),
+    mutationFn: async ({ productId, productUnitId, quantity, selectAfterAdding }: AddToCartInput) => {
+      const cart = await addCartLine(productId, productUnitId, quantity);
+      const line = selectAfterAdding
+        ? cart.lines.find((candidate) => candidate.productId === productId && candidate.productUnitId === productUnitId)
+        : undefined;
+      if (!line) return cart;
+      // The product is already in the cart. If ticking it fails, the shopper still reaches the order page with the
+      // line unticked and can tick it there, so the add is not reported as failed.
+      return setCartSelection(true, [line.id]).catch(() => cart);
+    },
     onSuccess: (cart) => {
       writeCart(queryClient, cart);
     },

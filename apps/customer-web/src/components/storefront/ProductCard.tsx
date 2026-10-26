@@ -69,10 +69,10 @@ export const ProductCard = ({
         className="mt-3 w-full"
         size="sm"
         variant={unavailable ? "secondary" : "primary"}
-        disabled={adding || !unit}
+        disabled={adding || !unit || product.prescriptionRequired}
         onClick={() => unit && onAdd(product, unit)}
       >
-        {adding ? "Đang thêm..." : "Chọn mua"}
+        {product.prescriptionRequired ? "Cần đơn thuốc" : adding ? "Đang thêm..." : "Chọn mua"}
       </Button>
     </article>
   );

@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { getCart, listProducts } from "../../customer-api.ts";
+import { cartQueryKey } from "../../storefront/cart-cache.ts";
 import { uniqueCategories } from "../../storefront/catalog.ts";
 import { buildCategoryPages } from "../../storefront/navigation.ts";
 import { BrandMark } from "./BrandMark.tsx";
@@ -44,7 +45,7 @@ export const SiteHeader = ({
   activeSlug,
   onSearch,
 }: SiteHeaderProps): React.JSX.Element => {
-  const cartQuery = useQuery({ queryKey: ["cart"], queryFn: getCart, retry: false });
+  const cartQuery = useQuery({ queryKey: cartQueryKey, queryFn: getCart, retry: false });
   const cartCount = cartQuery.data?.lines.reduce((total, line) => total + Number(line.quantity), 0) ?? 0;
   // The category bar is the same on every storefront page, so the header reads the catalogue query Home uses.
   const taxonomyQuery = useQuery({

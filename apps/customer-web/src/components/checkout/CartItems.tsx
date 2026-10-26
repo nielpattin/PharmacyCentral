@@ -86,6 +86,8 @@ type CartItemsProps = {
   busy: boolean;
   onQuantityChange: (line: CheckoutLine, quantity: number) => void;
   onRemove: (line: CheckoutLine) => void;
+  onToggleLine: (line: CheckoutLine) => void;
+  onToggleAll: () => void;
   onBrowse: () => void;
 };
 
@@ -95,6 +97,8 @@ export const CartItems = ({
   busy,
   onQuantityChange,
   onRemove,
+  onToggleLine,
+  onToggleAll,
   onBrowse,
 }: CartItemsProps): React.JSX.Element => {
   if (lines.length === 0) {
@@ -116,70 +120,94 @@ export const CartItems = ({
     );
   }
 
+  const selectedCount = lines.filter((line) => line.selected).length;
+  const checkboxClass =
+    "size-4 shrink-0 rounded border-line accent-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/50";
+
   return (
-    <ul className="divide-y divide-line">
-      {lines.map((line) => {
-        const pending = pendingLineId === line.id;
-        return (
-          <li key={line.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-4">
-            <Link className="shrink-0" href={`/san-pham/${line.productId}`}>
-              <ProductTile
-                name={line.productName}
-                seed={line.sku ?? line.productId}
-                imageUrl={line.imageUrl}
-                className="size-20"
-                monogramClassName="text-lg"
+    <div>
+      <label className="flex min-h-10 w-fit cursor-pointer items-center gap-2.5 pb-2 text-sm font-medium text-ink">
+        <input
+          type="checkbox"
+          className={checkboxClass}
+          checked={selectedCount === lines.length}
+          disabled={busy}
+          onChange={onToggleAll}
+        />
+        Chọn tất cả ({selectedCount}/{lines.length})
+      </label>
+      <ul className="divide-y divide-line border-t border-line">
+        {lines.map((line) => {
+          const pending = pendingLineId === line.id;
+          return (
+            <li key={line.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-4">
+              <input
+                type="checkbox"
+                className={cn(checkboxClass, "max-sm:size-5")}
+                aria-label={`Chọn ${line.productName} để đặt hàng`}
+                checked={line.selected}
+                disabled={busy}
+                onChange={() => onToggleLine(line)}
               />
-            </Link>
-            <div className="min-w-0 flex-1">
-              <Link
-                className="line-clamp-2 text-[15px] font-medium text-ink hover:text-primary"
-                href={`/san-pham/${line.productId}`}
-              >
-                {line.productName}
-              </Link>
-              <p className="mt-0.5 line-clamp-1 text-xs text-muted">
-                {line.unitName ? `${line.unitName} · ` : ""}
-                {line.sku ? `SKU ${line.sku}` : "Đơn vị bán theo nhà thuốc"}
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-primary">
-                  {line.unitPrice === undefined ? "Liên hệ báo giá" : formatMoney(line.unitPrice, line.currency)}
-                </span>
-                {line.unitName && line.unitPrice !== undefined ? (
-                  <span className="text-xs text-muted">/ {line.unitName}</span>
-                ) : null}
-                {line.available === false ? <Badge variant="danger">Có thể hết hàng</Badge> : null}
-              </div>
-            </div>
-            <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
-              <div className="flex items-center gap-1.5">
-                <QuantityStepper
-                  quantity={line.quantity}
-                  productName={line.productName}
-                  disabled={busy || pending}
-                  pending={pending}
-                  onChange={(quantity) => onQuantityChange(line, quantity)}
+              <Link className="shrink-0" href={`/san-pham/${line.productId}`}>
+                <ProductTile
+                  name={line.productName}
+                  seed={line.sku ?? line.productId}
+                  imageUrl={line.imageUrl}
+                  className="size-20"
+                  monogramClassName="text-lg"
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted hover:bg-danger-soft hover:text-danger-ink max-sm:min-h-10 max-sm:min-w-10"
-                  aria-label={`Xoá ${line.productName} khỏi giỏ`}
-                  disabled={busy || pending}
-                  onClick={() => onRemove(line)}
+              </Link>
+              <div className="min-w-0 flex-1">
+                <Link
+                  className="line-clamp-2 text-[15px] font-medium text-ink hover:text-primary"
+                  href={`/san-pham/${line.productId}`}
                 >
-                  <IconTrash className="size-4" />
-                </Button>
+                  {line.productName}
+                </Link>
+                <p className="mt-0.5 line-clamp-1 text-xs text-muted">
+                  {line.unitName ? `${line.unitName} · ` : ""}
+                  {line.sku ? `SKU ${line.sku}` : "Đơn vị bán theo nhà thuốc"}
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-primary">
+                    {line.unitPrice === undefined ? "Liên hệ báo giá" : formatMoney(line.unitPrice, line.currency)}
+                  </span>
+                  {line.unitName && line.unitPrice !== undefined ? (
+                    <span className="text-xs text-muted">/ {line.unitName}</span>
+                  ) : null}
+                  {line.available === false ? <Badge variant="danger">Có thể hết hàng</Badge> : null}
+                </div>
               </div>
-              <p className="w-24 shrink-0 text-right text-sm font-bold text-ink max-sm:w-auto max-sm:min-w-0 max-sm:shrink">
-                {line.lineTotal === undefined ? "—" : formatMoney(line.lineTotal, line.currency)}
-              </p>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+              <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
+                <div className="flex items-center gap-1.5">
+                  <QuantityStepper
+                    quantity={line.quantity}
+                    productName={line.productName}
+                    disabled={busy || pending}
+                    pending={pending}
+                    onChange={(quantity) => onQuantityChange(line, quantity)}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted hover:bg-danger-soft hover:text-danger-ink max-sm:min-h-10 max-sm:min-w-10"
+                    aria-label={`Xoá ${line.productName} khỏi giỏ`}
+                    disabled={busy || pending}
+                    onClick={() => onRemove(line)}
+                  >
+                    <IconTrash className="size-4" />
+                  </Button>
+                </div>
+                <p className="w-24 shrink-0 text-right text-sm font-bold text-ink max-sm:w-auto max-sm:min-w-0 max-sm:shrink">
+                  {line.lineTotal === undefined ? "—" : formatMoney(line.lineTotal, line.currency)}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 };

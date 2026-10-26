@@ -145,10 +145,14 @@ const SuggestionRow = ({
           size="sm"
           className="shrink-0 sm:w-full"
           variant={unavailable ? "secondary" : "primary"}
-          disabled={addingProductId === product.id || !unit}
+          disabled={addingProductId === product.id || !unit || product.prescriptionRequired}
           onClick={() => unit && onAdd(product, unit)}
         >
-          {addingProductId === product.id ? "Đang thêm..." : "Chọn mua"}
+          {product.prescriptionRequired
+            ? "Cần đơn thuốc"
+            : addingProductId === product.id
+              ? "Đang thêm..."
+              : "Chọn mua"}
         </Button>
       </div>
     </div>
@@ -269,11 +273,17 @@ export const PrescriptionResults = ({
 
   const orderedMatches = lines.map((line) => orderForStore(line.matches, catalog.stockIndex));
   // What each line would be filled with: its first suggestion that differs from it in nothing, is not out of stock
-  // at the chosen store and has a unit to sell. A line with none is one the pharmacists are asked about.
+  // at the chosen store and has a unit to sell. A line with none is one the pharmacists are asked about. A
+  // prescription-only product is never picked, because it cannot go into the cart (BR-ORD-011).
   const linePicks = orderedMatches.map((matches): BestPick | undefined => {
     for (const match of matches) {
       const unit = activeUnit(match.product);
-      if (unit && !differsFromLine(match) && catalog.stockIndex.get(match.product.id) !== false) {
+      if (
+        unit &&
+        !match.product.prescriptionRequired &&
+        !differsFromLine(match) &&
+        catalog.stockIndex.get(match.product.id) !== false
+      ) {
         return { product: match.product, unit, price: priceFor(catalog.priceIndex, match.product.id, unit.id) };
       }
     }

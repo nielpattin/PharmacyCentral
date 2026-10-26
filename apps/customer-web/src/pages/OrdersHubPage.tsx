@@ -21,7 +21,6 @@ import {
   addCartLine,
   ApiError,
   calculateDelivery,
-  clearCart,
   createOrder,
   createPaymentInvoice,
   getCart,
@@ -31,10 +30,10 @@ import {
   listProducts,
   listPublishedPrices,
   listStores,
-  mergeGuestCart,
   resolveAddressSuggestion,
   resolveCustomerSession,
   saveDeliveryAddress,
+  setCartSelection,
   updateCartLine,
   type CatalogProduct,
   type CatalogUnit,
@@ -57,7 +56,7 @@ import { CartFeedback } from "../components/storefront/CartFeedback.tsx";
 import { StoreBreadcrumb } from "../components/storefront/StoreBreadcrumb.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
-import { checkoutQueryKey, writeCart, writeDeliveryAddresses } from "../storefront/cart-cache.ts";
+import { cartQueryKey, checkoutQueryKey, writeCart, writeDeliveryAddresses } from "../storefront/cart-cache.ts";
 import { buildPriceIndex, buildStockIndex, uniqueCategories } from "../storefront/catalog.ts";
 import { buildCheckoutLines, checkoutTotals, type CheckoutLine } from "../storefront/checkout.ts";
 import { formatMoney } from "../storefront/format.ts";
@@ -176,17 +175,15 @@ export const OrdersHubPage = (): React.JSX.Element => {
   const checkoutQuery = useQuery({
     queryKey: checkoutQueryKey,
     queryFn: async () => {
-      const [products, stores, loadedCart, customer] = await Promise.all([
+      const [products, stores, cart, customer] = await Promise.all([
         listProducts(),
         listStores(),
+        // Merges the lines kept while signed out, so the cart read here is already the account's.
         getCart(),
         resolveCustomerSession(),
       ]);
-      let cart = loadedCart;
-      let addresses: DeliveryAddress[] = [];
-      if (customer) {
-        [addresses, cart] = await Promise.all([listDeliveryAddresses(), mergeGuestCart().catch(() => loadedCart)]);
-      }
+      // Saved addresses belong to the account, so a signed-out visitor has none to read.
+      const addresses: DeliveryAddress[] = customer ? await listDeliveryAddresses() : [];
       return {
         products,
         stores,
@@ -262,13 +259,14 @@ export const OrdersHubPage = (): React.JSX.Element => {
     return quantities;
   }, [cartLines]);
 
+  const orderedLines = useMemo(() => cartLines.filter((line) => line.selected), [cartLines]);
   const shippingFee = fulfillmentType === "delivery" ? delivery?.fee : undefined;
-  const totals = useMemo(() => checkoutTotals(cartLines, shippingFee), [cartLines, shippingFee]);
+  const totals = useMemo(() => checkoutTotals(orderedLines, shippingFee), [orderedLines, shippingFee]);
   const step: CheckoutStep = placed ? 3 : cartLines.length === 0 ? 1 : 2;
   // A delivery order needs the fee of the point the shopper picked; without it the order would fall back to the default point.
   const deliveryPending = fulfillmentType === "delivery" && !delivery;
   const canSubmit = Boolean(
-    cartLines.length &&
+    orderedLines.length &&
     session.authenticated &&
     (fulfillmentType === "pickup" || selectedStore) &&
     !deliveryPending &&
@@ -280,13 +278,28 @@ export const OrdersHubPage = (): React.JSX.Element => {
     ? "Đăng nhập tài khoản khách hàng để đặt hàng."
     : cartLines.length === 0
       ? "Thêm thuốc vào giỏ để đặt hàng."
-      : !selectedStore
-        ? "Chọn nhà thuốc xuất đơn."
-        : deliveryPending
-          ? "Chọn điểm giao và bấm “Tính phí giao hàng” trước khi đặt."
-          : totals.unpricedCount > 0
-            ? "Gỡ các sản phẩm chưa có giá khỏi giỏ hoặc nhờ dược sĩ tư vấn."
-            : undefined;
+      : orderedLines.length === 0
+        ? "Tick ít nhất một sản phẩm trong giỏ để đặt hàng."
+        : !selectedStore
+          ? "Chọn nhà thuốc xuất đơn."
+          : deliveryPending
+            ? "Chọn điểm giao và bấm “Tính phí giao hàng” trước khi đặt."
+            : totals.unpricedCount > 0
+              ? "Bỏ chọn hoặc gỡ các sản phẩm chưa có giá khỏi giỏ, hoặc nhờ dược sĩ tư vấn."
+              : undefined;
+
+  /** The tick is kept by the server, so a reload shows the same lines ticked. Busy holds the order button meanwhile. */
+  const changeSelection = async (selected: boolean, lineIds?: string[]): Promise<void> => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      writeCart(queryClient, await setCartSelection(selected, lineIds));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Không cập nhật được lựa chọn trong giỏ");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const changeLineQuantity = async (line: CheckoutLine, quantity: number): Promise<void> => {
     setPendingLineId(line.id);
@@ -444,7 +457,7 @@ export const OrdersHubPage = (): React.JSX.Element => {
   };
 
   const placeOrder = async (): Promise<void> => {
-    if (!selectedStore || !cart?.lines.length) return;
+    if (!selectedStore || orderedLines.length === 0) return;
     setBusy(true);
     setError(undefined);
     let order: CustomerOrderDetail | undefined;
@@ -453,20 +466,18 @@ export const OrdersHubPage = (): React.JSX.Element => {
         selectedStoreId: selectedStore.id,
         fulfillmentType,
         paymentMethod,
-        lines: cart.lines.map((line) => ({
-          productId: line.productId,
-          productUnitId: line.productUnitId,
-          quantity: Number(line.quantity),
-        })),
+        fromCart: true,
         ...(fulfillmentType === "delivery"
           ? { delivery: { destination, ...(addressNote ? { addressNote } : {}) } }
           : {}),
       });
       order = created;
-      // The order exists from here on: the orders tab is refreshed now rather than after the payment step below, and
-      // the cart is emptied now so a failed payment step cannot leave the same items to be ordered a second time.
+      // The order exists from here on: the orders tab is refreshed now rather than after the payment step below. The
+      // server took the ordered lines out of the cart with the order, so a failed payment step cannot leave the same
+      // items to be ordered a second time; the lines the shopper left unticked stay for a later order.
       void queryClient.invalidateQueries({ queryKey: ["customer-orders"] });
-      writeCart(queryClient, await clearCart());
+      void queryClient.invalidateQueries({ queryKey: cartQueryKey });
+      void queryClient.invalidateQueries({ queryKey: checkoutQueryKey });
       const invoice = await createPaymentInvoice({
         invoiceId: created.id,
         orderId: created.id,
@@ -617,6 +628,8 @@ export const OrdersHubPage = (): React.JSX.Element => {
                       busy={busy}
                       onQuantityChange={(line, quantity) => void changeLineQuantity(line, quantity)}
                       onRemove={(line) => void removeLine(line)}
+                      onToggleLine={(line) => void changeSelection(!line.selected, [line.id])}
+                      onToggleAll={() => void changeSelection(orderedLines.length !== cartLines.length)}
                       onBrowse={() => scrollToSection(PRODUCTS_SECTION_ID)}
                     />
                   ) : cartState === "loading" ? (
@@ -689,7 +702,8 @@ export const OrdersHubPage = (): React.JSX.Element => {
 
             <aside className="lg:sticky lg:top-5">
               <OrderSummary
-                lines={cartLines}
+                lines={orderedLines}
+                cartLineCount={cartLines.length}
                 totals={totals}
                 cartState={cartState}
                 fulfillmentType={fulfillmentType}

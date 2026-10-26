@@ -131,11 +131,11 @@ export const ProductPicker = ({
                   size="sm"
                   variant={inCart > 0 ? "outline" : "primary"}
                   className="shrink-0 rounded-full px-4 max-sm:min-h-10 max-sm:min-w-10"
-                  disabled={busy || adding || !unit}
+                  disabled={busy || adding || !unit || product.prescriptionRequired}
                   onClick={() => unit && onAdd(product, unit)}
                 >
-                  <IconPlus className="size-3.5" />
-                  {adding ? "Đang thêm" : "Thêm"}
+                  {product.prescriptionRequired ? null : <IconPlus className="size-3.5" />}
+                  {product.prescriptionRequired ? "Cần đơn thuốc" : adding ? "Đang thêm" : "Thêm"}
                 </Button>
               </li>
             );

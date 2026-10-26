@@ -113,6 +113,7 @@ export const ProductDetailPage = (): React.JSX.Element => {
       productUnitId: unit.id,
       quantity,
       productName: product.name,
+      selectAfterAdding: buyNow,
     });
     if (added && buyNow) void navigate({ to: "/don-hang" });
   };
@@ -237,37 +238,39 @@ export const ProductDetailPage = (): React.JSX.Element => {
                         )}
                       </label>
 
-                      <div className="space-y-1 text-sm">
-                        <span className="block text-muted">Số lượng</span>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            aria-label="Giảm số lượng"
-                            disabled={quantity <= 1}
-                            onClick={() => setQuantityText(String(quantity - 1))}
-                          >
-                            −
-                          </Button>
-                          <Input
-                            aria-label="Số lượng"
-                            inputMode="numeric"
-                            className="h-9 w-16 text-center"
-                            value={quantityText}
-                            onChange={(event) => setQuantityText(event.target.value.replace(/\D/g, "").slice(0, 3))}
-                            onBlur={() => setQuantityText(String(quantity))}
-                          />
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            aria-label="Tăng số lượng"
-                            disabled={quantity >= MAX_QUANTITY}
-                            onClick={() => setQuantityText(String(quantity + 1))}
-                          >
-                            +
-                          </Button>
+                      {product.prescriptionRequired ? null : (
+                        <div className="space-y-1 text-sm">
+                          <span className="block text-muted">Số lượng</span>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              aria-label="Giảm số lượng"
+                              disabled={quantity <= 1}
+                              onClick={() => setQuantityText(String(quantity - 1))}
+                            >
+                              −
+                            </Button>
+                            <Input
+                              aria-label="Số lượng"
+                              inputMode="numeric"
+                              className="h-9 w-16 text-center"
+                              value={quantityText}
+                              onChange={(event) => setQuantityText(event.target.value.replace(/\D/g, "").slice(0, 3))}
+                              onBlur={() => setQuantityText(String(quantity))}
+                            />
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              aria-label="Tăng số lượng"
+                              disabled={quantity >= MAX_QUANTITY}
+                              onClick={() => setQuantityText(String(quantity + 1))}
+                            >
+                              +
+                            </Button>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ) : (
                     <Alert variant="danger" className="mt-4">
@@ -275,27 +278,36 @@ export const ProductDetailPage = (): React.JSX.Element => {
                     </Alert>
                   )}
 
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <Button
-                      className="sm:flex-1"
-                      size="lg"
-                      variant={unavailable ? "secondary" : "primary"}
-                      disabled={adding || !unit}
-                      onClick={() => void addToCart(false)}
-                    >
-                      <IconCart />
-                      {adding ? "Đang thêm..." : "Thêm vào giỏ hàng"}
-                    </Button>
-                    <Button
-                      className="sm:flex-1"
-                      size="lg"
-                      variant="outline"
-                      disabled={adding || !unit}
-                      onClick={() => void addToCart(true)}
-                    >
-                      Mua ngay
-                    </Button>
-                  </div>
+                  {product.prescriptionRequired ? (
+                    <Alert variant="warning" className="mt-4" heading="Thuốc kê đơn không đặt online">
+                      Gửi đơn thuốc để dược sĩ hỗ trợ, hoặc đến nhà thuốc để mua theo đơn.
+                      <Link className="mt-2 block font-medium underline" href="/gui-don-thuoc">
+                        Gửi đơn thuốc
+                      </Link>
+                    </Alert>
+                  ) : (
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        className="sm:flex-1"
+                        size="lg"
+                        variant={unavailable ? "secondary" : "primary"}
+                        disabled={adding || !unit}
+                        onClick={() => void addToCart(false)}
+                      >
+                        <IconCart />
+                        {adding ? "Đang thêm..." : "Thêm vào giỏ hàng"}
+                      </Button>
+                      <Button
+                        className="sm:flex-1"
+                        size="lg"
+                        variant="outline"
+                        disabled={adding || !unit}
+                        onClick={() => void addToCart(true)}
+                      >
+                        Mua ngay
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Commitments sit with the buy box rather than under the photo, which also balances the two

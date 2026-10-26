@@ -5,12 +5,11 @@ import { useState } from "react";
 import { Button, Field, Input } from "@pharmacy/ui";
 
 import {
+  getCart,
   listDeliveryAddresses,
   loginCustomer,
-  mergeGuestCart,
   registerCustomer,
   setIdentityContextsEnabled,
-  type Customer,
 } from "../../customer-api.ts";
 import { setSessionSnapshot } from "../../auth.ts";
 import { accountQueryKey, checkoutQueryKey, mergeCartIntoCaches } from "../../storefront/cart-cache.ts";
@@ -46,11 +45,11 @@ export const CustomerAuthForm = ({ onSignedIn, onSignedUp }: CustomerAuthFormPro
           return;
         }
 
-        const customer = (await loginCustomer(value.email, value.password)) as Customer;
+        const customer = await loginCustomer(value.email, value.password);
         setSessionSnapshot({ authenticated: true, resolved: true, userId: customer.id });
         setIdentityContextsEnabled(true);
-        // A guest cart accumulated under a different identity has to land in the account before the shopper can order.
-        const [nextCart, nextAddresses] = await Promise.all([mergeGuestCart(), listDeliveryAddresses()]);
+        // The cart read sends the lines kept while signed out, so the cart shown after sign-in is the account's.
+        const [nextCart, nextAddresses] = await Promise.all([getCart(), listDeliveryAddresses()]);
         mergeCartIntoCaches(queryClient, nextCart, nextAddresses);
         // The header and the account page both read the name from this payload.
         queryClient.setQueryData(accountQueryKey, { customer, addresses: nextAddresses });

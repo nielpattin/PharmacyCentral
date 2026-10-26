@@ -14,6 +14,8 @@ export type CheckoutLine = {
   imageUrl: string | null | undefined;
   unitName: string | undefined;
   quantity: number;
+  /** Ticked for the next order: the summary, the totals and the order itself cover only these lines. */
+  selected: boolean;
   currency: string;
   unitPrice: number | undefined;
   lineTotal: number | undefined;
@@ -53,6 +55,7 @@ export const buildCheckoutLines = (
       imageUrl: product?.imageUrl,
       unitName: unit?.unitName,
       quantity: Number.isFinite(quantity) ? quantity : 0,
+      selected: line.selected,
       currency: price?.currency ?? "VND",
       unitPrice,
       lineTotal: unitPrice === undefined ? undefined : unitPrice * quantity,

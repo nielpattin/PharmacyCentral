@@ -30,7 +30,7 @@ import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
 import { IconPin, IconReceipt, IconShield, IconUser } from "../components/storefront/icons.tsx";
 import type { AccountSection } from "../router.ts";
-import { accountQueryKey, checkoutQueryKey, writeDeliveryAddresses } from "../storefront/cart-cache.ts";
+import { accountQueryKey, cartQueryKey, checkoutQueryKey, writeDeliveryAddresses } from "../storefront/cart-cache.ts";
 import { formatDateTime, formatMoney, initials } from "../storefront/format.ts";
 
 /** Both states the page shows before it can answer: an empty list must never stand in for either of them. */
@@ -136,6 +136,8 @@ export const AccountPage = (): React.JSX.Element => {
       queryClient.removeQueries({ queryKey: ["customer-prescriptions"] });
       queryClient.removeQueries({ queryKey: ["customer-prescription-consultations"] });
       queryClient.removeQueries({ queryKey: checkoutQueryKey });
+      // The header now shows this browser's cart, so the cart is read again rather than kept from the account.
+      void queryClient.resetQueries({ queryKey: cartQueryKey });
       void navigate({ to: "/" });
     } catch (reason) {
       announce({
@@ -306,7 +308,12 @@ export const AccountPage = (): React.JSX.Element => {
     if (section === "mat-khau") {
       return (
         <ChangePasswordCard
-          onChanged={() => announce({ kind: "notice", message: "Đã đổi mật khẩu. Hãy đăng nhập lại." })}
+          onChanged={() => {
+            // The browser is signed out now: drop the account's checkout copy and read this browser's cart instead.
+            queryClient.removeQueries({ queryKey: checkoutQueryKey });
+            void queryClient.resetQueries({ queryKey: cartQueryKey });
+            announce({ kind: "notice", message: "Đã đổi mật khẩu. Hãy đăng nhập lại." });
+          }}
         />
       );
     }

@@ -38,8 +38,9 @@ export const writeDeliveryAddresses = (queryClient: QueryClient, addresses: Deli
 };
 
 /**
- * A shopper who signs in may have filled a guest cart first: the merged cart and the addresses behind that identity
- * have to reach the checkout cache, or its delivery panel offers the previous visitor's saved points.
+ * A shopper who signs in may have filled the cart while signed out: the account cart, which now holds those lines, and
+ * the addresses behind that identity have to reach the checkout cache, or its delivery panel offers the previous
+ * visitor's saved points.
  */
 export const mergeCartIntoCaches = (queryClient: QueryClient, cart: Cart, addresses: DeliveryAddress[]): void => {
   writeCart(queryClient, cart);
