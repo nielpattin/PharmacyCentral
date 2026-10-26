@@ -248,6 +248,9 @@ catalogs:
     pino:
       specifier: 10.3.1
       version: 10.3.1
+    portless:
+      specifier: 0.15.11
+      version: 0.15.11
     qrcode:
       specifier: 1.5.4
       version: 1.5.4
@@ -317,6 +320,9 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.0
+      portless:
+        specifier: 'catalog:'
+        version: 0.15.11
       typescript:
         specifier: npm:@typescript/typescript6@6.0.2
         version: '@typescript/typescript6@6.0.2'
@@ -4677,6 +4683,12 @@ packages:
     resolution: {integrity: sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw==}
     engines: {node: '>=10.13.0'}
 
+  portless@0.15.11:
+    resolution: {integrity: sha512-2qjRJ0CG3zPOJ3mUVPdEZjivd7KV/ldiUwhYGI0fdxPVKDjv77GFVmioLQFWoDqNz5paG+4yk+Tibmgtil3Otg==}
+    engines: {node: '>=24'}
+    os: [darwin, linux, win32]
+    hasBin: true
+
   postal-mime@2.7.5:
     resolution: {integrity: sha512-GNEXKvWFQnbgO5NlrGzVa0FmWzBZ24PersAWErttSg1Hjpf0ATxTwS5DOMGaOpTG6bUh5cTr7xi0jAD942wCJA==}
 
@@ -8792,6 +8804,8 @@ snapshots:
       thread-stream: 4.2.0
 
   pngjs@5.0.0: {}
+
+  portless@0.15.11: {}
 
   postal-mime@2.7.5: {}
 

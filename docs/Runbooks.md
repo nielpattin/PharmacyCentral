@@ -52,6 +52,20 @@ Run a subset by project name (the real names live in `apps/*/package.json`). `ga
 pnpm nx run-many -t dev -p @pharmacy/sales-service @pharmacy/customer-web
 ```
 
+### Named local URLs
+
+`pnpm run urls:up` starts a [portless](https://github.com/vercel-labs/portless) proxy on `127.0.0.1:80` and registers three names that point at the fixed ports, for `pnpm dev` and for the container stack alike:
+
+| URL | Target |
+| --- | --- |
+| `http://customer.pharmacy.localhost` | customer-web (`CUSTOMER_WEB_PORT`) |
+| `http://staff.pharmacy.localhost` | staff-web (`STAFF_WEB_PORT`) |
+| `http://api.pharmacy.localhost` | gateway (`GATEWAY_PORT`) |
+
+Each name is a separate browser origin. On `localhost` the customer and staff apps share one cookie jar (cookies ignore the port), so signing in to one signs the other out; on the named URLs both stay signed in side by side. `*.localhost` is a secure context in browsers, so `crypto` APIs that need HTTPS work without a certificate. The proxy is plain HTTP; run `pnpm exec portless proxy stop`, then `pnpm exec portless proxy start` for HTTPS (it asks to trust a local CA).
+
+Chrome, Edge and Firefox resolve `*.localhost` themselves. `curl` does too; Node scripts and Safari may not, so `API_BASE_URL` stays `http://localhost:8080` and `pnpm run dev:data` is unchanged. `pnpm run urls:down` removes the routes and stops the proxy; `pnpm exec portless doctor` checks it. Port 80 must be free; if another program holds it, `urls:up` fails with the portless error.
+
 The web ports are `CUSTOMER_WEB_PORT` (5301) and `STAFF_WEB_PORT` (5302) in the root `.env`. Vite sets `strictPort`, so a busy port makes the app fail instead of moving to another port.
 
 Ports come from `<SVC>_PORT` in the root `.env`. Nx loads `apps/<svc>-service/.env.dev` for the `dev` target before the root `.env`, so it wins over the root `.env`'s shared `PORT=3000`; each service binds its own port and gets its own `DATABASE_URL`. Run apps through Nx: `pnpm --dir apps/<app> dev` bypasses Nx and skips `.env.dev`, so every service would collide on `PORT=3000`.

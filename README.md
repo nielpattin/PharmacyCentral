@@ -42,10 +42,13 @@ docker compose up -d --build
 
 The Compose web containers proxy `/api` requests through the local Nginx gateway. AWS deployment configuration is separate and remains configuration-only until provisioned.
 
+Run `pnpm run urls:up` once per session to get the named URLs (see Named local URLs in `docs/Runbooks.md`). Use them rather than `localhost`: the customer and staff sessions then live in separate browser origins.
+
 The default endpoints are:
 
-- Customer web: `http://localhost:5301`
-- Staff web: `http://localhost:5302`
+- Customer web: `http://customer.pharmacy.localhost` (or `http://localhost:5301`)
+- Staff web: `http://staff.pharmacy.localhost` (or `http://localhost:5302`)
+- API gateway: `http://api.pharmacy.localhost` (or `http://localhost:8080`)
 - Architecture diagrams (`pnpm diagrams:serve`): `http://localhost:5303`
 - RabbitMQ management: `http://localhost:15672`
 - Mailpit: `http://localhost:8025`

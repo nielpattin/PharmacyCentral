@@ -15,6 +15,8 @@
     "load": "docker compose --profile loadtest run --rm k6 run --out experimental-prometheus-rw",
     "dev:data": "node --experimental-transform-types --env-file=.env tools/dev-import-samples.mjs",
     "prescriptions:samples": "pnpm --dir apps/sales-service prescriptions:samples",
+    "urls:up": "node --env-file=.env tools/urls.mjs up",
+    "urls:down": "node --env-file=.env tools/urls.mjs down",
     "stack:down": "docker compose stop gateway identity-service catalog-service search-service inventory-service sales-service payment-service chatbot-service ops-console-service operations-query-service customer-web staff-web && docker compose up -d --wait gateway-dev",
     "stack:up": "docker compose stop gateway-dev && docker compose up -d --build --wait",
     "sync:check": "nx sync:check",
@@ -35,6 +37,7 @@
     "oxlint": "1.79.0",
     "oxlint-tsgolint": "7.0.2001",
     "pg": "catalog:",
+    "portless": "catalog:",
     "typescript": "npm:@typescript/typescript6@6.0.2"
   },
   "devEngines": {
