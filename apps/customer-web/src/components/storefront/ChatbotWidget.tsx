@@ -26,6 +26,25 @@ const failureText = (error: unknown): string => {
   return "Không gửi được câu hỏi. Vui lòng thử lại.";
 };
 
+// Wheel input over the panel must never scroll the page behind it: let a scrollable list under the pointer take it
+// while it has room, and swallow it otherwise.
+const trapWheel = (panel: HTMLElement | null): (() => void) | undefined => {
+  if (!panel) return undefined;
+  const hasRoom = (element: HTMLElement, deltaY: number): boolean =>
+    element.scrollHeight > element.clientHeight &&
+    /auto|scroll/.test(getComputedStyle(element).overflowY) &&
+    (deltaY < 0 ? element.scrollTop > 0 : element.scrollTop + element.clientHeight < element.scrollHeight - 1);
+  const onWheel = (event: WheelEvent): void => {
+    for (let node = event.target as HTMLElement | null; node; node = node.parentElement) {
+      if (hasRoom(node, event.deltaY)) return;
+      if (node === panel) break;
+    }
+    event.preventDefault();
+  };
+  panel.addEventListener("wheel", onWheel, { passive: false });
+  return () => panel.removeEventListener("wheel", onWheel);
+};
+
 export const ChatbotWidget = (): React.JSX.Element | null => {
   const session = useSession();
   const { container, content, follow } = useStickToBottom();
@@ -69,6 +88,7 @@ export const ChatbotWidget = (): React.JSX.Element | null => {
     <div className="fixed right-[calc(1rem+env(safe-area-inset-right))] bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40 flex flex-col items-end gap-3">
       {open ? (
         <section
+          ref={trapWheel}
           aria-label="Trợ lý tư vấn"
           className="flex h-[620px] max-h-[calc(100vh-6rem)] w-[440px] max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-line bg-surface shadow-lg"
         >
@@ -83,7 +103,7 @@ export const ChatbotWidget = (): React.JSX.Element | null => {
               </Button>
             </div>
           </header>
-          <div ref={container} className="flex-1 overflow-y-auto px-4 py-3 text-sm">
+          <div ref={container} className="flex-1 overflow-y-auto overscroll-contain px-4 py-3 text-sm">
             <div ref={content} className="space-y-3">
               {entries.length === 0 ? <p className="text-muted">Hỏi về sản phẩm hoặc cách gửi đơn thuốc.</p> : null}
               {entries.map((entry, index) => (

@@ -56,6 +56,7 @@ Tags: `[owner]` a recorded owner decision; `[observed]` a code or doc fact read 
   - Within 24 px of the end, a new reply scrolls the transcript to the end.
   - After I scroll up, a new reply does not move my position.
   - Sending my own question always scrolls to the end. Smoke run: `widget-follow`.
+  - Wheel input over the open panel never scrolls the page behind it, including at the ends of the transcript and over the header and input.
 
 ### US5. As a shopper who signs out, I never see the previous customer's conversation
 
