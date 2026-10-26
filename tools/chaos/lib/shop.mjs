@@ -12,8 +12,9 @@ export async function sellableLine(client) {
   const availability = await client.get("/api/availability", { siteId: store.id });
   const inStock = new Set((availability.body ?? []).filter((row) => row.inStock).map((row) => row.productId));
   const products = await client.get("/api/products", { limit: 100 });
+  // A prescription-only product cannot be ordered online: the sales service answers 409 prescription_required.
   const today = new Date().toISOString().slice(0, 10);
-  for (const product of (products.body ?? []).filter((item) => inStock.has(item.id))) {
+  for (const product of (products.body ?? []).filter((item) => inStock.has(item.id) && !item.prescriptionRequired)) {
     const units = product.units ?? [];
     const unit = units.find((item) => item.isDefaultSaleUnit) ?? units.find((item) => item.isBaseUnit) ?? units[0];
     if (!unit) continue;

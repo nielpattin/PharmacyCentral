@@ -38,8 +38,9 @@ function discoverSellable(session, storeId) {
   const inStock = new Set(availability.filter((row) => row.inStock).map((row) => row.productId));
   const products = listOf(session.get("/api/products", { query: { limit: 100 }, name: "GET /products" }), "products");
   const today = new Date().toISOString().slice(0, 10);
+  // A prescription-only product cannot be ordered online: the sales service answers 409 prescription_required.
   const sellable = [];
-  for (const product of shuffled(products.filter((item) => inStock.has(item.id)))) {
+  for (const product of shuffled(products.filter((item) => inStock.has(item.id) && !item.prescriptionRequired))) {
     if (sellable.length >= POOL_SIZE) break;
     const unit = unitFor(product);
     if (!unit) continue;
