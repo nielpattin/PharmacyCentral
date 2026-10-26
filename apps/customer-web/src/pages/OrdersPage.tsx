@@ -1,4 +1,14 @@
-import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@pharmacy/ui";
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  PageHeader,
+  Skeleton,
+} from "@pharmacy/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -12,10 +22,9 @@ import {
 } from "../customer-api.ts";
 import { useSession } from "../auth.ts";
 import { OrderHistory } from "../components/checkout/OrderHistory.tsx";
-import { Link } from "../components/storefront/Link.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
+import { StoreBreadcrumb } from "../components/storefront/StoreBreadcrumb.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
-import { IconChevronRight } from "../components/storefront/icons.tsx";
 
 /**
  * A SePay webhook or a pharmacy status change lands here while the list is open, so the page keeps re-reading
@@ -26,13 +35,17 @@ const REFRESH_INTERVAL_MS = 10_000;
 /** Where a signed-out visitor has to go: the customer sign-in form lives on the account page. */
 const ACCOUNT_LOCATION = { to: "/tai-khoan", search: { section: "tong-quan" } } as const;
 
-/** Both states the page shows before it can answer: an empty list must never stand in for either of them. */
-const NoticeCard = ({ children }: { children: React.ReactNode }): React.JSX.Element => (
-  <Card>
-    <CardContent className="py-10 text-center text-sm text-muted" role="status">
-      {children}
-    </CardContent>
-  </Card>
+/** Stands in for the table while the session or the list is still being read, so the page keeps its height. */
+const OrdersSkeleton = ({ label }: { label: string }): React.JSX.Element => (
+  <div role="status" aria-label={label} className="grid gap-px overflow-hidden rounded-lg border border-line">
+    {Array.from({ length: 4 }, (_, index) => (
+      <div key={index} className="flex items-center gap-6 bg-surface px-4 py-3">
+        <Skeleton className="h-9 w-32" />
+        <Skeleton className="h-4 flex-1" />
+        <Skeleton className="h-4 w-24" />
+      </div>
+    ))}
+  </div>
 );
 
 /**
@@ -61,7 +74,7 @@ export const OrdersPage = (): React.JSX.Element => {
   const loading = ordersQuery.isPending && !ordersQuery.data;
 
   const ordersBody = (): React.JSX.Element => {
-    if (!session.resolved) return <NoticeCard>Đang kiểm tra đăng nhập…</NoticeCard>;
+    if (!session.resolved) return <OrdersSkeleton label="Đang kiểm tra đăng nhập" />;
     if (!session.authenticated)
       return (
         <Card>
@@ -78,7 +91,7 @@ export const OrdersPage = (): React.JSX.Element => {
           </CardContent>
         </Card>
       );
-    if (loading) return <NoticeCard>Đang tải đơn hàng…</NoticeCard>;
+    if (loading) return <OrdersSkeleton label="Đang tải đơn hàng" />;
     return <OrderHistory orders={orders} stores={stores} />;
   };
 
@@ -90,32 +103,28 @@ export const OrdersPage = (): React.JSX.Element => {
       />
 
       <main className="mx-auto max-w-5xl space-y-5 px-4 py-6">
-        <nav aria-label="Đường dẫn" className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
-          <Link className="hover:text-primary" href="/">
-            Trang chủ
-          </Link>
-          <IconChevronRight className="size-3" />
-          <span className="font-medium text-ink">Đơn hàng của tôi</span>
-        </nav>
-
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-ink sm:text-2xl">Đơn hàng của tôi</h1>
-            <p className="mt-1 text-sm text-muted">
-              Trạng thái soạn thuốc, thanh toán và giao hàng của những đơn bạn đã đặt.
-            </p>
-          </div>
-          {session.authenticated ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={ordersQuery.isFetching}
-              onClick={() => void ordersQuery.refetch()}
-            >
-              Làm mới
-            </Button>
-          ) : null}
-        </div>
+        <PageHeader
+          className="mb-0"
+          breadcrumb={<StoreBreadcrumb items={[{ label: "Trang chủ", href: "/" }, { label: "Đơn hàng của tôi" }]} />}
+          title="Đơn hàng của tôi"
+          subtitle={
+            session.authenticated && orders.length > 0
+              ? `${orders.length} đơn · trạng thái cập nhật tự động`
+              : "Theo dõi việc lấy thuốc, thanh toán và giao hàng của những đơn bạn đã đặt."
+          }
+          actions={
+            session.authenticated ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={ordersQuery.isFetching}
+                onClick={() => void ordersQuery.refetch()}
+              >
+                Làm mới
+              </Button>
+            ) : null
+          }
+        />
 
         {loadError ? <Alert variant="danger">{loadError}</Alert> : null}
 

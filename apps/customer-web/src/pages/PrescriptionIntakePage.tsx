@@ -1,4 +1,4 @@
-import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@pharmacy/ui";
+import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader } from "@pharmacy/ui";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -21,11 +21,11 @@ import { useAddToCart } from "../hooks/useAddToCart.ts";
 import { useMountEffect } from "../hooks/useMountEffect.ts";
 import { CartFeedback } from "../components/storefront/CartFeedback.tsx";
 import { Link } from "../components/storefront/Link.tsx";
+import { StoreBreadcrumb } from "../components/storefront/StoreBreadcrumb.tsx";
 import { ImageLightbox } from "../components/storefront/ImageLightbox.tsx";
 import { PrescriptionResults } from "../components/storefront/PrescriptionResults.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
-import { IconChevronRight } from "../components/storefront/icons.tsx";
 import { buildPriceIndex, buildStockIndex } from "../storefront/catalog.ts";
 import { decodeQrFromImage, prepareImageForUpload } from "../storefront/prescription-image.ts";
 
@@ -295,18 +295,12 @@ export const PrescriptionIntakePage = (): React.JSX.Element => {
       />
 
       <main className="mx-auto max-w-5xl space-y-5 px-4 py-6">
-        <nav aria-label="Đường dẫn" className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
-          <Link className="hover:text-primary" href="/">
-            Trang chủ
-          </Link>
-          <IconChevronRight className="size-3" />
-          <span className="font-medium text-ink">Gửi đơn thuốc</span>
-        </nav>
-
-        <div>
-          <h1 className="text-xl font-semibold text-ink sm:text-2xl">Gửi đơn thuốc</h1>
-          <p className="mt-1 text-sm text-muted">Tải ảnh đơn thuốc in để nhận gợi ý các sản phẩm tương ứng.</p>
-        </div>
+        <PageHeader
+          className="mb-0"
+          breadcrumb={<StoreBreadcrumb items={[{ label: "Trang chủ", href: "/" }, { label: "Gửi đơn thuốc" }]} />}
+          title="Gửi đơn thuốc"
+          subtitle="Tải ảnh đơn thuốc in để nhận gợi ý các sản phẩm tương ứng."
+        />
 
         {body()}
       </main>

@@ -314,7 +314,7 @@ After an order is placed, the payment panel shows the order number, payment code
 
 ### Orders
 
-**Đơn hàng của tôi** (`/don-hang-cua-toi`) lists the signed-in customer's orders with status (Chờ xác nhận, Đã xác nhận, Đang soạn, Sẵn sàng giao, Đang giao, Hoàn tất, Đã huỷ) and payment status.
+**Đơn hàng của tôi** (`/don-hang-cua-toi`) lists the signed-in customer's orders. The order the customer most likely came for sits at the top as a large block: the newest order whose medicine is ready or on its way, otherwise the newest order still being handled, otherwise the newest one. It shows the package photo, the status as a sentence (for example "Thuốc của bạn đã sẵn sàng để nhận"), a five-step progress bar with labels (Chờ xác nhận, Đã xác nhận, Đang lấy thuốc, Sẵn sàng nhận hàng or Đang giao hàng, Hoàn tất), the pharmacy to collect from, the total and **Xem chi tiết đơn**, which opens every medicine with quantity and price, subtotal, delivery fee, the pharmacy address and the payment status. **Các đơn khác** lists the rest, newest first, each with its photo, status, date, total and a **Chi tiết** button; the tabs Tất cả, Đang xử lý, Hoàn tất and Đã huỷ filter that list. A cancelled order shows no payment note. The page refreshes itself every 10 seconds.
 
 ### Account
 

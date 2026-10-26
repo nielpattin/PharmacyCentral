@@ -18,6 +18,7 @@ import { ProductGrid, type ProductListStatus } from "../components/storefront/Pr
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
 import { IconChevronRight } from "../components/storefront/icons.tsx";
+import { StoreBreadcrumb } from "../components/storefront/StoreBreadcrumb.tsx";
 
 export const CategoryPage = (): React.JSX.Element => {
   const { slug } = useParams({ from: "/danh-muc/$slug" });
@@ -82,21 +83,13 @@ export const CategoryPage = (): React.JSX.Element => {
           )
         ) : (
           <>
-            <nav className="flex flex-wrap items-center gap-1.5 text-xs text-muted" aria-label="Đường dẫn">
-              <Link className="hover:text-primary" href="/">
-                Trang chủ
-              </Link>
-              {parent ? (
-                <>
-                  <IconChevronRight className="size-3" />
-                  <Link className="hover:text-primary" href={`/danh-muc/${parent.slug}`}>
-                    {parent.label}
-                  </Link>
-                </>
-              ) : null}
-              <IconChevronRight className="size-3" />
-              <span className="font-medium text-ink">{page.label}</span>
-            </nav>
+            <StoreBreadcrumb
+              items={[
+                { label: "Trang chủ", href: "/" },
+                ...(parent ? [{ label: parent.label, href: `/danh-muc/${parent.slug}` }] : []),
+                { label: page.label },
+              ]}
+            />
 
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>

@@ -25,12 +25,13 @@ import { formatDateTime, formatMoney } from "../storefront/format.ts";
 import { buildCategoryPages } from "../storefront/navigation.ts";
 import { CartFeedback } from "../components/storefront/CartFeedback.tsx";
 import { Link } from "../components/storefront/Link.tsx";
+import { StoreBreadcrumb } from "../components/storefront/StoreBreadcrumb.tsx";
 import { ProductGrid } from "../components/storefront/ProductGrid.tsx";
 import { ProductTile } from "../components/storefront/ProductTile.tsx";
 import { SectionHeading } from "../components/storefront/SectionHeading.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
-import { IconCart, IconChevronRight, IconShield, IconStore, IconTruck } from "../components/storefront/icons.tsx";
+import { IconCart, IconShield, IconStore, IconTruck } from "../components/storefront/icons.tsx";
 
 const MAX_QUANTITY = 999;
 const RELATED_LIMIT = 5;
@@ -156,21 +157,15 @@ export const ProductDetailPage = (): React.JSX.Element => {
 
         {product ? (
           <>
-            <nav className="flex flex-wrap items-center gap-1.5 text-xs text-muted" aria-label="Đường dẫn">
-              <Link className="hover:text-primary" href="/">
-                Trang chủ
-              </Link>
-              <IconChevronRight className="size-3" />
-              {categoryPage ? (
-                <Link className="hover:text-primary" href={`/danh-muc/${categoryPage.slug}`}>
-                  {categoryPage.label}
-                </Link>
-              ) : (
-                <span>{categoryLabel(product.category)}</span>
-              )}
-              <IconChevronRight className="size-3" />
-              <span className="min-w-0 truncate font-medium text-ink">{product.name}</span>
-            </nav>
+            <StoreBreadcrumb
+              items={[
+                { label: "Trang chủ", href: "/" },
+                categoryPage
+                  ? { label: categoryPage.label, href: `/danh-muc/${categoryPage.slug}` }
+                  : { label: categoryLabel(product.category) },
+                { label: product.name },
+              ]}
+            />
 
             {sideErrorMessage ? <Alert variant="danger">{sideErrorMessage}</Alert> : null}
 

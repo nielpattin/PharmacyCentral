@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 
-import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@pharmacy/ui";
+import { Alert, Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader } from "@pharmacy/ui";
 
 import {
   addCartLine,
@@ -40,10 +40,9 @@ import { OrderSummary } from "../components/checkout/OrderSummary.tsx";
 import { PaymentPanel } from "../components/checkout/PaymentPanel.tsx";
 import { ProductPicker } from "../components/checkout/ProductPicker.tsx";
 import { CartFeedback } from "../components/storefront/CartFeedback.tsx";
-import { Link } from "../components/storefront/Link.tsx";
+import { StoreBreadcrumb } from "../components/storefront/StoreBreadcrumb.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
-import { IconChevronRight } from "../components/storefront/icons.tsx";
 import { checkoutQueryKey, writeCart, writeDeliveryAddresses } from "../storefront/cart-cache.ts";
 import { buildPriceIndex, buildStockIndex, uniqueCategories } from "../storefront/catalog.ts";
 import { buildCheckoutLines, checkoutTotals, type CheckoutLine } from "../storefront/checkout.ts";
@@ -437,21 +436,15 @@ export const CheckoutPage = (): React.JSX.Element => {
       <SiteHeader storeCount={stores.length} onSearch={(term) => void navigate({ to: "/", search: { q: term } })} />
 
       <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
-        <nav aria-label="Đường dẫn" className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
-          <Link className="hover:text-primary" href="/">
-            Trang chủ
-          </Link>
-          <IconChevronRight className="size-3" />
-          <span className="font-medium text-ink">Đặt hàng &amp; thanh toán</span>
-        </nav>
-
         <div className="grid gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-ink sm:text-2xl">Đặt hàng &amp; thanh toán</h1>
-            <p className="mt-1 text-sm text-muted">
-              Kiểm tra giỏ thuốc, chọn nhà thuốc xuất đơn, tính phí giao hàng và theo dõi đơn đã đặt.
-            </p>
-          </div>
+          <PageHeader
+            className="mb-0"
+            breadcrumb={
+              <StoreBreadcrumb items={[{ label: "Trang chủ", href: "/" }, { label: "Đặt hàng & thanh toán" }]} />
+            }
+            title="Đặt hàng & thanh toán"
+            subtitle="Kiểm tra giỏ thuốc, chọn nhà thuốc xuất đơn, tính phí giao hàng và theo dõi đơn đã đặt."
+          />
           <CheckoutSteps current={step} />
         </div>
 

@@ -25,9 +25,10 @@ import { ProfileFormCard } from "../components/account/ProfileFormCard.tsx";
 import { SavedAddressesCard } from "../components/account/SavedAddressesCard.tsx";
 import type { AddressDraft } from "../components/AddressFormDialog.tsx";
 import { Link } from "../components/storefront/Link.tsx";
+import { StoreBreadcrumb } from "../components/storefront/StoreBreadcrumb.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
-import { IconChevronRight, IconPin, IconReceipt, IconShield, IconUser } from "../components/storefront/icons.tsx";
+import { IconPin, IconReceipt, IconShield, IconUser } from "../components/storefront/icons.tsx";
 import type { AccountSection } from "../router.ts";
 import { accountQueryKey, checkoutQueryKey, writeDeliveryAddresses } from "../storefront/cart-cache.ts";
 import { formatDateTime, formatMoney, initials } from "../storefront/format.ts";
@@ -61,7 +62,7 @@ const SECTIONS: Array<{ id: AccountSection; label: string; icon: (className: str
 const ORDER_STATUS_LABELS: Record<string, string> = {
   Pending: "Chờ xác nhận",
   Confirmed: "Đã xác nhận",
-  Preparing: "Đang soạn",
+  Preparing: "Đang lấy thuốc",
   Ready: "Sẵn sàng giao",
   Delivering: "Đang giao",
   Completed: "Hoàn tất",
@@ -455,13 +456,7 @@ export const AccountPage = (): React.JSX.Element => {
       <SiteHeader onSearch={(term) => void navigate({ to: "/", search: { q: term } })} />
 
       <main className="mx-auto max-w-5xl space-y-5 px-4 py-6">
-        <nav aria-label="Đường dẫn" className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
-          <Link className="hover:text-primary" href="/">
-            Trang chủ
-          </Link>
-          <IconChevronRight className="size-3" />
-          <span className="font-medium text-ink">Tài khoản</span>
-        </nav>
+        <StoreBreadcrumb items={[{ label: "Trang chủ", href: "/" }, { label: "Tài khoản" }]} />
 
         <div className="flex flex-wrap items-center gap-3">
           <span
