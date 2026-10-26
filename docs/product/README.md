@@ -32,15 +32,17 @@ A bug fix that restores the documented behavior does not need a spec change. If 
 - Tag where each statement comes from, so a reader knows how far to trust it:
   - `[owner]`: the product owner stated it, with the date.
   - `[observed]`: read from the code on a date. The behavior exists, but no one recorded why.
-  - `[question]`: unknown. It is listed under Open questions, with someone to answer it.
-- Never invent a reason. If the reason is not known, tag the line `[observed]` and add a question.
-- Acceptance criteria are checkable. A criterion that no test or smoke run can check is a wish and belongs under Open questions.
+  - `[standard]`: a decision taken from industry practice, with the source when one is known. It is a recommendation until the owner replaces it with a recorded reason.
+  - `[question]`: unknown, while a spec is still being written. A finished spec has none: every question is answered under Decisions.
+- Never invent a reason. If the reason is not known, tag the line `[observed]` and add a question; answer it under Decisions before the spec is finished.
+- The spec states the target behavior. Where the code or another document differs, add a row under Gaps against the code and mark the affected acceptance criterion `(gap Gn)`. Fix the code or the document, not the spec, unless the owner changes the decision.
+- Acceptance criteria are checkable. A criterion that no test or smoke run can check is a wish and belongs under Decisions as a question until it is answered.
 
 ## Lifecycle
 
 | Status | Meaning |
 | --- | --- |
-| Draft | Being written, or waiting for the owner to fill in the open questions. |
+| Draft | Being written; some questions are still unanswered. |
 | Current | Matches the code and has been reviewed by the owner. |
 | Retired | The page or feature no longer exists. Keep the file and say why. |
 
@@ -50,4 +52,25 @@ Update the `Last reviewed` date whenever you confirm the spec against the runnin
 
 | Page | App | Status |
 | --- | --- | --- |
+| [Home (`/`) and 404](customer-home-page.md) | customer-web | Current |
+| [Category (`/danh-muc/$slug`)](customer-category-page.md) | customer-web | Current |
+| [Product (`/san-pham/$productId`)](customer-product-page.md) | customer-web | Current |
 | [Orders page (`/don-hang`)](customer-orders-page.md) | customer-web | Current |
+| [Prescription intake (`/gui-don-thuoc`)](customer-prescription-intake-page.md) | customer-web | Current |
+| [Account and sign-in (`/tai-khoan`)](customer-account-page.md) | customer-web | Current |
+| [Shopping assistant (chat widget)](customer-shopping-assistant.md) | customer-web | Current |
+| [Shell: sign-in, navigation, roles](staff-shell-sign-in-and-navigation.md) | staff-web | Current |
+| [Dashboard, pharmacist overview, reporting](staff-dashboard-and-reporting.md) | staff-web | Current |
+| [Online orders (`/orders`)](staff-online-orders.md) | staff-web | Current |
+| [Prescriptions and counter (`/prescriptions`)](staff-prescriptions-and-counter.md) | staff-web | Current |
+| [Sites, storage locations, suppliers](staff-master-data.md) | staff-web | Current |
+| [Catalog, units, pricing](staff-catalog-units-and-pricing.md) | staff-web | Current |
+| [Search synonyms (`/search-synonyms`)](staff-search-synonyms.md) | staff-web | Current |
+| [Data import (`/imports/*`)](staff-data-import.md) | staff-web | Current |
+| [Procurement and receiving](staff-procurement-and-receiving.md) | staff-web | Current |
+| [Inventory operations](staff-inventory-operations.md) | staff-web | Current |
+| [Quality (`/quality`)](staff-quality.md) | staff-web | Current |
+| [Finance (`/finance`)](staff-finance.md) | staff-web | Current |
+| [Users and audit](staff-users-and-audit.md) | staff-web | Current |
+| [AI integrations (`/ai-integrations`)](staff-ai-integrations.md) | staff-web | Current |
+| [System (`/system`)](staff-system-page.md) | staff-web | Current |

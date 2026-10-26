@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Checkout completes on a shared cart cache with a live invoice, and shoppers' orders have their own page.
 - Account page wired to the profile, prescription and address endpoints.
 - Cart lines are ticked before ordering (new lines start unticked): the order summary, total and **Đặt hàng** cover only the ticked lines, and the unticked ones stay in the cart. **Mua ngay** on a product page ticks the line it adds.
-- Product specs under `docs/product/`, starting with the Orders page.
+- Product specs under `docs/product/`: one per customer-web page and per staff-web section group (22 in all), written from the code. Each states the target behavior, answers its questions under Decisions from industry practice, and lists the differences from the code under Gaps.
 - Prescription-only products show "Cần đơn thuốc" or a **Gửi đơn thuốc** link instead of add-to-cart and buy buttons, and a signed-out shopper cannot add them either.
 - A signed-out cart is kept in the browser (`localStorage`) and moves into the account at sign-in; opening a page no longer creates a cart on the server.
 
@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - `POST /api/orders` accepts `fromCart: true` instead of `lines`: the server orders the caller's ticked cart lines and removes them once the stock is held. New error `409 cart_selection_empty`.
 - Cart lines carry a server-kept `selected` flag (migration `0012_cart_line_selected`), set through the new `PATCH /api/carts/selection`.
 - `POST /api/carts/merge` takes the browser cart in its body (`{ lines: [...] }`).
+- Staff permissions follow the role contract in `docs/product/staff-shell-sign-in-and-navigation.md`: roles are checked at the edge and again in each service, a record at another site is refused before any write, and nobody approves a record they created (`403 self_approval_forbidden`). Platform Admin proposes but never approves search synonym groups, and does not take cash at the counter. Staff can deactivate and reactivate employee accounts; a reset forces a password change (`password_change_required`); staff sign-in refuses customer accounts (`audience: "employee"`). Staff order lists show the customer name and phone to Pharmacist, Pharmacy Manager and Platform Admin. `/api/sites`, suppliers, storage locations and non-published prices are no longer public.
 - Prescription-only products (`prescriptionRequired`) are refused with `409 prescription_required` by `POST /api/carts/lines` and `POST /api/orders` (both `lines` and `fromCart`); a cart merge drops them. A catalog read failure answers 500. See ADR 0016.
 
 **staff-web**

@@ -229,7 +229,7 @@ The internal ALB sees paths without `/api`. Rules are evaluated by priority, low
 | 15 | `GET /products` only (exact path and method; `/api/products` list) | search-service |
 | 20 | `/sites*`, `/storage-locations*`, `/products*`, `/suppliers*`, `/pricing*`, `/stores*`, `/availability*` | catalog-service |
 | 30 | `/procurement*` | inventory-service |
-| 40 | `/inventory*`, `/quality*` | inventory-service |
+| 40 | `/inventory*` | inventory-service |
 | 50 | `/carts*`, `/orders*`, `/delivery*`, `/prescriptions*`, `/counter-transactions*` | sales-service |
 | 60 | `/payments*` | payment-service |
 | 70 | `/operations*`, `/dashboard*`, `/finance*`, `/audit*`, `/reports*` | operations-query-service |

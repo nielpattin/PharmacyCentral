@@ -117,7 +117,7 @@ Both local gateways forward paths with identical patterns: `gateway` (container 
 - `/api/auth*`, `/api/admin*`, `/api/customers*` -> `identity-service:3001`
 - `GET /api/products` exactly (the product list) -> `search-service:3009`
 - `/api/sites*`, `/api/storage-locations*`, `/api/products*` (every other method and path under it), `/api/suppliers*`, `/api/pricing*`, `/api/stores*`, `/api/availability*` -> `catalog-service:3002`
-- `/api/procurement*`, `/api/inventory*`, `/api/quality*` -> `inventory-service:3004`
+- `/api/procurement*`, `/api/inventory*` -> `inventory-service:3004`
 - `/api/carts*`, `/api/orders*`, `/api/delivery*`, `/api/prescriptions*`, `/api/counter-transactions*` -> `sales-service:3005`
 - `/api/payments*` -> `payment-service:3006`
 - `/api/operations*`, `/api/dashboard*`, `/api/finance*`, `/api/audit*`, `/api/reports*` -> `operations-query-service:3007`
@@ -200,6 +200,8 @@ pnpm run db:migrate
 ```
 
 In containers, each service executes its compiled `node dist/migrate.js` on startup.
+
+Identity `0003_must_change_password` adds `users.must_change_password` (default `false`). Inventory `0012_batch_creator_stocktake_counter` adds nullable `product_batches.created_by` and `stocktake_lines.counted_by`. A row without a creator is not refused by the separation-of-duties checks (BR-AUTH-009).
 
 ### Database roles
 
@@ -353,7 +355,7 @@ pnpm test
 
 - AWS API Gateway HTTP API exposes `/api` routes with a Lambda authorizer.
 - Sessions use the opaque `pharmacy_session` HttpOnly cookie.
-- The authorizer validates sessions against `identity-service` and injects HMAC-signed identity context (`x-internal-identity-context`, `x-actor-id`, `x-actor-type`, `x-request-id`), discarding any client-supplied identity headers.
+- The authorizer validates sessions against `identity-service`, refuses an employee role that the rule table in `deploy/aws/lambda/policy.mjs` does not allow (ADR 0017), and injects HMAC-signed identity context (`x-internal-identity-context`, `x-actor-id`, `x-actor-type`, `x-request-id`), discarding any client-supplied identity headers.
 - Mutating browser requests require CSRF tokens. The external SePay webhook route is the explicit exception and uses HMAC payload verification.
 
 ## Payment webhook test

@@ -20,7 +20,7 @@ Production clients send requests to `/api` routes on AWS API Gateway HTTP API. L
 - `GET /api/auth/csrf`
 - `GET /api/auth/context`
 
-Authenticated browser mutations send the `pharmacy_session` cookie and `X-CSRF-TOKEN`. Authenticated service calls add the per-service token from `GET /api/auth/context` as `x-internal-identity-context`. Locally `identity-service` mints these tokens for the browser session; in production the Lambda authorizer mints them instead. Guest cart requests use the `pharmacy_guest_cart` cookie, which is `HttpOnly` and `SameSite=Lax` (and `Secure` when the deployment sets `COOKIE_SECURE=true`); script cannot read it, and `POST /api/carts/merge` clears it after the cart moves into the account. The Lambda Authorizer verifies session state with `identity-service`, sets `x-actor-id` and `x-actor-type`, and injects HMAC-signed `x-internal-identity-context`, discarding any client-supplied identity headers.
+Authenticated browser mutations send the `pharmacy_session` cookie and `X-CSRF-TOKEN`. Authenticated service calls add the per-service token from `GET /api/auth/context` as `x-internal-identity-context`. Locally `identity-service` mints these tokens for the browser session; in production the Lambda authorizer mints them instead. A signed-out cart stays in the browser and has no server copy; `POST /api/carts/merge` moves the browser cart into the signed-in account. The Lambda Authorizer verifies session state with `identity-service`, sets `x-actor-id` and `x-actor-type`, and injects HMAC-signed `x-internal-identity-context`, discarding any client-supplied identity headers.
 
 The Google routes answer `503 google_not_configured` when Google sign-in is not configured. The callback answers `400 invalid_oauth_state` when the `state` query value does not match the `oauth_state` cookie.
 
@@ -32,16 +32,46 @@ Employee roles are `Platform Admin`, `Pharmacy Manager`, `Pharmacist`, and `Ware
 
 Admin routes require a signed-in account with the `Platform Admin` role. A request with no session answers `401 unauthenticated`, and any other account answers `403 forbidden`.
 
+`POST /api/auth/login` takes `{ email, password, audience? }`. Staff Web sends `audience: "employee"`: a customer account then answers `403 employee_required` before any session cookie is set. An employee account signs in with its password, so a Google sign-in for one answers `403 password_sign_in_required`. A deactivated account gets the same `401` as a wrong password. A failed employee sign-in is audited as `identity.auth.login-failed` with its reason, never its password.
+
+While an account must change its password, the edge refuses every route except the auth routes, and `GET /api/auth/context` and `PATCH /api/auth/me` answer `403 password_change_required`. `POST /api/auth/change-password` clears the flag and the session cookie.
+
 - `GET /api/admin/roles` lists the employee roles.
-- `GET /api/admin/users` lists accounts.
-- `POST /api/admin/users` creates an employee account and answers `201`.
-- `PUT /api/admin/users/{id}/access` takes `{ "roles", "siteIds" }` and answers the account.
-- `POST /api/admin/users/{id}/reset-password` takes `{ "password" }` (12 to 200 characters) and answers `204`.
-- `POST /api/admin/users/{id}/revoke-sessions` answers `204`.
+- `GET /api/admin/users` lists employee accounts. `status=active` or `status=deactivated` narrows the list.
+- `POST /api/admin/users` creates an employee account and answers `201`. The account must change its password at its first sign-in. `roles` needs at least one role (`400 role_required`), and every role except Platform Admin needs at least one site (`400 site_required`).
+- `PUT /api/admin/users/{id}/access` takes `{ "roles", "siteIds" }`, follows the same rules as create, and answers the account. It refuses the caller's own account (`403 self_change_forbidden`) and any change that leaves no active Platform Admin (`409 last_platform_admin`).
+- `POST /api/admin/users/{id}/reset-password` takes `{ "password" }` (12 to 200 characters) and answers `204`. The account must change the password at its next sign-in, and all its sessions end. A deactivated account answers `409 account_deactivated`. The caller's own account is refused (`403 self_change_forbidden`).
+- `POST /api/admin/users/{id}/revoke-sessions` answers `204`. The caller's own account is refused (`403 self_change_forbidden`).
+- `POST /api/admin/users/{id}/deactivate` answers `204`. The account cannot sign in, its sessions end in the same transaction, and no data is deleted. The caller's own account and the last active Platform Admin are refused as above.
+- `POST /api/admin/users/{id}/activate` answers `204`.
+
+An id that is not an employee account answers `404 employee_not_found`. Every change is audited with the administrator as actor.
 
 - `GET /api/customers/lookup?q=` searches customer accounts for the counter's prescription linking. Only a `Pharmacist` or `Platform Admin` session may call it. It returns at most five customer accounts, and a shopper gets `403`.
 
-`GET /internal/customers/{id}` is served by `identity-service` for service-to-service lookups only. It requires the system actor, and no gateway routes it.
+`GET /internal/customers/{id}` and `POST /internal/customers/batch` (`{ "ids" }`, up to 200, answers `{ "customers" }`) are served by `identity-service` for service-to-service lookups only. They require the system actor, and no gateway routes them. sales-service calls the batch route to add customer names and phones to staff order lists.
+
+## Refusal codes
+
+Problem bodies carry a `code`. A role refusal by the edge is a bare `403` with no code; the service that owns the route answers the codes below.
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `role_forbidden` | 403 | The caller's roles do not allow the action, or Platform Admin meets one of its exclusions (BR-AUTH-010). |
+| `site_access_denied` | 403 | The record belongs to a site outside the caller's sites. |
+| `self_approval_forbidden` | 403 | The approver created, counted or submitted the record. Applies to Platform Admin too (BR-AUTH-009). |
+| `password_change_required` | 403 | The account must change its password before it does anything else. |
+| `self_change_forbidden` | 403 | An administrator acted on their own account. |
+| `employee_required` | 403 | A customer account signed in at staff sign-in. |
+| `password_sign_in_required` | 403 | An employee account tried to sign in with Google. |
+| `role_required` | 400 | An employee account was given no role. |
+| `site_required` | 400 | A non-Platform-Admin employee was given no site. |
+| `location_site_fixed` | 400 | A storage location's site cannot be changed. |
+| `last_platform_admin` | 409 | The change would leave no active Platform Admin. |
+| `account_deactivated` | 409 | The account is deactivated, so its password cannot be reset. |
+| `in_use` | 409 | A site or product is still referenced and cannot be deleted. |
+| `employee_not_found` | 404 | The id is not an employee account. |
+| `identity_unavailable` | 503 | A staff order list could not read customer names and phones from identity-service. |
 
 ## Customer catalog and sales
 
@@ -78,11 +108,11 @@ Every `/api/carts*` route needs a signed-in customer. A signed-out shopper's car
 
 `POST /api/orders` accepts the selected store, the pickup or delivery choice, and exactly one of `lines` (product and unit IDs with quantities) or `fromCart: true`. With `fromCart` the server orders the caller's ticked cart lines, takes the quantities from the cart, and removes those lines once the stock is held; no ticked line answers `409 cart_selection_empty`, and a refused order leaves the cart untouched. An order that includes a product marked `prescriptionRequired` answers `409 prescription_required` with its `productId`, for `lines` and `fromCart` alike. Sending both, or neither, answers `400`. `sales-service` recalculates active prices and delivery server-side. Delivery snapshots contain the provider-resolved address, separate customer note, road distance, duration, fee, and GeoJSON route.
 
-`GET /api/orders` answers the signed-in shopper's own orders. A staff session answers every order, narrowed by `status`, `paymentStatus`, and `siteId` when given. `GET /api/orders/{id}` answers `404` for an order that belongs to another customer.
+`GET /api/orders` answers the signed-in shopper's own orders. A staff session answers the orders at its sites (Platform Admin: all), narrowed by `status` and `paymentStatus`. `GET /api/orders/{id}` answers `404` for an order that belongs to another customer.
 
-`GET /api/orders` takes `status`, `paymentStatus`, `siteId`, `limit` (default 100, at most 500), `cursor`, and `q`. The body is the plain array of one page, newest first. `q` is a case-insensitive substring match over the order id only: sales-service stores no customer name, phone, or order number, and those live with identity-service. When another page follows, the answer carries its cursor in the `X-Next-Cursor` header; send it back as `cursor` with the same other parameters. The last page has no header. A cursor is opaque, and a malformed one answers `400 invalid_cursor` (problem JSON).
+`GET /api/orders` takes `status`, `paymentStatus`, `limit` (default 100, at most 500), `cursor`, and `q`. The body is the plain array of one page, newest first. `q` is a case-insensitive substring match over the order id only: sales-service stores no customer name, phone, or order number, and those live with identity-service. When another page follows, the answer carries its cursor in the `X-Next-Cursor` header; send it back as `cursor` with the same other parameters. The last page has no header. A cursor is opaque, and a malformed one answers `400 invalid_cursor` (problem JSON). A staff row carries `customer` (`{ displayName, phoneNumber }`, or `null` when the account is not found), read from identity-service. If identity-service does not answer, a staff list answers `503 identity_unavailable`.
 
-`POST /api/orders/{id}/transition` takes `{ "status" }`, one of `Confirmed`, `Preparing`, `Ready`, `Delivering`, `Completed`, or `Cancelled`.
+`POST /api/orders/{id}/transition` takes `{ "status" }`, one of `Confirmed`, `Preparing`, `Ready`, `Delivering`, `Completed`, or `Cancelled`. Pharmacist, Pharmacy Manager and Platform Admin move orders at their sites (`403 site_access_denied` otherwise). A shopper may only cancel their own order while it is `Pending` and unpaid; any other shopper move answers `403 forbidden`.
 
 `POST /api/delivery/reverse-geocode` takes `{ "destination" }`, and `GET /api/delivery/addresses/search` requires `q` of 2 to 200 characters. `POST /api/delivery/addresses/resolve` takes `{ "refId" }`. Each answers `400 invalid_request` when its body or query fails validation.
 
@@ -125,7 +155,7 @@ A consultation whose site cannot be verified answers `503 catalog_unavailable`, 
 - `GET /api/inventory/balances`
 - `GET /api/inventory/batches`
 - `POST /api/inventory/batches`
-- `POST /api/inventory/batches/{id}/quality` takes `{ "decision": "release" | "reject", "notes"? }`.
+- `POST /api/inventory/batches/{id}/quality` takes `{ "decision": "release" | "reject", "notes"? }`. A Pharmacist or Pharmacy Manager decides; the batch's creator cannot (`403 self_approval_forbidden`).
 - `GET /api/inventory/adjustments`
 - `GET /api/inventory/adjustments/count`
 - `POST /api/inventory/adjustments`
@@ -155,6 +185,8 @@ A consultation whose site cannot be verified answers `503 catalog_unavailable`, 
 - `POST /api/inventory/replenishment/{id}/approve`, `reject`, `cancel`, or `fulfill`
 - `POST /api/inventory/imports/opening-balances`
 
+Role gates on these routes are the rules in [business-rules.md](business-rules.md#4-quy-t%E1%BA%AFc-role-v%C3%A0-ph%C3%A2n-quy%E1%BB%81n) (BR-AUTH-002). Platform Admin passes every role rule except the counter exclusions and synonym approval (BR-AUTH-010). By group: Warehouse Staff propose adjustments and Pharmacy Manager approves or rejects them; Warehouse Staff create, ship and receive transfers, a Pharmacy Manager approves one, and either may cancel; Warehouse Staff create and count stocktakes, and a Pharmacy Manager posts one; a Pharmacist or Pharmacy Manager requests replenishment and Warehouse Staff approve, reject or fulfil it; Warehouse Staff create returns and a Pharmacy Manager approves or rejects them. Approval never goes to the record's creator, counter or requester (`403 self_approval_forbidden`).
+
 Inventory lists page by cursor where they take `limit` and `cursor`. The next page's cursor travels in the `X-Next-Cursor` header, present only while another page follows. A malformed cursor answers `400 invalid_cursor`. An out-of-range `limit` is clamped to its range; a non-numeric one takes the default.
 
 - `transfers`, `adjustments`, `stocktakes`, and `replenishment` take `status` (comma-separated, such as `status=PendingApproval,Draft`), `limit` (1 to 500, default 100), `cursor`, and `q`. They answer newest first by creation time, with the id breaking ties. `q` is a case-insensitive substring match: the transfer number on transfers; the reason, notes, or batch number on adjustments; the notes or a line's batch number on stocktakes and replenishment requests.
@@ -181,7 +213,7 @@ Prescription creation reserves FEFO stock through `inventory-service`. A reserva
 - `GET /api/procurement/purchase-orders`
 - `POST /api/procurement/purchase-orders`
 - `GET /api/procurement/purchase-orders/{id}`
-- `POST /api/procurement/purchase-orders/{id}/action` takes `{ "action": "approve" | "cancel", "notes"? }`.
+- `POST /api/procurement/purchase-orders/{id}/action` takes `{ "action": "approve" | "cancel", "notes"? }`. A Pharmacy Manager approves, never an order they created (`403 self_approval_forbidden`); cancel is for Pharmacy Manager.
 - `GET /api/procurement/goods-receipts`
 - `GET /api/procurement/goods-receipts/count`
 - `POST /api/procurement/goods-receipts`
@@ -193,7 +225,7 @@ Procurement routes check that the supplier, site, products, and storage location
 
 ## Catalog administration
 
-Reads under the catalog's public prefixes (`/sites`, `/storage-locations`, `/products`, `/suppliers`, `/pricing`, `/stores`, `/availability`) need no session. Writes are staff actions, and a single-site employee sees only the storage locations of their own site.
+Public reads need no session: `/api/products` (except `search-synonyms` and the AI credential paths), `/api/stores`, `/api/availability`, `/api/pricing/active`, and `GET /api/pricing/prices?status=Published`. Every other read under `/sites`, `/storage-locations`, `/suppliers` and `/pricing` needs a signed-in employee. Writes are staff actions: a Pharmacy Manager writes them, and Platform Admin alone creates and deletes sites (any other caller gets `403`). A single-site employee sees only the storage locations of their own site. An update that would move a storage location to another site answers `400 location_site_fixed`; deleting a site or product that is still referenced answers `409 in_use`.
 
 - `GET|POST /api/sites`, `GET|PUT|DELETE /api/sites/{id}`
 - `GET|POST /api/storage-locations`, `GET|PUT|DELETE /api/storage-locations/{id}`
@@ -205,7 +237,7 @@ Reads under the catalog's public prefixes (`/sites`, `/storage-locations`, `/pro
 - `GET /api/pricing/prices/count` takes `productId`, `status`, and `q` as the price list does, and answers `{ "count": n }`.
 - `GET /api/pricing/base-prices?day=YYYY-MM-DD` (default today, UTC) answers a plain array with one row per active product: `{ productId, productName, unitPrice }`. `unitPrice` is the price of one base unit effective on `day`, or `null` when no price qualifies. A price on a larger sale unit is divided by that unit's conversion factor; the base unit's own price wins over a larger unit's; then the latest effective date wins. Only site-less Published prices on a unit of their own product count. The answer is not paged, and an invalid `day` answers `400`.
 - `POST /api/pricing/prices`
-- `POST /api/pricing/prices/{id}/publish` or `archive`
+- `POST /api/pricing/prices/{id}/publish` or `archive`. Publish refuses the creator of the draft (`403 self_approval_forbidden`).
 - `GET /api/pricing/active` answers the active price for a product unit at a site on a date.
 - `GET /api/stores` takes `limit` (1 to 100, default 50) and `cursor`. Stores come in code order, and `X-Next-Cursor` works as it does for the price list. `GET /api/stores/nearest` answers the nearest stores to a point.
 - `GET /api/availability`
@@ -226,26 +258,26 @@ Staff maintain groups of search synonyms, such as a symptom and the words shoppe
 
 A group carries `id`, `terms`, `version`, `submittedBy`, `submittedAt`, and `status`. An approved group also carries `approvedBy` and `approvedAt`. The version starts at 1 and rises by one on every edit and approval.
 
-Any Platform Admin, Pharmacy Manager, or Pharmacist may use these routes. Any other signed-in account gets `403`, and a request with no identity gets `401`.
+Pharmacist and Pharmacy Manager may use these routes, and Platform Admin may too, except to approve a group (`403 role_forbidden`). Any other signed-in account gets `403`, and a request with no identity gets `401`.
 
-Review works as a four-eyes process. A creator or editor submits the group, and the group waits in `pending`. Only approved groups reach live search. An edit to an approved group returns it to `pending`, so it leaves live search until someone else approves it. The approver must differ from the last person who submitted the group, or the answer is `409 self_review_forbidden`. Deleting a group takes effect at once, without review.
+Review works as a four-eyes process. A creator or editor submits the group, and the group waits in `pending`. Only approved groups reach live search. An edit to an approved group returns it to `pending`, so it leaves live search until someone else approves it. The approver must differ from the last person who submitted the group, or the answer is `403 self_approval_forbidden`. Deleting a group takes effect at once, without review.
 
-The problem bodies use these codes. `invalid_request` gives `400`. `search_synonym_not_found` gives `404`. `version_conflict` gives `409`, when the version in the request is not the current one. `already_approved` gives `409`, when the group is already approved. `self_review_forbidden` gives `409`.
+The problem bodies use these codes. `invalid_request` gives `400`. `search_synonym_not_found` gives `404`. `version_conflict` gives `409`, when the version in the request is not the current one. `already_approved` gives `409`, when the group is already approved. `self_approval_forbidden` gives `403`, when the approver is the last submitter.
 
 After an approval, an edit of an approved group, or a delete of an approved group, the service pushes the approved set to the search index. A failed push is logged and does not fail the request. The next product search sweep pushes the set again.
 
 ## Payments
 
 - `POST /api/payments/invoices`
-- `POST /api/payments/prescriptions/{prescriptionId}`
+- `POST /api/payments/prescriptions/{prescriptionId}` (Pharmacist only)
 - `GET /api/payments/invoices`
 - `GET /api/payments/invoices/{id}`
 - `GET /api/payments/invoices/{id}/invoice`
 - `GET /api/payments/{id}`
 - `GET /api/payments/{id}/invoice`
-- `POST /api/payments/{id}/cash-paid`
-- `POST /api/payments/{id}/confirm-counter`
-- `POST /api/payments/{id}/refund` takes `{ "reason" }` (1 to 500 characters).
+- `POST /api/payments/{id}/cash-paid` (Pharmacist only)
+- `POST /api/payments/{id}/confirm-counter` (Pharmacist only)
+- `POST /api/payments/{id}/refund` takes `{ "reason" }` (1 to 500 characters). A counter invoice is refunded by a Pharmacist only; an online-order invoice by a Pharmacy Manager or Platform Admin. The wrong role answers `403 role_forbidden`.
 - `GET /api/payments/{id}/reconciliation`
 - `POST /api/payments/sepay/webhook`
 
@@ -264,7 +296,7 @@ A signed-in customer asks the shopping assistant inside a chat session. A sessio
 
 The list holds at most five products, each once, in the order the assistant first found them.
 
-A question that the intent gate classifies as a greeting, an out of scope question, a medical emergency, or an attempt to override the assistant's instructions answers `200 { reply, products: [] }` with a fixed reply. The model is not called. The exchange is saved and counts toward the session and the rate limits. The gate runs before the model and is configured through `/api/chatbot/intent-gate-credential`.
+A question that the intent gate classifies as a greeting, an out of scope question, a medical emergency, or an attempt to override the assistant's instructions answers `200 { reply, products: [] }` with a fixed reply. The model is not called. The exchange is saved and counts toward the session and the rate limits. The gate runs before the model and is configured through `/api/chatbot/intent-gate-credential`. With no screening key saved, or when the gate cannot classify a question, the question answers `503 assistant_unavailable` and nothing is sent to the model.
 
 Errors are problem JSON: `401 unauthenticated` for a request without a customer identity, `400 invalid_request`, `404 chat_session_not_found` for a session that is not the customer's, `409 session_full` once the session holds 20 questions (open a new session and send again), `429 rate_limited` above 10 questions per minute or 100 per day, and `503 assistant_unavailable` when the model, the catalog, or the intent gate fails. A `400`, `404`, `409`, `429`, or `503` answer saves nothing.
 
@@ -317,7 +349,7 @@ Both metric reads answer `400 invalid_request` for an unknown service or an unsu
 
 `operations-query-service` also serves `GET /api/operations/dashboard`, `GET /api/operations/audit`, and `GET /api/operations/finance`, which answer the same data as the dashboard, audit, and finance routes above.
 
-These endpoints read only `operations-query-service` projections. Projection lag is observable and does not change write-model truth.
+Dashboard routes are for Pharmacy Manager and Warehouse Staff, finance and reports for Pharmacy Manager, and audit for Platform Admin (BR-AUTH-002). These endpoints read only `operations-query-service` projections. Projection lag is observable and does not change write-model truth.
 
 `GET /api/audit/logs` and `GET /api/reports` answer one keyset page each. Both list newest first: audit events by `(occurredAt, eventId)`, reports by `(occurredAt, id)`. Each takes `limit` (default 100, clamped to 500) and `cursor`, and the body is the plain array of that page. When another row follows, `X-Next-Cursor` carries the cursor; send it back as `cursor` with the same other parameters. The last page has no header. A malformed or tampered cursor answers `400` with `code: "invalid_cursor"`.
 
@@ -328,7 +360,3 @@ These endpoints read only `operations-query-service` projections. Projection lag
 `GET /api/dashboard/summary` and `GET /api/finance/summary` count from the owning services' `COUNT(*)` endpoints, never from a capped list: `totalProducts` from `GET /api/products/count`, `pendingTransferCount` from `GET /api/inventory/transfers/count?status=PendingApproval,Draft,Approved,InTransit`, `openPrescriptionCount` from `GET /api/prescriptions/count?excludeStatus=Dispensed,Cancelled`, `openStocktakeCount` from `GET /api/inventory/stocktakes/count?excludeStatus=Completed,Cancelled`, `pendingAdjustmentCount` from `GET /api/inventory/adjustments/count?status=Pending`, and `receiptCount` from `GET /api/procurement/goods-receipts/count`. A scoped reader's counts carry its site scope, and a scoped read that fails answers `5xx` rather than a fallback. A network-wide reader falls back to the projection counter only when the owning service does not answer; a reachable zero stays zero.
 
 Stock is valued from `GET /api/pricing/base-prices?day=` (one row per active product, its base-unit price that day, `null` when none qualifies). A stocked balance whose product has no such price is listed as `Missing price` and counted in `missingPriceCount`. `receiptQuantity` and `dispensedQuantity` are all-time quantities summed by inventory-service from the stock ledger (`GoodsReceipt` quantity in, `Dispense` quantity out), so they are not sums of prescription and receipt lines.
-
-## Route groups without an endpoint
-
-The gateway forwards `/api/quality*` to `inventory-service`, but no route is mounted under that prefix. Batch quality review is `POST /api/inventory/batches/{id}/quality`.

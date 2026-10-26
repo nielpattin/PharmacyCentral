@@ -52,7 +52,7 @@ Shortcuts other than `Ctrl`/`Cmd` + `S` and `Esc` are ignored while you type in 
 2. Choose **Tài khoản** (Account) in the header. Signed-out visitors see the sign-in form there.
 3. Sign in with **Đăng nhập**, or choose **Tạo tài khoản mới** to register with a display name, an email and a password of at least 8 characters.
 
-Browsing, searching and the shopping assistant work without an account. Checkout, orders, prescription intake and the account pages require a signed-in customer.
+Browsing and searching work without an account. Checkout, orders, prescription intake, the account pages and the shopping assistant require a signed-in customer; the assistant button is not shown to signed-out visitors.
 
 ### Demo credentials
 
@@ -78,9 +78,9 @@ Staff Web has four business roles. Access is decided by role, and non-admin user
 | Role | Sidebar workspaces |
 | --- | --- |
 | Platform Admin | Every sidebar workspace, including Governance (Users, Audit, AI integrations) |
-| Pharmacy Manager | Dashboard, Pharmacist overview, Prescriptions, Online orders, Procurement, Reporting, Finance, Sites, Storage locations, Catalog, Search synonyms, Units, Pricing, Suppliers, Data import |
-| Pharmacist | Pharmacist overview, Prescriptions, Online orders, Replenishment, Search synonyms |
-| Warehouse Staff | Dashboard, Transfers, Replenishment, Receiving, Stocktake, Inventory, Adjustments, Returns and removals, Quality, Reporting, Data import (Stock only) |
+| Pharmacy Manager | Dashboard, Prescriptions, Online orders, Procurement, Reporting, Finance, Sites, Storage locations, Catalog, Search synonyms, Units, Pricing, Suppliers, Data import, Transfers, Replenishment, Stocktake, Inventory, Adjustments, Returns and removals, Quality |
+| Pharmacist | Pharmacist overview, Prescriptions, Online orders, Replenishment, Search synonyms, Inventory, Quality |
+| Warehouse Staff | Dashboard, Transfers, Replenishment, Receiving, Stocktake, Inventory, Adjustments, Returns and removals, Quality, Data import (Stock only) |
 
 Permissions per role, including which actions each role may perform, are defined in [Business rules](business-rules.md#4-quy-t%E1%BA%AFc-role-v%C3%A0-ph%C3%A2n-quy%E1%BB%81n).
 
@@ -92,7 +92,7 @@ A Pharmacy Manager sees the prescription, counter and consultation records as a 
 
 **Dashboard** (Platform Admin, Pharmacy Manager, Warehouse Staff) shows summary cards: active sites and storage locations, product and supplier counts, quantity on hand and reserved, low-stock batches, expiring batches, pending transfers, open prescriptions, open stocktakes, pending adjustments, and a list of recent activity.
 
-**Reporting** (Platform Admin, Pharmacy Manager, Warehouse Staff) opens the Reports tab of the finance service:
+**Reporting** (Platform Admin, Pharmacy Manager) opens the Reports tab of the finance service:
 
 1. Enter a **Report type** (the default is `sales`).
 2. Choose **Run report**.
@@ -160,7 +160,7 @@ Imports are repeatable: matching codes, SKUs and batch numbers update existing r
 **Procurement** (Platform Admin, Pharmacy Manager) opens on **Purchase orders**.
 
 1. Choose **Create order** (or press **N**). A side drawer opens: enter a purchase order number, supplier, site and the order lines, then choose **Create order**. The order lines are not kept in the autosaved draft.
-2. **Approve** a Draft purchase order from the list. Only Draft orders can be approved. **Cancel** is available until the order is received or cancelled.
+2. **Approve** a Draft purchase order from the list, as a Pharmacy Manager other than the one who created it. Only Draft orders can be approved. **Cancel** is available until the order is received or cancelled.
 3. Goods arriving against the order are recorded in Receiving (below). The order moves to partially received or received as quantities arrive.
 
 ### Receiving (goods receipts)
@@ -174,7 +174,7 @@ Imports are repeatable: matching codes, SKUs and batch numbers update existing r
 
 ## Quality
 
-**Quality** (Warehouse Staff) opens the Batches list.
+**Quality** (Pharmacist, Pharmacy Manager, Warehouse Staff) opens the Batches list. Warehouse Staff see the list read-only; Release and Reject are for Pharmacist and Pharmacy Manager.
 
 - **Release** approves a batch for operational use.
 - **Reject** fails a batch.
@@ -194,20 +194,20 @@ Only released batches that have not passed their expiry date count as sellable. 
 | Supply | Transfers | Transfer orders between sites and storage locations; **Create transfer** opens a drawer |
 | Supply | Replenishment | Replenishment requests with Approve, Reject, Fulfill and Cancel |
 | Supply | Returns | Returns and removals with reasons: Return to supplier, Damaged stock, Expired stock, Inventory removal |
-| Control | Adjustments | **Submit stock adjustment**; pending adjustments can be approved or rejected |
+| Control | Adjustments | **Submit stock adjustment**; a Pharmacy Manager approves or rejects pending adjustments |
 | Control | Stocktake | Stocktake sessions, **Create stocktake**, **Record count** for counted quantities (a drawer), and **Post adjustments** for pending sessions |
 
 Press **N** on a list to open its create drawer.
 
-**Transfers** workflow: create a transfer with its lines; approve it (`PendingApproval` to `Approved`); ship it (`InTransit`); receive it at the destination. A pending or approved transfer can be cancelled.
+**Transfers** workflow: Warehouse Staff create a transfer with its lines; a Pharmacy Manager other than its creator approves it (`PendingApproval` to `Approved`); Warehouse Staff ship it (`InTransit`) and receive it at the destination. A Pharmacy Manager or Warehouse Staff can cancel a pending or approved transfer.
 
-**Replenishment** workflow: a pharmacist or warehouse user creates a request; warehouse staff approve or reject it, then fulfill it or cancel it.
+**Replenishment** workflow: a pharmacist or pharmacy manager creates a request; warehouse staff approve or reject it, then fulfill it or cancel it.
 
-**Stocktake** workflow: create a session for a site and location; record counted quantities per line; post adjustments for the session.
+**Stocktake** workflow: Warehouse Staff create a session for a site and location and record counted quantities per line; a Pharmacy Manager who counted no line in the session posts its adjustments.
 
-**Adjustments** workflow: submit an adjustment with its type, quantity and reason; a reviewer approves or rejects it with optional approval notes.
+**Adjustments** workflow: Warehouse Staff submit an adjustment with its type, quantity and reason; a Pharmacy Manager other than its submitter approves or rejects it with optional approval notes.
 
-Pharmacists do not have Inventory in the sidebar and cannot adjust balances.
+Pharmacists see Inventory read-only; movements, adjustments and stocktake counts are Warehouse Staff actions.
 
 ## Online orders
 
@@ -253,7 +253,7 @@ External accounting ledger posting is outside the scope of these screens.
 
 Filter by entity type (grouped by area), actor and date range, or search by action, entity ID or actor ID. Each record shows the action in words (for example "Duyệt điều chuyển"), the entity, the actor, the site, the time and the details. The actor column reads "System" for changes nobody made by hand, such as an online order that expired unpaid.
 
-The log keeps no passwords, API keys or free-text notes. Details hold only a few safe fields, such as the roles given to a user or the decision on a batch. Shopper activity is not audited, and neither is a failed sign-in. Entries appear a few seconds after the change, because they travel through RabbitMQ; a change made while the broker is down is recorded when it is back.
+The log keeps no passwords, API keys or free-text notes. Details hold only a few safe fields, such as the roles given to a user or the decision on a batch. Shopper activity is not audited. A failed Staff Web sign-in is recorded with its reason and never its password; a failed shopper sign-in is not. Entries appear a few seconds after the change, because they travel through RabbitMQ; a change made while the broker is down is recorded when it is back.
 
 ## Users and access
 
@@ -261,10 +261,10 @@ The log keeps no passwords, API keys or free-text notes. Details hold only a few
 
 Per row:
 
-- **Edit access** opens a drawer with the account's roles and site access as checkboxes. Choose at least one role, then **Save access**.
+- **Edit access** opens a drawer with the account's roles and site access as checkboxes. Choose at least one role, and a site for every role except Platform Admin, then **Save access**.
 - The **More actions** menu (three dots) holds **Reset password** (a new password of at least 12 characters) and **Revoke sessions** (signs the account out everywhere, for example after a security incident; asks to confirm).
 
-**Create user** (or press `n`) opens the drawer "Create employee account": email, display name, password, roles and site access, then choose **Create employee**. Leaving a drawer with unsaved input asks first; Ctrl+S saves.
+**Create user** (or press `n`) opens the drawer "Create employee account": email, display name, password, roles and site access, then choose **Create employee**. The same site rule applies. The new account must change its password at its first sign-in. Leaving a drawer with unsaved input asks first; Ctrl+S saves.
 
 ## AI integrations
 
@@ -275,7 +275,7 @@ Per row:
 | Shopping assistant | Answers shopper questions on Customer Web | The assistant cannot answer |
 | Prescription photo reading | Reads medicines from a photo of a printed prescription | Photo reading is off; QR intake still works |
 | Semantic product search | Finds products by meaning, not only the words typed. Searches of fewer than three words always match keywords only | Search matches keywords only |
-| Question screening | Checks each shopper question first; greetings, off-topic questions, emergencies and prompt-injection attempts get a fixed reply | Every question goes straight to the assistant |
+| Question screening | Checks each shopper question first; greetings, off-topic questions, emergencies and prompt-injection attempts get a fixed reply | The assistant cannot answer: questions are refused, never sent unscreened |
 
 Each card shows a source badge: **Saved key**, **Environment key**, or **Not configured**. For a saved key it also shows the provider, model, base URL, the last four characters of the key, and when and by whom it was updated. Otherwise it explains that the value comes from the server environment.
 
@@ -284,7 +284,7 @@ Each card shows a source badge: **Saved key**, **Environment key**, or **Not con
 - **Remove key** deletes the saved settings. If the server environment has settings, the feature falls back to them; otherwise the feature stops working as described above.
 - Saving or removing a key starts a background reindex, so semantic search results update shortly afterwards.
 
-When the shopping assistant cannot answer, shoppers see "Trợ lý tư vấn đang gặp sự cố. Vui lòng thử lại sau ít phút." in the chat widget.
+When the shopping assistant cannot answer, shoppers see "Trợ lý tư vấn đang gặp sự cố. Vui lòng thử lại sau ít phút." in the chat widget. This includes a missing screening key: the question is refused rather than sent to the assistant.
 
 ## Customer Web
 
@@ -350,12 +350,12 @@ Use the demo accounts above, with `pnpm run dev:data` already run.
 
 1. **Platform Admin**: sign in to Staff Web. Open **Users** to review accounts and access, **Audit** for the activity log, and **AI integrations** for the four AI feature cards.
 2. **Platform Admin or Pharmacy Manager**: open **Sites**, **Storage locations**, **Suppliers** and **Catalog**, then **Units** and **Pricing** to see sale units and price drafts.
-3. **Pharmacy Manager**: open **Procurement**, create a purchase order and approve it.
-4. **Warehouse Staff**: open **Receiving**, record the goods receipt against that order, then open **Quality** and release the new batch.
-5. **Warehouse Staff**: open **Inventory** to see balances and movements; open **Transfers** to create and ship a transfer; open **Returns and removals** and **Stocktake**; open **Adjustments** to submit and approve an adjustment.
+3. **Pharmacy Manager**: open **Procurement** and create a purchase order. A second Pharmacy Manager or Platform Admin approves it.
+4. **Warehouse Staff**: open **Receiving** and record the goods receipt against that order. **Pharmacist** then opens **Quality** and releases the new batch.
+5. **Warehouse Staff**: open **Inventory** to see balances and movements; open **Transfers** to create and ship a transfer; open **Returns and removals** and **Stocktake**; open **Adjustments** to submit an adjustment for a Pharmacy Manager to approve.
 6. **Pharmacist**: sign in, open **Pharmacist overview**, then **Prescriptions**, choose **Create prescription**, then **Dispense** on its row. In **Counter transactions**, create the invoice and confirm cash.
 7. **Pharmacy Manager**: open **Finance** and **Reporting** to review the summary, invoices and report rows.
-8. **Pharmacist**: open **Search synonyms**, submit a group, then sign in as another staff member to approve it.
+8. **Pharmacist**: open **Search synonyms**, submit a group, then sign in as another Pharmacist or Pharmacy Manager to approve it. Platform Admin cannot approve synonym groups.
 9. **Customer**: open Customer Web at `http://customer.pharmacy.localhost/`, search for a product, add it to the cart, sign in, and check out with pickup or delivery. Open **Đơn hàng** (`/don-hang`) and the **Đơn của tôi** tab to track it, and try **Gửi đơn thuốc** and the shopping assistant.
 
 ## Demonstration guidelines

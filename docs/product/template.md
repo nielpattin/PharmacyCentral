@@ -1,7 +1,7 @@
 # <Page or feature name>
 
 <!-- Copy this file to docs/product/<app>-<page>.md and fill in every section. Delete the comments when done.
-Tag each statement [owner], [observed] or [question]; see README.md. Do not invent a reason. -->
+Tag each statement [owner], [observed], [standard] or [question]; see README.md. Do not invent a reason. -->
 
 - **Status:** Draft
 - **App and route:** <!-- customer-web or staff-web, and the route -->
@@ -42,6 +42,18 @@ Tag each statement [owner], [observed] or [question]; see README.md. Do not inve
 
 <!-- Link the BR-* rules, design docs and ADRs this page relies on. -->
 
-## Open questions
+## Decisions
 
-- <!-- Question, and who will answer it. -->
+<!-- Every question answered. Tag [standard] with the source when known. -->
+
+| # | Question | Decision | Why |
+| --- | --- | --- | --- |
+| 1 | <!-- question --> | <!-- decision --> | <!-- reason --> |
+
+## Gaps against the code (YYYY-MM-DD)
+
+<!-- One row per place the code or another document differs from this spec. "None." if there is no gap. Mark the affected criterion (gap Gn). -->
+
+| ID | The spec requires | The code does today | Where |
+| --- | --- | --- | --- |
+| G1 | <!-- target --> | <!-- current --> | <!-- file or doc section --> |

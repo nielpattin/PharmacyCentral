@@ -116,7 +116,7 @@ Tags: `[owner]` stated by the owner, `[observed]` read from the code on 2026-10-
 - [Design 0004](../design/0004-order-from-selected-cart-lines.md) (Implemented): moving "which lines are ordered" to the server.
 - [User guide, Cart and checkout](../user-guide.md#cart-and-checkout): how a customer works through it.
 
-## Open questions
+## Decisions
 
 Answered from published e-commerce research on 2026-10-26, because the owner asked for the standard answer. Tag `[standard]`: a recommendation from a source, not a recorded decision. The owner accepted these answers on 2026-10-26, and settled the prescription item the same day (US3a, BR-ORD-011, ADR 0016). The answers stay recommendations until the owner replaces them with a recorded reason.
 
@@ -125,3 +125,9 @@ Answered from published e-commerce research on 2026-10-26, because the owner ask
 - **The picker folds away once the cart has lines.** `[standard]` Consistent with Baymard: ads and cross-sells in the cart or checkout pull the shopper away from finishing, and should stay secondary ([Baymard](https://baymard.com/blog/reduce-cart-abandonment)). Keep it, with **Thêm thuốc** one click away.
 - **Signed-out customers.** `[owner]` Ordering needs a signed-in customer (BR-ORD-001); the owner confirmed this on 2026-10-26. Reaching `/don-hang` signed out to review the cart stays allowed. For the record, `[standard]` Baymard finds 19% of US shoppers abandoned an order because they had to create an account, and recommends guest checkout; this shop does not offer guest checkout.
 - **A ticked product goes out of stock before the order.** `[standard]` Baymard: never leave the shopper at a dead end; offer alternatives, since 30% abandon when only told "out of stock" ([Baymard](https://baymard.com/research-articles/handling-out-of-stock-products)). Selling an out-of-stock item for later delivery does not fit here, because the server holds real batch stock when the order is placed. Recommended: keep `409 insufficient_stock`, keep the cart and its ticks, name the product that failed, and offer to remove it or to ask a pharmacist for an alternative. The current message is not verified. Owner.
+
+## Gaps against the code (2026-10-26)
+
+| ID | The spec requires | The code does today | Where |
+| --- | --- | --- | --- |
+| G1 | A refused order for stock keeps the cart and ticks, names the product that failed, and offers to remove it or ask a pharmacist | The cart and its ticks are kept on a refusal (`sales-routes.ts` clears lines only after stock is held). The 409 shows a Vietnamese message (`OrdersHubPage.tsx` `deliveryErrorMessage`) that names no product and offers "Hãy giảm số lượng hoặc chọn cửa hàng khác", not removal or a pharmacist request. | `apps/customer-web/src/pages/OrdersHubPage.tsx`, `apps/sales-service/src/modules/sales-routes.ts` |

@@ -66,3 +66,4 @@ outlive the feature becomes an ADR. The design document links to the ADRs it rel
 | [0014](0014-signed-out-cart-in-the-browser.md) | Keep the signed-out cart in the browser | Accepted | 2026-10-26 |
 | [0015](0015-server-picks-the-cart-lines-of-an-order.md) | The server picks the cart lines of an order | Accepted | 2026-10-26 |
 | [0016](0016-prescription-only-products-are-not-sold-online.md) | Prescription-only products are not put in the cart or sold online | Accepted | 2026-10-26 |
+| [0017](0017-roles-checked-at-the-edge-and-in-each-service.md) | Roles are checked at the edge and in every service | Accepted | 2026-10-26 |
