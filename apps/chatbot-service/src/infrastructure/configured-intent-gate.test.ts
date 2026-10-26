@@ -12,10 +12,10 @@ const INPUT: IntentGateInput = {
 const VERDICT: IntentVerdict = { intent: "product_detail", intentConfidence: 0.9, emergency: 0, injection: 0 };
 
 describe("ConfiguredIntentGate", () => {
-  it("returns no verdict when no classifier is configured, so the gate is off", async () => {
+  it("refuses with IntentGateError when no screening key is configured, so the question never reaches the model", async () => {
     const gate = new ConfiguredIntentGate(async () => undefined);
 
-    await expect(gate.check(INPUT)).resolves.toBeUndefined();
+    await expect(gate.check(INPUT)).rejects.toBeInstanceOf(IntentGateError);
   });
 
   it("returns the verdict of the classifier built from the current settings", async () => {

@@ -32,7 +32,10 @@ export interface IntentClassifier {
   classify(input: IntentGateInput): Promise<IntentVerdict>;
 }
 
-/** The port of the chat use case. It answers undefined when no classifier is configured, which switches the gate off. */
+/**
+ * The port of the chat use case. It always answers a verdict or throws IntentGateError: with no screening key configured
+ * the question is refused, never sent to the model unscreened.
+ */
 export interface IntentGate {
-  check(input: IntentGateInput): Promise<IntentVerdict | undefined>;
+  check(input: IntentGateInput): Promise<IntentVerdict>;
 }

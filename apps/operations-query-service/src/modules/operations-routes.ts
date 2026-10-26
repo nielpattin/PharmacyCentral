@@ -2,6 +2,7 @@ import { Router, type Response } from "express";
 import { z } from "zod";
 
 import { listSiteIds } from "../middleware/trusted-request.ts";
+import { DASHBOARD_ROLES, REPORT_ROLES, roleRefusal } from "./operations-access.ts";
 import { decodePageCursor, encodePageCursor } from "./page-cursor.ts";
 import { OperationsRepository, type AuditFilters, type IntegrationEvent } from "./operations-repository.ts";
 
@@ -22,6 +23,15 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
   ): Promise<void> => {
     if (!repository) {
       unavailable(response);
+      return;
+    }
+    const refusal = roleRefusal(
+      request,
+      DASHBOARD_ROLES,
+      "Bảng điều khiển chỉ dành cho Quản trị nền tảng, Quản lý dược và Nhân viên kho.",
+    );
+    if (refusal) {
+      response.status(refusal.status).json(refusal);
       return;
     }
     try {
@@ -105,6 +115,11 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
   router.get("/reports", async (request, response, next) => {
     if (!repository) {
       unavailable(response);
+      return;
+    }
+    const refusal = roleRefusal(request, REPORT_ROLES, "Báo cáo chỉ dành cho Quản trị nền tảng và Quản lý dược.");
+    if (refusal) {
+      response.status(refusal.status).json(refusal);
       return;
     }
     const rawCursor = queryString(request.query.cursor);

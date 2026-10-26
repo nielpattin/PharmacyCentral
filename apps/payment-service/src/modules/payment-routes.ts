@@ -5,7 +5,16 @@ import { z } from "zod";
 
 import { createInvoiceRequestSchema, invoiceListQuerySchema } from "../contracts/payment.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
+import { actorSiteIds } from "../middleware/trusted-request.ts";
 
+import {
+  actorRoles,
+  cashConfirmationRefusal,
+  counterInvoiceRefusal,
+  forwardedActorHeaders,
+  refundRefusal,
+  siteScopeRefusal,
+} from "./payment-access.ts";
 import { InvoiceRefusal, priceInvoiceRequest, type PayableOrder } from "./invoice-pricing.ts";
 import { decodePageCursor, encodePageCursor } from "./page-cursor.ts";
 import { PaymentRepository } from "./payment-repository.ts";
@@ -31,11 +40,11 @@ export const createPaymentRouter = (
     const prescriptionId = z.string().uuid().safeParse(request.params.prescriptionId);
     const createdBy = actor(request);
     if (!prescriptionId.success || !createdBy) return unauthorized(response);
+    const roleRefusal = counterInvoiceRefusal(actorRoles(request));
+    if (roleRefusal) return response.status(roleRefusal.status).json(roleRefusal);
     try {
-      const existing = await repository.getInvoiceByPrescription(prescriptionId.data);
-      if (existing) return response.json(existing);
       const salesResponse = await fetch(`${options.salesServiceUrl}/prescriptions/${prescriptionId.data}`, {
-        headers: internalServiceHeaders(createdBy),
+        headers: { ...internalServiceHeaders(createdBy), ...forwardedActorHeaders(request) },
         signal: AbortSignal.timeout(2_000),
       });
       if (!salesResponse.ok)
@@ -46,6 +55,11 @@ export const createPaymentRouter = (
         siteId: string;
         lines: Array<{ productId: string; productUnitId: string; prescribedQuantity: string }>;
       };
+      // The site is judged before the invoice is read or written, so a refused caller learns nothing about the invoice.
+      const siteRefusal = siteScopeRefusal(prescription.siteId, actorSiteIds(request));
+      if (siteRefusal) return response.status(siteRefusal.status).json(siteRefusal);
+      const existing = await repository.getInvoiceByPrescription(prescriptionId.data);
+      if (existing) return response.json(existing);
       const lines = await Promise.all(
         prescription.lines.map(async (line) => {
           const [productResponse, priceResponse] = await Promise.all([
@@ -198,6 +212,8 @@ export const createPaymentRouter = (
     if (!repository) return unavailable(response);
     const id = idSchema.safeParse(request.params);
     if (!id.success) return invalid(response);
+    const refusal = cashConfirmationRefusal(actorRoles(request));
+    if (refusal) return response.status(refusal.status).json(refusal);
     try {
       const invoice = await repository.markCashPaid(id.data.id, actor(request));
       return invoice ? response.json(invoice) : response.status(404).json({ title: "Invoice not found", status: 404 });
@@ -210,6 +226,8 @@ export const createPaymentRouter = (
     if (!repository) return unavailable(response);
     const id = idSchema.safeParse(request.params);
     if (!id.success) return invalid(response);
+    const refusal = cashConfirmationRefusal(actorRoles(request));
+    if (refusal) return response.status(refusal.status).json(refusal);
     try {
       const invoice = await repository.markCashPaid(id.data.id, actor(request));
       return invoice ? response.json(invoice) : response.status(404).json({ title: "Invoice not found", status: 404 });
@@ -224,6 +242,11 @@ export const createPaymentRouter = (
     const parsed = z.object({ reason: z.string().trim().min(1).max(500) }).safeParse(request.body);
     if (!id.success || !parsed.success) return invalid(response);
     try {
+      const existing = await repository.getInvoice(id.data.id);
+      if (!existing) return response.status(404).json({ title: "Invoice not found", status: 404 });
+      // The invoice kind decides the role, so the refusal is judged before the refund writes anything.
+      const refusal = refundRefusal(existing, actorRoles(request));
+      if (refusal) return response.status(refusal.status).json(refusal);
       const invoice = await repository.refund(id.data.id, parsed.data.reason, actor(request));
       return invoice ? response.json(invoice) : response.status(404).json({ title: "Invoice not found", status: 404 });
     } catch (error) {

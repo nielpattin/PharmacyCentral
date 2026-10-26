@@ -3,7 +3,9 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createTrustedRequestMiddleware } from "./trusted-request.ts";
+import type { InternalIdentityContext } from "../contracts/common.ts";
+
+import { createTrustedRequestMiddleware, signInternalIdentityContext } from "./trusted-request.ts";
 
 const identitySecret = "test-identity-secret-1234567890123456";
 const serviceSecret = "test-service-secret-1234567890123456";
@@ -65,5 +67,79 @@ describe("trusted request actor headers", () => {
       headers: { "x-actor-id": spoofedActorId, "x-actor-type": "employee" },
     });
     expect(response.status).toBe(401);
+  });
+});
+
+describe("trusted request role restatement", () => {
+  let activeServer: Server | undefined;
+
+  afterEach(async () => {
+    if (!activeServer) return;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    activeServer.close(() => resolve());
+    activeServer = undefined;
+    await promise;
+  });
+
+  // Mirrors the employee and shopper cases of policy.mjs. A request the middleware admits reaches the fallback (200).
+  const callAs = async (
+    actorType: "employee" | "customer",
+    roles: string[],
+    path: string,
+    method: string,
+  ): Promise<Response> => {
+    const app = express();
+    app.use(express.json());
+    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+    app.use((_request, response) => response.json({ ok: true }));
+    const { server, url } = await startServer(app);
+    activeServer = server;
+    const context: InternalIdentityContext = {
+      version: "v1",
+      requestId: "req-role",
+      correlationId: "corr-role",
+      actorId: "00000000-0000-4000-8000-000000000001",
+      actorType,
+      roles,
+      siteIds: ["00000000-0000-4000-8000-000000000010"],
+      issuedAt: new Date(Date.now() - 1000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      audience: "payment-service",
+    };
+    return fetch(`${url}${path}`, {
+      method,
+      headers: {
+        "x-internal-identity-context": signInternalIdentityContext(context, identitySecret),
+        "content-type": "application/json",
+      },
+      ...(method === "GET" ? {} : { body: "{}" }),
+    });
+  };
+
+  const paymentId = "/payments/00000000-0000-4000-8000-000000000030";
+
+  it("admits a Pharmacy Manager and a Pharmacist to a refund, and refuses Warehouse Staff", async () => {
+    expect((await callAs("employee", ["Pharmacy Manager"], `${paymentId}/refund`, "POST")).status).toBe(200);
+    expect((await callAs("employee", ["Pharmacist"], `${paymentId}/refund`, "POST")).status).toBe(200);
+    const refused = await callAs("employee", ["Warehouse Staff"], `${paymentId}/refund`, "POST");
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("refuses Platform Admin cash taken at the counter, which a Pharmacist makes", async () => {
+    const response = await callAs("employee", ["Platform Admin"], `${paymentId}/cash-paid`, "POST");
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("refuses a Pharmacy Manager confirming counter cash, which only a Pharmacist may do", async () => {
+    const response = await callAs("employee", ["Pharmacy Manager"], `${paymentId}/confirm-counter`, "POST");
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("lets a shopper create an invoice, which carries no staff role", async () => {
+    const response = await callAs("customer", [], "/payments/invoices", "POST");
+    expect(response.status).toBe(200);
   });
 });

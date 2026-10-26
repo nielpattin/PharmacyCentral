@@ -81,7 +81,6 @@ export const DEFAULT_SITE_SCOPED_PREFIXES: readonly string[] = [
 export const DEFAULT_EMPLOYEE_PREFIXES: readonly string[] = [
   "/procurement",
   "/inventory",
-  "/quality",
   "/operations",
   "/dashboard",
   "/finance",

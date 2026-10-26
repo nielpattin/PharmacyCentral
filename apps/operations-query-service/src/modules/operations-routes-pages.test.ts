@@ -68,19 +68,20 @@ describe("audit and report paging routes", () => {
 
   it("pages reports with the default size of 100 and answers 400 invalid_cursor for a bad cursor", async () => {
     reportCalls.length = 0;
+    const managerHeaders = { headers: { "X-Actor-Type": "employee", "X-Actor-Roles": "Pharmacy Manager" } };
     reportPage = { rows: [{ id: "r" }], next: position };
-    const response = await fetch(`${base}/reports?reportType=payment.invoice.paid.v1`);
+    const response = await fetch(`${base}/reports?reportType=payment.invoice.paid.v1`, managerHeaders);
     expect(response.headers.get("x-next-cursor")).toBe(encodePageCursor(position));
     expect(reportCalls[0]).toStrictEqual({
       reportType: "payment.invoice.paid.v1",
       options: { limit: 100 },
     });
 
-    const cursored = await fetch(`${base}/reports?cursor=${encodePageCursor(position)}&limit=10`);
+    const cursored = await fetch(`${base}/reports?cursor=${encodePageCursor(position)}&limit=10`, managerHeaders);
     expect(cursored.status).toBe(200);
     expect(reportCalls[1]).toMatchObject({ options: { limit: 10, cursor: position } });
 
-    const invalid = await fetch(`${base}/reports?cursor=0`);
+    const invalid = await fetch(`${base}/reports?cursor=0`, managerHeaders);
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toMatchObject({ code: "invalid_cursor" });
   });

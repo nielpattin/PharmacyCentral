@@ -32,7 +32,7 @@ export type ChatDependencies = {
   store: ChatSessionStore;
   gate: IntentGate;
   reportUsage: (report: { usage: ChatUsage; modelCalls: number }) => void;
-  reportGate: (report: { decision: "allow" | "block"; reason: string | null; verdict: IntentVerdict | null }) => void;
+  reportGate: (report: { decision: "allow" | "block"; reason: string | null; verdict: IntentVerdict }) => void;
 };
 
 export const MAX_QUESTIONS_PER_SESSION = 20;
@@ -230,25 +230,21 @@ export const sendChatMessage = async (
     previousQuestion: history.findLast((turn) => turn.role === "user")?.content.slice(0, 300),
     previousReply: history.findLast((turn) => turn.role === "assistant")?.content.slice(0, 600),
   });
-  if (verdict === undefined) {
-    deps.reportGate({ decision: "allow", reason: null, verdict: null });
-  } else {
-    const decision = decideGate(verdict);
-    if (decision.action === "block") {
-      deps.reportGate({ decision: "block", reason: decision.reason, verdict });
-      await deps.store.appendExchange({
-        customerId: input.customerId,
-        sessionId: input.sessionId,
-        question: decision.reason === "injection" ? BLOCKED_INJECTION_QUESTION : input.content,
-        reply: decision.reply,
-        products: [],
-        limits: WRITE_LIMITS,
-        now: new Date(),
-      });
-      return { reply: decision.reply, products: [] };
-    }
-    deps.reportGate({ decision: "allow", reason: null, verdict });
+  const decision = decideGate(verdict);
+  if (decision.action === "block") {
+    deps.reportGate({ decision: "block", reason: decision.reason, verdict });
+    await deps.store.appendExchange({
+      customerId: input.customerId,
+      sessionId: input.sessionId,
+      question: decision.reason === "injection" ? BLOCKED_INJECTION_QUESTION : input.content,
+      reply: decision.reply,
+      products: [],
+      limits: WRITE_LIMITS,
+      now: new Date(),
+    });
+    return { reply: decision.reply, products: [] };
   }
+  deps.reportGate({ decision: "allow", reason: null, verdict });
 
   const { runTool, surfaced } = createToolRunner(deps.products, history);
   const completion = await deps.model.complete({

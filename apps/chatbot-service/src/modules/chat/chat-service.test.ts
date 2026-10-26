@@ -325,17 +325,6 @@ describe("sendChatMessage intent gate", () => {
     expect(gateReports).toEqual([{ decision: "allow", reason: null, verdict: ALLOWED }]);
   });
 
-  it("runs the model as before when no gate is configured, and reports an allow with no verdict", async () => {
-    const { deps, modelCalls, gateReports } = dependencies({ gate: { check: async () => undefined } });
-    const sessionId = await startChatSession(deps, CUSTOMER);
-
-    const reply = await sendChatMessage(deps, { customerId: CUSTOMER, sessionId, content: "tiêu chảy" });
-
-    expect(modelCalls).toHaveLength(1);
-    expect(reply.reply).toBe("Smecta giúp điều trị tiêu chảy.");
-    expect(gateReports).toEqual([{ decision: "allow", reason: null, verdict: null }]);
-  });
-
   it("lets an IntentGateError reach the caller and saves nothing, without calling the model", async () => {
     const { deps, modelCalls, sessions, usageReports, gateReports } = dependencies({
       gate: {

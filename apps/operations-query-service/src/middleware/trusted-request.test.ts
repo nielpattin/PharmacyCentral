@@ -3,7 +3,9 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createTrustedRequestMiddleware } from "./trusted-request.ts";
+import type { InternalIdentityContext } from "../contracts/common.ts";
+
+import { createTrustedRequestMiddleware, signInternalIdentityContext } from "./trusted-request.ts";
 
 const identitySecret = "test-identity-secret-1234567890123456";
 const serviceSecret = "test-service-secret-1234567890123456";
@@ -65,5 +67,55 @@ describe("trusted request actor headers", () => {
       headers: { "x-actor-id": spoofedActorId, "x-actor-type": "employee" },
     });
     expect(response.status).toBe(401);
+  });
+});
+
+describe("trusted request role restatement", () => {
+  let activeServer: Server | undefined;
+
+  afterEach(async () => {
+    if (!activeServer) return;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    activeServer.close(() => resolve());
+    activeServer = undefined;
+    await promise;
+  });
+
+  // Mirrors the employee cases of policy.mjs. A request the middleware admits reaches the fallback (200).
+  const callAs = async (roles: string[], path: string): Promise<Response> => {
+    const app = express();
+    app.use(express.json());
+    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+    app.use((_request, response) => response.json({ ok: true }));
+    const { server, url } = await startServer(app);
+    activeServer = server;
+    const context: InternalIdentityContext = {
+      version: "v1",
+      requestId: "req-role",
+      correlationId: "corr-role",
+      actorId: "00000000-0000-4000-8000-000000000001",
+      actorType: "employee",
+      roles,
+      siteIds: ["00000000-0000-4000-8000-000000000010"],
+      issuedAt: new Date(Date.now() - 1000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      audience: "operations-query-service",
+    };
+    return fetch(`${url}${path}`, {
+      headers: { "x-internal-identity-context": signInternalIdentityContext(context, identitySecret) },
+    });
+  };
+
+  it("admits Warehouse Staff to the dashboard and refuses them the reports", async () => {
+    expect((await callAs(["Warehouse Staff"], "/dashboard/summary")).status).toBe(200);
+    const refused = await callAs(["Warehouse Staff"], "/reports");
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("refuses a Pharmacy Manager the audit log, which only Platform Admin reads", async () => {
+    const refused = await callAs(["Pharmacy Manager"], "/audit/logs");
+    expect(refused.status).toBe(403);
+    expect((await callAs(["Platform Admin"], "/audit/logs")).status).toBe(200);
   });
 });

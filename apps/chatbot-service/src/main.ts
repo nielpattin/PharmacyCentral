@@ -74,10 +74,10 @@ const app = createApp({
         {
           decision,
           reason,
-          intent: verdict?.intent ?? null,
-          intentConfidence: verdict?.intentConfidence ?? null,
-          emergency: verdict?.emergency ?? null,
-          injection: verdict?.injection ?? null,
+          intent: verdict.intent,
+          intentConfidence: verdict.intentConfidence,
+          emergency: verdict.emergency,
+          injection: verdict.injection,
         },
         "intent gate decision",
       );

@@ -96,7 +96,7 @@ const buildApp = (fallback: AiProviderSettings | undefined) => {
       products: { search: async () => [], details: async () => undefined },
       store: {} as never,
       reportUsage: () => undefined,
-      gate: { check: async () => undefined },
+      gate: { check: async () => ({ intent: "greeting", intentConfidence: null, emergency: 0, injection: 0 }) },
       reportGate: () => undefined,
     },
     credentials: [
