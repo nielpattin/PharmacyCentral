@@ -9,6 +9,7 @@ import {
 } from "../../../../contracts/identity.ts";
 
 import type { Account } from "../../domain/account.ts";
+import { AccountError, accountErrors } from "../../domain/account-error.ts";
 import {
   AuthRateLimiterError,
   type AuthAdmission,
@@ -39,7 +40,10 @@ const adminUserSchema = z.object({
   siteIds: z.array(z.string().uuid()).max(500),
 });
 const userAccessSchema = z.object({ roles: z.array(z.string()).max(8), siteIds: z.array(z.string().uuid()).max(500) });
+const adminUserListSchema = z.object({ status: z.enum(["active", "deactivated"]).optional() });
 const userIdSchema = z.object({ id: z.string().uuid() });
+// A service caller resolves a page of orders at once; the cap keeps one request bounded.
+const customerBatchSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) });
 // A one-character query would return the whole customer base, so the counter has to type at least three.
 const customerLookupSchema = z.object({ q: z.string().trim().min(3).max(320) });
 const sessionCookieName = "pharmacy_session";
@@ -48,8 +52,8 @@ const csrfCookieName = "pharmacy_csrf";
 const customerLookupRoles = ["Pharmacist", "Platform Admin"];
 
 /**
- * Records a staff member acting on their own account: signing in or out, changing a password or a profile. Shoppers
- * are left out, because the audit log is the staff trail and a shopper signing in is not a staff action.
+ * Records a staff member acting on their own account: signing in or out. Shoppers are left out, because the audit log
+ * is the staff trail and a shopper signing in is not a staff action.
  */
 const auditOwnAccount = (
   audit: AuditRecorder,
@@ -110,6 +114,11 @@ export const createAccountRouter = (
     const current = token ? await service.currentSession(token) : undefined;
     if (!current) {
       response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
+      return;
+    }
+    // Every service trusts a context it can verify, so no context is minted for an account that must change its password.
+    if (current.account.mustChangePassword) {
+      writeServiceError(response, accountErrors.passwordChangeRequired(), 403);
       return;
     }
     const secret = process.env.INTERNAL_IDENTITY_SECRET;
@@ -244,6 +253,16 @@ export const createAccountRouter = (
       await auditOwnAccount(audit, result.account, "identity.auth.login");
       response.json(toPublicAccount(result.account));
     } catch (error) {
+      // A failed staff sign-in is recorded without its password. The entry names the account when the email matched
+      // one, and why it was refused. A shopper's failed sign-in is not recorded (no audit of shoppers' activity).
+      if (parsed.data.audience === "employee" && error instanceof AccountError && error.reason !== undefined) {
+        await audit.record({
+          action: "identity.auth.login-failed",
+          entityType: "user",
+          entityId: error.accountId,
+          details: { reason: error.reason },
+        });
+      }
       writeServiceError(response, error, 401);
     }
   });
@@ -277,6 +296,10 @@ export const createAccountRouter = (
       response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
       return;
     }
+    if (current.account.mustChangePassword) {
+      writeServiceError(response, accountErrors.passwordChangeRequired(), 403);
+      return;
+    }
 
     const parsed = updateProfileRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -286,7 +309,6 @@ export const createAccountRouter = (
 
     try {
       const updated = await service.updateProfile(current.account.id, parsed.data);
-      await auditOwnAccount(audit, updated, "identity.account.profile-updated");
       response.json(toPublicAccount(updated));
     } catch (error) {
       writeServiceError(response, error, 400);
@@ -337,7 +359,6 @@ export const createAccountRouter = (
 
     try {
       await service.changePassword(current.account.id, parsed.data.currentPassword, parsed.data.nextPassword);
-      await auditOwnAccount(audit, current.account, "identity.account.password-changed");
       clearSessionCookie(response);
       response.status(204).end();
     } catch (error) {
@@ -348,22 +369,12 @@ export const createAccountRouter = (
   return router;
 };
 
-export const createAdminRouter = (service: AccountService, audit: AuditRecorder): Router => {
+/**
+ * The administrator's routes. Every change is audited inside the service, in the same transaction as the change, so
+ * the router writes no audit entry of its own.
+ */
+export const createAdminRouter = (service: AccountService): Router => {
   const router = Router();
-  /** Records one administrator action on another account. The roles and sites are kept; passwords never are. */
-  const auditAdmin = (
-    response: Response,
-    action: string,
-    userId: string,
-    details?: Record<string, string | number | boolean | null>,
-  ): Promise<void> =>
-    audit.record({
-      action,
-      entityType: "user",
-      entityId: userId,
-      actorId: response.locals.adminId as string,
-      ...(details ? { details } : {}),
-    });
 
   router.use(async (request, response, next) => {
     const token = getSessionToken(request);
@@ -373,7 +384,16 @@ export const createAdminRouter = (service: AccountService, audit: AuditRecorder)
       return;
     }
     if (!current.account.roles.includes("Platform Admin")) {
-      response.status(403).json({ title: "Platform Admin role required", status: 403, code: "forbidden" });
+      response.status(403).json({
+        title: "Platform Admin role required",
+        status: 403,
+        code: "forbidden",
+        detail: "Chỉ Quản trị nền tảng mới được thực hiện thao tác này.",
+      });
+      return;
+    }
+    if (current.account.mustChangePassword) {
+      writeServiceError(response, accountErrors.passwordChangeRequired(), 403);
       return;
     }
 
@@ -382,21 +402,36 @@ export const createAdminRouter = (service: AccountService, audit: AuditRecorder)
   });
 
   router.get("/roles", async (_request, response) => response.json({ roles: await service.listRoles() }));
-  router.get("/users", async (_request, response) => response.json((await service.listUsers()).map(toPublicAccount)));
+
+  router.get("/users", async (request, response) => {
+    const parsed = adminUserListSchema.safeParse(request.query);
+    if (!parsed.success) {
+      response.status(400).json({
+        title: "Invalid request",
+        status: 400,
+        code: "invalid_request",
+        detail: "Dữ liệu gửi lên không hợp lệ.",
+      });
+      return;
+    }
+
+    response.json((await service.listUsers(parsed.data.status)).map(toPublicAccount));
+  });
 
   router.post("/users", async (request, response) => {
     const parsed = adminUserSchema.safeParse(request.body);
     if (!parsed.success) {
-      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      response.status(400).json({
+        title: "Invalid request",
+        status: 400,
+        code: "invalid_request",
+        detail: "Dữ liệu gửi lên không hợp lệ.",
+      });
       return;
     }
 
     try {
-      const created = await service.createEmployee(parsed.data);
-      await auditAdmin(response, "identity.user.created", created.id, {
-        roles: created.roles.join(","),
-        sites: created.siteIds.length,
-      });
+      const created = await service.createEmployee(response.locals.adminId as string, parsed.data);
       response.status(201).json(toPublicAccount(created));
     } catch (error) {
       writeServiceError(response, error, 400);
@@ -407,16 +442,22 @@ export const createAdminRouter = (service: AccountService, audit: AuditRecorder)
     const id = userIdSchema.safeParse(request.params);
     const parsed = userAccessSchema.safeParse(request.body);
     if (!id.success || !parsed.success) {
-      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      response.status(400).json({
+        title: "Invalid request",
+        status: 400,
+        code: "invalid_request",
+        detail: "Dữ liệu gửi lên không hợp lệ.",
+      });
       return;
     }
 
     try {
-      const updated = await service.updateUserAccess(id.data.id, parsed.data.roles, parsed.data.siteIds);
-      await auditAdmin(response, "identity.user.access-updated", updated.id, {
-        roles: updated.roles.join(","),
-        sites: updated.siteIds.length,
-      });
+      const updated = await service.updateUserAccess(
+        response.locals.adminId as string,
+        id.data.id,
+        parsed.data.roles,
+        parsed.data.siteIds,
+      );
       response.json(toPublicAccount(updated));
     } catch (error) {
       writeServiceError(response, error, 400);
@@ -427,13 +468,17 @@ export const createAdminRouter = (service: AccountService, audit: AuditRecorder)
     const id = userIdSchema.safeParse(request.params);
     const password = z.object({ password: z.string().min(12).max(200) }).safeParse(request.body);
     if (!id.success || !password.success) {
-      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      response.status(400).json({
+        title: "Invalid request",
+        status: 400,
+        code: "invalid_request",
+        detail: "Dữ liệu gửi lên không hợp lệ.",
+      });
       return;
     }
 
     try {
-      await service.resetUserPassword(id.data.id, password.data.password);
-      await auditAdmin(response, "identity.user.password-reset", id.data.id);
+      await service.resetUserPassword(response.locals.adminId as string, id.data.id, password.data.password);
       response.status(204).end();
     } catch (error) {
       writeServiceError(response, error, 400);
@@ -443,13 +488,57 @@ export const createAdminRouter = (service: AccountService, audit: AuditRecorder)
   router.post("/users/:id/revoke-sessions", async (request, response) => {
     const id = userIdSchema.safeParse(request.params);
     if (!id.success) {
-      response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
+      response.status(400).json({
+        title: "Invalid request",
+        status: 400,
+        code: "invalid_request",
+        detail: "Dữ liệu gửi lên không hợp lệ.",
+      });
       return;
     }
 
     try {
-      await service.revokeAllSessions(id.data.id);
-      await auditAdmin(response, "identity.user.sessions-revoked", id.data.id);
+      await service.revokeAllSessions(response.locals.adminId as string, id.data.id);
+      response.status(204).end();
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
+  router.post("/users/:id/deactivate", async (request, response) => {
+    const id = userIdSchema.safeParse(request.params);
+    if (!id.success) {
+      response.status(400).json({
+        title: "Invalid request",
+        status: 400,
+        code: "invalid_request",
+        detail: "Dữ liệu gửi lên không hợp lệ.",
+      });
+      return;
+    }
+
+    try {
+      await service.deactivateEmployee(response.locals.adminId as string, id.data.id);
+      response.status(204).end();
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
+  router.post("/users/:id/activate", async (request, response) => {
+    const id = userIdSchema.safeParse(request.params);
+    if (!id.success) {
+      response.status(400).json({
+        title: "Invalid request",
+        status: 400,
+        code: "invalid_request",
+        detail: "Dữ liệu gửi lên không hợp lệ.",
+      });
+      return;
+    }
+
+    try {
+      await service.activateEmployee(response.locals.adminId as string, id.data.id);
       response.status(204).end();
     } catch (error) {
       writeServiceError(response, error, 400);
@@ -475,7 +564,16 @@ export const createCustomerRouter = (service: AccountService): Router => {
       return;
     }
     if (!current.account.roles.some((role) => customerLookupRoles.includes(role))) {
-      response.status(403).json({ title: "Pharmacist role required", status: 403, code: "forbidden" });
+      response.status(403).json({
+        title: "Pharmacist role required",
+        status: 403,
+        code: "forbidden",
+        detail: "Chỉ Dược sĩ hoặc Quản trị nền tảng mới được tra cứu khách hàng.",
+      });
+      return;
+    }
+    if (current.account.mustChangePassword) {
+      writeServiceError(response, accountErrors.passwordChangeRequired(), 403);
       return;
     }
 
@@ -485,7 +583,12 @@ export const createCustomerRouter = (service: AccountService): Router => {
   router.get("/lookup", async (request, response) => {
     const parsed = customerLookupSchema.safeParse(request.query);
     if (!parsed.success) {
-      response.status(400).json({ title: "Invalid customer lookup", status: 400, code: "invalid_request" });
+      response.status(400).json({
+        title: "Invalid customer lookup",
+        status: 400,
+        code: "invalid_request",
+        detail: "Nhập ít nhất 3 ký tự để tra cứu.",
+      });
       return;
     }
 
@@ -498,29 +601,62 @@ export const createCustomerRouter = (service: AccountService): Router => {
 /**
  * Service-to-service customer resolution, mounted outside `publicPaths` so the trusted middleware has already
  * proven the internal service secret. The handler then insists on the system actor the middleware stamps for a
- * service call, so an employee's signed context cannot borrow this answer. No gateway routes this path.
+ * service call, so an employee's signed context cannot borrow this answer. No gateway routes this path. identity
+ * does not check roles or sites: the calling service does, before it asks.
  */
 export const createInternalCustomerRouter = (service: AccountService): Router => {
   const router = Router();
 
   router.use((request, response, next) => {
     if (request.header("x-actor-type") !== "system") {
-      response.status(403).json({ title: "System actor required", status: 403, code: "forbidden" });
+      response.status(403).json({
+        title: "System actor required",
+        status: 403,
+        code: "forbidden",
+        detail: "Chỉ hệ thống nội bộ được gọi đường dẫn này.",
+      });
       return;
     }
 
     next();
   });
 
+  // Staff contact rule (staff-online-orders, decision 14): a customer's name and phone show on an order only to
+  // Pharmacist, Pharmacy Manager and Platform Admin, and only for orders at their assigned sites. The calling service
+  // enforces that; this route answers the service and nobody else. BR-USER-011 is the separate counter lookup rule.
+  router.post("/customers/batch", async (request, response) => {
+    const parsed = customerBatchSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({
+        title: "Invalid customer batch",
+        status: 400,
+        code: "invalid_request",
+        detail: "Danh sách mã khách không hợp lệ.",
+      });
+      return;
+    }
+
+    response.json({ customers: await service.findActiveCustomers(parsed.data.ids) });
+  });
+
   router.get("/customers/:id", async (request, response) => {
     const parsed = userIdSchema.safeParse(request.params);
     if (!parsed.success) {
-      response.status(400).json({ title: "Invalid customer id", status: 400, code: "invalid_request" });
+      response.status(400).json({
+        title: "Invalid customer id",
+        status: 400,
+        code: "invalid_request",
+        detail: "Mã khách hàng không hợp lệ.",
+      });
       return;
     }
     const customer = await service.findActiveCustomer(parsed.data.id);
     if (!customer) {
-      response.status(404).json({ title: "Customer account not found", status: 404 });
+      response.status(404).json({
+        title: "Customer account not found",
+        status: 404,
+        detail: "Không tìm thấy tài khoản khách hàng.",
+      });
       return;
     }
 
@@ -537,6 +673,8 @@ const toPublicAccount = (account: Account) => ({
   displayName: account.displayName,
   phoneNumber: account.phoneNumber ?? null,
   emailVerified: account.emailVerifiedAt !== undefined,
+  isActive: account.isActive,
+  passwordChangeRequired: account.mustChangePassword,
   roles: account.roles,
   siteIds: account.siteIds,
 });
@@ -602,7 +740,14 @@ const clearCookie = (response: Response, name: string): void => {
   response.setHeader("Set-Cookie", `${name}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 };
 
+/** A refusal the domain made answers its own status, code and Vietnamese detail; anything else keeps the old shape. */
 const writeServiceError = (response: Response, error: unknown, defaultStatus: number): void => {
+  if (error instanceof AccountError) {
+    response
+      .status(error.status)
+      .json({ title: error.message, status: error.status, code: error.code, detail: error.detail });
+    return;
+  }
   const message = error instanceof Error ? error.message : "Request failed";
   const status = message.includes("already exists") ? 409 : defaultStatus;
   response.status(status).json({ title: message, status, code: status === 409 ? "conflict" : "request_failed" });

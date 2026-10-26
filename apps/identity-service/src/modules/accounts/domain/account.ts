@@ -13,6 +13,8 @@ export type Account = {
   emailVerifiedAt?: Date;
   roles: string[];
   siteIds: string[];
+  /** Set by an administrator's password set (create or reset). Requests are refused until the holder changes it. */
+  mustChangePassword: boolean;
   createdAt: Date;
 };
 

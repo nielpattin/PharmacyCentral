@@ -2,17 +2,17 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { and, eq, gt, isNull } from "drizzle-orm";
 
-import type { IdentityDatabase } from "../../../shared/infrastructure/database.ts";
+import type { IdentityExecutor } from "../../../shared/infrastructure/database.ts";
 import { sessions } from "../../../shared/infrastructure/schema.ts";
 import type { CreatedSession, Session } from "./in-memory-session-repository.ts";
 
 export class DrizzleSessionRepository {
-  public constructor(private readonly database: IdentityDatabase) {}
+  public constructor(private readonly executor: IdentityExecutor) {}
 
   public async create(accountId: string, expiresAt: Date): Promise<CreatedSession> {
     const rawToken = randomBytes(32).toString("base64url");
     const sessionId = randomUUID();
-    const [session] = await this.database.db
+    const [session] = await this.executor
       .insert(sessions)
       .values({ id: sessionId, userId: accountId, tokenDigest: this.digest(rawToken), expiresAt })
       .returning();
@@ -22,7 +22,7 @@ export class DrizzleSessionRepository {
 
   public async findActive(rawToken: string, now = new Date()): Promise<Session | undefined> {
     const row = (
-      await this.database.db
+      await this.executor
         .select()
         .from(sessions)
         .where(
@@ -41,11 +41,11 @@ export class DrizzleSessionRepository {
   }
 
   public async revoke(sessionId: string, now = new Date()): Promise<void> {
-    await this.database.db.update(sessions).set({ revokedAt: now }).where(eq(sessions.id, sessionId));
+    await this.executor.update(sessions).set({ revokedAt: now }).where(eq(sessions.id, sessionId));
   }
 
   public async revokeAll(accountId: string, now = new Date()): Promise<void> {
-    await this.database.db
+    await this.executor
       .update(sessions)
       .set({ revokedAt: now })
       .where(and(eq(sessions.userId, accountId), isNull(sessions.revokedAt)));

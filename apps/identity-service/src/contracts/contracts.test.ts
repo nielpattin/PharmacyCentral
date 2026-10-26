@@ -53,6 +53,16 @@ describe("identity-service contracts", () => {
       password: "password12345",
     });
     expect(validLogin.success).toBe(true);
+
+    const staffLogin = loginRequestSchema.safeParse({
+      email: "user@example.com",
+      password: "password12345",
+      audience: "employee",
+    });
+    expect(staffLogin.success).toBe(true);
+    expect(
+      loginRequestSchema.safeParse({ email: "user@example.com", password: "x", audience: "shopper" }).success,
+    ).toBe(false);
   });
 
   it("validates session user and account created event schemas", () => {

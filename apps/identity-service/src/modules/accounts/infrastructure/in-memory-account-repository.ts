@@ -64,4 +64,13 @@ export class InMemoryAccountRepository {
       phoneNumber: account.phoneNumber ?? null,
     };
   }
+
+  public async findActiveCustomersByIds(ids: string[]): Promise<CustomerMatch[]> {
+    const matches: CustomerMatch[] = [];
+    for (const id of ids) {
+      const match = await this.findActiveCustomerById(id);
+      if (match) matches.push(match);
+    }
+    return matches;
+  }
 }

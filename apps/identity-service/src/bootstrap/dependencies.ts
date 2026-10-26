@@ -17,6 +17,7 @@ import {
 import { Argon2idPasswordHasher } from "../modules/accounts/infrastructure/security/argon2id-password-hasher.ts";
 import { GoogleOidcClient, type GoogleSignIn } from "../modules/accounts/infrastructure/security/google-oidc-client.ts";
 import { InMemorySessionRepository } from "../modules/sessions/infrastructure/in-memory-session-repository.ts";
+import { createDrizzleUnitOfWork, createInMemoryUnitOfWork } from "../modules/accounts/infrastructure/unit-of-work.ts";
 
 export const createGoogleSignIn = (): GoogleSignIn | undefined => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -83,9 +84,11 @@ export const createAccountService = (database?: IdentityDatabase): AccountServic
         ? new LoggingVerificationEmailSender((input) => logger.info(input, "verification email queued"))
         : new SmtpVerificationEmailSender(emailOptions);
 
+  const accounts = database ? new DrizzleAccountRepository(database.db) : new InMemoryAccountRepository();
+  const sessions = database ? new DrizzleSessionRepository(database.db) : new InMemorySessionRepository();
   return new AccountService(
-    database ? new DrizzleAccountRepository(database) : new InMemoryAccountRepository(),
-    database ? new DrizzleSessionRepository(database) : new InMemorySessionRepository(),
+    accounts,
+    sessions,
     new Argon2idPasswordHasher({
       memory: Number.parseInt(
         process.env.ARGON2_MEMORY_KIB ??
@@ -116,5 +119,6 @@ export const createAccountService = (database?: IdentityDatabase): AccountServic
     }),
     new VerificationTokenService(),
     sender,
+    database ? createDrizzleUnitOfWork(database) : createInMemoryUnitOfWork(accounts, sessions),
   );
 };

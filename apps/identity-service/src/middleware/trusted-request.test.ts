@@ -798,3 +798,40 @@ describe("identity browser session paths", () => {
     }
   });
 });
+
+describe("trusted request role restatement", () => {
+  let activeServer: Server | undefined;
+
+  afterEach(async () => {
+    if (!activeServer) return;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    activeServer.close(() => resolve());
+    activeServer = undefined;
+    await promise;
+  });
+
+  // A request the middleware admits reaches the fallback (200); a refused one never does.
+  const callAs = async (roles: string[], path: string): Promise<Response> => {
+    const app = express();
+    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+    app.use((_request, response) => response.json({ ok: true }));
+    const { server, url } = await startServer(app);
+    activeServer = server;
+    const context = createTestContext({ roles, audience: "identity-service" });
+    return fetch(`${url}${path}`, {
+      headers: { "x-internal-identity-context": signInternalIdentityContext(context, identitySecret) },
+    });
+  };
+
+  it("refuses a Pharmacy Manager the admin routes, which only Platform Admin reads", async () => {
+    const refused = await callAs(["Pharmacy Manager"], "/admin/users");
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+    expect((await callAs(["Platform Admin"], "/admin/users")).status).toBe(200);
+  });
+
+  it("lets a Pharmacist look up a customer, and refuses a Pharmacy Manager the same lookup", async () => {
+    expect((await callAs(["Pharmacist"], "/customers/00000000-0000-4000-8000-000000000060")).status).toBe(200);
+    expect((await callAs(["Pharmacy Manager"], "/customers/00000000-0000-4000-8000-000000000060")).status).toBe(403);
+  });
+});

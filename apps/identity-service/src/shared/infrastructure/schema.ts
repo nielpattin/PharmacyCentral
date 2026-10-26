@@ -12,6 +12,8 @@ export const users = pgTable(
     passwordHash: text("password_hash"),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     isActive: boolean("is_active").notNull().default(true),
+    /** Set when an administrator sets the password (create or reset); cleared once the holder changes it. */
+    mustChangePassword: boolean("must_change_password").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

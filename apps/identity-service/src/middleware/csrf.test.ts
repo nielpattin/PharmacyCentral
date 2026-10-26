@@ -19,6 +19,7 @@ const buildApp = (): express.Express => {
   app.use(createCsrfMiddleware());
   app.post("/auth/logout", (_req, res) => res.status(204).end());
   app.post("/auth/login", (_req, res) => res.json({ loggedIn: true }));
+  app.post("/internal/customers/batch", (_req, res) => res.json({ customers: [] }));
   return app;
 };
 
@@ -64,6 +65,13 @@ describe("csrf middleware", () => {
     const { server, url } = await startServer(buildApp());
     activeServer = server;
     const response = await fetch(`${url}/auth/login`, { method: "POST" });
+    expect(response.status).toBe(200);
+  });
+
+  it("exempts service-to-service routes, which carry no cookie", async () => {
+    const { server, url } = await startServer(buildApp());
+    activeServer = server;
+    const response = await fetch(`${url}/internal/customers/batch`, { method: "POST" });
     expect(response.status).toBe(200);
   });
 });

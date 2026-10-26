@@ -1,6 +1,6 @@
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 
-import type { IdentityDatabase } from "../../../shared/infrastructure/database.ts";
+import type { IdentityExecutor } from "../../../shared/infrastructure/database.ts";
 import { userRoles, userSiteScopes, users } from "../../../shared/infrastructure/schema.ts";
 import type { Account, CustomerMatch } from "../domain/account.ts";
 
@@ -12,16 +12,20 @@ const customerColumns = {
   phoneNumber: users.phoneNumber,
 };
 
+/**
+ * Runs on the pool or inside a transaction, so a unit of work can make several writes that commit or fail together.
+ */
 export class DrizzleAccountRepository {
-  public constructor(private readonly database: IdentityDatabase) {}
+  public constructor(private readonly executor: IdentityExecutor) {}
 
   public async create(input: Omit<Account, "id" | "createdAt">): Promise<Account> {
-    return this.database.db.transaction(async (transaction) => {
+    return this.executor.transaction(async (transaction) => {
       const [user] = await transaction
         .insert(users)
         .values({
           actorType: input.actorType,
           isActive: input.isActive,
+          mustChangePassword: input.mustChangePassword,
           email: input.email,
           displayName: input.displayName,
           passwordHash: input.passwordHash,
@@ -36,12 +40,12 @@ export class DrizzleAccountRepository {
   }
 
   public async findByEmail(email: string): Promise<Account | undefined> {
-    const user = (await this.database.db.select().from(users).where(eq(users.email, email)).limit(1))[0];
+    const user = (await this.executor.select().from(users).where(eq(users.email, email)).limit(1))[0];
     return user ? this.toAccount(user) : undefined;
   }
 
   public async findById(id: string): Promise<Account | undefined> {
-    const user = (await this.database.db.select().from(users).where(eq(users.id, id)).limit(1))[0];
+    const user = (await this.executor.select().from(users).where(eq(users.id, id)).limit(1))[0];
     return user ? this.toAccount(user) : undefined;
   }
 
@@ -59,7 +63,7 @@ export class DrizzleAccountRepository {
     // country-code spelling written `84` plus nine digits rewritten as its `0` form.
     const phone = sql`regexp_replace(regexp_replace(coalesce(${users.phoneNumber}, ''), '[^0-9]', '', 'g'), '^84([0-9]{9})$', '0\\1') = ${input.phoneDigits}`;
     const matches = input.phoneDigits.length > 0 ? or(email, phone) : email;
-    const rows = await this.database.db
+    const rows = await this.executor
       .select(customerColumns)
       .from(users)
       .where(and(eq(users.actorType, "customer"), eq(users.isActive, true), matches))
@@ -70,7 +74,7 @@ export class DrizzleAccountRepository {
 
   public async findActiveCustomerById(id: string): Promise<CustomerMatch | undefined> {
     const row = (
-      await this.database.db
+      await this.executor
         .select(customerColumns)
         .from(users)
         .where(and(eq(users.id, id), eq(users.actorType, "customer"), eq(users.isActive, true)))
@@ -79,13 +83,22 @@ export class DrizzleAccountRepository {
     return row ? { ...row, phoneNumber: row.phoneNumber ?? null } : undefined;
   }
 
+  public async findActiveCustomersByIds(ids: string[]): Promise<CustomerMatch[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.executor
+      .select(customerColumns)
+      .from(users)
+      .where(and(inArray(users.id, ids), eq(users.actorType, "customer"), eq(users.isActive, true)));
+    return rows.map((row) => ({ ...row, phoneNumber: row.phoneNumber ?? null }));
+  }
+
   public async list(): Promise<Account[]> {
-    const allUsers = await this.database.db.select().from(users).orderBy(users.email);
+    const allUsers = await this.executor.select().from(users).orderBy(users.email);
     return Promise.all(allUsers.map((user) => this.toAccount(user)));
   }
 
   public async save(account: Account): Promise<void> {
-    await this.database.db.transaction(async (transaction) => {
+    await this.executor.transaction(async (transaction) => {
       await transaction
         .update(users)
         .set({
@@ -95,6 +108,7 @@ export class DrizzleAccountRepository {
           passwordHash: account.passwordHash,
           emailVerifiedAt: account.emailVerifiedAt ?? null,
           isActive: account.isActive,
+          mustChangePassword: account.mustChangePassword,
           updatedAt: new Date(),
         })
         .where(eq(users.id, account.id));
@@ -105,13 +119,14 @@ export class DrizzleAccountRepository {
   private async toAccount(user: typeof users.$inferSelect): Promise<Account> {
     if (!user.passwordHash) throw new Error("Account password hash is missing");
     const [roles, siteIds] = await Promise.all([
-      this.database.db.select().from(userRoles).where(eq(userRoles.userId, user.id)),
-      this.database.db.select().from(userSiteScopes).where(eq(userSiteScopes.userId, user.id)),
+      this.executor.select().from(userRoles).where(eq(userRoles.userId, user.id)),
+      this.executor.select().from(userSiteScopes).where(eq(userSiteScopes.userId, user.id)),
     ]);
     return {
       id: user.id,
       actorType: user.actorType as Account["actorType"],
       isActive: user.isActive,
+      mustChangePassword: user.mustChangePassword,
       email: user.email,
       displayName: user.displayName,
       ...(user.phoneNumber ? { phoneNumber: user.phoneNumber } : {}),
@@ -124,7 +139,7 @@ export class DrizzleAccountRepository {
   }
 
   private async replaceAccess(
-    transaction: Parameters<Parameters<IdentityDatabase["db"]["transaction"]>[0]>[0],
+    transaction: IdentityExecutor,
     userId: string,
     roles: string[],
     siteIds: string[],

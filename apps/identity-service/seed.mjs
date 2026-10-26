@@ -152,7 +152,7 @@ try {
   const passwordHash = await hashPassword(demoAccountPassword);
   for (const account of accounts) {
     await client.query(
-      `INSERT INTO users (id, actor_type, email, display_name, password_hash, email_verified_at, is_active) VALUES ($1, $2, $3, $4, $5, now(), true) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, actor_type = EXCLUDED.actor_type, display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash, email_verified_at = EXCLUDED.email_verified_at, is_active = true`,
+      `INSERT INTO users (id, actor_type, email, display_name, password_hash, email_verified_at, is_active, must_change_password) VALUES ($1, $2, $3, $4, $5, now(), true, false) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, actor_type = EXCLUDED.actor_type, display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash, email_verified_at = EXCLUDED.email_verified_at, is_active = true, must_change_password = false`,
       [account.id, account.actorType, account.email, account.displayName, passwordHash],
     );
     // Re-seeding resets roles and sites, so a role or site added by hand never lingers on a demo account.

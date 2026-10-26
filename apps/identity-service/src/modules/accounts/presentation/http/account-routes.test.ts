@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import type { AccountService } from "../../application/account-service.ts";
 import { AuthRateLimiterError, type AuthRateLimiter } from "../../domain/auth-rate-limit.ts";
+import { AccountError } from "../../domain/account-error.ts";
 
 import { noAuditRecorder, type AuditEntry, type AuditRecorder } from "../../../outbox/audit-recorder.ts";
 import {
@@ -527,9 +528,11 @@ describe("internal customer route", () => {
   };
 
   it("resolves an active customer for the system actor", async () => {
-    const findActiveCustomer = vi
-      .fn()
-      .mockResolvedValue({ id: "00000000-0000-4000-8000-000000000002", displayName: "Nguyễn Thị B" });
+    const findActiveCustomer = vi.fn().mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000002",
+      displayName: "Nguyễn Thị B",
+      phoneNumber: "0901234567",
+    });
     const { server, url } = await startInternalServer(findActiveCustomer);
     activeServer = server;
 
@@ -538,6 +541,7 @@ describe("internal customer route", () => {
     expect(await response.json()).toEqual({
       id: "00000000-0000-4000-8000-000000000002",
       displayName: "Nguyễn Thị B",
+      phoneNumber: "0901234567",
     });
   });
 
@@ -581,6 +585,8 @@ describe("audit entries", () => {
     displayName: "X",
     roles,
     siteIds: [] as string[],
+    isActive: true,
+    mustChangePassword: false,
   });
 
   const start = async (
@@ -592,7 +598,7 @@ describe("audit entries", () => {
     const app = express();
     app.use(express.json());
     app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, audit));
-    app.use("/admin", createAdminRouter(stub, audit));
+    app.use("/admin", createAdminRouter(stub));
     const started = await startServer(app);
     activeServer = started.server;
     return { url: started.url, entries };
@@ -627,42 +633,223 @@ describe("audit entries", () => {
     expect(entries).toEqual([]);
   });
 
-  it("records an administrator's changes against the target account, never the password", async () => {
-    const admin = account(ids.admin, "employee", ["Platform Admin"]);
-    const target = account(ids.target, "employee", ["Pharmacist"]);
+  it("records a failed staff sign-in without the password, naming the account it matched", async () => {
+    const refusal = new AccountError(
+      403,
+      "employee_required",
+      "Employee account required",
+      "Cần tài khoản nhân viên để vào khu vực này.",
+    );
+    refusal.reason = "not_employee";
+    refusal.accountId = ids.shopper;
     const { url, entries } = await start({
-      currentSession: async () => ({ account: admin, session: {} }),
-      createEmployee: async () => target,
-      resetUserPassword: async () => undefined,
-      revokeAllSessions: async () => undefined,
-    });
-    await post(url, "/admin/users", {
-      email: "n@example.vn",
-      password: "a-secret-password-1",
-      displayName: "N",
-      roles: ["Pharmacist"],
-      siteIds: [],
-    });
-    await post(url, "/admin/users/" + ids.target + "/reset-password", { password: "another-secret-1" });
-    await post(url, "/admin/users/" + ids.target + "/revoke-sessions");
-    expect(entries.map((entry) => [entry.action, entry.entityId, entry.actorId])).toEqual([
-      ["identity.user.created", ids.target, ids.admin],
-      ["identity.user.password-reset", ids.target, ids.admin],
-      ["identity.user.sessions-revoked", ids.target, ids.admin],
-    ]);
-    expect(entries[0]?.details).toEqual({ roles: "Pharmacist", sites: 0 });
-    expect(JSON.stringify(entries)).not.toContain("secret");
-  });
-
-  it("records nothing when the change is refused", async () => {
-    const admin = account(ids.admin, "employee", ["Platform Admin"]);
-    const { url, entries } = await start({
-      currentSession: async () => ({ account: admin, session: {} }),
-      revokeAllSessions: async () => {
-        throw new Error("not found");
+      login: async () => {
+        throw refusal;
       },
     });
-    expect((await post(url, "/admin/users/" + ids.target + "/revoke-sessions")).status).toBeGreaterThanOrEqual(400);
+
+    const response = await post(url, "/auth/login", {
+      email: "x@example.vn",
+      password: "a-long-password-1",
+      audience: "employee",
+    });
+    expect(response.status).toBe(403);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(await response.json()).toEqual({
+      title: "Employee account required",
+      status: 403,
+      code: "employee_required",
+      detail: "Cần tài khoản nhân viên để vào khu vực này.",
+    });
+    expect(entries).toEqual([
+      {
+        action: "identity.auth.login-failed",
+        entityType: "user",
+        entityId: ids.shopper,
+        details: { reason: "not_employee" },
+      },
+    ]);
+    expect(JSON.stringify(entries)).not.toContain("a-long-password-1");
+  });
+
+  it("does not record a failed sign-in that did not name a staff sign-in", async () => {
+    const { url, entries } = await start({
+      login: async () => {
+        throw new AccountError(401, "request_failed", "Invalid email or password", "Email hoặc mật khẩu không đúng.");
+      },
+    });
+
+    expect((await post(url, "/auth/login", { email: "x@example.vn", password: "a-long-password-1" })).status).toBe(401);
     expect(entries).toEqual([]);
+  });
+
+  it("refuses a context to an account that must change its password, with the code and detail", async () => {
+    const { url } = await start({
+      currentSession: async () => ({
+        account: { ...account(ids.admin, "employee", ["Pharmacist"]), mustChangePassword: true },
+        session: {},
+      }),
+    });
+
+    const response = await fetch(`${url}/auth/context`, { headers: { Cookie: "pharmacy_session=valid" } });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      title: "Password change required",
+      status: 403,
+      code: "password_change_required",
+      detail: "Bạn cần đổi mật khẩu trước khi tiếp tục.",
+    });
+  });
+});
+
+describe("administrator routes", () => {
+  let activeServer: Server | undefined;
+  afterEach(
+    () =>
+      activeServer &&
+      new Promise<void>((resolve, reject) => activeServer?.close((error) => (error ? reject(error) : resolve()))),
+  );
+
+  const adminId = "00000000-0000-4000-8000-0000000000a1";
+  const targetId = "00000000-0000-4000-8000-0000000000b2";
+  const admin = (mustChangePassword: boolean) => ({
+    id: adminId,
+    actorType: "employee",
+    email: "admin@example.vn",
+    displayName: "Quản trị",
+    roles: ["Platform Admin"],
+    siteIds: [] as string[],
+    mustChangePassword,
+  });
+
+  const start = async (service: Partial<Record<keyof AccountService, unknown>>): Promise<string> => {
+    const app = express();
+    app.use(express.json());
+    app.use("/admin", createAdminRouter(service as unknown as AccountService));
+    const started = await startServer(app);
+    activeServer = started.server;
+    return started.url;
+  };
+
+  const session = { Cookie: "pharmacy_session=valid" };
+
+  it("passes the acting administrator to a change and answers 204", async () => {
+    const deactivateEmployee = vi.fn(async () => undefined);
+    const url = await start({
+      currentSession: async () => ({ account: admin(false), session: {} }),
+      deactivateEmployee,
+    });
+
+    const response = await fetch(`${url}/admin/users/${targetId}/deactivate`, { method: "POST", headers: session });
+    expect(response.status).toBe(204);
+    expect(deactivateEmployee).toHaveBeenCalledWith(adminId, targetId);
+  });
+
+  it("answers a refused change with its code and Vietnamese detail", async () => {
+    const url = await start({
+      currentSession: async () => ({ account: admin(false), session: {} }),
+      deactivateEmployee: async () => {
+        throw new AccountError(
+          403,
+          "self_change_forbidden",
+          "An administrator cannot change their own account",
+          "Bạn không thể tự vô hiệu hóa tài khoản của mình.",
+        );
+      },
+    });
+
+    const response = await fetch(`${url}/admin/users/${adminId}/deactivate`, { method: "POST", headers: session });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      title: "An administrator cannot change their own account",
+      status: 403,
+      code: "self_change_forbidden",
+      detail: "Bạn không thể tự vô hiệu hóa tài khoản của mình.",
+    });
+  });
+
+  it("filters the list by status and refuses an unknown status", async () => {
+    const listUsers = vi.fn(async () => []);
+    const url = await start({ currentSession: async () => ({ account: admin(false), session: {} }), listUsers });
+
+    expect((await fetch(`${url}/admin/users?status=deactivated`, { headers: session })).status).toBe(200);
+    expect(listUsers).toHaveBeenCalledWith("deactivated");
+    expect((await fetch(`${url}/admin/users?status=bogus`, { headers: session })).status).toBe(400);
+  });
+
+  it("refuses every administrator route while the administrator must change their own password", async () => {
+    const listUsers = vi.fn();
+    const url = await start({ currentSession: async () => ({ account: admin(true), session: {} }), listUsers });
+
+    const response = await fetch(`${url}/admin/users`, { headers: session });
+    expect(response.status).toBe(403);
+    const body: unknown = await response.json();
+    expect(body).toMatchObject({ code: "password_change_required" });
+    expect(listUsers).not.toHaveBeenCalled();
+  });
+});
+
+describe("internal customer batch route", () => {
+  let activeServer: Server | undefined;
+  afterEach(
+    () =>
+      activeServer &&
+      new Promise<void>((resolve, reject) => activeServer?.close((error) => (error ? reject(error) : resolve()))),
+  );
+
+  const customerIds = ["00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000003"];
+  const start = async (findActiveCustomers: Mock): Promise<string> => {
+    const app = express();
+    app.use(express.json());
+    app.use("/internal", createInternalCustomerRouter({ findActiveCustomers } as unknown as AccountService));
+    const started = await startServer(app);
+    activeServer = started.server;
+    return started.url;
+  };
+
+  it("resolves the batch for the system actor", async () => {
+    const findActiveCustomers = vi
+      .fn()
+      .mockResolvedValue([{ id: customerIds[0], displayName: "Nguyễn Thị B", phoneNumber: null }]);
+    const url = await start(findActiveCustomers);
+
+    const response = await fetch(`${url}/internal/customers/batch`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-actor-type": "system" },
+      body: JSON.stringify({ ids: customerIds }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      customers: [{ id: customerIds[0], displayName: "Nguyễn Thị B", phoneNumber: null }],
+    });
+    expect(findActiveCustomers).toHaveBeenCalledWith(customerIds);
+  });
+
+  it("refuses an empty batch and a malformed id without asking the service", async () => {
+    const findActiveCustomers = vi.fn();
+    const url = await start(findActiveCustomers);
+
+    for (const body of [{ ids: [] }, { ids: ["not-a-uuid"] }]) {
+      const response = await fetch(`${url}/internal/customers/batch`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-actor-type": "system" },
+        body: JSON.stringify(body),
+      });
+      expect(response.status).toBe(400);
+    }
+    expect(findActiveCustomers).not.toHaveBeenCalled();
+  });
+
+  it("refuses a caller that is not the system actor", async () => {
+    const findActiveCustomers = vi.fn();
+    const url = await start(findActiveCustomers);
+
+    const response = await fetch(`${url}/internal/customers/batch`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-actor-type": "employee" },
+      body: JSON.stringify({ ids: customerIds }),
+    });
+    expect(response.status).toBe(403);
+    expect(findActiveCustomers).not.toHaveBeenCalled();
   });
 });

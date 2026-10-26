@@ -4,13 +4,15 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import type { IdentityDatabase } from "../../../shared/infrastructure/database.ts";
+import type { IdentityDatabase, IdentityExecutor } from "../../../shared/infrastructure/database.ts";
 import * as schema from "../../../shared/infrastructure/schema.ts";
-import { InMemorySessionRepository } from "../../sessions/infrastructure/in-memory-session-repository.ts";
 import { AccountService } from "../application/account-service.ts";
 import { VerificationTokenService } from "../application/verification-token-service.ts";
 import { Argon2idPasswordHasher } from "../infrastructure/security/argon2id-password-hasher.ts";
 import { DrizzleAccountRepository } from "./drizzle-account-repository.ts";
+import { createDrizzleUnitOfWork } from "./unit-of-work.ts";
+import { DrizzleSessionRepository } from "../../sessions/infrastructure/drizzle-session-repository.ts";
+import { AccountError } from "../domain/account-error.ts";
 
 const migrationsFolder = fileURLToPath(new URL("../../../../drizzle/migrations", import.meta.url));
 
@@ -19,27 +21,40 @@ const migrationsFolder = fileURLToPath(new URL("../../../../drizzle/migrations",
  * Postgres engine shows that both halves agree: a number kept with the `84` country code is found by its local
  * spelling and the other way round, while a colleague sharing the number never surfaces in the counter picker.
  */
-describe("DrizzleAccountRepository customer lookup", () => {
+describe("DrizzleAccountRepository", () => {
   const client = new PGlite();
   const db = drizzle({ client, schema });
-  const repository = new DrizzleAccountRepository({ db, pool: undefined } as unknown as IdentityDatabase);
+  // PGlite and node-postgres Drizzle instances share one query API but differ in their result types, so the test
+  // narrows the PGlite instance to the production executor type. The migrations and assertions still run on PGlite.
+  const executor = db as unknown as IdentityExecutor;
+  // The unit of work only reads `db`; the pool is not used against PGlite, so it is absent here.
+  const identityDatabase = { db, pool: undefined } as unknown as IdentityDatabase;
+  const repository = new DrizzleAccountRepository(executor);
+  const sessions = new DrizzleSessionRepository(executor);
   const hasher = new Argon2idPasswordHasher({ memory: 19456, passes: 2, parallelism: 1, tagLength: 32 });
   const service = new AccountService(
     repository,
-    new InMemorySessionRepository(),
+    sessions,
     hasher,
     new VerificationTokenService(),
     { sendVerificationEmail: async () => undefined },
+    createDrizzleUnitOfWork(identityDatabase),
   );
 
   const countryCodeId = "00000000-0000-4000-8000-00000000000a";
   const localId = "00000000-0000-4000-8000-00000000000b";
+  const employeeId = "00000000-0000-4000-8000-00000000000c";
+  const adminId = "00000000-0000-4000-8000-0000000000a1";
 
   beforeAll(async () => {
     await migrate(db, { migrationsFolder });
   });
 
   beforeEach(async () => {
+    await db.delete(schema.sessions);
+    await db.delete(schema.outboxMessages);
+    await db.delete(schema.userSiteScopes);
+    await db.delete(schema.userRoles);
     await db.delete(schema.users);
     await db.insert(schema.users).values([
       {
@@ -59,13 +74,24 @@ describe("DrizzleAccountRepository customer lookup", () => {
         phoneNumber: "0901-234-567",
       },
       {
-        id: "00000000-0000-4000-8000-00000000000c",
+        id: employeeId,
         actorType: "employee",
         email: "duocsi@example.com",
         displayName: "Dược sĩ",
         passwordHash: "hash",
         phoneNumber: "+84901234567",
       },
+      {
+        id: adminId,
+        actorType: "employee",
+        email: "quan-tri@example.com",
+        displayName: "Quản trị",
+        passwordHash: "hash",
+      },
+    ]);
+    await db.insert(schema.userRoles).values([
+      { userId: employeeId, roleName: "Pharmacist" },
+      { userId: adminId, roleName: "Platform Admin" },
     ]);
   });
 
@@ -93,6 +119,7 @@ describe("DrizzleAccountRepository customer lookup", () => {
     const deactivated = await repository.create({
       actorType: "customer",
       isActive: false,
+      mustChangePassword: false,
       email: "nghi@example.com",
       displayName: "Lê Thị C",
       passwordHash: "hash",
@@ -107,6 +134,49 @@ describe("DrizzleAccountRepository customer lookup", () => {
     await expect(service.searchCustomers("0909876543")).resolves.toEqual([]);
     await expect(service.findActiveCustomer(deactivated.id)).resolves.toBeUndefined();
     // The active customers of the fixture stay reachable, so the filter is about is_active and nothing else.
-    await expect(service.findActiveCustomer(localId)).resolves.toEqual({ id: localId, displayName: "Trần Thị B" });
+    await expect(service.findActiveCustomer(localId)).resolves.toEqual({
+      id: localId,
+      displayName: "Trần Thị B",
+      phoneNumber: "0901-234-567",
+    });
+    await expect(service.findActiveCustomers([localId, employeeId, deactivated.id])).resolves.toEqual([
+      { id: localId, displayName: "Trần Thị B", phoneNumber: "0901-234-567" },
+    ]);
+  });
+
+  it("deactivates an employee, ends the session and writes the audit entry in one transaction", async () => {
+    const session = await sessions.create(employeeId, new Date(Date.now() + 60_000));
+
+    await service.deactivateEmployee(adminId, employeeId);
+
+    await expect(repository.findById(employeeId)).resolves.toMatchObject({ isActive: false });
+    await expect(sessions.findActive(session.rawToken)).resolves.toBeUndefined();
+    const audit = await db.select().from(schema.outboxMessages);
+    expect(audit.map((row) => row.eventType)).toEqual(["identity.audit.v1"]);
+    expect(JSON.parse(audit[0]?.payload ?? "{}")).toMatchObject({
+      action: "identity.user.deactivated",
+      entityId: employeeId,
+      actorId: adminId,
+    });
+  });
+
+  it("rolls the deactivation back when its audit entry cannot be written", async () => {
+    const session = await sessions.create(employeeId, new Date(Date.now() + 60_000));
+
+    // Park the outbox table so the audit insert inside the same transaction fails.
+    await client.exec('ALTER TABLE "outbox_messages" RENAME TO "outbox_messages_parked"');
+    try {
+      const refusal: unknown = await service.deactivateEmployee(adminId, employeeId).then(
+        () => undefined,
+        (caught: unknown) => caught,
+      );
+      if (!(refusal instanceof AccountError)) throw new Error("Expected the deactivation to be refused");
+      expect(refusal.code).toBe("audit_unavailable");
+    } finally {
+      await client.exec('ALTER TABLE "outbox_messages_parked" RENAME TO "outbox_messages"');
+    }
+
+    await expect(repository.findById(employeeId)).resolves.toMatchObject({ isActive: true });
+    await expect(sessions.findActive(session.rawToken)).resolves.toMatchObject({ accountId: employeeId });
   });
 });

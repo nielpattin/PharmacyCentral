@@ -81,7 +81,6 @@ export const DEFAULT_SITE_SCOPED_PREFIXES: readonly string[] = [
 export const DEFAULT_EMPLOYEE_PREFIXES: readonly string[] = [
   "/procurement",
   "/inventory",
-  "/quality",
   "/operations",
   "/dashboard",
   "/finance",
@@ -200,6 +199,46 @@ export const isEmployeePath = (path: string, method: string): boolean => {
 };
 
 const SITE_ID_KEYS: Record<string, true> = { siteId: true, sourceSiteId: true, destinationSiteId: true };
+
+export const ACTOR_ROLES_HEADER = "x-actor-roles";
+
+// Restates `employeeRoleRules` of deploy/aws/lambda/policy.mjs for this service. Methods: "*", "READ", "WRITE" or a name.
+type Route = { methods: readonly string[]; path: string; exact?: boolean };
+type RoleRule = Route & { roles: readonly string[] };
+
+const ROLE_RULES: readonly RoleRule[] = [
+  { methods: ["*"], path: "/admin", roles: ["Platform Admin"] },
+  { methods: ["*"], path: "/customers", roles: ["Pharmacist"] },
+];
+
+const PLATFORM_ADMIN_EXCLUDED: readonly Route[] = [];
+
+const ROLE_FORBIDDEN_DETAIL = "Vai trò của tài khoản này không được thực hiện thao tác này.";
+
+const routeMatches = (route: Route, path: string, method: string): boolean => {
+  const upper = method.toUpperCase();
+  const isRead = upper === "GET" || upper === "HEAD";
+  if (!route.methods.some((m) => m === "*" || m === upper || (m === "READ" && isRead) || (m === "WRITE" && !isRead))) {
+    return false;
+  }
+  const actual = stripApiPrefix(path).split("/");
+  const expected = route.path.split("/");
+  if (route.exact ? actual.length !== expected.length : actual.length < expected.length) return false;
+  return expected.every((segment, index) =>
+    segment === "*" ? (actual[index] ?? "") !== "" : actual[index] === segment,
+  );
+};
+
+const roleRefusal = (path: string, method: string, roles: readonly string[]): string | undefined => {
+  if (roles.includes("Platform Admin")) {
+    return PLATFORM_ADMIN_EXCLUDED.some((route) => routeMatches(route, path, method))
+      ? ROLE_FORBIDDEN_DETAIL
+      : undefined;
+  }
+  const rule = ROLE_RULES.find((candidate) => routeMatches(candidate, path, method));
+  if (rule === undefined || rule.roles.length === 0) return undefined;
+  return rule.roles.some((role) => roles.includes(role)) ? undefined : ROLE_FORBIDDEN_DETAIL;
+};
 
 /**
  * The site ids a payload names that lie outside `allowedSiteIds`. A transfer names one site at each end and belongs to
@@ -435,6 +474,12 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       request.headers["x-actor-type"] = verifiedContext.actorType;
       request.headers["x-request-id"] = verifiedContext.requestId;
       request.headers["x-correlation-id"] = verifiedContext.correlationId;
+      // Route handlers see the roles of an employee only; a shopper or anonymous caller has none to carry.
+      if (verifiedContext.actorType === "employee") {
+        request.headers[ACTOR_ROLES_HEADER] = verifiedContext.roles.join(",");
+      } else {
+        delete request.headers[ACTOR_ROLES_HEADER];
+      }
     } else if (isServiceSecretValid) {
       if (!request.headers["x-actor-type"]) {
         request.headers["x-actor-type"] = "system";
@@ -449,16 +494,30 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       }
       delete request.headers["x-actor-id"];
       delete request.headers["x-actor-type"];
+      delete request.headers[ACTOR_ROLES_HEADER];
     }
 
     // A shopper's own paths stay open; anything behind the counter stops here even though the context verifies.
-    if (verifiedContext && verifiedContext.actorType === "customer" && isEmployeePath(request.path, request.method)) {
+    if (
+      verifiedContext &&
+      (verifiedContext.actorType === "customer" || verifiedContext.actorType === "anonymous") &&
+      isEmployeePath(request.path, request.method)
+    ) {
       response.status(403).json({
         title: "Employee access required",
         status: 403,
         code: "employee_required",
       });
       return;
+    }
+
+    // The roles a verified employee holds are checked here as the edge checks them.
+    if (verifiedContext && verifiedContext.actorType === "employee") {
+      const detail = roleRefusal(request.path, request.method, verifiedContext.roles);
+      if (detail !== undefined) {
+        response.status(403).json({ title: "Role forbidden", status: 403, code: "role_forbidden", detail });
+        return;
+      }
     }
 
     // Only this middleware states an employee's sites, so a browser can never claim a scope. An internal service

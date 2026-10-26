@@ -19,6 +19,7 @@ const EXEMPT_PREFIXES: readonly string[] = [
   "/auth/reset-password",
   "/auth/csrf",
   "/auth/context",
+  "/internal",
 ];
 
 const readCookie = (request: Request, name: string): string | undefined => {

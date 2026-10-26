@@ -17,6 +17,8 @@ export const registerRequestSchema = z.object({
 export const loginRequestSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1).max(200),
+  /** `employee`: a staff sign-in, which refuses a customer account before any session is created. */
+  audience: z.enum(["employee"]).optional(),
 });
 
 export const updateProfileRequestSchema = z.object({

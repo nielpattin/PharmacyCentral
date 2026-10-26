@@ -62,7 +62,7 @@ app.get("/health/ready", (_request, response) =>
 );
 app.use(createCsrfMiddleware());
 app.use("/auth", createAccountRouter(accountService, googleSignIn, authRateLimit.limiter, audit, cookieSecure));
-app.use("/admin", createAdminRouter(accountService, audit));
+app.use("/admin", createAdminRouter(accountService));
 app.use("/customers", createCustomerRouter(accountService));
 app.use("/internal", createInternalCustomerRouter(accountService));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
