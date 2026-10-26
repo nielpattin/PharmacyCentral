@@ -1,6 +1,7 @@
 import { Link as RouterLink } from "@tanstack/react-router";
 
-import type { HomeSearch } from "../../router.ts";
+import type { SortMode } from "../../storefront/catalog.ts";
+import { ORDER_TABS } from "../../storefront/order-tabs.ts";
 
 type LinkProps = {
   href: string;
@@ -9,10 +10,10 @@ type LinkProps = {
   children: React.ReactNode;
 };
 
-const homeSearchFromUrl = (url: URL): HomeSearch => ({
+const homeSearchFromUrl = (url: URL) => ({
   q: url.searchParams.get("q") || undefined,
   "danh-muc": url.searchParams.get("danh-muc") || undefined,
-  "sap-xep": (url.searchParams.get("sap-xep") as HomeSearch["sap-xep"]) || undefined,
+  "sap-xep": (url.searchParams.get("sap-xep") as SortMode | null) || undefined,
   "nha-thuoc": url.searchParams.get("nha-thuoc") || undefined,
 });
 
@@ -25,8 +26,11 @@ const linkTarget = (target: URL) => {
   if (categorySlug) return { to: "/danh-muc/$slug", params: { slug: categorySlug } } as const;
   const productId = /^\/san-pham\/([^/]+)$/.exec(target.pathname)?.[1];
   if (productId) return { to: "/san-pham/$productId", params: { productId } } as const;
-  if (target.pathname === "/don-hang") return { to: "/don-hang" } as const;
-  if (target.pathname === "/don-hang-cua-toi") return { to: "/don-hang-cua-toi" } as const;
+  if (target.pathname === "/don-hang")
+    return {
+      to: "/don-hang",
+      search: { tab: ORDER_TABS.find((tab) => tab === target.searchParams.get("tab")) },
+    } as const;
   if (target.pathname === "/gui-don-thuoc") return { to: "/gui-don-thuoc" } as const;
   if (target.pathname === "/tai-khoan") return { to: "/tai-khoan" } as const;
   return {

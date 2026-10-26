@@ -130,7 +130,7 @@ export const ProductPicker = ({
                   type="button"
                   size="sm"
                   variant={inCart > 0 ? "outline" : "primary"}
-                  className="shrink-0"
+                  className="shrink-0 max-sm:min-h-10 max-sm:min-w-10"
                   disabled={busy || adding || !unit}
                   onClick={() => unit && onAdd(product, unit)}
                 >

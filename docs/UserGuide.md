@@ -4,8 +4,8 @@
 
 This document describes how internal teams and shoppers use the two Pharmacy Central web apps as they exist today:
 
-- **Staff Web** (`http://localhost:5302/`) for employees: pharmacists, pharmacy managers, warehouse staff and platform administrators.
-- **Customer Web** (`http://localhost:5301/`) for shoppers: product search, cart, checkout, orders, prescriptions, account and the shopping assistant.
+- **Staff Web** (`http://staff.pharmacy.localhost/`, or `http://localhost:5302/` without the named URLs) for employees: pharmacists, pharmacy managers, warehouse staff and platform administrators.
+- **Customer Web** (`http://customer.pharmacy.localhost/`, or `http://localhost:5301/` without the named URLs) for shoppers: product search, cart, checkout, orders, prescriptions, account and the shopping assistant.
 
 Screens are described as the code renders them. A sidebar item lists only for roles that may open it; the labels are the ones shown on screen.
 
@@ -304,18 +304,18 @@ Stock shown for a product is for the selected pharmacy only.
 
 ### Cart and checkout
 
-**Đặt hàng & thanh toán** (`/don-hang`) requires a signed-in customer.
+**Đơn hàng** (`/don-hang`) is one page with two tabs, **Đặt hàng** and **Đơn của tôi** (`/don-hang?tab=don-cua-toi`). The **Đặt hàng** tab requires a signed-in customer. Switching tabs keeps what you chose on the order form and the payment panel of an order you just placed.
 
-1. Review the cart. Products without a price cannot be checked out; remove them or use **Nhờ dược sĩ tư vấn** from the intake results.
+1. Review the cart. With an empty cart the page shows only the cart and the medicine picker; the fulfillment, payment and delivery sections appear once the cart has a product. With products in the cart the picker folds away: **Thêm thuốc** in the cart header opens it right under the cart, and **Thu gọn** folds it again. Products without a price cannot be checked out; remove them or use **Nhờ dược sĩ tư vấn** from the intake results.
 2. Choose the fulfillment: **Giao tận nơi** (delivery, with the fee calculated from the pharmacy to your delivery point) or **Nhận tại nhà thuốc** (pickup at the selected pharmacy).
 3. Choose the payment: **Chuyển khoản SePay QR** (scan the VietQR code with your banking app; the order is confirmed automatically) or **Thanh toán khi nhận hàng** (cash on delivery).
 4. Choose **Đặt hàng**.
 
-After an order is placed, the payment panel shows the order number, payment code, amount and status, and the SePay QR code and transfer description when QR payment is chosen. It reads "Đã nhận thanh toán" once payment is received.
+After an order is placed, the payment panel shows the order number, payment code, amount (goods plus the delivery fee) and status, and the SePay QR code and transfer description when QR payment is chosen. It reads "Đã nhận thanh toán" once payment is received.
 
 ### Orders
 
-**Đơn hàng của tôi** (`/don-hang-cua-toi`) lists the signed-in customer's orders. The order the customer most likely came for sits at the top as a large block: the newest order whose medicine is ready or on its way, otherwise the newest order still being handled, otherwise the newest one. It shows the package photo, the status as a sentence (for example "Thuốc của bạn đã sẵn sàng để nhận"), a five-step progress bar with labels (Chờ xác nhận, Đã xác nhận, Đang lấy thuốc, Sẵn sàng nhận hàng or Đang giao hàng, Hoàn tất), the pharmacy to collect from, the total and **Xem chi tiết đơn**, which opens every medicine with quantity and price, subtotal, delivery fee, the pharmacy address and the payment status. **Các đơn khác** lists the rest, newest first, each with its photo, status, date, total and a **Chi tiết** button; the tabs Tất cả, Đang xử lý, Hoàn tất and Đã huỷ filter that list. A cancelled order shows no payment note. The page refreshes itself every 10 seconds.
+The **Đơn của tôi** tab (`/don-hang?tab=don-cua-toi`) lists the signed-in customer's orders. The order the customer most likely came for sits at the top as a large block: the newest order whose medicine is ready or on its way, otherwise the newest order still being handled, otherwise the newest one. It shows the package photo, the status as a sentence (for example "Thuốc của bạn đã sẵn sàng để nhận"), a five-step progress bar with labels (Chờ xác nhận, Đã xác nhận, Đang lấy thuốc, Sẵn sàng nhận hàng or Đang giao hàng, Hoàn tất), the pharmacy to collect from, the total and **Xem chi tiết đơn**, which opens every medicine with quantity and price, subtotal, delivery fee, the pharmacy address and the payment status. **Các đơn khác** lists the rest, newest first, each with its photo, status, date, total and a **Chi tiết** button; the tabs Tất cả, Đang xử lý, Hoàn tất and Đã huỷ filter that list. A cancelled order shows no payment note. The tab refreshes itself every 10 seconds. The old address `/don-hang-cua-toi` no longer exists.
 
 ### Account
 

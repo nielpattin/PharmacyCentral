@@ -2,6 +2,7 @@ import { apiServiceForPath, createIdentityContextCache, type IdentityContexts } 
 import { z } from "zod";
 
 import { setSessionSnapshot } from "./auth.ts";
+import { newUuid } from "./storefront/ids.ts";
 
 export type ApiRequestOptions = RequestInit & {
   csrfToken?: string;
@@ -177,6 +178,8 @@ export type CustomerOrder = {
   deliveryFee: string;
   currency: string;
   createdAt: string;
+  /** The sales service stores the method the shopper chose; orders placed before it existed carry none. */
+  paymentMethod?: "sepay_qr" | "cash_on_delivery" | null;
 };
 
 /** `POST /orders` and `GET /orders/:id` answer with the order, its lines, and the delivery snapshot when there is one. */
@@ -299,7 +302,7 @@ export const createOrder = (input: {
   lines: Array<{ productId: string; productUnitId: string; quantity: number }>;
   delivery?: { destination: { latitude: number; longitude: number }; addressNote?: string };
 }): Promise<CustomerOrderDetail> =>
-  request("/api/orders", { method: "POST", body: JSON.stringify(input), idempotencyKey: crypto.randomUUID() });
+  request("/api/orders", { method: "POST", body: JSON.stringify(input), idempotencyKey: newUuid() });
 export const createPaymentInvoice = (input: {
   invoiceId: string;
   orderId: string;

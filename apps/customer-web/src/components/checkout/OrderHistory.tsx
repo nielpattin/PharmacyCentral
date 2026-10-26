@@ -129,8 +129,8 @@ const FeaturedOrder = ({
   const failedPayment = !cancelled && order.paymentStatus.toLowerCase() === "failed";
 
   return (
-    <Card className="overflow-hidden">
-      <div className="grid gap-6 p-5 sm:p-8 md:grid-cols-[16rem_minmax(0,1fr)] md:gap-10">
+    <Card className="min-w-0 overflow-hidden">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 p-5 sm:p-8 md:grid-cols-[16rem_minmax(0,1fr)] md:gap-10">
         <div className="mx-auto w-full max-w-64 md:mx-0">
           {firstLine ? (
             <ProductTile
@@ -240,7 +240,7 @@ const OrderRow = ({
   const lines = detail.data?.lines;
 
   return (
-    <li className="border-t border-line first:border-t-0">
+    <li className="min-w-0 border-t border-line first:border-t-0">
       <div className="grid grid-cols-[4rem_minmax(0,1fr)] gap-x-4 gap-y-3 px-5 py-4 sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:gap-x-5">
         <div aria-hidden="true" className="size-16">
           {firstLine ? (
@@ -328,16 +328,20 @@ export const OrderHistory = ({
   const shown = others.filter((order) => active?.matches(order) ?? true);
 
   return (
-    <div className="grid gap-10">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-10">
       <FeaturedOrder order={featured} store={storeOf(featured)} />
 
       {others.length > 0 ? (
-        <section aria-labelledby="other-orders" className="grid gap-4">
+        <section aria-labelledby="other-orders" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 id="other-orders" className="text-xl font-semibold text-ink">
               Các đơn khác
             </h2>
-            <div className="inline-flex gap-1 rounded-lg bg-surface-soft p-1">
+            <div
+              role="group"
+              aria-label="Lọc đơn hàng"
+              className="inline-flex max-w-full flex-wrap gap-1 rounded-lg bg-surface-soft p-1"
+            >
               {FILTERS.map((candidate) => (
                 <button
                   key={candidate.id}
@@ -357,10 +361,10 @@ export const OrderHistory = ({
             </div>
           </div>
           {shown.length > 0 ? (
-            <Card className="overflow-hidden">
+            <Card className="min-w-0 overflow-hidden">
               <ul>
-                {shown.map((order) => (
-                  <OrderRow key={order.id} order={order} store={storeOf(order)} index={others.indexOf(order)} />
+                {shown.map((order, index) => (
+                  <OrderRow key={order.id} order={order} store={storeOf(order)} index={index} />
                 ))}
               </ul>
             </Card>

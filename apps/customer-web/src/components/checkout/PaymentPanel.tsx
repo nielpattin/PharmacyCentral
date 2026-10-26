@@ -26,7 +26,7 @@ export const PaymentPanel = ({ order, invoice, paymentMethod, storeName }: Payme
   // them the moment the money is in, however the status arrived.
   const instruction = paymentMethod === "sepay_qr" && !paid ? invoice.paymentInstruction : undefined;
   const description = paid
-    ? "Nhà thuốc đã nhận đủ tiền và đang soạn đơn của bạn."
+    ? "Nhà thuốc đã nhận đủ tiền và đang lấy thuốc cho bạn."
     : paymentMethod === "sepay_qr"
       ? "Quét mã bên dưới để chuyển khoản. Đơn được xác nhận tự động khi nhà thuốc nhận đủ tiền."
       : "Bạn thanh toán cho nhân viên khi nhận thuốc. Nhà thuốc sẽ gọi xác nhận trước khi soạn.";
@@ -136,7 +136,7 @@ export const PaymentPanel = ({ order, invoice, paymentMethod, storeName }: Payme
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/60 pt-3">
             <p className="text-xs text-muted">Bạn có thể theo dõi tiến độ đơn hàng bất kỳ lúc nào.</p>
             <Link
-              href="/don-hang-cua-toi"
+              href="/don-hang?tab=don-cua-toi"
               className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-soft px-3 py-1.5 text-xs font-medium text-ink hover:border-primary hover:text-primary transition"
             >
               <IconReceipt className="size-3.5 text-primary" />

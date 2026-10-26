@@ -2,6 +2,8 @@ import { Alert, Button, Card, CardDescription, CardHeader, CardTitle, Dialog, Fi
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { newUuid } from "../../storefront/ids.ts";
+
 type PharmacistRequestCardProps = {
   /** The prescribed names no suggestion could fill as written at the chosen store. */
   helpNames: string[];
@@ -16,7 +18,7 @@ const NOTE_MAX_LENGTH = 1000;
  * the prescription on screen, so sending again after a lost answer files nothing twice.
  */
 export const PharmacistRequestCard = ({ helpNames, onSend }: PharmacistRequestCardProps): React.JSX.Element => {
-  const [requestKey] = useState(() => crypto.randomUUID());
+  const [requestKey] = useState(() => newUuid());
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [step, setStep] = useState<"compose" | "sending" | "sent">("compose");

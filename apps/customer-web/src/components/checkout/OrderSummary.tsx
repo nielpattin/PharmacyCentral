@@ -1,4 +1,4 @@
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@pharmacy/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@pharmacy/ui";
 
 import type { CheckoutLine, CheckoutTotals } from "../../storefront/checkout.ts";
 import { formatMoney, formatQuantity } from "../../storefront/format.ts";
@@ -18,6 +18,9 @@ const TRUST_POINTS = [
   { icon: <IconQr />, label: "Chuyển khoản QR hoặc trả khi nhận hàng" },
 ];
 
+/** Whether the cart has been read yet: the summary shows placeholders while it loads and stays blank if it failed. */
+export type CartState = "loading" | "failed" | "ready";
+
 type OrderSummaryProps = {
   lines: CheckoutLine[];
   totals: CheckoutTotals;
@@ -30,6 +33,8 @@ type OrderSummaryProps = {
   blockedReason: string | undefined;
   /** True when the only thing standing between the shopper and an order is signing in. */
   needsAccount: boolean;
+  /** Placeholders while the cart is read; nothing on a failed read, so the empty-cart copy never shows for it. */
+  cartState: CartState;
   onSubmit: () => void;
   onGoToCart: () => void;
 };
@@ -44,6 +49,7 @@ export const OrderSummary = ({
   canSubmit,
   blockedReason,
   needsAccount,
+  cartState,
   onSubmit,
   onGoToCart,
 }: OrderSummaryProps): React.JSX.Element => {
@@ -60,10 +66,16 @@ export const OrderSummary = ({
     <Card>
       <CardHeader className="flex items-center justify-between gap-2">
         <CardTitle>Đơn hàng của bạn</CardTitle>
-        <span className="text-xs text-muted">{totals.productCount} sản phẩm</span>
+        {cartState === "ready" ? <span className="text-xs text-muted">{totals.productCount} sản phẩm</span> : null}
       </CardHeader>
       <CardContent className="grid gap-4">
-        {lines.length === 0 ? (
+        {cartState === "loading" ? (
+          <div role="status" aria-label="Đang tải giỏ thuốc" className="grid gap-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-4/5" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+        ) : cartState === "failed" ? null : lines.length === 0 ? (
           <div className="grid gap-3">
             <p className="rounded-md bg-surface-soft px-3 py-4 text-center text-sm text-muted">
               Chưa có sản phẩm nào trong giỏ. Chọn thuốc để bắt đầu đơn hàng.

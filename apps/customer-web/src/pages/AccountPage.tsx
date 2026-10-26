@@ -265,7 +265,7 @@ export const AccountPage = (): React.JSX.Element => {
             <CardTitle>Đơn hàng của tôi</CardTitle>
             <CardDescription>
               {orders.length} đơn trên tài khoản này.{" "}
-              <Link className="font-medium text-primary hover:underline" href="/don-hang-cua-toi">
+              <Link className="font-medium text-primary hover:underline" href="/don-hang?tab=don-cua-toi">
                 Xem chi tiết và theo dõi giao hàng
               </Link>
               .
@@ -348,7 +348,7 @@ export const AccountPage = (): React.JSX.Element => {
             <CardTitle>Đơn hàng gần đây</CardTitle>
             <CardDescription>
               {orders.length > 0 ? (
-                <Link className="font-medium text-primary hover:underline" href="/don-hang-cua-toi">
+                <Link className="font-medium text-primary hover:underline" href="/don-hang?tab=don-cua-toi">
                   Xem tất cả {orders.length} đơn
                 </Link>
               ) : (

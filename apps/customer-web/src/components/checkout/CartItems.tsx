@@ -39,10 +39,15 @@ const QuantityStepper = ({
   };
 
   const stepClass =
-    "grid size-8 place-items-center text-muted transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-40";
+    "grid size-8 place-items-center text-muted transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-40 max-sm:size-10";
 
   return (
-    <div className={cn("flex h-9 items-center rounded-md border border-line bg-surface", pending && "opacity-60")}>
+    <div
+      className={cn(
+        "flex h-9 items-center rounded-md border border-line bg-surface max-sm:h-[42px]",
+        pending && "opacity-60",
+      )}
+    >
       <button
         type="button"
         className={stepClass}
@@ -106,7 +111,7 @@ export const CartItems = ({
         <div>
           <p className="text-sm font-medium text-ink">Giỏ thuốc của bạn đang trống</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-            Chọn thuốc hoặc vật tư y tế bên dưới để thêm vào đơn, sau đó tính phí giao hàng và đặt hàng.
+            Chọn thuốc hoặc vật tư y tế bên dưới để thêm vào đơn, sau đó chọn cách nhận hàng và đặt hàng.
           </p>
         </div>
         <Button type="button" variant="outline" onClick={onBrowse}>
@@ -165,6 +170,7 @@ export const CartItems = ({
                   type="button"
                   variant="ghost"
                   size="icon"
+                  className="max-sm:min-h-10 max-sm:min-w-10"
                   aria-label={`Xoá ${line.productName} khỏi giỏ`}
                   disabled={busy || pending}
                   onClick={() => onRemove(line)}
@@ -172,7 +178,7 @@ export const CartItems = ({
                   <IconTrash className="size-4" />
                 </Button>
               </div>
-              <p className="w-24 shrink-0 text-right text-sm font-semibold text-ink">
+              <p className="w-24 shrink-0 text-right text-sm font-semibold text-ink max-sm:w-auto max-sm:min-w-0 max-sm:shrink">
                 {line.lineTotal === undefined ? "—" : formatMoney(line.lineTotal, line.currency)}
               </p>
             </div>

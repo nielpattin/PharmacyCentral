@@ -214,7 +214,7 @@ export const DeliveryPointPanel = ({
                 <IconCrosshair className="size-4" />
                 Dùng vị trí hiện tại
               </Button>
-              <Button type="button" onClick={onCalculate} disabled={busy || !selectedStore}>
+              <Button type="button" variant="secondary" onClick={onCalculate} disabled={busy || !selectedStore}>
                 Tính phí giao hàng
               </Button>
             </div>
@@ -226,7 +226,13 @@ export const DeliveryPointPanel = ({
                   Lần sau bạn chỉ cần bấm vào tên ở bước thanh toán, không phải tìm lại từ đầu.
                 </p>
                 <div className="mt-2">
-                  <Button type="button" size="sm" onClick={onSaveDestination} disabled={savingDestination}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onSaveDestination}
+                    disabled={savingDestination}
+                  >
                     <IconPin className="size-3.5" />
                     {savingDestination ? "Đang lưu…" : "Lưu điểm giao này"}
                   </Button>

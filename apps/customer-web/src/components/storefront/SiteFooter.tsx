@@ -6,7 +6,7 @@ import { IconChevronRight, IconQr, IconShield, IconStore, IconTruck } from "./ic
 const SERVICE_LINKS = [
   { label: "Tìm nhà thuốc gần bạn", href: "/#nha-thuoc" },
   { label: "Giỏ hàng và thanh toán", href: "/don-hang" },
-  { label: "Đơn hàng của tôi", href: "/don-hang-cua-toi" },
+  { label: "Đơn hàng của tôi", href: "/don-hang?tab=don-cua-toi" },
   { label: "Tài khoản của tôi", href: "/tai-khoan" },
 ];
 

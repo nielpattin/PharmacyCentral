@@ -3,12 +3,12 @@ import { createRootRoute, createRoute, createRouter } from "@tanstack/react-rout
 import { AccountPage } from "./pages/AccountPage.tsx";
 import { RootLayout } from "./components/RootLayout.tsx";
 import { CategoryPage } from "./pages/CategoryPage.tsx";
-import { CheckoutPage } from "./pages/CheckoutPage.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
 import { NotFoundPage } from "./pages/NotFoundPage.tsx";
-import { OrdersPage } from "./pages/OrdersPage.tsx";
+import { OrdersHubPage } from "./pages/OrdersHubPage.tsx";
 import { PrescriptionIntakePage } from "./pages/PrescriptionIntakePage.tsx";
 import { ProductDetailPage } from "./pages/ProductDetailPage.tsx";
+import { ORDER_TABS, type OrderTab } from "./storefront/order-tabs.ts";
 import type { SortMode } from "./storefront/catalog.ts";
 
 export type HomeSearch = {
@@ -38,6 +38,12 @@ const validateAccountSearch = (search: Record<string, unknown>): { section: Acco
   return { section: ACCOUNT_SECTIONS.includes(section as AccountSection) ? (section as AccountSection) : "tong-quan" };
 };
 
+type OrdersSearch = { tab?: OrderTab | undefined };
+
+const validateOrdersSearch = (search: Record<string, unknown>): OrdersSearch => ({
+  tab: ORDER_TABS.find((tab) => tab === search["tab"]),
+});
+
 const rootRoute = createRootRoute({ component: RootLayout, notFoundComponent: NotFoundPage });
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -45,15 +51,11 @@ const homeRoute = createRoute({
   validateSearch: validateHomeSearch,
   component: HomePage,
 });
-const checkoutRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/don-hang",
-  component: CheckoutPage,
-});
 const ordersRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/don-hang-cua-toi",
-  component: OrdersPage,
+  path: "/don-hang",
+  validateSearch: validateOrdersSearch,
+  component: OrdersHubPage,
 });
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -81,7 +83,6 @@ const routeTree = rootRoute.addChildren([
   homeRoute,
   categoryRoute,
   productRoute,
-  checkoutRoute,
   ordersRoute,
   accountRoute,
   prescriptionIntakeRoute,

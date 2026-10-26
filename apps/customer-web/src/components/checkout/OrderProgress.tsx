@@ -40,7 +40,10 @@ export const OrderSteps = ({
       <li
         key={label}
         aria-current={index === step ? "step" : undefined}
-        className={cn("grid gap-2 text-sm", index === step ? "font-semibold text-primary-dark" : "text-muted")}
+        className={cn(
+          "grid gap-2 text-sm max-sm:text-xs max-sm:leading-tight",
+          index === step ? "font-semibold text-primary-dark" : "text-muted",
+        )}
       >
         <span className={cn("h-2 rounded-full", segmentClass(index, step))} />
         {label}

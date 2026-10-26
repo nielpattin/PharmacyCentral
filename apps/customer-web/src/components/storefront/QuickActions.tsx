@@ -12,7 +12,7 @@ type QuickAction = {
 export const QuickActions = ({ onFindNearest }: { onFindNearest: () => void }): React.JSX.Element => {
   const actions: QuickAction[] = [
     { label: "Tìm nhà thuốc", detail: "Theo vị trí của bạn", icon: <IconPin />, onSelect: onFindNearest },
-    { label: "Đơn của tôi", detail: "Tra cứu đơn hàng", icon: <IconReceipt />, href: "/don-hang-cua-toi" },
+    { label: "Đơn của tôi", detail: "Tra cứu đơn hàng", icon: <IconReceipt />, href: "/don-hang?tab=don-cua-toi" },
     { label: "Giao hàng", detail: "Tính phí theo km", icon: <IconTruck />, href: "/don-hang" },
     { label: "Nhận tại quầy", detail: "Chọn nhà thuốc", icon: <IconStore />, href: "/don-hang" },
     { label: "Thanh toán QR", detail: "SePay hoặc COD", icon: <IconQr />, href: "/don-hang" },

@@ -57,15 +57,15 @@ export const SiteHeader = ({
           </p>
           <p className="flex items-center gap-4">
             {storeCount !== undefined ? <span>{storeCount} nhà thuốc đang hoạt động</span> : null}
-            <a className="flex items-center gap-1 hover:underline" href="#nha-thuoc">
+            <Link className="flex items-center gap-1 hover:underline" href="/#nha-thuoc">
               <IconPin className="size-3.5" />
               Tìm nhà thuốc
-            </a>
+            </Link>
             <Link className="flex items-center gap-1 hover:underline" href="/gui-don-thuoc">
               <IconQr className="size-3.5" />
               Gửi đơn thuốc
             </Link>
-            <Link className="flex items-center gap-1 hover:underline" href="/don-hang-cua-toi">
+            <Link className="flex items-center gap-1 hover:underline" href="/don-hang?tab=don-cua-toi">
               <IconReceipt className="size-3.5" />
               Đơn hàng của tôi
             </Link>
@@ -74,7 +74,7 @@ export const SiteHeader = ({
       </div>
 
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
-        <Link className="flex items-center gap-2.5" href="/">
+        <Link className="flex shrink-0 items-center gap-2.5" href="/">
           <BrandMark className="size-10" />
           <span className="hidden leading-tight sm:block">
             <span className="block text-base font-semibold text-ink">Pharmacy Central</span>
@@ -82,8 +82,8 @@ export const SiteHeader = ({
           </span>
         </Link>
 
-        <form onSubmit={submit} className="flex flex-1 items-center gap-2" role="search">
-          <div className="relative flex-1">
+        <form onSubmit={submit} className="flex min-w-0 flex-1 items-center gap-2" role="search">
+          <div className="relative min-w-0 flex-1">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-soft">
               <IconSearch className="size-4" />
             </span>
@@ -92,7 +92,7 @@ export const SiteHeader = ({
               value={term}
               onChange={(event) => setTerm(event.target.value)}
               placeholder="Tìm kiếm sản phẩm, tên thuốc, mã SKU..."
-              className="h-10 pl-9"
+              className="h-10 min-w-0 pl-9"
             />
           </div>
           <Button type="submit" size="lg" className="h-10 shrink-0">

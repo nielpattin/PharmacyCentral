@@ -85,7 +85,7 @@ export const PrescriptionsCard = ({ prescriptions }: PrescriptionsCardProps): Re
       )}
       <p className="mt-4 text-xs text-muted">
         Muốn xem thuốc đã mua và trạng thái giao hàng?{" "}
-        <Link className="font-medium text-primary hover:underline" href="/don-hang-cua-toi">
+        <Link className="font-medium text-primary hover:underline" href="/don-hang?tab=don-cua-toi">
           Đơn hàng của tôi
         </Link>
       </p>
