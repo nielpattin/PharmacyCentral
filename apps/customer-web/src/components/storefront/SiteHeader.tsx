@@ -157,7 +157,7 @@ export const SiteHeader = ({
 
       {pages.length > 0 ? (
         <nav className="border-b border-line bg-surface shadow-sm" aria-label="Danh mục sản phẩm">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-2 px-4">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 px-4">
             {pages.map((page) => {
               const active = activeSlug === page.slug || page.children.some((child) => child.slug === activeSlug);
               return (
