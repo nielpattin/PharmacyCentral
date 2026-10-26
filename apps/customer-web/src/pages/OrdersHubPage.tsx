@@ -548,7 +548,7 @@ export const OrdersHubPage = (): React.JSX.Element => {
       <main className="mx-auto max-w-7xl space-y-5 px-4 py-6">
         <div className="grid gap-3">
           <PageHeader
-            className="mb-0"
+            className="mb-0 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:tracking-tight"
             breadcrumb={<StoreBreadcrumb items={[{ label: "Trang chủ", href: "/" }, { label: "Đơn hàng" }]} />}
             title="Đơn hàng"
             subtitle="Đặt thuốc mới hoặc theo dõi những đơn bạn đã đặt."
@@ -581,7 +581,9 @@ export const OrdersHubPage = (): React.JSX.Element => {
           hidden={tab !== "dat-hang"}
           className="space-y-5"
         >
-          <CheckoutSteps current={step} />
+          <div className="rounded-lg bg-surface px-5 py-4 shadow-sm">
+            <CheckoutSteps current={step} />
+          </div>
 
           {visibleError ? <Alert variant="danger">{visibleError}</Alert> : null}
 
@@ -594,8 +596,8 @@ export const OrdersHubPage = (): React.JSX.Element => {
             />
           ) : null}
 
-          <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
+          <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
               <Card>
                 <CardHeader className="flex items-center justify-between gap-2">
                   <CardTitle>Giỏ thuốc</CardTitle>

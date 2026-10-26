@@ -79,9 +79,9 @@ export const DeliveryPointPanel = ({
 
   return (
     <Card>
-      <CardHeader className="flex items-center justify-between gap-2">
+      <CardHeader className="flex items-center justify-between gap-3">
         <CardTitle>{pickup ? "Nhà thuốc nhận hàng" : "Điểm giao hàng"}</CardTitle>
-        <span className="text-muted">
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
           {pickup ? <IconStore className="size-4" /> : <IconTruck className="size-4" />}
         </span>
       </CardHeader>
@@ -91,7 +91,11 @@ export const DeliveryPointPanel = ({
           hint={selectedStore?.address ?? "Đơn được soạn và xuất tại nhà thuốc này."}
           className="max-w-xl"
         >
-          <Select value={selectedStoreId} onChange={(event) => onSelectStore(event.target.value)}>
+          <Select
+            className="h-10 rounded-lg"
+            value={selectedStoreId}
+            onChange={(event) => onSelectStore(event.target.value)}
+          >
             {stores.map((store) => (
               <option key={store.id} value={store.id}>
                 {store.name}
@@ -130,7 +134,7 @@ export const DeliveryPointPanel = ({
                     <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-soft" />
                     <Input
                       id={searchInputId}
-                      className="pl-9 pr-9"
+                      className="h-10 rounded-lg pl-9 pr-9"
                       value={query}
                       onChange={(event) => onQueryChange(event.target.value)}
                       placeholder="Ví dụ: 123 Nguyễn Trãi, Quận 1"
@@ -146,7 +150,12 @@ export const DeliveryPointPanel = ({
                       </button>
                     ) : null}
                   </div>
-                  <Button type="submit" variant="outline" disabled={searching || !query.trim()}>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    className="h-10 rounded-lg"
+                    disabled={searching || !query.trim()}
+                  >
                     {searching ? "Đang tìm…" : "Tìm"}
                   </Button>
                 </div>
@@ -154,7 +163,7 @@ export const DeliveryPointPanel = ({
               </form>
 
               {results.length > 0 ? (
-                <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
+                <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line shadow-sm">
                   {results.map((result) => (
                     <li key={result.refId}>
                       <button
@@ -183,7 +192,12 @@ export const DeliveryPointPanel = ({
                         key={address.id}
                         type="button"
                         size="sm"
-                        variant={active ? "primary" : "outline"}
+                        variant="outline"
+                        className={
+                          active
+                            ? "rounded-full border-primary bg-primary-soft text-primary ring-2 ring-primary/20 hover:bg-primary-soft"
+                            : "rounded-full hover:border-primary/50"
+                        }
                         aria-pressed={active}
                         onClick={() => onPickSavedAddress(address)}
                       >
@@ -203,6 +217,7 @@ export const DeliveryPointPanel = ({
               className="max-w-xl"
             >
               <Input
+                className="h-10 rounded-lg"
                 value={addressNote}
                 onChange={(event) => onAddressNoteChange(event.target.value)}
                 placeholder="Số nhà, toà nhà, hẻm…"
@@ -241,13 +256,15 @@ export const DeliveryPointPanel = ({
             ) : null}
 
             {storePoint ? (
-              <DeliveryMap
-                key={mapKey}
-                store={storePoint}
-                destination={destination}
-                onDestinationChange={onDestinationChange}
-                {...(delivery ? { route: delivery.route.coordinates } : {})}
-              />
+              <div className="overflow-hidden rounded-lg shadow-sm">
+                <DeliveryMap
+                  key={mapKey}
+                  store={storePoint}
+                  destination={destination}
+                  onDestinationChange={onDestinationChange}
+                  {...(delivery ? { route: delivery.route.coordinates } : {})}
+                />
+              </div>
             ) : (
               <div className="grid min-h-[280px] place-items-center rounded-lg border border-dashed border-line bg-surface-soft p-8 text-center">
                 <p className="max-w-xs text-sm text-muted">
@@ -273,7 +290,7 @@ export const DeliveryPointPanel = ({
                 ) : null}
               </div>
             ) : (
-              <p className="rounded-md bg-surface-soft px-3.5 py-2.5 text-xs text-muted">
+              <p className="rounded-lg bg-primary-soft/50 px-3.5 py-2.5 text-xs text-muted">
                 Chưa tính phí giao hàng. Bấm “Tính phí giao hàng” để xem khoảng cách, thời gian dự kiến và phí trước khi
                 đặt, hoặc để hệ thống tính khi bạn xác nhận đơn.
               </p>

@@ -153,7 +153,7 @@ export const OrderDetail = ({
   return (
     <div
       id={id}
-      className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 border-t border-line bg-surface-soft px-5 py-5"
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 border-t border-line bg-surface px-5 py-5 sm:px-6"
     >
       {!showSteps ? null : step !== undefined ? (
         <OrderSteps step={step} fulfillmentType={order.fulfillmentType} />
@@ -162,7 +162,7 @@ export const OrderDetail = ({
       ) : null}
 
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
+        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-lg bg-surface-soft p-4">
           <Heading>Sản phẩm</Heading>
           {query.isPending ? (
             <div role="status" aria-label="Đang tải chi tiết đơn" className="grid gap-2">
@@ -200,9 +200,9 @@ export const OrderDetail = ({
                   <dt>Phí giao hàng</dt>
                   <dd className="tabular-nums">{formatMoney(detail.deliveryFee, detail.currency)}</dd>
                 </div>
-                <div className="flex justify-between gap-4 font-semibold text-ink">
+                <div className="flex items-baseline justify-between gap-4 pt-1 text-base font-semibold text-ink">
                   <dt>Tổng cộng</dt>
-                  <dd className="tabular-nums text-primary-dark">
+                  <dd className="text-xl font-bold tabular-nums text-primary">
                     {formatMoney(Number(detail.subtotal) + Number(detail.deliveryFee), detail.currency)}
                   </dd>
                 </div>
@@ -211,7 +211,7 @@ export const OrderDetail = ({
           ) : null}
         </section>
 
-        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
+        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 rounded-lg bg-surface-soft p-4">
           <Heading>{order.fulfillmentType === "pickup" ? "Thông tin nhận hàng" : "Thông tin giao hàng"}</Heading>
           <dl className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm max-sm:grid-cols-[6.5rem_minmax(0,1fr)]">
             <dt className="text-muted">Hình thức</dt>
@@ -256,7 +256,7 @@ export const OrderDetail = ({
       </div>
 
       {awaitingTransfer ? (
-        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
+        <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-lg bg-surface-soft p-4">
           <Heading>Thanh toán chuyển khoản</Heading>
           <TransferPayment orderId={order.id} />
         </section>

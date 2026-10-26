@@ -42,12 +42,7 @@ const QuantityStepper = ({
     "grid size-8 place-items-center text-muted transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-40 max-sm:size-10";
 
   return (
-    <div
-      className={cn(
-        "flex h-9 items-center rounded-md border border-line bg-surface max-sm:h-[42px]",
-        pending && "opacity-60",
-      )}
-    >
+    <div className={cn("flex h-10 items-center rounded-full border border-line bg-surface", pending && "opacity-60")}>
       <button
         type="button"
         className={stepClass}
@@ -132,13 +127,13 @@ export const CartItems = ({
                 name={line.productName}
                 seed={line.sku ?? line.productId}
                 imageUrl={line.imageUrl}
-                className="size-16"
+                className="size-20"
                 monogramClassName="text-lg"
               />
             </Link>
             <div className="min-w-0 flex-1">
               <Link
-                className="line-clamp-2 text-sm font-medium text-ink hover:text-primary"
+                className="line-clamp-2 text-[15px] font-medium text-ink hover:text-primary"
                 href={`/san-pham/${line.productId}`}
               >
                 {line.productName}
@@ -148,7 +143,7 @@ export const CartItems = ({
                 {line.sku ? `SKU ${line.sku}` : "Đơn vị bán theo nhà thuốc"}
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-danger">
+                <span className="text-sm font-semibold text-primary">
                   {line.unitPrice === undefined ? "Liên hệ báo giá" : formatMoney(line.unitPrice, line.currency)}
                 </span>
                 {line.unitName && line.unitPrice !== undefined ? (
@@ -170,7 +165,7 @@ export const CartItems = ({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="max-sm:min-h-10 max-sm:min-w-10"
+                  className="text-muted hover:bg-danger-soft hover:text-danger-ink max-sm:min-h-10 max-sm:min-w-10"
                   aria-label={`Xoá ${line.productName} khỏi giỏ`}
                   disabled={busy || pending}
                   onClick={() => onRemove(line)}
@@ -178,7 +173,7 @@ export const CartItems = ({
                   <IconTrash className="size-4" />
                 </Button>
               </div>
-              <p className="w-24 shrink-0 text-right text-sm font-semibold text-ink max-sm:w-auto max-sm:min-w-0 max-sm:shrink">
+              <p className="w-24 shrink-0 text-right text-sm font-bold text-ink max-sm:w-auto max-sm:min-w-0 max-sm:shrink">
                 {line.lineTotal === undefined ? "—" : formatMoney(line.lineTotal, line.currency)}
               </p>
             </div>

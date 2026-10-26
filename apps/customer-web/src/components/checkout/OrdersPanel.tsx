@@ -26,9 +26,9 @@ const ACCOUNT_LOCATION = { to: "/tai-khoan", search: { section: "tong-quan" } } 
 
 /** Stands in for the list while the session or the orders are still being read, so the panel keeps its height. */
 const OrdersSkeleton = ({ label }: { label: string }): React.JSX.Element => (
-  <div role="status" aria-label={label} className="grid gap-px overflow-hidden rounded-lg border border-line">
+  <div role="status" aria-label={label} className="grid gap-3">
     {Array.from({ length: 4 }, (_, index) => (
-      <div key={index} className="flex items-center gap-6 bg-surface px-4 py-3">
+      <div key={index} className="flex items-center gap-6 rounded-lg bg-surface px-5 py-4 shadow-sm">
         <Skeleton className="h-9 w-32" />
         <Skeleton className="h-4 flex-1" />
         <Skeleton className="h-4 w-24" />

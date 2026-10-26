@@ -56,14 +56,14 @@ export const ProductPicker = ({
         <div className="relative min-w-40 flex-1">
           <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-soft" />
           <Input
-            className="pl-9"
+            className="h-10 rounded-full pl-9"
             aria-label="Tìm kiếm sản phẩm"
             value={searchTerm}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Tìm theo tên thuốc, hoạt chất hoặc mã SKU"
           />
         </div>
-        <Button type="submit" variant="outline">
+        <Button type="submit" variant="outline" className="h-10 rounded-full px-5">
           Tìm kiếm
         </Button>
       </form>
@@ -94,14 +94,14 @@ export const ProductPicker = ({
             return (
               <li
                 key={product.id}
-                className="flex items-center gap-3 rounded-lg border border-line bg-surface p-2.5 transition-colors hover:border-primary/40"
+                className="flex items-center gap-3 rounded-lg border border-transparent bg-surface-soft/50 p-2.5 shadow-sm motion-safe:transition hover:-translate-y-px hover:shadow-md"
               >
                 <ProductTile
                   name={product.name}
                   seed={product.sku}
                   imageUrl={product.imageUrl}
-                  className="size-14"
-                  monogramClassName="text-base"
+                  className="size-16 sm:size-20"
+                  monogramClassName="text-lg"
                 />
                 <div className="min-w-0 flex-1">
                   <p className="line-clamp-2 text-sm font-medium text-ink" title={product.name}>
@@ -113,7 +113,7 @@ export const ProductPicker = ({
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     {price && unit ? (
-                      <span className="text-sm font-semibold text-danger">
+                      <span className="text-sm font-semibold text-primary">
                         {formatMoney(price.unitPrice, price.currency)}
                         <span className="text-xs font-normal text-muted"> / {unit.unitName}</span>
                       </span>
@@ -130,7 +130,7 @@ export const ProductPicker = ({
                   type="button"
                   size="sm"
                   variant={inCart > 0 ? "outline" : "primary"}
-                  className="shrink-0 max-sm:min-h-10 max-sm:min-w-10"
+                  className="shrink-0 rounded-full px-4 max-sm:min-h-10 max-sm:min-w-10"
                   disabled={busy || adding || !unit}
                   onClick={() => unit && onAdd(product, unit)}
                 >

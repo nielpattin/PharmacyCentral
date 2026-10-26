@@ -7,8 +7,8 @@ import { IconQr, IconShield, IconTruck } from "../storefront/icons.tsx";
 
 const AmountRow = ({ label, value, strong }: { label: string; value: string; strong?: boolean }): React.JSX.Element => (
   <div className="flex items-baseline justify-between gap-3">
-    <dt className={strong ? "text-sm font-semibold text-ink" : "text-sm text-muted"}>{label}</dt>
-    <dd className={strong ? "text-lg font-semibold text-danger" : "text-sm font-medium text-ink"}>{value}</dd>
+    <dt className={strong ? "text-base font-semibold text-ink" : "text-sm text-muted"}>{label}</dt>
+    <dd className={strong ? "text-2xl font-bold text-primary" : "text-sm font-medium text-ink"}>{value}</dd>
   </div>
 );
 
@@ -127,7 +127,12 @@ export const OrderSummary = ({
               <p>Giá và phí giao hàng được hệ thống tính lại khi bạn xác nhận đặt hàng.</p>
             </div>
 
-            <Button size="lg" className="w-full" disabled={!canSubmit || busy} onClick={onSubmit}>
+            <Button
+              size="lg"
+              className="h-12 w-full rounded-full text-base font-semibold shadow-sm"
+              disabled={!canSubmit || busy}
+              onClick={onSubmit}
+            >
               {busy ? "Đang xử lý…" : "Đặt hàng"}
             </Button>
 
@@ -146,7 +151,7 @@ export const OrderSummary = ({
           </>
         )}
 
-        <ul className="grid gap-2 border-t border-line pt-4 text-xs text-muted">
+        <ul className="grid gap-2 rounded-lg bg-primary-soft/60 p-3 text-xs text-ink">
           {TRUST_POINTS.map((point) => (
             <li key={point.label} className="flex items-center gap-2">
               <span className="text-primary">{point.icon}</span>

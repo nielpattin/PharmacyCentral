@@ -48,10 +48,13 @@ const ChoiceGroup = ({
   onChange: (value: string) => void;
 }): React.JSX.Element => (
   <fieldset className="grid gap-2">
-    <legend className="text-sm font-medium text-ink">{legend}</legend>
+    <legend className="text-sm font-semibold text-ink">{legend}</legend>
     <div className="grid gap-3 sm:grid-cols-2">
       {options.map((option) => (
-        <label key={option.value} className="relative flex">
+        <label
+          key={option.value}
+          className="group relative flex cursor-pointer rounded-lg border border-line bg-surface p-3.5 text-left shadow-sm transition-colors hover:border-primary/50 has-[:checked]:border-primary has-[:checked]:bg-primary-soft has-[:checked]:ring-2 has-[:checked]:ring-primary/20 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/50 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+        >
           <input
             type="radio"
             name={name}
@@ -59,10 +62,10 @@ const ChoiceGroup = ({
             checked={value === option.value}
             disabled={disabled}
             onChange={() => onChange(option.value)}
-            className="peer sr-only"
+            className="sr-only"
           />
-          <span className="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-line bg-surface p-3.5 text-left transition-colors hover:border-primary/50 peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:ring-1 peer-checked:ring-primary/40 peer-focus-visible:ring-2 peer-focus-visible:ring-primary/50 peer-disabled:cursor-not-allowed peer-disabled:opacity-60">
-            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-soft text-primary">
+          <span className="flex w-full items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary transition-colors group-has-[:checked]:bg-primary group-has-[:checked]:text-white">
               {option.icon}
             </span>
             <span className="min-w-0">
@@ -110,6 +113,6 @@ export const FulfillmentPanel = ({
       disabled={disabled}
       onChange={(value) => onPaymentChange(value as "sepay_qr" | "cash_on_delivery")}
     />
-    <p className="rounded-md bg-surface-soft px-3 py-2 text-xs text-muted">{paymentHint}</p>
+    <p className="rounded-lg bg-primary-soft/50 px-3.5 py-2.5 text-xs text-muted">{paymentHint}</p>
   </div>
 );

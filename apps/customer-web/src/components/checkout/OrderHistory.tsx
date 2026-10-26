@@ -129,7 +129,16 @@ const FeaturedOrder = ({
   const failedPayment = !cancelled && order.paymentStatus.toLowerCase() === "failed";
 
   return (
-    <Card className="min-w-0 overflow-hidden">
+    <Card className="min-w-0 overflow-hidden border-0">
+      <div className="bg-gradient-to-r from-primary-soft to-surface px-5 py-4 sm:px-8">
+        <p className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm text-muted">
+          <span>
+            Mã đơn <span className="ml-1 text-base font-semibold tabular-nums text-ink">{orderCode(order)}</span>
+          </span>
+          <span>Đặt lúc {formatDateTime(order.createdAt)}</span>
+        </p>
+        <h2 className="mt-2 text-balance text-lg font-semibold text-ink">{orderHeadline(order)}</h2>
+      </div>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 p-5 sm:p-8 md:grid-cols-[16rem_minmax(0,1fr)] md:gap-10">
         <div className="mx-auto w-full max-w-64 md:mx-0">
           {firstLine ? (
@@ -148,15 +157,6 @@ const FeaturedOrder = ({
         </div>
 
         <div className="min-w-0">
-          <p className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm text-muted">
-            <span>
-              Mã đơn <span className="ml-1 text-xl font-semibold tabular-nums text-ink">{orderCode(order)}</span>
-            </span>
-            <span>Đặt lúc {formatDateTime(order.createdAt)}</span>
-          </p>
-          <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
-            {orderHeadline(order)}
-          </h2>
           {firstLine ? (
             <p className="mt-2 text-lg leading-snug text-ink">
               {firstLine.productNameSnapshot}
@@ -201,14 +201,14 @@ const FeaturedOrder = ({
           <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="text-sm text-muted">Tổng cộng</p>
-              <p className="text-2xl font-semibold tabular-nums text-ink">{orderTotal(order)}</p>
+              <p className="text-xl font-bold tabular-nums text-primary">{orderTotal(order)}</p>
             </div>
             <button
               type="button"
               aria-expanded={open}
               aria-controls={open ? detailId : undefined}
               onClick={() => setOpen((current) => !current)}
-              className="inline-flex h-11 items-center gap-2 rounded-md bg-primary px-5 text-base font-semibold text-white outline-none hover:bg-primary-dark focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-5 text-base font-semibold text-white outline-none hover:bg-primary-dark focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
             >
               {open ? "Thu gọn chi tiết" : "Xem chi tiết đơn"}
               <Chevron open={open} />
@@ -240,7 +240,7 @@ const OrderRow = ({
   const lines = detail.data?.lines;
 
   return (
-    <li className="min-w-0 border-t border-line first:border-t-0">
+    <li className="min-w-0 overflow-hidden rounded-lg bg-surface shadow-sm transition-shadow hover:shadow-md motion-reduce:transition-none">
       <div className="grid grid-cols-[4rem_minmax(0,1fr)] gap-x-4 gap-y-3 px-5 py-4 sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:gap-x-5">
         <div aria-hidden="true" className="size-16">
           {firstLine ? (
@@ -361,13 +361,11 @@ export const OrderHistory = ({
             </div>
           </div>
           {shown.length > 0 ? (
-            <Card className="min-w-0 overflow-hidden">
-              <ul>
-                {shown.map((order, index) => (
-                  <OrderRow key={order.id} order={order} store={storeOf(order)} index={index} />
-                ))}
-              </ul>
-            </Card>
+            <ul className="grid min-w-0 gap-3">
+              {shown.map((order, index) => (
+                <OrderRow key={order.id} order={order} store={storeOf(order)} index={index} />
+              ))}
+            </ul>
           ) : (
             <p className="py-6 text-sm text-muted">Chưa có đơn nào trong mục này.</p>
           )}

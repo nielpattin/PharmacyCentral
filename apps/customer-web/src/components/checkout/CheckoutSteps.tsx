@@ -15,15 +15,17 @@ export const CheckoutSteps = ({ current }: { current: CheckoutStep }): React.JSX
     {STEPS.map(({ step, label }, index) => {
       const done = step < current;
       const active = step === current;
+      // The connector after a step is coloured once that step is done, i.e. once the current step is past it.
+      const connectorDone = index < current - 1;
       return (
         <li key={step} className="flex flex-none items-center gap-3 sm:flex-1 sm:last:flex-none">
           <span className="flex items-center gap-2">
             <span
               aria-hidden="true"
               className={cn(
-                "grid size-7 shrink-0 place-items-center rounded-full border text-xs font-semibold",
+                "grid size-8 shrink-0 place-items-center rounded-full border text-xs font-semibold",
                 done ? "border-primary bg-primary text-white" : null,
-                active ? "border-primary bg-primary-soft text-primary-dark" : null,
+                active ? "border-primary bg-primary text-white ring-4 ring-primary-soft" : null,
                 !done && !active ? "border-line bg-surface text-muted-soft" : null,
               )}
             >
@@ -32,7 +34,7 @@ export const CheckoutSteps = ({ current }: { current: CheckoutStep }): React.JSX
             <span
               className={cn(
                 "whitespace-nowrap text-xs sm:text-sm",
-                active ? "font-semibold text-ink" : done ? "text-muted" : "text-muted-soft",
+                active ? "font-semibold text-ink text-sm" : done ? "text-muted" : "text-muted-soft",
               )}
               {...(active ? { "aria-current": "step" as const } : {})}
             >
@@ -40,7 +42,13 @@ export const CheckoutSteps = ({ current }: { current: CheckoutStep }): React.JSX
             </span>
           </span>
           {index < STEPS.length - 1 ? (
-            <span aria-hidden="true" className="hidden h-px min-w-4 flex-1 bg-line sm:block" />
+            <span
+              aria-hidden="true"
+              className={cn(
+                "hidden h-0.5 min-w-4 flex-1 rounded-full sm:block",
+                connectorDone ? "bg-primary" : "bg-line",
+              )}
+            />
           ) : null}
         </li>
       );

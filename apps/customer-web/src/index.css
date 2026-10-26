@@ -2,6 +2,16 @@
 @source "../../../packages/ui/src";
 @import "@pharmacy/ui/theme.css";
 
+/* Customer-only token overrides. This later @theme wins over the shared packages/ui theme for customer-web only,
+   so staff-web keeps the shared tokens. */
+@theme {
+  --color-background: oklch(0.955 0.014 250);
+  --color-line: oklch(0.92 0.008 255);
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgb(15 40 90 / 0.06), 0 2px 8px rgb(15 40 90 / 0.05);
+}
+
 body {
   background: var(--color-background);
   color: var(--color-ink);

@@ -35,11 +35,13 @@ export const PaymentPanel = ({ order, invoice, paymentMethod, storeName }: Payme
   const preview = (): React.JSX.Element => {
     if (instruction)
       return (
-        <img
-          src={instruction.qrImageUrl}
-          alt="Mã QR chuyển khoản SePay cho đơn hàng"
-          className="size-[190px] rounded-lg border border-line bg-white object-contain p-2"
-        />
+        <div className="grid size-[190px] place-items-center rounded-lg bg-white p-2 shadow-md ring-1 ring-primary/15">
+          <img
+            src={instruction.qrImageUrl}
+            alt="Mã QR chuyển khoản SePay cho đơn hàng"
+            className="size-full object-contain"
+          />
+        </div>
       );
     if (paid)
       return (
@@ -61,10 +63,12 @@ export const PaymentPanel = ({ order, invoice, paymentMethod, storeName }: Payme
   };
 
   return (
-    <Card id="ket-qua-dat-hang" className="border-primary/40">
-      <CardHeader className="border-primary/20 bg-primary-soft/50">
-        <CardTitle className="flex items-center gap-2">
-          <span className="grid size-6 place-items-center rounded-full bg-primary text-white">
+    <Card id="ket-qua-dat-hang" className="overflow-hidden border-primary/40 shadow-md">
+      <CardHeader className={paid ? "border-success/25 bg-success-soft" : "border-primary/20 bg-primary-soft"}>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <span
+            className={`grid size-7 place-items-center rounded-full text-white ${paid ? "bg-success" : "bg-primary"}`}
+          >
             <IconCheck className="size-4" />
           </span>
           Đã gửi đơn hàng tới nhà thuốc
@@ -86,7 +90,7 @@ export const PaymentPanel = ({ order, invoice, paymentMethod, storeName }: Payme
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <dt className="text-muted">Số tiền</dt>
-              <dd className="text-base font-semibold text-danger">{formatMoney(invoice.amount, invoice.currency)}</dd>
+              <dd className="text-2xl font-bold text-primary">{formatMoney(invoice.amount, invoice.currency)}</dd>
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <dt className="text-muted">Trạng thái</dt>
@@ -105,13 +109,13 @@ export const PaymentPanel = ({ order, invoice, paymentMethod, storeName }: Payme
           </dl>
 
           {instruction ? (
-            <div className="grid gap-2 rounded-lg bg-surface-soft p-3">
+            <div className="grid gap-2 rounded-lg bg-primary-soft/50 p-3.5">
               <p className="flex items-center gap-2 text-xs text-muted">
                 <IconQr className="size-4 text-primary" />
                 Nội dung chuyển khoản
               </p>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <code className="rounded bg-surface px-2 py-1 text-sm font-semibold text-ink">
+                <code className="rounded-md bg-surface px-2 py-1 text-sm font-semibold text-ink">
                   {instruction.transferContent}
                 </code>
                 <Button
@@ -137,7 +141,7 @@ export const PaymentPanel = ({ order, invoice, paymentMethod, storeName }: Payme
             <p className="text-xs text-muted">Bạn có thể theo dõi tiến độ đơn hàng bất kỳ lúc nào.</p>
             <Link
               href="/don-hang?tab=don-cua-toi"
-              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-soft px-3 py-1.5 text-xs font-medium text-ink hover:border-primary hover:text-primary transition"
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-1.5 text-xs font-medium text-ink shadow-sm transition hover:border-primary hover:text-primary"
             >
               <IconReceipt className="size-3.5 text-primary" />
               Xem tất cả đơn hàng đã đặt →

@@ -28,7 +28,7 @@ type SiteHeaderProps = {
   onSearch?: ((term: string) => void) | undefined;
 };
 
-const BAR_ITEM = "relative flex items-center whitespace-nowrap py-3.5 text-[13px] transition-colors";
+const BAR_ITEM = "relative flex items-center whitespace-nowrap py-3.5 text-sm transition-colors";
 
 export const SiteHeader = ({
   categories = [],
@@ -48,83 +48,88 @@ export const SiteHeader = ({
   };
 
   return (
-    <header className="border-b border-line bg-surface">
-      <div className="bg-primary-dark text-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-1.5 text-xs">
-          <p className="flex items-center gap-1.5">
-            <IconCheck className="size-3.5" />
-            <span>Thuốc chính hãng · Giao hàng tận nơi · Nhận tại nhà thuốc</span>
-          </p>
-          <p className="flex items-center gap-4">
-            {storeCount !== undefined ? <span>{storeCount} nhà thuốc đang hoạt động</span> : null}
-            <Link className="flex items-center gap-1 hover:underline" href="/#nha-thuoc">
-              <IconPin className="size-3.5" />
-              Tìm nhà thuốc
-            </Link>
-            <Link className="flex items-center gap-1 hover:underline" href="/gui-don-thuoc">
-              <IconQr className="size-3.5" />
-              Gửi đơn thuốc
-            </Link>
-            <Link className="flex items-center gap-1 hover:underline" href="/don-hang?tab=don-cua-toi">
-              <IconReceipt className="size-3.5" />
-              Đơn hàng của tôi
-            </Link>
-          </p>
-        </div>
-      </div>
-
-      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
-        <Link className="flex shrink-0 items-center gap-2.5" href="/">
-          <BrandMark className="size-10" />
-          <span className="hidden leading-tight sm:block">
-            <span className="block text-base font-semibold text-ink">Pharmacy Central</span>
-            <span className="block text-xs text-muted">Nhà thuốc trực tuyến</span>
-          </span>
-        </Link>
-
-        <form onSubmit={submit} className="flex min-w-0 flex-1 items-center gap-2" role="search">
-          <div className="relative min-w-0 flex-1">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-soft">
-              <IconSearch className="size-4" />
-            </span>
-            <Input
-              aria-label="Tìm kiếm sản phẩm"
-              value={term}
-              onChange={(event) => setTerm(event.target.value)}
-              placeholder="Tìm kiếm sản phẩm, tên thuốc, mã SKU..."
-              className="h-10 min-w-0 pl-9"
-            />
+    <header>
+      <div className="bg-gradient-to-r from-primary-dark via-primary to-primary text-white">
+        <div className="bg-black/10">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-1.5 text-xs">
+            <p className="flex items-center gap-1.5">
+              <IconCheck className="size-3.5" />
+              <span>Thuốc chính hãng · Giao hàng tận nơi · Nhận tại nhà thuốc</span>
+            </p>
+            <p className="flex items-center gap-4">
+              {storeCount !== undefined ? <span>{storeCount} nhà thuốc đang hoạt động</span> : null}
+              <Link className="flex items-center gap-1 hover:underline" href="/#nha-thuoc">
+                <IconPin className="size-3.5" />
+                Tìm nhà thuốc
+              </Link>
+              <Link className="flex items-center gap-1 hover:underline" href="/gui-don-thuoc">
+                <IconQr className="size-3.5" />
+                Gửi đơn thuốc
+              </Link>
+              <Link className="flex items-center gap-1 hover:underline" href="/don-hang?tab=don-cua-toi">
+                <IconReceipt className="size-3.5" />
+                Đơn hàng của tôi
+              </Link>
+            </p>
           </div>
-          <Button type="submit" size="lg" className="h-10 shrink-0">
-            Tìm kiếm
-          </Button>
-        </form>
+        </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <Link
-            className="flex items-center gap-1.5 rounded-md border border-line bg-surface-soft px-3 py-2 text-sm font-medium text-ink hover:border-primary hover:text-primary"
-            href="/tai-khoan"
-          >
-            <IconUser className="size-4 text-primary" />
-            <span className="hidden sm:inline">Tài khoản</span>
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4">
+          <Link className="flex shrink-0 items-center gap-2.5" href="/">
+            <BrandMark className="size-10 bg-white p-1 shadow-sm" />
+            <span className="hidden leading-tight sm:block">
+              <span className="block text-base font-semibold text-white">Pharmacy Central</span>
+              <span className="block text-xs text-white/90">Nhà thuốc trực tuyến</span>
+            </span>
           </Link>
-          <Link
-            className="relative flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-ink hover:bg-surface-soft"
-            href="/don-hang"
-          >
-            <IconCart />
-            <span className="hidden sm:inline">Giỏ hàng</span>
-            {cartCount > 0 ? (
-              <Badge variant="danger" className="absolute -right-1.5 -top-1.5 min-w-5 justify-center">
-                {cartCount}
-              </Badge>
-            ) : null}
-          </Link>
+
+          <form onSubmit={submit} className="flex min-w-0 flex-1 items-center" role="search">
+            <div className="relative min-w-0 flex-1">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-soft">
+                <IconSearch className="size-4" />
+              </span>
+              <Input
+                aria-label="Tìm kiếm sản phẩm"
+                value={term}
+                onChange={(event) => setTerm(event.target.value)}
+                placeholder="Tìm kiếm sản phẩm, tên thuốc, mã SKU..."
+                className="h-11 min-w-0 rounded-full border-transparent bg-white pl-11 pr-28 shadow-sm focus:border-transparent focus:ring-2 focus:ring-white"
+              />
+              <Button
+                type="submit"
+                className="absolute right-1 top-1/2 h-9 -translate-y-1/2 rounded-full bg-primary-dark px-5 text-white hover:bg-ink"
+              >
+                Tìm kiếm
+              </Button>
+            </div>
+          </form>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              href="/tai-khoan"
+            >
+              <IconUser className="size-4" />
+              <span className="hidden sm:inline">Tài khoản</span>
+            </Link>
+            <Link
+              className="relative flex items-center gap-2 rounded-full bg-white/15 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              href="/don-hang"
+            >
+              <IconCart />
+              <span className="hidden sm:inline">Giỏ hàng</span>
+              {cartCount > 0 ? (
+                <Badge variant="danger" className="absolute -right-1.5 -top-1.5 min-w-5 justify-center">
+                  {cartCount}
+                </Badge>
+              ) : null}
+            </Link>
+          </div>
         </div>
       </div>
 
       {pages.length > 0 ? (
-        <nav className="border-t border-line" aria-label="Danh mục sản phẩm">
+        <nav className="border-b border-line bg-surface shadow-sm" aria-label="Danh mục sản phẩm">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-2 px-4">
             {pages.map((page) => {
               const active = activeSlug === page.slug || page.children.some((child) => child.slug === activeSlug);
