@@ -97,7 +97,12 @@ describe("policy - route classification", () => {
   it("identifies employee routes", () => {
     assert.equal(isEmployeeRoute("/api/procurement", "GET"), true);
     assert.equal(isEmployeeRoute("/api/inventory/balances", "GET"), true);
-    assert.equal(isEmployeeRoute("/api/quality", "GET"), true);
+    assert.equal(isEmployeeRoute("/api/sites", "GET"), true, "sites are a staff read, never a shopper's");
+    assert.equal(isEmployeeRoute("/api/storage-locations", "GET"), true);
+    assert.equal(isEmployeeRoute("/api/suppliers", "GET"), true);
+    assert.equal(isEmployeeRoute("/api/pricing/prices", "GET"), true, "a shopper reads Published prices only");
+    assert.equal(isEmployeeRoute("/api/products/search-synonyms", "GET"), true);
+    assert.equal(isEmployeeRoute("/api/quality", "GET"), false, "the quality prefix is dead: batches carry the verdict");
     assert.equal(isEmployeeRoute("/api/operations", "GET"), true);
     assert.equal(isEmployeeRoute("/api/dashboard", "GET"), true);
     assert.equal(isEmployeeRoute("/api/finance", "GET"), true);
@@ -188,6 +193,8 @@ describe("policy - route classification", () => {
     assert.equal(isSiteScopedListRoute("/api/finance/summary"), true);
     assert.equal(isSiteScopedListRoute("/api/reports"), true);
     assert.equal(isSiteScopedListRoute("/api/audit/logs"), true);
+    assert.equal(isSiteScopedListRoute("/api/orders"), true);
+    assert.equal(isSiteScopedListRoute("/api/inventory/batches"), true);
     assert.equal(isSiteScopedListRoute("/api/products"), false);
   });
 
@@ -254,7 +261,7 @@ describe("policy - employee roles and authorization", () => {
     // Replenishment
     assert.deepEqual(employeeRolesForRequest("/api/inventory/replenishment", "POST"), [
       "Pharmacist",
-      "Warehouse Staff",
+      "Pharmacy Manager",
     ]);
 
     // Counter Sale
@@ -285,19 +292,28 @@ describe("policy - employee roles and authorization", () => {
 
     // Warehouse
     assert.deepEqual(employeeRolesForRequest("/api/procurement/goods-receipts", "GET"), ["Warehouse Staff"]);
-    assert.deepEqual(employeeRolesForRequest("/api/inventory/batches", "GET"), ["Warehouse Staff"]);
-    assert.deepEqual(employeeRolesForRequest("/api/inventory/movements", "GET"), ["Warehouse Staff"]);
+    assert.deepEqual(employeeRolesForRequest("/api/inventory/batches", "GET"), [
+      "Pharmacist",
+      "Pharmacy Manager",
+      "Warehouse Staff",
+    ]);
+    assert.deepEqual(employeeRolesForRequest("/api/inventory/movements", "GET"), [
+      "Pharmacy Manager",
+      "Warehouse Staff",
+    ]);
     assert.deepEqual(employeeRolesForRequest("/api/inventory/adjustments", "POST"), ["Warehouse Staff"]);
     assert.deepEqual(employeeRolesForRequest("/api/inventory/transfers", "POST"), ["Warehouse Staff"]);
     assert.deepEqual(employeeRolesForRequest("/api/inventory/stocktakes", "POST"), ["Warehouse Staff"]);
     assert.deepEqual(employeeRolesForRequest("/api/inventory/returns", "POST"), ["Warehouse Staff"]);
-    assert.deepEqual(employeeRolesForRequest("/api/quality", "GET"), ["Warehouse Staff"]);
 
     // Management paths (POST/PUT/DELETE requires Pharmacy Manager, GET does not)
     assert.deepEqual(employeeRolesForRequest("/api/products", "POST"), ["Pharmacy Manager"]);
     assert.deepEqual(employeeRolesForRequest("/api/products", "GET"), undefined);
     assert.deepEqual(employeeRolesForRequest("/api/procurement/purchase-orders", "POST"), ["Pharmacy Manager"]);
-    assert.deepEqual(employeeRolesForRequest("/api/procurement/purchase-orders", "GET"), undefined);
+    assert.deepEqual(employeeRolesForRequest("/api/procurement/purchase-orders", "GET"), [
+      "Pharmacy Manager",
+      "Warehouse Staff",
+    ]);
   });
 
   it("checks if employee roles satisfy requirements", () => {
@@ -321,7 +337,6 @@ describe("policy - target service selection", () => {
     assert.equal(selectTargetService("/api/pricing/prices"), "catalog-service");
     assert.equal(selectTargetService("/api/procurement/purchase-orders"), "inventory-service");
     assert.equal(selectTargetService("/api/inventory/balances"), "inventory-service");
-    assert.equal(selectTargetService("/api/quality/inspections"), "inventory-service");
     assert.equal(selectTargetService("/api/carts"), "sales-service");
     assert.equal(selectTargetService("/api/orders"), "sales-service");
     assert.equal(selectTargetService("/api/delivery/calculate"), "sales-service");

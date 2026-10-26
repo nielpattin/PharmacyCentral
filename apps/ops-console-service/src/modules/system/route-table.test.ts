@@ -116,7 +116,7 @@ const alb = parseAlb(mainTf);
 describe("ROUTE_TABLE against the deploy files", () => {
   it("lists the top-level prefixes that routes.conf and the ALB both forward, to the same service", () => {
     const table = ROUTE_TABLE.filter((row) => row.method === undefined && /^\/api\/[^/]+\*$/.test(row.path)).map(key);
-    expect(gateway.prefixes).toHaveLength(26);
+    expect(gateway.prefixes).toHaveLength(25);
     expect(sorted(table)).toEqual(sorted(gateway.prefixes.map(key)));
     expect(sorted(table)).toEqual(sorted(alb.prefixes.map(key)));
   });

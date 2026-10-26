@@ -1,10 +1,14 @@
 export type Section<T> = { status: "ok"; data: T } | { status: "unavailable"; error: string };
 
-export const settle = async <T>(work: () => Promise<T>): Promise<Section<T>> => {
+/**
+ * Runs one section. A failed section answers its fixed Vietnamese `message`, never the raw cause: the English text of a
+ * host, Prometheus or RabbitMQ error is for operators in the logs, not for the staff page.
+ */
+export const settle = async <T>(message: string, work: () => Promise<T>): Promise<Section<T>> => {
   try {
     return { status: "ok", data: await work() };
-  } catch (error) {
-    return { status: "unavailable", error: error instanceof Error ? error.message : String(error) };
+  } catch {
+    return { status: "unavailable", error: message };
   }
 };
 

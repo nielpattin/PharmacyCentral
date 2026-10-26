@@ -7,6 +7,7 @@ import {
   isEmployeeRoleAllowed,
   isEmployeeRoute,
   isOptionalIdentityRoute,
+  isPublishedPriceRead,
   isPublicRoute,
   isSiteScopedListRoute,
   normalizeApiPath,
@@ -145,10 +146,12 @@ export const createAuthorizerHandler = (options = {}) => {
 
       // 2. Route classification
       const normPath = normalizeApiPath(path);
-      const isPublic = isPublicRoute(normPath);
+      // A shopper reads the published price list anonymously; every other price read is a staff read.
+      const publishedPriceRead = isPublishedPriceRead(normPath, method, queryStringParameters);
+      const isPublic = publishedPriceRead || isPublicRoute(normPath);
       const optionalIdentity = isOptionalIdentityRoute(normPath);
       const isAuth = isAuthRoute(normPath);
-      const needsEmployee = isEmployeeRoute(normPath, method);
+      const needsEmployee = !publishedPriceRead && isEmployeeRoute(normPath, method);
 
       let identity;
 
@@ -197,23 +200,28 @@ export const createAuthorizerHandler = (options = {}) => {
         }
       }
 
+      // A password the account must change first (a new or reset account) limits it to the auth routes, which were
+      // exempt above because they never resolve identity.
+      if (identity?.passwordChangeRequired === true) {
+        return deny();
+      }
+
       // 4. Employee authorization policy
       // A route can serve both audiences: any signed-in account may read the prescription list, but a staff caller
       // sees every record instead of only their own, so the role that route requires still applies to staff.
       const requiredRoles = employeeRolesForRequest(normPath, method);
-      const requiresStaffRole = identity?.actorType === "employee" && (requiredRoles?.length ?? 0) > 0;
-      if (needsEmployee || requiresStaffRole) {
-        if (!identity || identity.actorType !== "employee") {
-          return deny();
-        }
-
+      if (needsEmployee && identity?.actorType !== "employee") {
+        return deny();
+      }
+      if (identity?.actorType === "employee") {
         const roles = Array.isArray(identity.roles) ? identity.roles : [];
-        if (!isEmployeeRoleAllowed(roles, requiredRoles)) {
+        // Every staff request is checked, because Platform Admin's exclusions apply even to a route that names no role.
+        if (!isEmployeeRoleAllowed(roles, requiredRoles, normPath, method)) {
           return deny();
         }
 
         // Site checks for non-Platform Admin
-        if (!roles.includes("Platform Admin")) {
+        if ((needsEmployee || (requiredRoles?.length ?? 0) > 0) && !roles.includes("Platform Admin")) {
           const siteIds = Array.isArray(identity.siteIds) ? identity.siteIds : [];
 
           // Query parameter site check

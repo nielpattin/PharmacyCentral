@@ -43,26 +43,26 @@ export const ROUTE_TABLE: readonly RouteRow[] = [
   {
     path: "/api/sites*",
     service: "catalog-service",
-    access: { kind: "public" },
-    note: "Writes need the Pharmacy Manager role.",
+    access: { kind: "roles", roles: STAFF_ROLES },
+    note: "Reads are staff reads. Create and delete need Platform Admin; edits need the Pharmacy Manager role.",
   },
   {
     path: "/api/storage-locations*",
     service: "catalog-service",
-    access: { kind: "signed-in" },
+    access: { kind: "roles", roles: STAFF_ROLES },
     note: "Writes need the Pharmacy Manager role.",
   },
   {
     path: "/api/suppliers*",
     service: "catalog-service",
-    access: { kind: "signed-in" },
+    access: { kind: "roles", roles: STAFF_ROLES },
     note: "Writes need the Pharmacy Manager role.",
   },
   {
     path: "/api/pricing*",
     service: "catalog-service",
-    access: { kind: "signed-in" },
-    note: "Active prices are public. Price writes need the Pharmacy Manager role.",
+    access: { kind: "public" },
+    note: "Active prices and the Published price list are public. Other price reads are staff reads; writes need the Pharmacy Manager role.",
   },
   { path: "/api/stores*", service: "catalog-service", access: { kind: "public" } },
   { path: "/api/availability*", service: "catalog-service", access: { kind: "public" } },
@@ -76,12 +76,7 @@ export const ROUTE_TABLE: readonly RouteRow[] = [
     path: "/api/inventory*",
     service: "inventory-service",
     access: { kind: "roles", roles: STAFF_ROLES },
-    note: "Batches, movements, adjustments, transfers, stocktakes and returns need Warehouse Staff.",
-  },
-  {
-    path: "/api/quality*",
-    service: "inventory-service",
-    access: { kind: "roles", roles: ["Warehouse Staff"] },
+    note: "Balances are read by every employee. Warehouse Staff act on stock; Pharmacy Manager approves and reads; Pharmacist reads batches and its replenishment requests.",
   },
   {
     path: "/api/carts*",
@@ -89,7 +84,12 @@ export const ROUTE_TABLE: readonly RouteRow[] = [
     access: { kind: "signed-in" },
     note: "A signed-out cart stays in the browser. Carts need a sign-in.",
   },
-  { path: "/api/orders*", service: "sales-service", access: { kind: "signed-in" } },
+  {
+    path: "/api/orders*",
+    service: "sales-service",
+    access: { kind: "signed-in" },
+    note: "Shoppers read and withdraw their own orders. Staff read the orders at their sites and move them: Pharmacist and Pharmacy Manager.",
+  },
   {
     path: "/api/delivery*",
     service: "sales-service",
@@ -136,12 +136,13 @@ export const ROUTE_TABLE: readonly RouteRow[] = [
   {
     path: "/api/operations*",
     service: "operations-query-service",
-    access: { kind: "roles", roles: STAFF_ROLES },
+    access: { kind: "roles", roles: ["Pharmacy Manager", "Warehouse Staff"] },
+    note: "Dashboard reads are Pharmacy Manager and Warehouse Staff. The finance read is Pharmacy Manager; the audit read is Platform Admin.",
   },
   {
     path: "/api/dashboard*",
     service: "operations-query-service",
-    access: { kind: "roles", roles: STAFF_ROLES },
+    access: { kind: "roles", roles: ["Pharmacy Manager", "Warehouse Staff"] },
   },
   {
     path: "/api/finance*",
@@ -151,7 +152,7 @@ export const ROUTE_TABLE: readonly RouteRow[] = [
   {
     path: "/api/reports*",
     service: "operations-query-service",
-    access: { kind: "roles", roles: STAFF_ROLES },
+    access: { kind: "roles", roles: ["Pharmacy Manager"] },
   },
   { path: "/api/audit*", service: "operations-query-service", access: { kind: "platform-admin" } },
   { path: "/api/system*", service: "ops-console-service", access: { kind: "platform-admin" } },

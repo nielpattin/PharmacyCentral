@@ -211,7 +211,7 @@ describe("GET /system/overview", () => {
       const response = await get(configured.base, "/system/overview");
       const body = (await response.json()) as Overview;
       expect(response.status).toBe(200);
-      expect(body.queues).toEqual({ status: "unavailable", error: "rabbit.test answered 503" });
+      expect(body.queues).toEqual({ status: "unavailable", error: "Không tải được hàng đợi." });
       expect(body.searchIndex.status).toBe("ok");
     } finally {
       flags.rabbitDown = false;

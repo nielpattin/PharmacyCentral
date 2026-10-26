@@ -37,7 +37,10 @@ export type Overview = {
 
 /** Facts are optional for the grid: when Prometheus cannot answer, the health probes still show and facts read as null. */
 const probeServiceHealth = async (probes: Probes): Promise<ServiceHealth[]> => {
-  const [probed, facts] = await Promise.all([probeServices(probes), settle(() => probeServiceFacts(probes))]);
+  const [probed, facts] = await Promise.all([
+    probeServices(probes),
+    settle("Không tải được danh mục dịch vụ.", () => probeServiceFacts(probes)),
+  ]);
   const factsByName = facts.status === "ok" ? facts.data : new Map<string, ServiceFacts>();
   return probed.map((service) => ({
     ...service,
@@ -59,10 +62,10 @@ export const createSystemRouter = (probes: Probes, links: DashboardLink[]): Rout
 
   router.get("/system/overview", async (_request, response) => {
     const [services, load, queues, searchIndex] = await Promise.all([
-      settle(() => probeServiceHealth(probes)),
-      settle(() => probeLoad(probes)),
-      settle(() => probeQueues(probes)),
-      settle(() => probeSearchIndex(probes)),
+      settle("Không tải được tình trạng dịch vụ.", () => probeServiceHealth(probes)),
+      settle("Không tải được số liệu tải.", () => probeLoad(probes)),
+      settle("Không tải được hàng đợi.", () => probeQueues(probes)),
+      settle("Không tải được chỉ mục tìm kiếm.", () => probeSearchIndex(probes)),
     ]);
     const overview: Overview = {
       generatedAt: new Date().toISOString(),

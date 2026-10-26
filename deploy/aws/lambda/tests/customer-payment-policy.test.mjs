@@ -29,7 +29,9 @@ describe("customer payment authorization", () => {
   it("lets a manager read payments but keeps staff payment actions for pharmacists", () => {
     assert.equal(isEmployeeRoute("/api/payments/invoices", "GET"), true);
     assert.deepEqual(employeeRolesForRequest("/api/payments/invoices", "GET"), ["Pharmacist", "Pharmacy Manager"]);
-    assert.deepEqual(employeeRolesForRequest("/api/payments/123/refund", "POST"), ["Pharmacist"]);
+    // A refund is a counter action for a Pharmacist and an online-order refund for a Pharmacy Manager: the edge admits
+    // both, and payment-service decides by invoice kind.
+    assert.deepEqual(employeeRolesForRequest("/api/payments/123/refund", "POST"), ["Pharmacist", "Pharmacy Manager"]);
     // A staff caller on the shared invoice read still has to satisfy the counter role.
     assert.deepEqual(employeeRolesForRequest(invoicePath, "GET"), ["Pharmacist", "Pharmacy Manager"]);
   });

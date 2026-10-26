@@ -253,11 +253,25 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
       assert.equal(result.context.actorId, mockWarehouseEmployee.id);
     });
 
-    it("denies pharmacist from accessing warehouse-only route", async () => {
+    it("allows pharmacist to read batches, the quality verdict being a Pharmacist action", async () => {
       const event = {
         rawPath: "/api/inventory/batches",
         headers: { cookie: "pharmacy_session=session-pharmacist" },
         requestContext: { http: { method: "GET", path: "/api/inventory/batches" } },
+      };
+
+      const result = await authorizer(event);
+      assert.equal(result.isAuthorized, true);
+    });
+
+    it("denies pharmacist creating a batch, which is a Warehouse Staff action", async () => {
+      const event = {
+        rawPath: "/api/inventory/batches",
+        headers: {
+          cookie: "pharmacy_session=session-pharmacist; pharmacy_csrf=token-a",
+          "x-csrf-token": "token-a",
+        },
+        requestContext: { http: { method: "POST", path: "/api/inventory/batches" } },
       };
 
       const result = await authorizer(event);

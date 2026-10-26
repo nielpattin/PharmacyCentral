@@ -58,7 +58,7 @@ locals {
     }
     inventory-service = {
       priority = 40
-      paths    = ["/inventory*", "/quality*"]
+      paths    = ["/inventory*"]
       service  = "inventory-service"
     }
     sales-service = {
