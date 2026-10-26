@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { Router } from "express";
 import type { Request, Response } from "express";
@@ -9,6 +9,7 @@ import {
   createOrderRequestSchema,
   createPrescriptionRequestSchema,
   dispensePrescriptionRequestSchema,
+  mergeCartRequestSchema,
   orderTransitionSchema,
 } from "../contracts/sales.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
@@ -28,6 +29,11 @@ import { InsufficientStockError, InventoryRequestError } from "./orders/infrastr
 import { PrescriptionDispenseError, SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
+/** `PATCH /carts/selection` ticks or unticks the named lines, or every line when `lineIds` is left out. */
+const cartSelectionSchema = z.object({
+  selected: z.boolean(),
+  lineIds: z.array(z.string().uuid()).min(1).max(200).optional(),
+});
 /** The prescription states a caller may name in `excludeStatus`, as stored. */
 const prescriptionStatuses = ["Draft", "Pending", "PartiallyDispensed", "Dispensed", "Cancelled"] as const;
 const excludeStatusParam = z
@@ -48,8 +54,6 @@ const readsEveryOrder = (request: Request): boolean => {
   const type = request.header("X-Actor-Type");
   return type === "employee" || type === "system";
 };
-const guestToken = (request: Request): string | undefined =>
-  request.headers.cookie?.match(/(?:^|;\s*)pharmacy_guest_cart=([^;]+)/)?.[1];
 
 export type SalesRouterOptions = {
   /** Both URLs are validated at boot by main.ts, so a missing one is a type error and never a localhost guess. */
@@ -60,21 +64,17 @@ export type SalesRouterOptions = {
   identityServiceUrl?: string | undefined;
   deliveryCalculator?: DeliveryCalculator | undefined;
   lookupStore?: (storeId: string) => Promise<{ id: string; latitude: number; longitude: number } | undefined>;
-  /** From COOKIE_SECURE in main.ts: `Secure` is added to the guest cart cookie only when true. */
-  cookieSecure: boolean;
 };
 
 export const createSalesRouter = (repository: SalesRepository | undefined, options: SalesRouterOptions): Router => {
   const router = Router();
-  const { cookieSecure } = options;
 
   router.get("/carts", async (request, response, next) => {
     if (!repository) return unavailable(response);
     const customerId = actor(request);
-    const token = guestToken(request) ?? (customerId ? undefined : randomBytes(24).toString("base64url"));
-    if (!customerId && token) setGuestCookie(response, token, GUEST_CART_MAX_AGE_SECONDS, cookieSecure);
+    if (!customerId) return unauthorized(response);
     try {
-      return response.json(await repository.getOrCreateCart(customerId, token));
+      return response.json(await repository.getOrCreateCart(customerId));
     } catch (error) {
       return next(error);
     }
@@ -82,13 +82,14 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
 
   router.post("/carts/lines", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const customerId = actor(request);
+    if (!customerId) return unauthorized(response);
     const parsed = cartLineSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response);
-    const customerId = actor(request);
-    const token = guestToken(request) ?? (customerId ? undefined : randomBytes(24).toString("base64url"));
-    if (!customerId && token) setGuestCookie(response, token, GUEST_CART_MAX_AGE_SECONDS, cookieSecure);
     try {
-      return response.status(201).json(await repository.addCartLine(customerId, token, parsed.data));
+      const [prescriptionId] = await findPrescriptionProductIds([parsed.data.productId], options.catalogServiceUrl);
+      if (prescriptionId) return response.status(409).json(prescriptionProblem(prescriptionId));
+      return response.status(201).json(await repository.addCartLine(customerId, parsed.data));
     } catch (error) {
       return next(error);
     }
@@ -97,10 +98,9 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
   router.delete("/carts", async (request, response, next) => {
     if (!repository) return unavailable(response);
     const customerId = actor(request);
-    const token = guestToken(request);
-    if (!customerId && token) setGuestCookie(response, token, GUEST_CART_MAX_AGE_SECONDS, cookieSecure);
+    if (!customerId) return unauthorized(response);
     try {
-      return response.json(await repository.clearCart(customerId, token));
+      return response.json(await repository.clearCart(customerId));
     } catch (error) {
       return next(error);
     }
@@ -108,14 +108,27 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
 
   router.patch("/carts/lines/:id", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    const customerId = actor(request);
+    if (!customerId) return unauthorized(response);
     const id = idSchema.safeParse(request.params);
     const parsed = z.object({ quantity: z.number().nonnegative() }).safeParse(request.body);
     if (!id.success || !parsed.success) return invalid(response);
-    const customerId = actor(request);
-    const token = guestToken(request);
-    if (!customerId && token) setGuestCookie(response, token, GUEST_CART_MAX_AGE_SECONDS, cookieSecure);
     try {
-      const cart = await repository.updateCartLine(customerId, token, id.data.id, parsed.data.quantity);
+      const cart = await repository.updateCartLine(customerId, id.data.id, parsed.data.quantity);
+      return cart ? response.json(cart) : response.status(404).json({ title: "Cart not found", status: 404 });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.patch("/carts/selection", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    const customerId = actor(request);
+    if (!customerId) return unauthorized(response);
+    const parsed = cartSelectionSchema.safeParse(request.body);
+    if (!parsed.success) return invalid(response);
+    try {
+      const cart = await repository.setCartSelection(customerId, parsed.data.selected, parsed.data.lineIds);
       return cart ? response.json(cart) : response.status(404).json({ title: "Cart not found", status: 404 });
     } catch (error) {
       return next(error);
@@ -125,13 +138,18 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
   router.post("/carts/merge", async (request, response, next) => {
     if (!repository) return unavailable(response);
     const customerId = actor(request);
-    const token = guestToken(request);
-    if (!customerId || !token)
-      return response.status(400).json({ title: "Customer and guest cart token are required", status: 400 });
+    if (!customerId) return unauthorized(response);
+    const parsed = mergeCartRequestSchema.safeParse(request.body);
+    if (!parsed.success) return invalid(response);
     try {
-      const cart = await repository.mergeGuestCart(customerId, token);
-      setGuestCookie(response, "", 0, cookieSecure);
-      return response.json(cart);
+      // A prescription-only line never enters the cart (BR-ORD-011). It can only arrive from a browser cart written
+      // before the rule, so it is dropped here and the other lines still merge.
+      const prescriptionIds = await findPrescriptionProductIds(
+        parsed.data.lines.map((line) => line.productId),
+        options.catalogServiceUrl,
+      );
+      const lines = parsed.data.lines.filter((line) => !prescriptionIds.has(line.productId));
+      return response.json(await repository.mergeLocalCart(customerId, lines));
     } catch (error) {
       return next(error);
     }
@@ -277,7 +295,15 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     if (!customerId) return unauthorized(response);
     if (!parsed.success) return invalid(response);
     try {
-      const lines = await resolveOrderLines(parsed.data.lines, options.catalogServiceUrl);
+      // An order made from the cart takes its lines from the server's copy, never from the request (BR-CART-002).
+      const cartLines = parsed.data.fromCart ? await repository.getSelectedCartLines(customerId) : undefined;
+      if (cartLines?.length === 0)
+        return response
+          .status(409)
+          .json({ title: "No cart line is selected for this order", status: 409, code: "cart_selection_empty" });
+      const requested = cartLines ?? parsed.data.lines;
+      if (!requested) return invalid(response);
+      const lines = await resolveOrderLines(requested, options.catalogServiceUrl);
       const subtotal = lines.reduce((total, line) => total + line.unitPriceSnapshot * line.quantity, 0);
       let delivery: DeliveryCalculation | undefined;
       if (parsed.data.fulfillmentType === "delivery") {
@@ -309,6 +335,12 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
         order,
         lines.map((line) => ({ productId: line.productId, quantity: line.quantity })),
       );
+      // Only after the stock is held: a refused order leaves the cart as it was. The lines that were not ticked stay.
+      if (cartLines)
+        await repository.clearCart(
+          customerId,
+          cartLines.map((line) => line.id),
+        );
       return response.status(201).json(await repository.getOrder(order.id));
     } catch (error) {
       if (error instanceof InsufficientStockError)
@@ -327,6 +359,8 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
           distanceMeters: error.distanceMeters,
           maxDistanceMeters: error.maxDistanceMeters,
         });
+      if (error instanceof PrescriptionProductError)
+        return response.status(409).json(prescriptionProblem(error.productId));
       if (error instanceof UnpricedProductError)
         return response.status(409).json({
           title: error.message,
@@ -614,6 +648,43 @@ class UnpricedProductError extends Error {
   }
 }
 
+/** A prescription-only product cannot be ordered online or kept in the cart (BR-ORD-011). */
+class PrescriptionProductError extends Error {
+  constructor(public readonly productId: string) {
+    super("Prescription-only products cannot be ordered online");
+    this.name = "PrescriptionProductError";
+  }
+}
+
+const prescriptionProblem = (productId: string) => ({
+  title: "Prescription-only products cannot be ordered online",
+  detail: "Thuốc kê đơn không đặt online. Hãy gửi đơn thuốc hoặc nhờ dược sĩ tư vấn.",
+  status: 409,
+  code: "prescription_required",
+  productId,
+});
+
+/**
+ * The ids among `productIds` that catalog marks prescription-only. A product catalog does not know (404) is not
+ * flagged, so a stale line cannot block a merge; any other catalog failure throws rather than let one through.
+ */
+const findPrescriptionProductIds = async (productIds: string[], baseUrl: string): Promise<Set<string>> => {
+  const flagged = new Set<string>();
+  await Promise.all(
+    [...new Set(productIds)].map(async (productId) => {
+      const response = await fetch(`${baseUrl}/products/${productId}`, {
+        headers: internalServiceHeaders(),
+        signal: AbortSignal.timeout(2_000),
+      });
+      if (response.status === 404) return;
+      if (!response.ok) throw new Error("Product is unavailable");
+      const product = (await response.json()) as { prescriptionRequired?: boolean };
+      if (product.prescriptionRequired === true) flagged.add(productId);
+    }),
+  );
+  return flagged;
+};
+
 const resolveOrderLines = async (
   lines: Array<{ productId: string; productUnitId: string; quantity: number }>,
   baseUrl: string,
@@ -638,9 +709,11 @@ const resolveOrderLines = async (
           { headers: internalServiceHeaders(), signal: AbortSignal.timeout(2_000) },
         ),
       ]);
+      if (!productResponse.ok) throw new Error("Product or active price is unavailable");
+      const product = (await productResponse.json()) as { id: string; name: string; prescriptionRequired?: boolean };
+      if (product.prescriptionRequired === true) throw new PrescriptionProductError(line.productId);
       if (priceResponse.status === 404) throw new UnpricedProductError(line.productId);
-      if (!productResponse.ok || !priceResponse.ok) throw new Error("Product or active price is unavailable");
-      const product = (await productResponse.json()) as { id: string; name: string };
+      if (!priceResponse.ok) throw new Error("Product or active price is unavailable");
       const price = (await priceResponse.json()) as {
         productId: string;
         productUnitId: string;
@@ -744,18 +817,6 @@ const roundMoney = (value: number): number => Math.round(value * 100) / 100;
 const queryString = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
 
-/** How long a guest cart's cookie lives; every guest response re-issues it, so an active cart keeps sliding. */
-const GUEST_CART_MAX_AGE_SECONDS = 2592000;
-/**
- * HttpOnly keeps script from reading the bearer token. Secure is added only where the site is served over HTTPS.
- * Clearing the cookie is the same call with an empty value and a zero max-age.
- */
-const setGuestCookie = (response: Response, value: string, maxAgeSeconds: number, cookieSecure: boolean): void => {
-  response.setHeader(
-    "Set-Cookie",
-    `pharmacy_guest_cart=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${cookieSecure ? "; Secure" : ""}`,
-  );
-};
 const unauthorized = (response: Response) =>
   response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
 const invalid = (response: Response) =>

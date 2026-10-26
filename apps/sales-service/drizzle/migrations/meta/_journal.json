@@ -85,6 +85,20 @@
       "when": 1792840014700,
       "tag": "0011_list_keyset_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792999409059,
+      "tag": "0012_cart_line_selected",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793003188226,
+      "tag": "0013_drop_guest_carts",
+      "breakpoints": true
     }
   ]
 }

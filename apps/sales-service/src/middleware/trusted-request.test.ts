@@ -45,7 +45,7 @@ const closeServer = async (server: Server): Promise<void> => {
   await closed.promise;
 };
 
-/** Mirrors the sales app: `/carts` is public, `/orders` needs a trusted caller, and `/health` is exempt. */
+/** Mirrors the sales app: `/delivery/calculate` is public, `/orders` needs a trusted caller, `/health` is exempt. */
 const createApp = (): express.Express => {
   const app = express();
   app.use(
@@ -53,7 +53,7 @@ const createApp = (): express.Express => {
       identitySecret,
       serviceSecret,
       expectedAudience: "sales-service",
-      isPublic: (request) => matchesPathPrefix(request.path, "/carts"),
+      isPublic: (request) => matchesPathPrefix(request.path, "/delivery/calculate"),
     }),
   );
   const echoActorHeaders = (request: express.Request, response: express.Response) =>
@@ -63,8 +63,7 @@ const createApp = (): express.Express => {
       siteIds: request.header("x-actor-site-ids") ?? null,
       requestId: request.header("x-request-id") ?? null,
     });
-  app.all("/carts", echoActorHeaders);
-  app.all("/carts/merge", echoActorHeaders);
+  app.all("/delivery/calculate", echoActorHeaders);
   app.all("/orders", echoActorHeaders);
   app.all("/health/live", echoActorHeaders);
   return app;
@@ -88,7 +87,7 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const response = await fetch(`${url}/carts`, {
+    const response = await fetch(`${url}/delivery/calculate`, {
       headers: {
         "x-actor-id": "00000000-0000-4000-8000-0000000000aa",
         "x-actor-type": "system",
@@ -124,7 +123,7 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const response = await fetch(`${url}/carts`);
+    const response = await fetch(`${url}/delivery/calculate`);
 
     expect(response.status).toBe(200);
     expect(warn).not.toHaveBeenCalled();
@@ -134,7 +133,7 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const response = await fetch(`${url}/carts`, {
+    const response = await fetch(`${url}/delivery/calculate`, {
       headers: {
         "x-internal-service-secret": serviceSecret,
         "x-actor-id": actorId,
@@ -150,7 +149,7 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const response = await fetch(`${url}/carts`, {
+    const response = await fetch(`${url}/delivery/calculate`, {
       headers: { "x-internal-service-secret": serviceSecret },
     });
 
@@ -162,7 +161,7 @@ describe("sales trusted request middleware", () => {
     activeServer = server;
 
     const header = signInternalIdentityContext(createTestContext({ actorType: "employee" }), identitySecret);
-    const response = await fetch(`${url}/carts`, {
+    const response = await fetch(`${url}/delivery/calculate`, {
       headers: {
         "x-internal-identity-context": header,
         "x-actor-id": "spoofed-actor-id",
@@ -182,7 +181,7 @@ describe("sales trusted request middleware", () => {
       createTestContext({ actorId: undefined, actorType: "system" }),
       identitySecret,
     );
-    const response = await fetch(`${url}/carts`, {
+    const response = await fetch(`${url}/delivery/calculate`, {
       headers: { "x-internal-identity-context": header, "x-actor-id": "spoofed-actor-id" },
     });
 
@@ -197,7 +196,7 @@ describe("sales trusted request middleware", () => {
       createTestContext({ actorId: undefined, actorType: "anonymous", roles: [], siteIds: [] }),
       identitySecret,
     );
-    const response = await fetch(`${url}/carts`, {
+    const response = await fetch(`${url}/delivery/calculate`, {
       headers: { "x-internal-identity-context": header, "x-actor-id": "spoofed-actor-id" },
     });
 

@@ -13,6 +13,14 @@ export const cartLineSchema = z.object({
   quantity: z.number().positive(),
 });
 
+/** The signed-out cart handed over once at sign-in. A line keeps the tick the shopper set in the browser. */
+export const mergeCartRequestSchema = z.object({
+  lines: z
+    .array(cartLineSchema.extend({ selected: z.boolean() }))
+    .min(1)
+    .max(200),
+});
+
 export const deliveryPointSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
@@ -104,27 +112,36 @@ export const deliverySnapshotSchema = z.object({
   routeGeoJson: routeGeoJsonSchema,
 });
 
-export const createOrderRequestSchema = z.object({
-  selectedStoreId: z.string().uuid(),
-  fulfillmentType: z.enum(["pickup", "delivery"]),
-  /** How the shopper means to pay; it sets how long an unpaid order holds its stock. */
-  paymentMethod: z.enum(["sepay_qr", "cash_on_delivery"]).optional(),
-  lines: z
-    .array(
-      z.object({
-        productId: z.string().uuid(),
-        productUnitId: z.string().uuid(),
-        quantity: z.number().positive(),
-      }),
-    )
-    .min(1),
-  delivery: z
-    .object({
-      destination: deliveryPointSchema,
-      addressNote: z.string().trim().max(500).optional(),
-    })
-    .optional(),
-});
+export const createOrderRequestSchema = z
+  .object({
+    selectedStoreId: z.string().uuid(),
+    fulfillmentType: z.enum(["pickup", "delivery"]),
+    /** How the shopper means to pay; it sets how long an unpaid order holds its stock. */
+    paymentMethod: z.enum(["sepay_qr", "cash_on_delivery"]).optional(),
+    /** The lines to order, named by the caller. Send either this or `fromCart`, never both. */
+    lines: z
+      .array(
+        z.object({
+          productId: z.string().uuid(),
+          productUnitId: z.string().uuid(),
+          quantity: z.number().positive(),
+        }),
+      )
+      .min(1)
+      .optional(),
+    /** Order the caller's ticked cart lines: the server reads them from the cart and removes them once ordered. */
+    fromCart: z.literal(true).optional(),
+    delivery: z
+      .object({
+        destination: deliveryPointSchema,
+        addressNote: z.string().trim().max(500).optional(),
+      })
+      .optional(),
+  })
+  .refine((order) => (order.lines === undefined) !== (order.fromCart === undefined), {
+    message: "Send either lines or fromCart: true",
+    path: ["lines"],
+  });
 
 export const orderTransitionSchema = z.object({
   status: z.enum(["Confirmed", "Preparing", "Ready", "Delivering", "Completed", "Cancelled"]),

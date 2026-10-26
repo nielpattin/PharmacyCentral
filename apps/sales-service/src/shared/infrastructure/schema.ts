@@ -32,15 +32,11 @@ export const carts = pgTable(
   "carts",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    customerId: uuid("customer_id"),
-    guestTokenDigest: varchar("guest_token_digest", { length: 128 }),
+    customerId: uuid("customer_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [
-    uniqueIndex("carts_customer_unique").on(table.customerId),
-    uniqueIndex("carts_guest_token_unique").on(table.guestTokenDigest),
-  ],
+  (table) => [uniqueIndex("carts_customer_unique").on(table.customerId)],
 );
 
 export const cartLines = pgTable(
@@ -51,6 +47,8 @@ export const cartLines = pgTable(
     productId: uuid("product_id").notNull(),
     productUnitId: uuid("product_unit_id").notNull(),
     quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
+    /** Whether the shopper ticked the line for the next order. A new line starts unticked. */
+    selected: boolean("selected").notNull().default(false),
   },
   (table) => [
     uniqueIndex("cart_lines_cart_product_unit_unique").on(table.cartId, table.productId, table.productUnitId),

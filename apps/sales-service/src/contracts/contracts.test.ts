@@ -9,6 +9,7 @@ import {
   eventEnvelopeSchema,
   eventMetadataSchema,
   internalIdentityContextSchema,
+  mergeCartRequestSchema,
   orderChangedEventSchema,
   orderTransitionSchema,
   salesContractVersion,
@@ -39,6 +40,35 @@ describe("sales-service contracts", () => {
       ],
     });
     expect(validOrder.success).toBe(true);
+
+    const fromCart = {
+      selectedStoreId: "00000000-0000-4000-8000-000000000010",
+      fulfillmentType: "pickup",
+    } as const;
+    expect(createOrderRequestSchema.safeParse({ ...fromCart, fromCart: true }).success).toBe(true);
+    expect(createOrderRequestSchema.safeParse(fromCart).success).toBe(false);
+    expect(createOrderRequestSchema.safeParse({ ...fromCart, fromCart: false }).success).toBe(false);
+    expect(
+      createOrderRequestSchema.safeParse({
+        ...fromCart,
+        fromCart: true,
+        lines: validOrder.success ? validOrder.data.lines : [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires between one and 200 cart lines, each with a tick, in a merge request", () => {
+    const line = {
+      productId: "00000000-0000-4000-8000-000000000001",
+      productUnitId: "00000000-0000-4000-8000-000000000002",
+      quantity: 2,
+      selected: true,
+    };
+
+    expect(mergeCartRequestSchema.safeParse({ lines: [line] }).success).toBe(true);
+    expect(mergeCartRequestSchema.safeParse({ lines: [] }).success).toBe(false);
+    expect(mergeCartRequestSchema.safeParse({ lines: Array.from({ length: 201 }, () => line) }).success).toBe(false);
+    expect(mergeCartRequestSchema.safeParse({ lines: [{ ...line, selected: undefined }] }).success).toBe(false);
   });
 
   it("validates delivery calculation and order transition schemas", () => {

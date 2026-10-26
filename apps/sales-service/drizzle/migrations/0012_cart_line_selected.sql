@@ -1,0 +1,1 @@
+ALTER TABLE "cart_lines" ADD COLUMN "selected" boolean DEFAULT false NOT NULL;

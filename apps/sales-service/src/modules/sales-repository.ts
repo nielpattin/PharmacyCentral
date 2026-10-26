@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, lt, ne, notInArray, or, sql } from "drizzle-orm";
 
 import type { SalesDatabase } from "../shared/infrastructure/database.ts";
@@ -59,38 +57,29 @@ export type PrescriptionStockDispense = {
 export class SalesRepository {
   public constructor(private readonly database: SalesDatabase) {}
 
-  public async getCart(customerId: string | undefined, guestToken: string | undefined) {
-    const cart = await this.findCart(this.database.db, customerId, guestToken);
+  public async getCart(customerId: string) {
+    const cart = await this.findCart(this.database.db, customerId);
     if (!cart) return undefined;
     return this.withCartLines(this.database.db, cart);
   }
 
-  public async getOrCreateCart(customerId: string | undefined, guestToken: string | undefined) {
-    this.assertCartIdentity(customerId, guestToken);
-    const existing = await this.getCart(customerId, guestToken);
+  public async getOrCreateCart(customerId: string) {
+    const existing = await this.getCart(customerId);
     if (existing) return existing;
     const [cart] = await this.database.db
       .insert(carts)
-      .values({
-        customerId: customerId ?? null,
-        guestTokenDigest: customerId ? null : digestToken(guestToken as string),
-      })
-      .onConflictDoNothing({ target: customerId ? carts.customerId : carts.guestTokenDigest })
+      .values({ customerId })
+      .onConflictDoNothing({ target: carts.customerId })
       .returning();
     if (cart) return { ...cart, lines: [] };
 
-    const concurrentCart = await this.getCart(customerId, guestToken);
+    const concurrentCart = await this.getCart(customerId);
     if (!concurrentCart) throw new Error("Cart insert did not return a row");
     return concurrentCart;
   }
 
-  public async addCartLine(
-    customerId: string | undefined,
-    guestToken: string | undefined,
-    input: { productId: string; productUnitId: string; quantity: number },
-  ) {
-    this.assertCartIdentity(customerId, guestToken);
-    const cart = await this.getOrCreateCart(customerId, guestToken);
+  public async addCartLine(customerId: string, input: { productId: string; productUnitId: string; quantity: number }) {
+    const cart = await this.getOrCreateCart(customerId);
     await this.database.db.transaction(async (transaction) => {
       const current = (
         await transaction
@@ -120,26 +109,40 @@ export class SalesRepository {
       }
       await transaction.update(carts).set({ updatedAt: new Date() }).where(eq(carts.id, cart.id));
     });
-    return this.getCart(customerId, guestToken);
+    return this.getCart(customerId);
   }
 
-  public async clearCart(customerId: string | undefined, guestToken: string | undefined) {
-    this.assertCartIdentity(customerId, guestToken);
-    const cart = await this.getCart(customerId, guestToken);
+  /** The ticked lines of the cart, the ones the next order is made from (BR-CART-002). */
+  public async getSelectedCartLines(customerId: string) {
+    const cart = await this.getCart(customerId);
+    return (cart?.lines ?? [])
+      .filter((line) => line.selected)
+      .map((line) => ({
+        id: line.id,
+        productId: line.productId,
+        productUnitId: line.productUnitId,
+        quantity: Number(line.quantity),
+      }));
+  }
+
+  /**
+   * Empties the cart, or removes only `lineIds` when given. The ids are scoped to this cart, so an id from another
+   * shopper's cart matches nothing. Removing just the lines an order was made from keeps the rest for a later order.
+   */
+  public async clearCart(customerId: string, lineIds?: string[]) {
+    const cart = await this.getCart(customerId);
     if (!cart) return undefined;
-    await this.database.db.delete(cartLines).where(eq(cartLines.cartId, cart.id));
+    await this.database.db
+      .delete(cartLines)
+      .where(
+        lineIds ? and(eq(cartLines.cartId, cart.id), inArray(cartLines.id, lineIds)) : eq(cartLines.cartId, cart.id),
+      );
     await this.database.db.update(carts).set({ updatedAt: new Date() }).where(eq(carts.id, cart.id));
-    return this.getCart(customerId, guestToken);
+    return this.getCart(customerId);
   }
 
-  public async updateCartLine(
-    customerId: string | undefined,
-    guestToken: string | undefined,
-    lineId: string,
-    quantity: number,
-  ) {
-    this.assertCartIdentity(customerId, guestToken);
-    const cart = await this.getCart(customerId, guestToken);
+  public async updateCartLine(customerId: string, lineId: string, quantity: number) {
+    const cart = await this.getCart(customerId);
     if (!cart) return undefined;
     if (quantity === 0)
       await this.database.db.delete(cartLines).where(and(eq(cartLines.id, lineId), eq(cartLines.cartId, cart.id)));
@@ -148,22 +151,53 @@ export class SalesRepository {
         .update(cartLines)
         .set({ quantity: String(quantity) })
         .where(and(eq(cartLines.id, lineId), eq(cartLines.cartId, cart.id)));
-    return this.getCart(customerId, guestToken);
+    return this.getCart(customerId);
   }
 
-  public async mergeGuestCart(customerId: string, guestToken: string) {
-    const guest = await this.getCart(undefined, guestToken);
-    const customer = await this.getOrCreateCart(customerId, undefined);
-    if (!guest || guest.id === customer.id) return customer;
+  /**
+   * Ticks or unticks cart lines for the next order: the named `lineIds`, or every line when none are named. Ids are
+   * scoped to this cart, so an id from another shopper's cart matches nothing. The tick lives on the server so it
+   * survives a reload and follows the shopper to another device.
+   */
+  public async setCartSelection(customerId: string, selected: boolean, lineIds?: string[]) {
+    const cart = await this.getCart(customerId);
+    if (!cart) return undefined;
+    await this.database.db
+      .update(cartLines)
+      .set({ selected })
+      .where(
+        lineIds ? and(eq(cartLines.cartId, cart.id), inArray(cartLines.id, lineIds)) : eq(cartLines.cartId, cart.id),
+      );
+    return this.getCart(customerId);
+  }
+
+  /**
+   * Adds the signed-out cart to the account cart in one transaction. Lines for the same product and unit are summed
+   * first, so the request holds one line per product and unit. An account line that already exists keeps its tick and
+   * takes the quantity; any other line is inserted with the tick it was sent with. The first sent line decides the
+   * tick of a repeated product and unit.
+   */
+  public async mergeLocalCart(
+    customerId: string,
+    lines: Array<{ productId: string; productUnitId: string; quantity: number; selected: boolean }>,
+  ) {
+    const cart = await this.getOrCreateCart(customerId);
+    const summed = new Map<string, (typeof lines)[number]>();
+    for (const line of lines) {
+      const key = `${line.productId}:${line.productUnitId}`;
+      const existing = summed.get(key);
+      if (existing) existing.quantity += line.quantity;
+      else summed.set(key, { ...line });
+    }
     await this.database.db.transaction(async (transaction) => {
-      for (const line of guest.lines) {
+      for (const line of summed.values()) {
         const current = (
           await transaction
             .select()
             .from(cartLines)
             .where(
               and(
-                eq(cartLines.cartId, customer.id),
+                eq(cartLines.cartId, cart.id),
                 eq(cartLines.productId, line.productId),
                 eq(cartLines.productUnitId, line.productUnitId),
               ),
@@ -173,17 +207,21 @@ export class SalesRepository {
         if (current) {
           await transaction
             .update(cartLines)
-            .set({ quantity: String(Number(current.quantity) + Number(line.quantity)) })
+            .set({ quantity: String(Number(current.quantity) + line.quantity) })
             .where(eq(cartLines.id, current.id));
-          await transaction.delete(cartLines).where(eq(cartLines.id, line.id));
         } else {
-          await transaction.update(cartLines).set({ cartId: customer.id }).where(eq(cartLines.id, line.id));
+          await transaction.insert(cartLines).values({
+            cartId: cart.id,
+            productId: line.productId,
+            productUnitId: line.productUnitId,
+            quantity: String(line.quantity),
+            selected: line.selected,
+          });
         }
       }
-      await transaction.delete(carts).where(eq(carts.id, guest.id));
-      await transaction.update(carts).set({ updatedAt: new Date() }).where(eq(carts.id, customer.id));
+      await transaction.update(carts).set({ updatedAt: new Date() }).where(eq(carts.id, cart.id));
     });
-    return this.getCart(customerId, undefined);
+    return this.getCart(customerId);
   }
 
   public async createOrder(input: {
@@ -850,18 +888,8 @@ export class SalesRepository {
     return this.listPrescriptions(input);
   }
 
-  private async findCart(
-    database: SalesDatabase["db"],
-    customerId: string | undefined,
-    guestToken: string | undefined,
-  ) {
-    const digest = guestToken ? digestToken(guestToken) : undefined;
-    const condition = customerId
-      ? eq(carts.customerId, customerId)
-      : digest
-        ? eq(carts.guestTokenDigest, digest)
-        : undefined;
-    return (await database.select().from(carts).where(condition).limit(1))[0];
+  private async findCart(database: SalesDatabase["db"], customerId: string) {
+    return (await database.select().from(carts).where(eq(carts.customerId, customerId)).limit(1))[0];
   }
 
   private async withCartLines(database: SalesDatabase["db"], cart: typeof carts.$inferSelect) {
@@ -871,13 +899,7 @@ export class SalesRepository {
     };
   }
 
-  private assertCartIdentity(customerId: string | undefined, guestToken: string | undefined): void {
-    if (!customerId && !guestToken) throw new Error("A customer session or guest cart token is required");
-  }
-
   private async appendEvent(eventType: string, aggregateId: string, payload: Record<string, unknown>): Promise<void> {
     await this.database.db.insert(outboxMessages).values({ eventType, aggregateId, payload: JSON.stringify(payload) });
   }
 }
-
-const digestToken = (token: string): string => createHash("sha256").update(token).digest("hex");

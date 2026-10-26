@@ -36,7 +36,6 @@ const ids = {
 const createTestServer = async (
   repository: SalesRepository,
   orderStock: Partial<OrderStock> = {},
-  cookieSecure = false,
 ): Promise<{ server: Server; url: string }> => {
   const app = express();
   app.use(express.json());
@@ -46,7 +45,6 @@ const createTestServer = async (
       inventoryServiceUrl: "http://inventory.test",
       identityServiceUrl: "http://identity.test",
       orderStock: orderStock as OrderStock,
-      cookieSecure,
     }),
   );
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
@@ -807,6 +805,145 @@ describe("sales order stock API", () => {
       }),
     });
   const order = { id: ids.prescription, customerId: ids.actor, selectedStoreId: ids.site, status: "Pending" };
+  const cartLineId = "00000000-0000-4000-8000-0000000000c1";
+  const postOrder = (url: string, body: Record<string, unknown>) =>
+    httpFetch(`${url}/orders`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      body: JSON.stringify({
+        selectedStoreId: ids.site,
+        fulfillmentType: "pickup",
+        paymentMethod: "sepay_qr",
+        ...body,
+      }),
+    });
+  const cartOrderRepository = (
+    selected: Array<{ id: string; productId: string; productUnitId: string; quantity: number }>,
+  ) =>
+    ({
+      createOrder: vi.fn().mockResolvedValue(order),
+      getOrder: vi.fn().mockResolvedValue(order),
+      getSelectedCartLines: vi.fn().mockResolvedValue(selected),
+      clearCart: vi.fn().mockResolvedValue(undefined),
+    }) as unknown as SalesRepository;
+
+  it("orders the ticked cart lines the server holds, and removes them only after the stock is held", async () => {
+    const repository = cartOrderRepository([
+      { id: cartLineId, productId: ids.productA, productUnitId: ids.unitA, quantity: 3 },
+    ]);
+    const hold = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("fetch", vi.fn(catalogResponder));
+    const testServer = await createTestServer(repository, { hold });
+    server = testServer.server;
+
+    const response = await postOrder(testServer.url, { fromCart: true });
+
+    expect(response.status).toBe(201);
+    expect(repository.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lines: [expect.objectContaining({ productId: ids.productA, productUnitId: ids.unitA, quantity: 3 })],
+      }),
+    );
+    expect(hold).toHaveBeenCalledWith(order, [{ productId: ids.productA, quantity: 3 }]);
+    expect(repository.clearCart).toHaveBeenCalledWith(ids.actor, [cartLineId]);
+    expect(vi.mocked(repository.clearCart).mock.invocationCallOrder[0]).toBeGreaterThan(
+      hold.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("refuses an order from the cart when no line is ticked, and makes no order", async () => {
+    const repository = cartOrderRepository([]);
+    vi.stubGlobal("fetch", vi.fn(catalogResponder));
+    const testServer = await createTestServer(repository, { hold: vi.fn() });
+    server = testServer.server;
+
+    const response = await postOrder(testServer.url, { fromCart: true });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "cart_selection_empty" });
+    expect(repository.createOrder).not.toHaveBeenCalled();
+  });
+
+  it("leaves the cart as it was when the stock cannot be held", async () => {
+    const repository = cartOrderRepository([
+      { id: cartLineId, productId: ids.productA, productUnitId: ids.unitA, quantity: 1 },
+    ]);
+    vi.stubGlobal("fetch", vi.fn(catalogResponder));
+    const testServer = await createTestServer(repository, {
+      hold: vi.fn().mockRejectedValue(new InsufficientStockError()),
+    });
+    server = testServer.server;
+
+    const response = await postOrder(testServer.url, { fromCart: true });
+
+    expect(response.status).toBe(409);
+    expect(repository.clearCart).not.toHaveBeenCalled();
+  });
+
+  it("never touches the cart for an order that names its own lines", async () => {
+    const repository = cartOrderRepository([]);
+    vi.stubGlobal("fetch", vi.fn(catalogResponder));
+    const testServer = await createTestServer(repository, { hold: vi.fn().mockResolvedValue(undefined) });
+    server = testServer.server;
+
+    const response = await postOrder(testServer.url, {
+      lines: [{ productId: ids.productA, productUnitId: ids.unitA, quantity: 2 }],
+    });
+
+    expect(response.status).toBe(201);
+    expect(repository.getSelectedCartLines).not.toHaveBeenCalled();
+    expect(repository.clearCart).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["lines", { lines: [{ productId: ids.productA, productUnitId: ids.unitA, quantity: 1 }] }],
+    ["fromCart", { fromCart: true }],
+  ])("refuses an order with a prescription-only product, whether it comes by %s", async (_label, body) => {
+    const repository = cartOrderRepository([
+      { id: cartLineId, productId: ids.productA, productUnitId: ids.unitA, quantity: 1 },
+    ]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).includes("/pricing/active")
+          ? new Response(
+              JSON.stringify({ productId: ids.productA, productUnitId: ids.unitA, unitPrice: "1", currency: "VND" }),
+              { status: 200 },
+            )
+          : new Response(JSON.stringify({ id: ids.productA, name: "Amoxicillin", prescriptionRequired: true }), {
+              status: 200,
+            }),
+      ),
+    );
+    const hold = vi.fn();
+    const testServer = await createTestServer(repository, { hold });
+    server = testServer.server;
+
+    const response = await postOrder(testServer.url, body);
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "prescription_required", productId: ids.productA });
+    expect(repository.createOrder).not.toHaveBeenCalled();
+    expect(hold).not.toHaveBeenCalled();
+    expect(repository.clearCart).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "both lines and fromCart",
+      { fromCart: true, lines: [{ productId: ids.productA, productUnitId: ids.unitA, quantity: 1 }] },
+    ],
+    ["neither lines nor fromCart", {}],
+  ])("rejects an order that sends %s", async (_label, body) => {
+    const repository = cartOrderRepository([]);
+    const testServer = await createTestServer(repository, { hold: vi.fn() });
+    server = testServer.server;
+
+    const response = await postOrder(testServer.url, body);
+
+    expect(response.status).toBe(400);
+    expect(repository.createOrder).not.toHaveBeenCalled();
+  });
 
   it("holds the stock of the store for the lines it priced, and answers 201 with the order", async () => {
     const createOrder = vi.fn().mockResolvedValue(order);
@@ -920,162 +1057,219 @@ describe("sales order stock API", () => {
   });
 });
 
-describe("sales guest cart API", () => {
+describe("sales cart API", () => {
   let server: Server | undefined;
 
   afterEach(async () => {
     if (server) await closeServer(server);
     server = undefined;
+    vi.unstubAllGlobals();
   });
+
+  /** Catalog answers `GET /products/:id`; the ids in `prescriptionOnly` are marked prescription-only. */
+  const stubCatalog = (prescriptionOnly: string[] = []) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const productId = String(url).split("/products/")[1];
+        return new Response(
+          JSON.stringify({
+            id: productId,
+            name: "Product",
+            prescriptionRequired: prescriptionOnly.includes(productId!),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
 
   const emptyCart = { id: ids.site, lines: [] };
   const cartLine = { productId: ids.productA, productUnitId: ids.unitA, quantity: 2 };
-  const guestCartRepository = () => ({
+  const mergeLine = { ...cartLine, selected: true };
+  const cartRepository = () => ({
     getOrCreateCart: vi.fn().mockResolvedValue(emptyCart),
     addCartLine: vi.fn().mockResolvedValue(emptyCart),
     clearCart: vi.fn().mockResolvedValue(emptyCart),
+    setCartSelection: vi.fn().mockResolvedValue(emptyCart),
     updateCartLine: vi.fn().mockResolvedValue(emptyCart),
-    mergeGuestCart: vi.fn().mockResolvedValue(emptyCart),
+    mergeLocalCart: vi.fn().mockResolvedValue(emptyCart),
   });
-  const startCartServer = async (repository: object, cookieSecure = false) => {
-    const testServer = await createTestServer(repository as SalesRepository, {}, cookieSecure);
+  const startCartServer = async (repository: object) => {
+    const testServer = await createTestServer(repository as SalesRepository);
     server = testServer.server;
     return testServer;
   };
 
-  it("issues an HttpOnly, SameSite=Lax guest cookie without Secure when cookieSecure is false", async () => {
-    const repository = guestCartRepository();
+  it("answers 401 and sets no cookie on every cart route without a signed-in customer", async () => {
+    const repository = cartRepository();
+    const testServer = await startCartServer(repository);
+    const requests = [
+      { method: "GET", path: "/carts", body: undefined },
+      { method: "POST", path: "/carts/lines", body: cartLine },
+      { method: "DELETE", path: "/carts", body: {} },
+      { method: "PATCH", path: `/carts/lines/${ids.lineA}`, body: { quantity: 1 } },
+      { method: "PATCH", path: "/carts/selection", body: { selected: true } },
+      { method: "POST", path: "/carts/merge", body: { lines: [mergeLine] } },
+    ];
+
+    for (const request of requests) {
+      const response = await httpFetch(`${testServer.url}${request.path}`, {
+        method: request.method,
+        ...(request.body === undefined
+          ? {}
+          : { headers: { "content-type": "application/json" }, body: JSON.stringify(request.body) }),
+      });
+      expect(response.status, `${request.method} ${request.path}`).toBe(401);
+      expect(response.headers.get("set-cookie"), `${request.method} ${request.path}`).toBeNull();
+    }
+    for (const method of Object.values(repository)) expect(method).not.toHaveBeenCalled();
+  });
+
+  it("reads the signed-in customer's cart and sets no cookie", async () => {
+    const repository = cartRepository();
     const testServer = await startCartServer(repository);
 
-    const response = await httpFetch(`${testServer.url}/carts`);
+    const response = await httpFetch(`${testServer.url}/carts`, { headers: { "X-Actor-Id": ids.actor } });
 
-    const setCookie = response.headers.get("set-cookie") ?? "";
-    const token = setCookie.match(/^pharmacy_guest_cart=([^;]+);/)?.[1];
     expect(response.status).toBe(200);
-    expect(token).toBeDefined();
-    expect(setCookie).toBe(`pharmacy_guest_cart=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`);
-    expect(repository.getOrCreateCart).toHaveBeenCalledWith(undefined, token);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(repository.getOrCreateCart).toHaveBeenCalledWith(ids.actor);
   });
 
-  it("adds Secure to the guest cookie when cookieSecure is true", async () => {
-    const testServer = await startCartServer(guestCartRepository(), true);
-
-    const response = await httpFetch(`${testServer.url}/carts`);
-
-    expect(response.headers.get("set-cookie")).toMatch(
-      /^pharmacy_guest_cart=[^;]+; HttpOnly; SameSite=Lax; Path=\/; Max-Age=2592000; Secure$/,
-    );
-  });
-
-  it("re-issues an existing guest cookie so cookies set before this change are rewritten", async () => {
-    const repository = guestCartRepository();
-    const testServer = await startCartServer(repository);
-
-    const response = await httpFetch(`${testServer.url}/carts`, {
-      headers: { cookie: "pharmacy_guest_cart=existing-token" },
-    });
-
-    expect(response.headers.get("set-cookie")).toBe(
-      "pharmacy_guest_cart=existing-token; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000",
-    );
-    expect(repository.getOrCreateCart).toHaveBeenCalledWith(undefined, "existing-token");
-  });
-
-  it("issues the guest cookie when a guest adds a line", async () => {
-    const repository = guestCartRepository();
+  it("adds a line to the signed-in customer's cart", async () => {
+    const repository = cartRepository();
+    stubCatalog();
     const testServer = await startCartServer(repository);
 
     const response = await httpFetch(`${testServer.url}/carts/lines`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
       body: JSON.stringify(cartLine),
     });
 
-    const token = response.headers.get("set-cookie")?.match(/^pharmacy_guest_cart=([^;]+);/)?.[1];
     expect(response.status).toBe(201);
-    expect(response.headers.get("set-cookie")).toContain("; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000");
-    expect(repository.addCartLine).toHaveBeenCalledWith(undefined, token, cartLine);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(repository.addCartLine).toHaveBeenCalledWith(ids.actor, cartLine);
   });
 
-  it("ignores the retired X-Guest-Cart-Token header and issues a fresh token", async () => {
-    const repository = guestCartRepository();
+  it("hands the signed-in customer's local lines to the merge and sets no cookie", async () => {
+    const repository = cartRepository();
+    stubCatalog();
     const testServer = await startCartServer(repository);
 
-    const response = await httpFetch(`${testServer.url}/carts`, {
-      headers: { "X-Guest-Cart-Token": "header-token" },
-    });
-
-    const token = response.headers.get("set-cookie")?.match(/^pharmacy_guest_cart=([^;]+);/)?.[1];
-    expect(token).toBeDefined();
-    expect(token).not.toBe("header-token");
-    expect(repository.getOrCreateCart).toHaveBeenCalledWith(undefined, token);
-    expect(repository.getOrCreateCart).not.toHaveBeenCalledWith(undefined, "header-token");
-  });
-
-  it("does not issue a guest cookie to a signed-in customer", async () => {
-    const repository = guestCartRepository();
-    const testServer = await startCartServer(repository);
-
-    const response = await httpFetch(`${testServer.url}/carts`, {
-      headers: { "X-Actor-Id": ids.actor },
+    const response = await httpFetch(`${testServer.url}/carts/merge`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      body: JSON.stringify({ lines: [mergeLine] }),
     });
 
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toBeNull();
-    expect(repository.getOrCreateCart).toHaveBeenCalledWith(ids.actor, undefined);
+    expect(repository.mergeLocalCart).toHaveBeenCalledWith(ids.actor, [mergeLine]);
   });
 
-  it("clears the guest cookie when a customer merges the guest cart", async () => {
-    const repository = guestCartRepository();
+  it("keeps a prescription-only product out of the cart", async () => {
+    const repository = cartRepository();
+    stubCatalog([ids.productA]);
+    const testServer = await startCartServer(repository);
+
+    const response = await httpFetch(`${testServer.url}/carts/lines`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      body: JSON.stringify(cartLine),
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "prescription_required", productId: ids.productA });
+    expect(repository.addCartLine).not.toHaveBeenCalled();
+  });
+
+  it("drops a prescription-only line from a merge and still merges the others", async () => {
+    const repository = cartRepository();
+    stubCatalog([ids.productB]);
     const testServer = await startCartServer(repository);
 
     const response = await httpFetch(`${testServer.url}/carts/merge`, {
       method: "POST",
-      headers: { "X-Actor-Id": ids.actor, cookie: "pharmacy_guest_cart=guest-token" },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      body: JSON.stringify({ lines: [mergeLine, { ...mergeLine, productId: ids.productB }] }),
     });
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("set-cookie")).toBe("pharmacy_guest_cart=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
-    expect(repository.mergeGuestCart).toHaveBeenCalledWith(ids.actor, "guest-token");
+    expect(repository.mergeLocalCart).toHaveBeenCalledWith(ids.actor, [mergeLine]);
   });
 
-  it("clears the merge cookie with Secure when cookieSecure is true", async () => {
-    const testServer = await startCartServer(guestCartRepository(), true);
-
-    const response = await httpFetch(`${testServer.url}/carts/merge`, {
-      method: "POST",
-      headers: { "X-Actor-Id": ids.actor, cookie: "pharmacy_guest_cart=guest-token" },
-    });
-
-    expect(response.headers.get("set-cookie")).toBe(
-      "pharmacy_guest_cart=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0; Secure",
+  it("lets nothing into the cart when the catalog cannot say whether a product is prescription-only", async () => {
+    const repository = cartRepository();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("down", { status: 503 })),
     );
-  });
-
-  it("refuses a merge that only carries the retired X-Guest-Cart-Token header", async () => {
-    const repository = guestCartRepository();
     const testServer = await startCartServer(repository);
 
-    const response = await httpFetch(`${testServer.url}/carts/merge`, {
+    const response = await httpFetch(`${testServer.url}/carts/lines`, {
       method: "POST",
-      headers: { "X-Actor-Id": ids.actor, "X-Guest-Cart-Token": "header-token" },
-    });
-
-    expect(response.status).toBe(400);
-    expect(response.headers.get("set-cookie")).toBeNull();
-    expect(repository.mergeGuestCart).not.toHaveBeenCalled();
-  });
-
-  it("leaves the guest cookie in place when the merge fails", async () => {
-    const repository = { ...guestCartRepository(), mergeGuestCart: vi.fn().mockRejectedValue(new Error("db down")) };
-    const testServer = await startCartServer(repository);
-
-    const response = await httpFetch(`${testServer.url}/carts/merge`, {
-      method: "POST",
-      headers: { "X-Actor-Id": ids.actor, cookie: "pharmacy_guest_cart=guest-token" },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      body: JSON.stringify(cartLine),
     });
 
     expect(response.status).toBe(500);
-    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(repository.addCartLine).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no body", undefined],
+    ["an empty line list", { lines: [] }],
+    ["more than 200 lines", { lines: Array.from({ length: 201 }, () => mergeLine) }],
+    ["a line without a tick", { lines: [cartLine] }],
+  ])("rejects a merge with %s", async (_label, body) => {
+    const repository = cartRepository();
+    const testServer = await startCartServer(repository);
+
+    const response = await httpFetch(`${testServer.url}/carts/merge`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(repository.mergeLocalCart).not.toHaveBeenCalled();
+  });
+
+  it("ticks the named lines on PATCH /carts/selection, and every line when none are named", async () => {
+    const repository = cartRepository();
+    const testServer = await startCartServer(repository);
+    const send = (body: unknown) =>
+      httpFetch(`${testServer.url}/carts/selection`, {
+        method: "PATCH",
+        headers: { "X-Actor-Id": ids.actor, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    const some = await send({ selected: true, lineIds: [ids.productA] });
+    const all = await send({ selected: false });
+
+    expect(some.status).toBe(200);
+    expect(all.status).toBe(200);
+    expect(repository.setCartSelection).toHaveBeenNthCalledWith(1, ids.actor, true, [ids.productA]);
+    expect(repository.setCartSelection).toHaveBeenNthCalledWith(2, ids.actor, false, undefined);
+  });
+
+  it("rejects a selection without a boolean and an empty lineIds list", async () => {
+    const repository = cartRepository();
+    const testServer = await startCartServer(repository);
+    const send = (body: unknown) =>
+      httpFetch(`${testServer.url}/carts/selection`, {
+        method: "PATCH",
+        headers: { "X-Actor-Id": ids.actor, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    const missing = await send({ lineIds: [ids.productA] });
+    const empty = await send({ selected: true, lineIds: [] });
+
+    expect(missing.status).toBe(400);
+    expect(empty.status).toBe(400);
+    expect(repository.setCartSelection).not.toHaveBeenCalled();
   });
 });
