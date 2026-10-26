@@ -123,6 +123,28 @@ The local gateway and AWS ALB forward traffic with identical path patterns. The 
 - Web clients call `/api/...` endpoints. Vite and production Nginx proxy those calls to the configured ingress URL.
 - Build all UI from `@pharmacy/ui` primitives and theme tokens (Tailwind v4). Extend the shared package instead of adding a second design system.
 
+## Change workflow
+
+There are two local modes (details in `docs/runbook.md`). **Ask the user which one to use at the start of every session** and keep it until they change it. Never assume, and never switch silently.
+
+|                                | Dev mode                                                                                                   | Container mode                                                                            |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| What runs                      | Infra in Docker; the six services and both webs on the host (`node --watch`, Vite HMR)                     | Everything in Docker, built from the images, closest to AWS                               |
+| Start                          | `pnpm run infra:up`, then `pnpm dev` (background service; stop it when you finish unless the user runs it) | `pnpm run stack:up` (stops `gateway-dev`, rebuilds, waits until healthy)                  |
+| Use it for                     | Fast iteration while coding                                                                                | Checking what ships; Dockerfile, Compose, env, dependency, migration, load and chaos work |
+| Latest change is visible after | The file is saved                                                                                          | You rebuild with `pnpm run stack:up`                                                      |
+
+Then follow the same loop in both modes:
+
+1. **Classify the request.** If it says talk, research, suggest, or "do not edit", answer only and change nothing.
+2. **Orient.** Read `docs/architecture.md`, the ADRs in `docs/adr`, and any draft in `docs/design`. Reuse the existing pattern. A big change (new service, new integration event, a schema change across services, a new external dependency) starts as a draft in `docs/design`; stop for review before building.
+3. **Implement in small slices.** Delegate disjoint slices to sub-agents in parallel and set shared contracts (types, schema, events) first. Sub-agents only edit; they do not run gates, formatters, or commit. Build UI only from `@pharmacy/ui`, with no custom in-place styles.
+4. **Run the gates once** (see Verification workflow). Use pnpm only.
+5. **Run the change in the chosen mode.** After a migration change run `pnpm run db:migrate`; Compose does not run it. In container mode rebuild with `pnpm run stack:up` and confirm every container in `docker compose ps` is healthy. Run `pnpm run urls:up` once per session for the named URLs.
+6. **Verify the real surface** (the `verify-pharmacy-central` skill in `.agents/skills` scripts the checks for both modes). Open the named URLs at 1920x1080 with the saved role state (see Browser testing) and exercise the changed path. For an API change, call it through `http://api.pharmacy.localhost`. Report only what you ran. Dev data is disposable: reseed with `pnpm run dev:data` instead of preserving it.
+7. **Update docs in the same change.** `docs/` (user guide, API guide, runbook), the LikeC4 diagrams, `CHANGELOG.md` under Unreleased, and an ADR when you made a lasting decision.
+8. **Report and stop.** Commit only when asked. When asked: split by concern, use `type(scope): summary` with a short body, amend the last commit when told to fix it, and never push.
+
 ## Verification workflow
 
 Run all checks before finishing work:

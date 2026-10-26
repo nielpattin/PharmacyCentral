@@ -35,7 +35,7 @@ Infra always runs in Docker. The two modes differ only in where the apps and the
 | Back to dev mode | | `pnpm run stack:down`, then `pnpm dev` |
 | Stop everything | `pnpm run infra:down` | `pnpm run infra:down` |
 
-Use dev mode while coding. Run container mode before opening a pull request, and always after changing a Dockerfile, `docker-compose.yml`, environment variables, dependencies, or migrations; every container in `docker compose ps` must be healthy.
+Use dev mode for fast iteration and container mode to check what ships. An agent session asks which mode to use before it starts ([AGENTS.md](../AGENTS.md#change-workflow)). Run container mode before opening a pull request, and always after changing a Dockerfile, `docker-compose.yml`, environment variables, dependencies, or migrations; every container in `docker compose ps` must be healthy.
 
 #### Dev mode
 

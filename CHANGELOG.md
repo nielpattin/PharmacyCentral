@@ -71,6 +71,8 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 - Repository documentation standard: CONTRIBUTING.md, SECURITY.md, LICENSE, CODEOWNERS, CLAUDE.md, CHANGELOG.md, docs/architecture.md, docs/adr, docs/design, GitHub PR and issue templates.
 - Thirteen ADRs (docs/adr) recording existing decisions, and three draft design documents (docs/design): operations-query events-only reads, fail-fast configuration gaps, and guest cart cookie and edge header hardening.
+- AGENTS.md Change workflow: ask which local mode to use (dev mode or container mode) at the start of a session, then one loop for orienting, building, gating, running in Docker, verifying and documenting a change.
+- `verify-pharmacy-central` and `maintain-verification-skill` moved to `.agents/skills` and tracked in git; the verify skill now supports dev mode and container mode, drives the default browser tool on the named URLs with saved role state files, and no longer launches Edge.
 - Original .NET pharmacy application: products, suppliers, stock ledger, goods receipt, transfers, stocktake, prescriptions, returns, procurement, pricing, recall, quality review, reconciliation, audit log and role-based access.
 - Node.js microservice foundation: pnpm and Nx workspace, shared UI package, identity, catalog, inventory, sales, payment and operations-query services, customer and staff web apps, local Compose topology, API gateway and AWS Fargate configuration.
 - OTLP export of traces, metrics and logs from every service, with a local Tempo, Prometheus, Loki and Grafana stack, trace context carried through the outbox, and a derived service map.
