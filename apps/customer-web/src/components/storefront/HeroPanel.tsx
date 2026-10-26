@@ -4,14 +4,14 @@ import { scrollToProducts } from "../../storefront/scroll.ts";
 import { IconChevronRight, IconQr, IconStore, IconTruck } from "./icons.tsx";
 
 export const HeroPanel = (): React.JSX.Element => (
-  <section className="relative overflow-hidden rounded-lg bg-gradient-to-br from-primary via-primary to-primary-dark text-white">
+  <section className="relative mt-6 overflow-hidden rounded-lg bg-sidebar text-white">
     <img
       alt=""
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 hidden size-full object-cover object-[78%_top] lg:block"
       src="/banner-pharmacy.webp"
     />
-    <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-r from-primary-dark/90 via-primary-dark/45 to-primary-dark/15 lg:block" />
+    <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-r from-sidebar/95 via-sidebar/75 to-sidebar/30 lg:block" />
 
     <div className="relative p-6 sm:p-10 lg:px-12 lg:py-14">
       <h1 className="max-w-2xl text-2xl font-semibold leading-tight sm:text-3xl lg:text-4xl">
@@ -22,11 +22,15 @@ export const HeroPanel = (): React.JSX.Element => (
         thuốc bạn chọn.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">
-        <Button size="lg" className="bg-white text-primary-dark hover:bg-white/90" onClick={scrollToProducts}>
+        <Button
+          size="lg"
+          className="bg-white text-primary-dark hover:bg-white/90 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+          onClick={scrollToProducts}
+        >
           Xem sản phẩm
         </Button>
         <a
-          className="inline-flex h-10 items-center gap-2 rounded-md border border-white/40 px-6 text-sm font-medium text-white hover:bg-white/10"
+          className="inline-flex h-10 items-center gap-2 rounded-md border border-white/40 px-6 text-sm font-medium text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           href="#nha-thuoc"
         >
           Tìm nhà thuốc gần bạn
@@ -64,7 +68,7 @@ const TrustItem = ({
   title: string;
   detail: string;
 }): React.JSX.Element => (
-  <div className="flex items-start gap-3 bg-primary-dark/80 px-6 py-4">
+  <div className="flex items-start gap-3 bg-sidebar/80 px-6 py-4">
     <span className="mt-0.5 text-white/80">{icon}</span>
     <span>
       <span className="block text-sm font-medium">{title}</span>

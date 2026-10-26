@@ -90,7 +90,6 @@ export const HomePage = (): React.JSX.Element => {
   return (
     <div className="min-h-screen bg-background text-ink">
       <SiteHeader
-        categories={categories}
         storeCount={storesStatus === "ready" ? stores.length : undefined}
         searchTerm={filters.search}
         onSearch={(term) => {

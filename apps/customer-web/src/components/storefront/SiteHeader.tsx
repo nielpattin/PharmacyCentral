@@ -1,9 +1,9 @@
 import { Badge, Button, Input, cn } from "@pharmacy/ui";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { getCart } from "../../customer-api.ts";
-import type { CategoryOption } from "../../storefront/catalog.ts";
+import { getCart, listProducts } from "../../customer-api.ts";
+import { uniqueCategories } from "../../storefront/catalog.ts";
 import { buildCategoryPages } from "../../storefront/navigation.ts";
 import { BrandMark } from "./BrandMark.tsx";
 import { Link } from "./Link.tsx";
@@ -21,17 +21,24 @@ import {
 } from "./icons.tsx";
 
 type SiteHeaderProps = {
-  categories?: CategoryOption[] | undefined;
   storeCount?: number | undefined;
   searchTerm?: string | undefined;
   activeSlug?: string | undefined;
   onSearch?: ((term: string) => void) | undefined;
 };
 
-const BAR_ITEM = "relative flex items-center whitespace-nowrap py-3.5 text-sm transition-colors";
+/** Focus ring for controls sitting on the blue band. */
+const FOCUS_ON_BLUE = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white";
+/** Focus ring for controls sitting on the white category bar. */
+const FOCUS_ON_WHITE =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary";
+
+const BAR_ITEM = cn(
+  "relative flex items-center whitespace-nowrap rounded-sm py-3.5 text-sm transition-colors",
+  FOCUS_ON_WHITE,
+);
 
 export const SiteHeader = ({
-  categories = [],
   storeCount,
   searchTerm = "",
   activeSlug,
@@ -39,8 +46,14 @@ export const SiteHeader = ({
 }: SiteHeaderProps): React.JSX.Element => {
   const cartQuery = useQuery({ queryKey: ["cart"], queryFn: getCart, retry: false });
   const cartCount = cartQuery.data?.lines.reduce((total, line) => total + Number(line.quantity), 0) ?? 0;
+  // The category bar is the same on every storefront page, so the header reads the catalogue query Home uses.
+  const taxonomyQuery = useQuery({
+    queryKey: ["products", { limit: 100 }],
+    queryFn: () => listProducts({ limit: 100 }),
+  });
+  const categories = useMemo(() => uniqueCategories(taxonomyQuery.data ?? []), [taxonomyQuery.data]);
+  const pages = useMemo(() => buildCategoryPages(categories), [categories]);
   const [term, setTerm] = useState(searchTerm);
-  const pages = buildCategoryPages(categories);
 
   const submit = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -56,17 +69,26 @@ export const SiteHeader = ({
               <IconCheck className="size-3.5" />
               <span>Thuốc chính hãng · Giao hàng tận nơi · Nhận tại nhà thuốc</span>
             </p>
-            <p className="flex items-center gap-4">
+            <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
               {storeCount !== undefined ? <span>{storeCount} nhà thuốc đang hoạt động</span> : null}
-              <Link className="flex items-center gap-1 hover:underline" href="/#nha-thuoc">
+              <Link
+                className={cn("flex items-center gap-1 rounded-sm hover:underline", FOCUS_ON_BLUE)}
+                href="/#nha-thuoc"
+              >
                 <IconPin className="size-3.5" />
                 Tìm nhà thuốc
               </Link>
-              <Link className="flex items-center gap-1 hover:underline" href="/gui-don-thuoc">
+              <Link
+                className={cn("flex items-center gap-1 rounded-sm hover:underline", FOCUS_ON_BLUE)}
+                href="/gui-don-thuoc"
+              >
                 <IconQr className="size-3.5" />
                 Gửi đơn thuốc
               </Link>
-              <Link className="flex items-center gap-1 hover:underline" href="/don-hang?tab=don-cua-toi">
+              <Link
+                className={cn("flex items-center gap-1 rounded-sm hover:underline", FOCUS_ON_BLUE)}
+                href="/don-hang?tab=don-cua-toi"
+              >
                 <IconReceipt className="size-3.5" />
                 Đơn hàng của tôi
               </Link>
@@ -74,8 +96,8 @@ export const SiteHeader = ({
           </div>
         </div>
 
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4">
-          <Link className="flex shrink-0 items-center gap-2.5" href="/">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4">
+          <Link className={cn("flex shrink-0 items-center gap-2.5 rounded-lg", FOCUS_ON_BLUE)} href="/">
             <BrandMark className="size-10 bg-white p-1 shadow-sm" />
             <span className="hidden leading-tight sm:block">
               <span className="block text-base font-semibold text-white">Pharmacy Central</span>
@@ -83,7 +105,11 @@ export const SiteHeader = ({
             </span>
           </Link>
 
-          <form onSubmit={submit} className="flex min-w-0 flex-1 items-center" role="search">
+          <form
+            onSubmit={submit}
+            className="order-last flex w-full min-w-0 items-center sm:order-none sm:w-auto sm:flex-1"
+            role="search"
+          >
             <div className="relative min-w-0 flex-1">
               <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-soft">
                 <IconSearch className="size-4" />
@@ -97,14 +123,14 @@ export const SiteHeader = ({
               />
               <Button
                 type="submit"
-                className="absolute right-1 top-1/2 h-9 -translate-y-1/2 rounded-full bg-primary-dark px-5 text-white hover:bg-ink"
+                className="absolute right-1 top-1/2 h-9 -translate-y-1/2 rounded-full bg-primary-dark px-5 text-white hover:bg-ink focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 Tìm kiếm
               </Button>
             </div>
           </form>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <Link
               className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
               href="/tai-khoan"
@@ -153,7 +179,10 @@ export const SiteHeader = ({
                       {page.children.map((child) => (
                         <Link
                           key={child.slug}
-                          className="flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-ink hover:bg-surface-soft hover:text-primary"
+                          className={cn(
+                            "flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-ink hover:bg-surface-soft hover:text-primary",
+                            FOCUS_ON_WHITE,
+                          )}
                           href={`/danh-muc/${child.slug}`}
                         >
                           {child.label}
@@ -161,7 +190,10 @@ export const SiteHeader = ({
                         </Link>
                       ))}
                       <Link
-                        className="mt-1 flex items-center gap-1.5 border-t border-line px-3 pb-1.5 pt-2 text-sm font-medium text-primary hover:underline"
+                        className={cn(
+                          "mt-1 flex items-center gap-1.5 rounded-sm border-t border-line px-3 pb-1.5 pt-2 text-sm font-medium text-primary hover:underline",
+                          FOCUS_ON_WHITE,
+                        )}
                         href={`/danh-muc/${page.slug}`}
                       >
                         Xem tất cả {page.label}

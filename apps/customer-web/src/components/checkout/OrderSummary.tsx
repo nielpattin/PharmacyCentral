@@ -140,7 +140,10 @@ export const OrderSummary = ({
               needsAccount ? (
                 <p className="-mt-2 text-center text-xs text-muted">
                   {blockedReason}{" "}
-                  <Link className="font-medium text-primary hover:underline" href="/tai-khoan">
+                  <Link
+                    className="rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    href="/tai-khoan"
+                  >
                     Đăng nhập
                   </Link>
                 </p>

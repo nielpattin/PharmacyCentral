@@ -138,7 +138,7 @@ export const ProductDetailPage = (): React.JSX.Element => {
 
   return (
     <div className="min-h-screen bg-background text-ink">
-      <SiteHeader categories={categories} onSearch={(term) => void navigate({ to: "/", search: { q: term } })} />
+      <SiteHeader onSearch={(term) => void navigate({ to: "/", search: { q: term } })} />
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
         {productQuery.isPending ? <ProductDetailLoading /> : null}

@@ -94,13 +94,13 @@ export const ProductPicker = ({
             return (
               <li
                 key={product.id}
-                className="flex items-center gap-3 rounded-lg border border-transparent bg-surface-soft/50 p-2.5 shadow-sm motion-safe:transition hover:-translate-y-px hover:shadow-md"
+                className="flex items-center gap-2.5 rounded-lg border border-transparent bg-surface-soft/50 p-2.5 shadow-sm motion-safe:transition hover:-translate-y-px hover:shadow-md sm:gap-3"
               >
                 <ProductTile
                   name={product.name}
                   seed={product.sku}
                   imageUrl={product.imageUrl}
-                  className="size-16 sm:size-20"
+                  className="size-14 shrink-0 sm:size-20"
                   monogramClassName="text-lg"
                 />
                 <div className="min-w-0 flex-1">

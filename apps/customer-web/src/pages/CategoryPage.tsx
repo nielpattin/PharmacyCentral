@@ -60,11 +60,7 @@ export const CategoryPage = (): React.JSX.Element => {
 
   return (
     <div className="min-h-screen bg-background text-ink">
-      <SiteHeader
-        categories={categories}
-        activeSlug={slug}
-        onSearch={(term) => void navigate({ to: "/", search: { q: term } })}
-      />
+      <SiteHeader activeSlug={slug} onSearch={(term) => void navigate({ to: "/", search: { q: term } })} />
 
       <main className="mx-auto max-w-7xl space-y-4 px-4 py-6">
         {!page ? (
