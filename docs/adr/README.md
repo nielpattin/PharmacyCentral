@@ -63,3 +63,6 @@ outlive the feature becomes an ADR. The design document links to the ADRs it rel
 | [0011](0011-shared-ui-package-and-react-conventions.md) | Shared UI package and React conventions | Accepted | 2026-09-10 |
 | [0012](0012-local-development-modes-and-named-urls.md) | Local development modes and named URLs | Accepted | 2026-10-08 |
 | [0013](0013-observability-and-system-console.md) | Observability and the System console | Accepted | 2026-10-21 |
+| [0014](0014-signed-out-cart-in-the-browser.md) | Keep the signed-out cart in the browser | Accepted | 2026-10-26 |
+| [0015](0015-server-picks-the-cart-lines-of-an-order.md) | The server picks the cart lines of an order | Accepted | 2026-10-26 |
+| [0016](0016-prescription-only-products-are-not-sold-online.md) | Prescription-only products are not put in the cart or sold online | Accepted | 2026-10-26 |

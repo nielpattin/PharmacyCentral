@@ -45,6 +45,8 @@ Admin routes require a signed-in account with the `Platform Admin` role. A reque
 
 ## Customer catalog and sales
 
+Every `/api/carts*` route needs a signed-in customer. A signed-out shopper's cart is kept in the browser and the server never sees it until sign-in ([ADR 0014](adr/0014-signed-out-cart-in-the-browser.md)).
+
 - `GET /api/products`, `GET /api/products/{id}`, `GET /api/products/{id}/units`
 
 `GET /api/products` takes `search`, `category`, `prescriptionRequired`, `limit` (1 to 100, default 20) and `cursor`. The body is the plain array of one page. When another page follows, the answer carries its cursor in the `X-Next-Cursor` header; send it back as `cursor` with the same other parameters. The last page has no header. A cursor is opaque and a malformed one answers `400`. Answers are kept for up to 30 seconds per query and page, so a product change made through another replica can take that long to show.
@@ -56,10 +58,11 @@ Admin routes require a signed-in account with the `Platform Admin` role. A reque
 - `GET /api/stores`, `GET /api/stores/nearest`
 - `GET /api/pricing/active`
 - `GET /api/carts`
-- `POST /api/carts/lines`
+- `POST /api/carts/lines` (a product the catalog marks `prescriptionRequired` answers `409 prescription_required` with its `productId` and is not added)
 - `PATCH /api/carts/lines/{id}`
-- `DELETE /api/carts`
-- `POST /api/carts/merge`
+- `PATCH /api/carts/selection` (body `{ "selected": true|false, "lineIds": ["…"] }`; ticks or unticks those lines of the caller's own cart for the next order, or every line when `lineIds` is left out. An empty `lineIds` list or a missing `selected` answers `400`. A cart answer lists each line with `selected`; a new line starts `false`.)
+- `DELETE /api/carts` (empties the caller's cart)
+- `POST /api/carts/merge` (body `{ "lines": [{ "productId": "…", "productUnitId": "…", "quantity": 1, "selected": false }] }`, 1 to 200 lines; moves the browser cart into the caller's cart and answers it. A line that matches one already in the cart adds its quantity and keeps the cart line's tick; any other line is added with the tick it was sent with. A missing, empty or oversized `lines` answers `400`.)
 - `POST /api/delivery/calculate`
 - `POST /api/delivery/reverse-geocode`
 - `GET /api/delivery/addresses/search?q=`
@@ -73,7 +76,7 @@ Admin routes require a signed-in account with the `Platform Admin` role. A reque
 - `GET /api/orders/{id}`
 - `POST /api/orders/{id}/transition`
 
-`POST /api/orders` accepts product and unit IDs, quantity, selected store, and pickup or delivery choice. `sales-service` recalculates active prices and delivery server-side. Delivery snapshots contain the provider-resolved address, separate customer note, road distance, duration, fee, and GeoJSON route.
+`POST /api/orders` accepts the selected store, the pickup or delivery choice, and exactly one of `lines` (product and unit IDs with quantities) or `fromCart: true`. With `fromCart` the server orders the caller's ticked cart lines, takes the quantities from the cart, and removes those lines once the stock is held; no ticked line answers `409 cart_selection_empty`, and a refused order leaves the cart untouched. An order that includes a product marked `prescriptionRequired` answers `409 prescription_required` with its `productId`, for `lines` and `fromCart` alike. Sending both, or neither, answers `400`. `sales-service` recalculates active prices and delivery server-side. Delivery snapshots contain the provider-resolved address, separate customer note, road distance, duration, fee, and GeoJSON route.
 
 `GET /api/orders` answers the signed-in shopper's own orders. A staff session answers every order, narrowed by `status`, `paymentStatus`, and `siteId` when given. `GET /api/orders/{id}` answers `404` for an order that belongs to another customer.
 

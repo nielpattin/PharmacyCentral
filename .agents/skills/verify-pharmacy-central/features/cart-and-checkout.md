@@ -5,7 +5,7 @@ A signed-in shopper adds a product to the cart, reviews it on the checkout page,
 ## Sub-features
 
 - `cart-add` adds a product from its detail page with the button `Thêm vào giỏ hàng`.
-- `cart-merge-on-sign-in` moves a guest cart into the account at sign-in.
+- `cart-merge-on-sign-in` sends the signed-out cart lines kept in the browser to the account cart at sign-in.
 - `checkout-review` shows the cart lines on `/don-hang` under the heading `Đặt hàng & thanh toán`.
 - `checkout-place-order` submits with `Đặt hàng` and shows the order status.
 - `order-list` shows the new order in `/don-hang-cua-toi`.
@@ -29,7 +29,10 @@ Preconditions:
 
 Steps:
 
-- **Add to cart.** Open `http://customer.pharmacy.localhost/san-pham/<id>` for `THU-0001` (see storefront-search.md). Click `role/button[name="Thêm vào giỏ hàng"]`. Result: the button reads `Đang thêm...` while the request runs, then the header cart count goes up by the quantity. Side effect: `GET /api/carts` through the gateway returns a line for the product.
+- **Signed-out cart stays in the browser.** On a clean tab with no saved state, open `http://customer.pharmacy.localhost/san-pham/<id>` for `THU-0001` (see storefront-search.md) and click `role/button[name="Thêm vào giỏ hàng"]`. Repeat for a second product, then tick one line on `/don-hang`. Result: the header cart count goes up by the quantity, and the lines are in the browser under `pharmacy.guest-cart.v1`. Side effect: the network log has no `/api/carts` request for the visit, and sales-service gains no `carts` row.
+- **Reload keeps the signed-out cart.** Run `tab.reload()` on `/don-hang`. Result: both lines and the tick on the chosen line survive, and the network log still has no `/api/carts` request.
+- **Merge on sign-in.** Sign in on the same tab as customer-sign-in-account.md. Result: the browser key `pharmacy.guest-cart.v1` is gone, and `GET /api/carts` answers `200` with both lines, the ticked line still ticked. Side effect: the account's `carts` row holds both lines, each with the tick it had in the browser.
+- **Add to cart (signed in).** Open `http://customer.pharmacy.localhost/san-pham/<id>` for `THU-0001` (see storefront-search.md). Click `role/button[name="Thêm vào giỏ hàng"]`. Result: the button reads `Đang thêm...` while the request runs, then the header cart count goes up by the quantity. Side effect: `GET /api/carts` through the gateway returns a line for the product.
 - **Review.** Open `/don-hang`. Result: the h1 `Đặt hàng & thanh toán` appears and the cart lines show the product name.
 - **Choose cash on delivery.** Select the option `Thanh toán khi nhận hàng`. Result: the payment choice is cash on delivery. The QR code does not appear.
 - **Place the order.** Click `role/button[name="Đặt hàng"]`. Result: the page moves to the order state, and the store holds the stock for the order (a store without enough answers the alert `Cửa hàng này không còn đủ hàng cho đơn của bạn.`). The order status reads `Chờ xác nhận` (Pending) on the order list. (Mapped, not yet re-driven under the new rules.)
@@ -43,5 +46,5 @@ Steps:
 - Cash on delivery does create a payment-service invoice: `CheckoutPage.tsx` always calls `createPaymentInvoice`, and `payment-repository.ts:44-80` stores it with method `cash_on_delivery` and emits `payment.invoice.created.v1`. (Read from source, not yet observed live.)
 - Creating the invoice throws without the `PHARMACY_PAYMENT_SEPAY_*` settings, even for cash on delivery, and the order already exists when it does. Doctor does not check them.
 - Delivery fees come from `POST /api/delivery/calculate`. A VietMap outage blocks the address step and is an external failure, not a checkout bug.
-- The header cart badge reads `0` when sales-service is down. Check the cart through `GET /api/carts` before reporting an empty cart.
+- The header cart badge reads `0` when sales-service is down. Check the cart through `GET /api/carts` on a signed-in session before reporting an empty cart. A signed-out cart is read from the browser, not from sales-service.
 - Re-running the order flow adds another order. Keep one order per run and record its id in the evidence.

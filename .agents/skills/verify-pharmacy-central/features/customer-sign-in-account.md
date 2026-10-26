@@ -1,6 +1,6 @@
 # Customer sign-in and account
 
-A shopper signs in or registers from the account page, sees their name in the account overview, and signs out. Signing in also merges the guest cart into the account. This feature needs no AI, but its sign-in needs sales-service because the account page loads the cart and addresses from it.
+A shopper signs in or registers from the account page, sees their name in the account overview, and signs out. Signing in also sends the signed-out cart lines kept in the browser to the account cart. This feature needs no AI, but its sign-in needs sales-service because the account page loads the cart and addresses from it.
 
 ## Sub-features
 

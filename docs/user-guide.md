@@ -292,19 +292,19 @@ When the shopping assistant cannot answer, shoppers see "Trợ lý tư vấn đa
 
 - **Home** (`/`): a search box ("Tìm kiếm sản phẩm, tên thuốc, mã SKU..."), product categories in the header, and sorting by default, price (low to high or high to low) or name.
 - **Category** (`/danh-muc/...`): products in one category.
-- **Product** (`/san-pham/...`): name, manufacturer, badges for prescription-required products and stock status ("Còn hàng" or "Hết hàng"), and **Thêm vào giỏ hàng**.
+- **Product** (`/san-pham/...`): name, manufacturer, badges for prescription-required products and stock status ("Còn hàng" or "Hết hàng"), **Thêm vào giỏ hàng** (the line is added unticked; for a prescription-required product these buttons are replaced by a notice and a **Gửi đơn thuốc** link, because such products cannot be ordered online) and **Mua ngay** (adds the product, ticks that line, and opens the order page).
 - **Pharmacies** (the store finder on Home, `/#nha-thuoc`): choose a pharmacy to see its stock and collect orders there; **Tìm nhà thuốc gần bạn** uses your location.
 
 Stock shown for a product is for the selected pharmacy only.
 
 ### Cart and checkout
 
-**Đơn hàng** (`/don-hang`) is one page with two tabs, **Đặt hàng** and **Đơn của tôi** (`/don-hang?tab=don-cua-toi`). The **Đặt hàng** tab requires a signed-in customer. Switching tabs keeps what you chose on the order form and the payment panel of an order you just placed.
+**Đơn hàng** (`/don-hang`) is one page with two tabs, **Đặt hàng** and **Đơn của tôi** (`/don-hang?tab=don-cua-toi`). Placing an order requires a signed-in customer. Until you sign in, your cart is kept in this browser only: it survives a reload and a restart, but not clearing the site data and not another device. When you sign in, it moves into your account. Switching tabs keeps what you chose on the order form and the payment panel of an order you just placed.
 
-1. Review the cart. With an empty cart the page shows only the cart and the medicine picker; the fulfillment, payment and delivery sections appear once the cart has a product. With products in the cart the picker folds away: **Thêm thuốc** in the cart header opens it right under the cart, and **Thu gọn** folds it again. Products without a price cannot be checked out; remove them or use **Nhờ dược sĩ tư vấn** from the intake results.
+1. Review the cart. With an empty cart the page shows only the cart and the medicine picker; the fulfillment, payment and delivery sections appear once the cart has a product. With products in the cart the picker folds away: **Thêm thuốc** in the cart header opens it right under the cart, and **Thu gọn** folds it again. Products without a price cannot be checked out; untick or remove them, or use **Nhờ dược sĩ tư vấn** from the intake results. Every product starts unticked. Tick the products you want in this order (or use **Chọn tất cả** to tick or untick them all): the summary, the total and **Đặt hàng** cover only the ticked products, and the unticked ones stay in the cart for a later order. The ticks are saved with the cart, so they survive a reload, and once you are signed in they follow your account to another device.
 2. Choose the fulfillment: **Giao tận nơi** (delivery, with the fee calculated from the pharmacy to your delivery point) or **Nhận tại nhà thuốc** (pickup at the selected pharmacy).
 3. Choose the payment: **Chuyển khoản SePay QR** (scan the VietQR code with your banking app; the order is confirmed automatically) or **Thanh toán khi nhận hàng** (cash on delivery).
-4. Choose **Đặt hàng**.
+4. Choose **Đặt hàng**. The server orders the products ticked in your cart, and only those leave the cart. If the order is refused, for example for lack of stock, the cart stays as it was.
 
 After an order is placed, the payment panel shows the order number, payment code, amount (goods plus the delivery fee) and status, and the SePay QR code and transfer description when QR payment is chosen. It reads "Đã nhận thanh toán" once payment is received.
 

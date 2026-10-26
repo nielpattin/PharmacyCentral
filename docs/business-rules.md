@@ -762,6 +762,43 @@ Chỉ trả tài khoản khách, không trả nhân viên (BR-AUTH-002).
 
 ## 19. Đơn hàng online và giao hàng
 
+### BR-CART-001. Dòng mới vào giỏ chưa được chọn để đặt
+
+- Mỗi dòng giỏ (`cart_lines`) có cờ `selected`, mặc định `false`. Thêm sản phẩm vào giỏ không tự chọn nó.
+- Thêm số lượng vào một dòng đã có không đổi cờ `selected` của dòng đó.
+- Ngoại lệ: **Mua ngay** trên trang sản phẩm thêm sản phẩm rồi chọn chính dòng đó (`PATCH /api/carts/selection`) trước khi chuyển sang trang đặt hàng. Đây là hành vi của customer-web, server không phân biệt.
+- Khi đăng nhập, customer-web gửi các dòng của giỏ trong trình duyệt tới `POST /api/carts/merge`. Dòng trùng sản phẩm và đơn vị với một dòng của tài khoản giữ cờ của dòng tài khoản và được cộng số lượng; dòng khác được thêm với cờ đã gửi. Các dòng trùng nhau trong cùng yêu cầu được cộng trước.
+- Sản phẩm kê đơn (`prescriptionRequired = true`) không vào giỏ (BR-ORD-011). `POST /api/carts/merge` bỏ các dòng kê đơn và gộp các dòng còn lại.
+
+### BR-CART-002. Chỉ dòng đã chọn được đặt
+
+- Tạm tính, tổng tiền và nút **Đặt hàng** của customer-web chỉ tính các dòng `selected = true`. Không chọn dòng nào thì không đặt được.
+- Đơn đặt từ giỏ (`POST /api/orders` với `fromCart: true`, không có `lines`) lấy dòng từ giỏ của người gọi trên server: chỉ các dòng `selected = true`, số lượng đọc từ giỏ. Không có dòng nào được chọn: 409 `cart_selection_empty`, không tạo đơn.
+- `fromCart` và `lines` loại trừ nhau: gửi cả hai hoặc không gửi cái nào: 400.
+- Dòng chưa chọn và chưa có giá không chặn việc đặt các dòng đã chọn.
+- Server vẫn tính lại giá từ catalog cho các dòng của đơn, dù lấy từ giỏ hay từ `lines` (BR-ORD-002).
+- Đơn có `lines` (k6, chaos, nhập mẫu, bước kiểm chứng tồn kho) không đọc và không đổi giỏ (xem BR-GAP-006).
+
+### BR-CART-003. Cờ chọn lưu cùng giỏ
+
+- Giỏ tài khoản: `PATCH /api/carts/selection` đặt `selected` cho các dòng trong `lineIds`, hoặc cho mọi dòng của giỏ khi không có `lineIds`.
+- Chỉ dòng thuộc giỏ của người gọi bị đổi. `lineIds` rỗng hoặc thiếu `selected`: 400.
+- Cờ của giỏ tài khoản còn nguyên sau khi tải lại trang và trên thiết bị khác của cùng tài khoản.
+- Cờ của giỏ trong trình duyệt (khách chưa đăng nhập) lưu cùng giỏ, còn nguyên sau khi tải lại trang và không sang thiết bị khác.
+
+### BR-CART-004. Đặt xong chỉ các dòng đã đặt rời giỏ
+
+- Với đơn `fromCart`, server xóa các dòng đã đặt khỏi giỏ sau khi giữ được tồn kho. Đơn bị từ chối (hết hàng, thiếu giá, giao quá xa) để nguyên giỏ. Các dòng chưa chọn ở lại giỏ và vẫn chưa chọn.
+- `DELETE /api/carts` xóa cả giỏ, không nhận `lineIds`.
+
+### BR-CART-005. Giỏ của khách chưa đăng nhập chỉ nằm trong trình duyệt
+
+- Giỏ của khách chưa đăng nhập lưu trong `localStorage` (khóa `pharmacy.guest-cart.v1`), tối đa 200 dòng, chỉ gồm mã sản phẩm, mã đơn vị, số lượng và cờ chọn. Giá, tồn kho và phí vẫn do server tính (BR-ORD-002).
+- sales-service không lưu giỏ khách và không đặt cookie giỏ. Mọi route `/api/carts*` cần khách đã đăng nhập; không có ngữ cảnh danh tính: 401 `trusted_request_required`.
+- Khách chưa đăng nhập thêm, sửa, xóa và chọn dòng mà không gọi `/api/carts`. Giá trị lưu hỏng hoặc khác phiên bản được xem là giỏ rỗng. Khi `localStorage` không dùng được, giỏ nằm trong bộ nhớ của tab.
+- Sau khi `POST /api/carts/merge` thành công, trình duyệt xóa giỏ cục bộ. Gộp thất bại thì giữ nguyên các dòng và thử lại ở lần tải sau.
+- Giỏ cục bộ không đặt đơn được: đặt đơn cần đăng nhập (BR-ORD-001).
+
 ### BR-ORD-001. Đặt đơn cần khách đăng nhập và mọi dòng có giá
 
 - Khách chưa đăng nhập không đặt được đơn.
@@ -816,6 +853,15 @@ Chuyển sang `Delivering` hoặc `Completed` gọi inventory tiêu thụ reserv
 ### BR-ORD-010. Hoàn tiền hủy đơn chưa giao
 
 Khi nhận `payment.invoice.refunded.v1`, đơn chuyển `paymentStatus = Refunded` và được hủy, giải phóng giữ hàng (`cancelRefunded`). Hoàn tiền cho đơn đã bị hủy trước khi khách trả tiền không được tự động xử lý; service ghi log lỗi để nhân viên xử lý thủ công.
+
+### BR-ORD-011. Sản phẩm kê đơn không vào giỏ và không đặt online
+
+- Sản phẩm có `prescriptionRequired = true` không thêm được vào giỏ và không đặt được qua `POST /api/orders`, dù đơn dùng `lines` hay `fromCart`.
+- sales-service đọc cờ từ `GET /products/:id` của catalog-service. `POST /api/carts/lines` và đơn có sản phẩm kê đơn trả 409 `prescription_required` kèm `productId`; không ghi dòng giỏ, không tạo đơn, không giữ hàng.
+- `POST /api/carts/merge` không lỗi vì dòng kê đơn: bỏ dòng đó, gộp các dòng còn lại.
+- Không đọc được cờ (catalog-service lỗi hoặc quá 2 giây): 500, không cho qua. Sản phẩm không tồn tại (404) không bị chặn ở bước này; các bước kiểm tra giá và tồn kho xử lý tiếp.
+- customer-web vô hiệu hóa nút thêm vào giỏ ("Cần đơn thuốc"), thay nút mua trên trang sản phẩm bằng liên kết **Gửi đơn thuốc**. Khách chưa đăng nhập cũng bị từ chối khi thêm vào giỏ trong trình duyệt.
+- Đường mua thuốc kê đơn là **Gửi đơn thuốc**, tư vấn của dược sĩ hoặc quầy (xem ADR 0016).
 
 ### BR-DLV-001. Điểm giao là tọa độ, tuyến đường từ OpenRouteService
 
@@ -1074,3 +1120,15 @@ Các quyết định liên quan và chỗ lệch khỏi thiết kế được gh
 ### BR-GAP-005. Trả hàng không kiểm tra batch Released và hạn dùng
 
 Luồng trả hàng chỉ dựa vào kiểm tra tồn của movement (BR-RET-004).
+
+### BR-GAP-006. Đơn có `lines` không đối chiếu với dòng đã chọn trong giỏ
+
+`POST /api/orders` với `lines` vẫn nhận danh sách dòng từ client và không kiểm tra chúng khớp các dòng `selected` của giỏ; k6, chaos, nhập mẫu và bước kiểm chứng tồn kho còn dùng dạng này. Một client dùng `lines` vẫn đặt được dòng chưa chọn. customer-web dùng `fromCart`.
+
+### BR-GAP-008. Hai đơn `fromCart` đồng thời có thể cùng lấy một dòng
+
+Hai tab đặt cùng lúc từ một giỏ đều đọc các dòng đã chọn trước khi cái nào xóa chúng, nên có thể tạo hai đơn cho cùng các dòng. Không có khóa trên giỏ.
+
+### BR-GAP-007. Gộp giỏ có thể cộng đôi số lượng khi mất phản hồi
+
+`POST /api/carts/merge` không có khóa idempotent. Nếu server đã ghi nhưng phản hồi bị mất, trình duyệt giữ các dòng cục bộ và gửi lại ở lần tải sau, nên số lượng của dòng trùng bị cộng hai lần (BR-CART-001).

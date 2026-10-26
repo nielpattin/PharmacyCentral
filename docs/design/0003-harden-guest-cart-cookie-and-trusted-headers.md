@@ -1,6 +1,6 @@
 # 0003. Harden the guest cart cookie and edge identity headers
 
-- **Status:** Implemented (optional step 7, CSRF in nginx, is not part of this change)
+- **Status:** Implemented (optional step 7, CSRF in nginx, is not part of this change). The guest cart cookie it hardens was later removed with the server-side guest cart by [design 0005](0005-client-only-guest-cart.md); the actor-header stripping and the `anonymous` actor remain.
 - **Author:** TBD (unclaimed)
 - **Date:** 2026-10-26
 
