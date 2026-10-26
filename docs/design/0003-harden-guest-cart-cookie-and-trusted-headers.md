@@ -1,6 +1,6 @@
 # 0003. Harden the guest cart cookie and edge identity headers
 
-- **Status:** Draft
+- **Status:** Implemented (optional step 7, CSRF in nginx, is not part of this change)
 - **Author:** TBD (unclaimed)
 - **Date:** 2026-10-26
 

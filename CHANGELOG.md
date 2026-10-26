@@ -87,6 +87,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 **customer-web**
 
 - customer-web: blue brand header, tinted page background and stronger checkout hierarchy
+- customer-web: Home hero uses a deep navy palette distinct from the header, the category bar shows on every storefront page, and Home no longer overflows horizontally at 360px.
 - One `/don-hang` page with Đặt hàng and Đơn của tôi tabs.
 - Order and checkout pages rebuilt around one featured order and a storefront checkout.
 - Homepage hero with a generated banner image, account page with a sidebar and real sections, and storefront migrated to the TanStack stack.
@@ -170,6 +171,11 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Shared UI: table toolbar, header casing, quiet row delete, readable site types, StatTile edge, honest warning tone and grouped dashboard KPIs.
 
 ### Security
+
+**platform/tooling/docs**
+
+- Guest cart cookie is `HttpOnly` with `Secure` driven by the new required `COOKIE_SECURE` variable (sales-service, identity-service, CSRF Lambda); the old `X-Guest-Cart-Token` header is gone and the cookie is cleared after the merge into an account.
+- Services drop client-supplied `x-actor-id` and `x-actor-type` when no identity context or service secret is verified, both local gateways strip them, anonymous callers get actor type `anonymous` instead of `system`, and the SePay webhook path strips identity headers (design 0003).
 
 **customer-web**
 

@@ -53,4 +53,4 @@ Small changes inside one service do not need a design document. The rules for th
 | --- | --- | --- | --- | --- |
 | [0001](0001-operations-query-reads-only-events.md) | Operations query reads only through events | Draft | TBD (unclaimed) | 2026-10-26 |
 | [0002](0002-close-fail-fast-configuration-gaps.md) | Close the fail-fast configuration gaps | Draft | TBD (unclaimed) | 2026-10-26 |
-| [0003](0003-harden-guest-cart-cookie-and-trusted-headers.md) | Harden the guest cart cookie and edge identity headers | Draft | TBD (unclaimed) | 2026-10-26 |
+| [0003](0003-harden-guest-cart-cookie-and-trusted-headers.md) | Harden the guest cart cookie and edge identity headers | Implemented | TBD (unclaimed) | 2026-10-26 |
