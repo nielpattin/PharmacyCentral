@@ -61,6 +61,7 @@ const procurementRepository = database
           manufacturedDate: input.manufacturedDate ?? null,
           expiryDate: input.expiryDate,
           manufacturer: input.manufacturer ?? null,
+          createdBy: input.actorId,
         }));
       await repository.recordMovement({
         productId: input.productId,

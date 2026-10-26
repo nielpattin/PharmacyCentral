@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gt, gte, ilike, inArray, lt, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
+import { BusinessRuleError } from "../shared/business-rule-error.ts";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   idempotencyRecords,
@@ -81,11 +82,15 @@ const transferFilters = (filters: StatusListFilters): Array<SQL | undefined> => 
   filters.q ? ilike(transferOrders.transferNumber, containsPattern(filters.q)) : undefined,
 ];
 
-const replenishmentFilters = (filters: StatusListFilters): Array<SQL | undefined> => [
+const replenishmentFilters = (filters: ReplenishmentFilters): Array<SQL | undefined> => [
   filters.siteIds ? inArray(replenishmentRequests.siteId, filters.siteIds) : undefined,
+  filters.requestedBy ? eq(replenishmentRequests.requestedBy, filters.requestedBy) : undefined,
   ...statusConditions(replenishmentRequests.status, filters),
   filters.q ? replenishmentText(filters.q) : undefined,
 ];
+
+/** A pharmacist reads only the replenishment requests they made; `requestedBy` narrows the list to them. */
+type ReplenishmentFilters = StatusListFilters & { requestedBy?: string | undefined };
 
 const stocktakeFilters = (filters: StatusListFilters): Array<SQL | undefined> => [
   filters.siteIds ? inArray(stocktakes.siteId, filters.siteIds) : undefined,
@@ -175,12 +180,16 @@ export class InventoryRepository {
   }
 
   public async listBatches(
-    filters: { productId?: string | undefined; q?: string | undefined } = {},
+    filters: { productId?: string | undefined; q?: string | undefined; siteIds?: string[] | undefined } = {},
     page: PageRequest = everything,
   ) {
     const conditions = presentConditions([
       filters.productId ? eq(productBatches.productId, filters.productId) : undefined,
       filters.q ? ilike(productBatches.batchNumber, containsPattern(filters.q)) : undefined,
+      // A batch is listed to a site-scoped reader only where it has a balance at one of their sites.
+      filters.siteIds
+        ? sql`exists (select 1 from ${inventoryBalances} where ${inventoryBalances.productBatchId} = ${productBatches.id} and ${inArray(inventoryBalances.siteId, filters.siteIds)})`
+        : undefined,
       afterCursor({
         sortColumn: productBatches.expiryDate,
         idColumn: productBatches.id,
@@ -197,6 +206,19 @@ export class InventoryRepository {
     const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
     const { items, nextCursor } = splitPage(fetched, page.limit);
     return { rows: items.map(({ batch }) => batch), nextCursor };
+  }
+
+  public async getBatch(id: string) {
+    return (await this.database.db.select().from(productBatches).where(eq(productBatches.id, id)).limit(1))[0];
+  }
+
+  /** The sites that hold stock of a batch, from its balances. */
+  public async batchSiteIds(batchId: string): Promise<string[]> {
+    const rows = await this.database.db
+      .selectDistinct({ siteId: inventoryBalances.siteId })
+      .from(inventoryBalances)
+      .where(eq(inventoryBalances.productBatchId, batchId));
+    return rows.map((row) => row.siteId);
   }
 
   public async listMovements(
@@ -325,6 +347,10 @@ export class InventoryRepository {
       .values({ ...input, quantity: String(input.quantity), notes: input.notes ?? null })
       .returning();
     return adjustment;
+  }
+
+  public async getAdjustment(id: string) {
+    return (await this.database.db.select().from(stockAdjustments).where(eq(stockAdjustments.id, id)).limit(1))[0];
   }
 
   public async transitionAdjustment(id: string, action: "approve" | "reject", actorId: string, approvalNotes?: string) {
@@ -1040,7 +1066,7 @@ export class InventoryRepository {
       : undefined;
   }
 
-  public async listReplenishments(filters: StatusListFilters = {}, page: PageRequest = everything) {
+  public async listReplenishments(filters: ReplenishmentFilters = {}, page: PageRequest = everything) {
     const conditions = presentConditions([
       ...replenishmentFilters(filters),
       afterCursor({
@@ -1074,7 +1100,7 @@ export class InventoryRepository {
     return { rows, nextCursor };
   }
 
-  public async countReplenishments(filters: StatusListFilters = {}) {
+  public async countReplenishments(filters: ReplenishmentFilters = {}) {
     const conditions = presentConditions(replenishmentFilters(filters));
     const [row] = await this.database.db
       .select({ count: sql<number>`count(*)::int` })
@@ -1356,6 +1382,8 @@ export class InventoryRepository {
   public async transitionTransfer(
     id: string,
     action: "approve" | "ship" | "receive" | "cancel",
+    /** The user acting; recorded as the approver when the action is an approval. */
+    actorId: string | null,
     lineCommands?: Array<{ transferOrderLineId: string; quantity: number }>,
   ) {
     const result = await this.database.db.transaction(async (transaction) => {
@@ -1504,7 +1532,7 @@ export class InventoryRepository {
         .update(transferOrders)
         .set({
           status,
-          ...(action === "approve" ? { approvedBy: current.createdBy, approvedAt: new Date() } : {}),
+          ...(action === "approve" ? { approvedBy: actorId, approvedAt: new Date() } : {}),
           ...(action === "ship" ? { shippedAt: new Date() } : {}),
           ...(action === "receive" && status === "Received" ? { receivedAt: new Date() } : {}),
           updatedAt: new Date(),
@@ -1571,30 +1599,55 @@ export class InventoryRepository {
     });
   }
 
-  public async countStocktakeLine(id: string, countedQuantity: number) {
-    const [line] = await this.database.db
-      .update(stocktakeLines)
-      .set({ countedQuantity: String(countedQuantity), status: "Counted" })
-      .where(eq(stocktakeLines.id, id))
-      .returning();
-    return line;
+  public async findStocktakeLine(id: string) {
+    return (await this.database.db.select().from(stocktakeLines).where(eq(stocktakeLines.id, id)).limit(1))[0];
   }
 
-  public async postStocktake(id: string) {
+  /**
+   * Records a count on a line. The first count moves a Pending session to InProgress; a session that is Completed or
+   * Cancelled takes no more counts.
+   */
+  public async countStocktakeLine(id: string, countedQuantity: number, countedBy: string | null) {
+    return this.database.db.transaction(async (transaction) => {
+      const line = (
+        await transaction.select().from(stocktakeLines).where(eq(stocktakeLines.id, id)).limit(1).for("update")
+      )[0];
+      if (!line) return undefined;
+      const session = (
+        await transaction.select().from(stocktakes).where(eq(stocktakes.id, line.stocktakeId)).limit(1).for("update")
+      )[0];
+      if (!session) return undefined;
+      if (["Completed", "Cancelled"].includes(session.status))
+        throw new BusinessRuleError("Phiên kiểm kê đã hoàn tất hoặc đã hủy, không ghi nhận thêm số đếm.");
+      if (session.status === "Pending")
+        await transaction
+          .update(stocktakes)
+          .set({ status: "InProgress", updatedAt: new Date() })
+          .where(eq(stocktakes.id, session.id));
+      const [counted] = await transaction
+        .update(stocktakeLines)
+        .set({ countedQuantity: String(countedQuantity), status: "Counted", countedBy })
+        .where(eq(stocktakeLines.id, id))
+        .returning();
+      return counted;
+    });
+  }
+
+  public async postStocktake(id: string, actorId: string | null) {
     const result = await this.database.db.transaction(async (transaction) => {
       const session = (
         await transaction.select().from(stocktakes).where(eq(stocktakes.id, id)).limit(1).for("update")
       )[0];
       if (!session) return undefined;
-      if (!["Pending", "InProgress"].includes(session.status))
-        throw new Error(`Stocktake is already ${session.status}`);
+      if (session.status !== "InProgress")
+        throw new BusinessRuleError("Chỉ phiên kiểm kê đang kiểm mới được đăng điều chỉnh.");
       const lines = await transaction
         .select({ line: stocktakeLines, batch: productBatches })
         .from(stocktakeLines)
         .innerJoin(productBatches, eq(productBatches.id, stocktakeLines.productBatchId))
         .where(eq(stocktakeLines.stocktakeId, id));
       if (lines.length === 0 || lines.some(({ line }) => line.countedQuantity === null))
-        throw new Error("All stocktake lines must be counted before posting");
+        throw new BusinessRuleError("Mọi dòng kiểm kê phải được đếm trước khi đăng điều chỉnh.");
       for (const { line, batch } of lines) {
         const countedQuantity = Number(line.countedQuantity);
         const variance = countedQuantity - Number(line.systemQuantity);
@@ -1640,7 +1693,7 @@ export class InventoryRepository {
             reason: "Stocktake variance",
             status: "Approved",
             createdBy: session.createdBy,
-            approvedBy: session.createdBy,
+            approvedBy: actorId,
             approvalNotes: null,
             notes: null,
             stocktakeSessionId: id,

@@ -85,6 +85,13 @@
       "when": 1792850000000,
       "tag": "0011_list_keyset_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793010211641,
+      "tag": "0012_batch_creator_stocktake_counter",
+      "breakpoints": true
     }
   ]
 }

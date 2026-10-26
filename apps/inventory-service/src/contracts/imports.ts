@@ -16,7 +16,10 @@ export const openingBalanceImportRowSchema = z
     supplierId: z.string().uuid().nullable().optional(),
     supplierCode: z.string().trim().min(1).max(50).nullable().optional(),
     batchNumber: z.string().trim().min(1).max(100),
-    quantityOnHand: z.coerce.number().nonnegative(),
+    quantityOnHand: z.coerce
+      .number()
+      .int({ message: "Số lượng phải là số nguyên." })
+      .positive({ message: "Số lượng phải lớn hơn 0." }),
     manufacturedDate: z.string().date().nullable().optional(),
     expiryDate: z.string().date(),
     manufacturer: z.string().trim().max(300).nullable().optional(),

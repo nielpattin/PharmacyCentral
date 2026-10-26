@@ -22,17 +22,44 @@ export type OpeningBalanceReferenceResolver = {
   reset?(): void;
 };
 
+/** A row names a site the importing user is not assigned to. Nothing is written when one is found. */
+export class ImportSiteAccessError extends Error {}
+
+export type OpeningBalanceImportOptions = {
+  /** The user importing; recorded as the creator of each batch the import creates. */
+  actorId: string | null;
+  /** The sites the importer may write to; undefined for Platform Admin, which has no site limit. */
+  allowedSiteIds?: string[] | undefined;
+};
+
 export class InventoryImportService {
   public constructor(
     private readonly database: InventoryDatabase,
     private readonly resolver: OpeningBalanceReferenceResolver,
   ) {}
 
-  public async importOpeningBalances(input: OpeningBalanceImport): Promise<OpeningBalanceImportResult> {
+  public async importOpeningBalances(
+    input: OpeningBalanceImport,
+    options: OpeningBalanceImportOptions = { actorId: null },
+  ): Promise<OpeningBalanceImportResult> {
     this.resolver.reset?.();
     const resolved: Array<{ row: OpeningBalanceImportRow; reference: OpeningBalanceReference }> = [];
     for (const row of input.balances) {
       resolved.push({ row, reference: await this.resolver.resolve(row) });
+    }
+    if (options.allowedSiteIds) {
+      const allowed = options.allowedSiteIds;
+      if (resolved.some(({ reference }) => !allowed.includes(reference.siteId)))
+        throw new ImportSiteAccessError("Có dòng nhập thuộc địa điểm bạn không được phân công.");
+    }
+    // One batch number of one product has one expiry date and one quality status within the file.
+    const batchFacts = new Map<string, { expiryDate: string; qualityStatus: string }>();
+    for (const { row, reference } of resolved) {
+      const key = `${reference.productId}:${row.batchNumber}`;
+      const seen = batchFacts.get(key);
+      if (seen && (seen.expiryDate !== row.expiryDate || seen.qualityStatus !== row.qualityStatus))
+        throw new Error(`Lô ${row.batchNumber} có hạn sử dụng hoặc trạng thái chất lượng khác nhau trong tệp.`);
+      batchFacts.set(key, { expiryDate: row.expiryDate, qualityStatus: row.qualityStatus });
     }
 
     // One answer per product and site, from all of its sellable stock once every row is in.
@@ -55,6 +82,8 @@ export class InventoryImportService {
         )[0];
         let batchId: string;
         if (existingBatch) {
+          if (existingBatch.expiryDate !== row.expiryDate || existingBatch.qualityStatus !== row.qualityStatus)
+            throw new Error(`Lô ${row.batchNumber} đã có hạn sử dụng hoặc trạng thái chất lượng khác trong hệ thống.`);
           batchId = existingBatch.id;
         } else {
           const [batch] = await transaction
@@ -67,6 +96,7 @@ export class InventoryImportService {
               expiryDate: row.expiryDate,
               manufacturer: row.manufacturer ?? null,
               qualityStatus: row.qualityStatus,
+              createdBy: options.actorId,
             })
             .returning({ id: productBatches.id });
           if (!batch) throw new Error(`Batch ${row.batchNumber} was not saved`);

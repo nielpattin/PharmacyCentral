@@ -31,6 +31,8 @@ export const productBatches = pgTable(
     qualityReviewedAt: timestamp("quality_reviewed_at", { withTimezone: true }),
     qualityNotes: text("quality_notes"),
     isActive: boolean("is_active").notNull().default(true),
+    /** The user who recorded the batch's first receipt or import; NULL for batches that predate the column. */
+    createdBy: uuid("created_by"),
   },
   (table) => [
     uniqueIndex("product_batches_product_number_unique").on(table.productId, table.batchNumber),
@@ -232,6 +234,8 @@ export const stocktakeLines = pgTable("stocktake_lines", {
   systemQuantity: numeric("system_quantity", { precision: 18, scale: 6 }).notNull(),
   countedQuantity: numeric("counted_quantity", { precision: 18, scale: 6 }),
   status: varchar("status", { length: 20 }).notNull().default("Pending"),
+  /** The user who recorded this line's count; NULL for counts recorded before the column. */
+  countedBy: uuid("counted_by"),
 });
 
 export const returnRequests = pgTable(

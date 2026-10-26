@@ -1,4 +1,4 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 
 import {
@@ -9,6 +9,15 @@ import {
 } from "../contracts/inventory.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
 
+import {
+  actorIdOf,
+  allowRoles,
+  ownRequestsOnly,
+  refuseRole,
+  refuseOutOfSiteScope,
+  refuseSelfApproval,
+  refuseUnlessAnySiteInScope,
+} from "./access-control.ts";
 import { InventoryRepository, StockDispenseError } from "./inventory-repository.ts";
 import { invalidCursor, sendPage } from "./keyset-page.ts";
 import { readCommaList, readPageRequest, readSearchText, type PageOptions } from "./page-cursor.ts";
@@ -130,6 +139,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/batches", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"])) return;
     const page = readPageRequest(request.query, expiryPage);
     if (!page) return invalidCursor(response);
     try {
@@ -139,6 +149,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
           {
             productId: typeof request.query.productId === "string" ? request.query.productId : undefined,
             q: readSearchText(request.query),
+            siteIds: listSiteIds(request),
           },
           page,
         ),
@@ -149,38 +160,49 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.post("/inventory/batches", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const parsed = batchSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response);
     try {
-      return response
-        .status(201)
-        .json(
-          await repository.createBatch({ ...parsed.data, qualityReviewedBy: undefined, qualityReviewedAt: undefined }),
-        );
+      return response.status(201).json(
+        await repository.createBatch({
+          ...parsed.data,
+          qualityReviewedBy: undefined,
+          qualityReviewedAt: undefined,
+          createdBy: actorIdOf(request) ?? null,
+        }),
+      );
     } catch (error) {
       return next(error);
     }
   });
   router.post("/inventory/batches/:id/quality", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacist", "Pharmacy Manager"])) return;
     const id = idParam.safeParse(request.params);
     const parsed = qualitySchema.safeParse(request.body);
     if (!id.success || !parsed.success) return invalid(response);
     try {
-      const batch = await repository.reviewBatch(
+      const batch = await repository.getBatch(id.data.id);
+      if (!batch) return response.status(404).json({ title: "Batch not found", status: 404 });
+      // A verdict covers every site that holds the batch, so each of them must be the caller's.
+      if (refuseOutOfSiteScope(request, response, await repository.batchSiteIds(batch.id))) return;
+      if (refuseSelfApproval(request, response, batch.createdBy)) return;
+      const reviewed = await repository.reviewBatch(
         id.data.id,
         parsed.data.decision === "release" ? "Released" : "Rejected",
         parsed.data.notes,
         request.header("X-Actor-Id") ?? undefined,
       );
-      if (!batch) return response.status(404).json({ title: "Batch not found", status: 404 });
-      return response.json(batch);
+      if (!reviewed) return response.status(404).json({ title: "Batch not found", status: 404 });
+      return response.json(reviewed);
     } catch (error) {
       return next(error);
     }
   });
   router.get("/inventory/adjustments", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     const page = readPageRequest(request.query, statusListPage);
     if (!page) return invalidCursor(response);
     try {
@@ -191,6 +213,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/adjustments/count", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     try {
       return response.json({ count: await repository.countAdjustments(statusListFilters(request)) });
     } catch (error) {
@@ -199,8 +222,10 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.post("/inventory/adjustments", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const parsed = adjustmentSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response);
+    if (refuseOutOfSiteScope(request, response, [parsed.data.siteId])) return;
     try {
       return response.status(201).json(
         await repository.createAdjustment({
@@ -214,19 +239,24 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.post("/inventory/adjustments/:id/:action", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager"])) return;
     const id = idParam.safeParse(request.params);
     const action = z.enum(["approve", "reject"]).safeParse(request.params.action);
     const notes = z.object({ approvalNotes: z.string().max(500).optional() }).safeParse(request.body);
     if (!id.success || !action.success || !notes.success) return invalid(response);
     try {
-      const adjustment = await repository.transitionAdjustment(
+      const adjustment = await repository.getAdjustment(id.data.id);
+      if (!adjustment) return response.status(404).json({ title: "Adjustment not found", status: 404 });
+      if (refuseOutOfSiteScope(request, response, [adjustment.siteId])) return;
+      if (refuseSelfApproval(request, response, adjustment.createdBy)) return;
+      const decided = await repository.transitionAdjustment(
         id.data.id,
         action.data,
         request.header("X-Actor-Id") ?? "00000000-0000-0000-0000-000000000000",
         notes.data.approvalNotes,
       );
-      return adjustment
-        ? response.json(adjustment)
+      return decided
+        ? response.json(decided)
         : response.status(404).json({ title: "Adjustment not found", status: 404 });
     } catch (error) {
       return next(error);
@@ -234,6 +264,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/movements/summary", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     const period = periodSchema.safeParse(request.query);
     if (!period.success) return invalid(response);
     try {
@@ -250,6 +281,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/movements", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     const page = readPageRequest(request.query, ledgerPage);
     if (!page) return invalidCursor(response);
     const period = periodSchema.safeParse(request.query);
@@ -276,6 +308,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.post("/inventory/movements", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const parsed = stockMovementCommandSchema
       .extend({
         productBatchId: z.string().uuid(),
@@ -286,12 +319,11 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
       })
       .safeParse(request.body);
     if (!parsed.success) return invalid(response);
+    if (refuseOutOfSiteScope(request, response, [parsed.data.siteId])) return;
     try {
       return response
         .status(201)
-        .json(
-          await repository.recordMovement({ ...parsed.data, createdBy: request.header("X-Actor-Id") ?? undefined }),
-        );
+        .json(await repository.recordMovement({ ...parsed.data, createdBy: actorIdOf(request) }));
     } catch (error) {
       return next(error);
     }
@@ -407,6 +439,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/transfers", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     const page = readPageRequest(request.query, statusListPage);
     if (!page) return invalidCursor(response);
     try {
@@ -417,6 +450,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/transfers/count", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     try {
       return response.json({ count: await repository.countTransfers(statusListFilters(request)) });
     } catch (error) {
@@ -429,17 +463,20 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
     if (!id.success) return invalid(response);
     try {
       const transfer = await repository.getTransfer(id.data.id);
-      return transfer
-        ? response.json(transfer)
-        : response.status(404).json({ title: "Transfer not found", status: 404 });
+      if (!transfer) return response.status(404).json({ title: "Transfer not found", status: 404 });
+      if (refuseUnlessAnySiteInScope(request, response, [transfer.sourceSiteId, transfer.destinationSiteId])) return;
+      return response.json(transfer);
     } catch (error) {
       return next(error);
     }
   });
   router.post("/inventory/transfers", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const parsed = transferSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response);
+    // Creating a transfer needs both of its sites in scope, not only one of them.
+    if (refuseOutOfSiteScope(request, response, [parsed.data.sourceSiteId, parsed.data.destinationSiteId])) return;
     try {
       return response.status(201).json(
         await repository.createTransfer({
@@ -471,14 +508,19 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
       .safeParse(request.body);
     if (!id.success || !action.success || !lines.success) return invalid(response);
     try {
+      const current = await repository.getTransfer(id.data.id);
+      if (!current) return response.status(404).json({ title: "Transfer not found", status: 404 });
+      if (!transferActionAllowed(request, response, action.data, current)) return;
       const lineCommands = lines.data.lines?.map((line) => ({
         transferOrderLineId: line.transferOrderLineId,
         quantity: action.data === "ship" ? (line.shippedQuantity ?? 0) : (line.receivedQuantity ?? 0),
       }));
-      const transfer =
-        lineCommands === undefined
-          ? await repository.transitionTransfer(id.data.id, action.data)
-          : await repository.transitionTransfer(id.data.id, action.data, lineCommands);
+      const transfer = await repository.transitionTransfer(
+        id.data.id,
+        action.data,
+        actorIdOf(request) ?? null,
+        lineCommands,
+      );
       if (!transfer) return response.status(404).json({ title: "Transfer not found", status: 404 });
       return response.json(transfer);
     } catch (error) {
@@ -487,6 +529,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/stocktakes", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     const page = readPageRequest(request.query, statusListPage);
     if (!page) return invalidCursor(response);
     try {
@@ -497,6 +540,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/stocktakes/count", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     try {
       return response.json({ count: await repository.countStocktakes(statusListFilters(request)) });
     } catch (error) {
@@ -509,17 +553,19 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
     if (!id.success) return invalid(response);
     try {
       const stocktake = await repository.getStocktake(id.data.id);
-      return stocktake
-        ? response.json(stocktake)
-        : response.status(404).json({ title: "Stocktake not found", status: 404 });
+      if (!stocktake) return response.status(404).json({ title: "Stocktake not found", status: 404 });
+      if (refuseOutOfSiteScope(request, response, [stocktake.siteId])) return;
+      return response.json(stocktake);
     } catch (error) {
       return next(error);
     }
   });
   router.post("/inventory/stocktakes", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const parsed = stocktakeSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response);
+    if (refuseOutOfSiteScope(request, response, [parsed.data.siteId])) return;
     try {
       return response.status(201).json(
         await repository.createStocktake({
@@ -533,11 +579,21 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.post("/inventory/stocktake-lines/:id/count", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const id = idParam.safeParse(request.params);
     const parsed = countSchema.safeParse(request.body);
     if (!id.success || !parsed.success) return invalid(response);
     try {
-      const line = await repository.countStocktakeLine(id.data.id, parsed.data.countedQuantity);
+      const existing = await repository.findStocktakeLine(id.data.id);
+      if (!existing) return response.status(404).json({ title: "Stocktake line not found", status: 404 });
+      const session = await repository.getStocktake(existing.stocktakeId);
+      if (!session) return response.status(404).json({ title: "Stocktake not found", status: 404 });
+      if (refuseOutOfSiteScope(request, response, [session.siteId])) return;
+      const line = await repository.countStocktakeLine(
+        id.data.id,
+        parsed.data.countedQuantity,
+        actorIdOf(request) ?? null,
+      );
       if (!line) return response.status(404).json({ title: "Stocktake line not found", status: 404 });
       return response.json(line);
     } catch (error) {
@@ -546,10 +602,18 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.post("/inventory/stocktakes/:id/post", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager"])) return;
     const id = idParam.safeParse(request.params);
     if (!id.success) return invalid(response);
     try {
-      const stocktake = await repository.postStocktake(id.data.id);
+      const session = await repository.getStocktake(id.data.id);
+      if (!session) return response.status(404).json({ title: "Stocktake not found", status: 404 });
+      if (refuseOutOfSiteScope(request, response, [session.siteId])) return;
+      // Nobody posts a session they counted in: a line the actor counted refuses the post.
+      for (const line of session.lines) {
+        if (refuseSelfApproval(request, response, line.countedBy)) return;
+      }
+      const stocktake = await repository.postStocktake(id.data.id, actorIdOf(request) ?? null);
       return stocktake
         ? response.json(stocktake)
         : response.status(404).json({ title: "Stocktake not found", status: 404 });
@@ -559,6 +623,7 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/returns", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     const page = readPageRequest(request.query, returnPage);
     if (!page) return invalidCursor(response);
     try {
@@ -569,8 +634,10 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.post("/inventory/returns", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const parsed = returnSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response);
+    if (refuseOutOfSiteScope(request, response, [parsed.data.siteId])) return;
     try {
       return response.status(201).json(
         await repository.createReturn({
@@ -584,10 +651,21 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   });
   router.get("/inventory/replenishment", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"])) return;
+    // A pharmacist reads only the requests they made.
+    const ownOnly = ownRequestsOnly(request);
+    const requester = actorIdOf(request);
+    if (ownOnly && requester === undefined) return refuseRole(response);
     const page = readPageRequest(request.query, statusListPage);
     if (!page) return invalidCursor(response);
     try {
-      return sendPage(response, await repository.listReplenishments(statusListFilters(request), page));
+      return sendPage(
+        response,
+        await repository.listReplenishments(
+          { ...statusListFilters(request), requestedBy: ownOnly ? requester : undefined },
+          page,
+        ),
+      );
     } catch (error) {
       return next(error);
     }
@@ -598,18 +676,21 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
     if (!id.success) return invalid(response);
     try {
       const replenishment = await repository.getReplenishment(id.data.id);
-      return replenishment
-        ? response.json(replenishment)
-        : response.status(404).json({ title: "Replenishment request not found", status: 404 });
+      if (!replenishment) return response.status(404).json({ title: "Replenishment request not found", status: 404 });
+      if (refuseOutOfSiteScope(request, response, [replenishment.siteId])) return;
+      if (ownRequestsOnly(request) && actorIdOf(request) !== replenishment.requestedBy) return refuseRole(response);
+      return response.json(replenishment);
     } catch (error) {
       return next(error);
     }
   });
   router.post("/inventory/replenishment", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacist", "Pharmacy Manager"])) return;
     const parsed = replenishmentSchema.safeParse(request.body);
     const requestedBy = request.header("X-Actor-Id");
     if (!parsed.success || !requestedBy) return invalid(response);
+    if (refuseOutOfSiteScope(request, response, [parsed.data.siteId])) return;
     try {
       return response.status(201).json(
         await repository.createReplenishment({
@@ -635,15 +716,16 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
       .safeParse(request.body);
     if (!id.success || !action.success || !review.success) return invalid(response);
     try {
-      const replenishment =
-        review.data.reviewNotes === undefined
-          ? await repository.transitionReplenishment(id.data.id, action.data)
-          : await repository.transitionReplenishment(
-              id.data.id,
-              action.data,
-              request.header("X-Actor-Id") ?? undefined,
-              review.data.reviewNotes,
-            );
+      const current = await repository.getReplenishment(id.data.id);
+      if (!current) return response.status(404).json({ title: "Replenishment request not found", status: 404 });
+      if (refuseOutOfSiteScope(request, response, [current.siteId])) return;
+      if (!replenishmentActionAllowed(request, response, action.data, current.requestedBy)) return;
+      const replenishment = await repository.transitionReplenishment(
+        id.data.id,
+        action.data,
+        actorIdOf(request),
+        review.data.reviewNotes ?? null,
+      );
       return replenishment
         ? response.json(replenishment)
         : response.status(404).json({ title: "Replenishment request not found", status: 404 });
@@ -654,9 +736,58 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
   return router;
 };
 
-const unavailable = (response: import("express").Response) =>
+const unavailable = (response: Response) =>
   response.status(503).json({ title: "Inventory database is not configured", status: 503 });
-const invalid = (response: import("express").Response) =>
+
+type TransferRecord = { sourceSiteId: string; destinationSiteId: string; createdBy: string };
+
+/**
+ * The role, site and separation-of-duties checks of one transfer action. Approval is a Pharmacy Manager's and needs
+ * the scope of either end, never by the creator; shipping is Warehouse Staff at the source and receiving at the
+ * destination; cancelling is Warehouse Staff or a Pharmacy Manager at the source. Sends the refusal and returns false.
+ */
+const transferActionAllowed = (
+  request: Request,
+  response: Response,
+  action: "approve" | "ship" | "receive" | "cancel",
+  transfer: TransferRecord,
+): boolean => {
+  if (action === "approve") {
+    if (!allowRoles(request, response, ["Pharmacy Manager"])) return false;
+    if (refuseUnlessAnySiteInScope(request, response, [transfer.sourceSiteId, transfer.destinationSiteId]))
+      return false;
+    return !refuseSelfApproval(request, response, transfer.createdBy);
+  }
+  if (action === "ship" || action === "receive") {
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return false;
+    const site = action === "ship" ? transfer.sourceSiteId : transfer.destinationSiteId;
+    return !refuseOutOfSiteScope(request, response, [site]);
+  }
+  // Cancelling is allowed before shipment, at the source site, to Warehouse Staff or a Pharmacy Manager.
+  if (!allowRoles(request, response, ["Warehouse Staff", "Pharmacy Manager"])) return false;
+  return !refuseOutOfSiteScope(request, response, [transfer.sourceSiteId]);
+};
+
+/**
+ * The role and separation-of-duties checks of one replenishment action. Approval, rejection and fulfilment belong to
+ * Warehouse Staff and never to the requester; the requester (or Warehouse Staff) may cancel. Sends the refusal and
+ * returns false.
+ */
+const replenishmentActionAllowed = (
+  request: Request,
+  response: Response,
+  action: "approve" | "reject" | "cancel" | "fulfill",
+  requestedBy: string,
+): boolean => {
+  if (action === "cancel") {
+    if (actorIdOf(request) === requestedBy) return true;
+    return allowRoles(request, response, ["Warehouse Staff"]);
+  }
+  if (!allowRoles(request, response, ["Warehouse Staff"])) return false;
+  return !refuseSelfApproval(request, response, requestedBy);
+};
+
+const invalid = (response: Response) =>
   response.status(400).json({ title: "Invalid inventory request", status: 400, code: "invalid_request" });
 /**
  * The site scope and the filters of a status list, shared by the list and its count. `status` and `excludeStatus`

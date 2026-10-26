@@ -9,6 +9,7 @@ import {
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
 
+import { allowRoles, refuseOutOfSiteScope, refuseSelfApproval } from "./access-control.ts";
 import { ProcurementRepository } from "./procurement-repository.ts";
 import { invalidCursor, sendPage } from "./keyset-page.ts";
 import { readPageRequest, readSearchText, type PageOptions } from "./page-cursor.ts";
@@ -32,6 +33,7 @@ export const createProcurementRouter = (
   const router = Router();
   router.get("/procurement/purchase-orders", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     const page = readPageRequest(request.query, listPage);
     if (!page) return invalidCursor(response);
     try {
@@ -52,11 +54,13 @@ export const createProcurementRouter = (
   });
   router.get("/procurement/purchase-orders/:id", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
     const id = idSchema.safeParse(request.params);
     if (!id.success) return invalid(response);
     try {
       const order = await repository.getPurchaseOrder(id.data.id);
       if (!order) return response.status(404).json({ title: "Purchase order not found", status: 404 });
+      if (refuseOutOfSiteScope(request, response, [order.siteId])) return;
       return response.json(order);
     } catch (error) {
       return next(error);
@@ -64,8 +68,10 @@ export const createProcurementRouter = (
   });
   router.post("/procurement/purchase-orders", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager"])) return;
     const parsed = createPurchaseOrderRequestSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response);
+    if (refuseOutOfSiteScope(request, response, [parsed.data.siteId])) return;
     try {
       await assertCatalogReferences(
         options.catalogServiceUrl,
@@ -82,10 +88,16 @@ export const createProcurementRouter = (
   });
   router.post("/procurement/purchase-orders/:id/action", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager"])) return;
     const id = idSchema.safeParse(request.params);
     const parsed = purchaseOrderActionSchema.safeParse(request.body);
     if (!id.success || !parsed.success) return invalid(response);
     try {
+      const current = await repository.getPurchaseOrder(id.data.id);
+      if (!current) return response.status(404).json({ title: "Purchase order not found", status: 404 });
+      if (refuseOutOfSiteScope(request, response, [current.siteId])) return;
+      // Approval belongs to someone other than the creator; cancelling needs no second person.
+      if (parsed.data.action === "approve" && refuseSelfApproval(request, response, current.createdBy)) return;
       const order =
         parsed.data.notes === undefined
           ? await repository.transition(id.data.id, parsed.data.action, actor(request))
@@ -98,6 +110,7 @@ export const createProcurementRouter = (
   });
   router.get("/procurement/goods-receipts", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const page = readPageRequest(request.query, listPage);
     if (!page) return invalidCursor(response);
     try {
@@ -111,6 +124,7 @@ export const createProcurementRouter = (
   });
   router.get("/procurement/goods-receipts/count", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     try {
       return response.json({
         count: await repository.countReceipts({ siteIds: listSiteIds(request), q: readSearchText(request.query) }),
@@ -121,22 +135,30 @@ export const createProcurementRouter = (
   });
   router.get("/procurement/goods-receipts/:id", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const id = idSchema.safeParse(request.params);
     if (!id.success) return invalid(response);
     try {
       const receipt = await repository.getReceipt(id.data.id);
-      return receipt
-        ? response.json(receipt)
-        : response.status(404).json({ title: "Goods receipt not found", status: 404 });
+      if (!receipt) return response.status(404).json({ title: "Goods receipt not found", status: 404 });
+      if (refuseOutOfSiteScope(request, response, [receipt.siteId])) return;
+      return response.json(receipt);
     } catch (error) {
       return next(error);
     }
   });
   router.post("/procurement/goods-receipts", async (request, response, next) => {
     if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const parsed = createGoodsReceiptRequestSchema.safeParse(request.body);
     if (!parsed.success) return invalid(response);
+    if (refuseOutOfSiteScope(request, response, [parsed.data.siteId])) return;
     try {
+      // A receipt that links an order must lie within the scope of that order's site too.
+      if (parsed.data.purchaseOrderId) {
+        const order = await repository.getPurchaseOrder(parsed.data.purchaseOrderId);
+        if (order && refuseOutOfSiteScope(request, response, [order.siteId])) return;
+      }
       await assertCatalogReferences(
         options.catalogServiceUrl,
         parsed.data.supplierId,

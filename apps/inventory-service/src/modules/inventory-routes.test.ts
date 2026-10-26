@@ -9,6 +9,7 @@ import { encodePageCursor } from "./page-cursor.ts";
 
 const ids = {
   actor: "00000000-0000-4000-8000-000000000001",
+  other: "00000000-0000-4000-8000-000000000099",
   productA: "00000000-0000-4000-8000-000000000002",
   productB: "00000000-0000-4000-8000-000000000003",
   batchA: "00000000-0000-4000-8000-000000000004",
@@ -26,6 +27,12 @@ const ids = {
 const createTestServer = async (repository: InventoryRepository): Promise<{ server: Server; url: string }> => {
   const app = express();
   app.use(express.json());
+  // The edge forwards the verified roles; a test call without them acts as Platform Admin, which passes every role
+  // check. Role and site cases send their own headers.
+  app.use((request, _response, next) => {
+    if (request.header("x-actor-roles") === undefined) request.headers["x-actor-roles"] = "Platform Admin";
+    next();
+  });
   app.use(createInventoryRouter(repository));
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
     response.status(500).json({ error: String(error) }),
@@ -222,7 +229,11 @@ describe("inventory API", () => {
     const reviewBatch = vi
       .fn<(id: string, status: "Released" | "Rejected", notes?: string | null, actorId?: string) => Promise<unknown>>()
       .mockResolvedValue({ id: ids.batchA, qualityStatus: "Released" });
-    const repository = { reviewBatch } as unknown as InventoryRepository;
+    const repository = {
+      reviewBatch,
+      getBatch: vi.fn().mockResolvedValue({ id: ids.batchA, createdBy: ids.other }),
+      batchSiteIds: vi.fn().mockResolvedValue([ids.sourceSite]),
+    } as unknown as InventoryRepository;
     const testServer = await createTestServer(repository);
     server = testServer.server;
 
@@ -238,13 +249,13 @@ describe("inventory API", () => {
 
   it("forwards critical inventory lifecycle transitions", async () => {
     const transitionTransfer = vi
-      .fn<(id: string, action: "approve" | "ship" | "receive" | "cancel") => Promise<unknown>>()
+      .fn<(id: string, action: "approve" | "ship" | "receive" | "cancel", actorId: string | null) => Promise<unknown>>()
       .mockResolvedValue({ id: ids.transfer, status: "Received" });
     const postStocktake = vi
-      .fn<(id: string) => Promise<unknown>>()
+      .fn<(id: string, actorId: string | null) => Promise<unknown>>()
       .mockResolvedValue({ id: ids.stocktake, status: "Completed" });
     const transitionReplenishment = vi
-      .fn<(id: string, action: "approve" | "reject" | "cancel" | "fulfill") => Promise<unknown>>()
+      .fn<(id: string, action: "approve" | "reject" | "cancel" | "fulfill", reviewedBy?: string) => Promise<unknown>>()
       .mockResolvedValue({ id: ids.replenishment, status: "Fulfilled" });
     const transitionAdjustment = vi
       .fn<(id: string, action: "approve" | "reject", actorId: string, approvalNotes?: string) => Promise<unknown>>()
@@ -254,13 +265,30 @@ describe("inventory API", () => {
       postStocktake,
       transitionReplenishment,
       transitionAdjustment,
+      getTransfer: vi.fn().mockResolvedValue({
+        id: ids.transfer,
+        sourceSiteId: ids.sourceSite,
+        destinationSiteId: ids.destinationSite,
+        createdBy: ids.other,
+      }),
+      getStocktake: vi.fn().mockResolvedValue({ id: ids.stocktake, siteId: ids.sourceSite, lines: [] }),
+      getReplenishment: vi.fn().mockResolvedValue({
+        id: ids.replenishment,
+        siteId: ids.sourceSite,
+        requestedBy: ids.other,
+      }),
+      getAdjustment: vi.fn().mockResolvedValue({
+        id: ids.adjustment,
+        siteId: ids.sourceSite,
+        createdBy: ids.other,
+      }),
     } as unknown as InventoryRepository;
     const testServer = await createTestServer(repository);
     server = testServer.server;
     const post = (path: string, body: unknown = {}, headers: Record<string, string> = {}) =>
       fetch(`${testServer.url}${path}`, {
         method: "POST",
-        headers: { "content-type": "application/json", ...headers },
+        headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...headers },
         body: JSON.stringify(body),
       });
 
@@ -279,8 +307,8 @@ describe("inventory API", () => {
     ).toBe(200);
 
     expect(transitionTransfer.mock.calls.map((call) => call[1])).toEqual(["ship", "receive"]);
-    expect(postStocktake).toHaveBeenCalledWith(ids.stocktake);
-    expect(transitionReplenishment).toHaveBeenCalledWith(ids.replenishment, "fulfill");
+    expect(postStocktake).toHaveBeenCalledWith(ids.stocktake, ids.actor);
+    expect(transitionReplenishment).toHaveBeenCalledWith(ids.replenishment, "fulfill", ids.actor, null);
     expect(transitionAdjustment).toHaveBeenCalledWith(ids.adjustment, "approve", ids.actor, "Reviewed");
   });
 

@@ -10,6 +10,7 @@ const httpFetch = globalThis.fetch.bind(globalThis);
 
 const ids = {
   actor: "00000000-0000-4000-8000-000000000001",
+  other: "00000000-0000-4000-8000-000000000099",
   supplier: "00000000-0000-4000-8000-000000000002",
   site: "00000000-0000-4000-8000-000000000003",
   location: "00000000-0000-4000-8000-000000000004",
@@ -22,6 +23,11 @@ const createTestServer = async (repository: ProcurementRepository): Promise<{ se
   vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-internal-secret");
   const app = express();
   app.use(express.json());
+  // The edge forwards the verified roles; a call without them acts as Platform Admin, which passes every role check.
+  app.use((request, _response, next) => {
+    if (request.header("x-actor-roles") === undefined) request.headers["x-actor-roles"] = "Platform Admin";
+    next();
+  });
   app.use(createProcurementRouter(repository, { catalogServiceUrl: "http://catalog.test" }));
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
     response.status(500).json({ error: String(error) }),
@@ -110,7 +116,12 @@ describe("procurement API", () => {
     const transition = vi
       .fn<(id: string, action: "approve" | "cancel", actorId: string) => Promise<unknown>>()
       .mockResolvedValue({ id: "00000000-0000-4000-8000-000000000007", status: "Approved" });
-    const repository = { transition } as unknown as ProcurementRepository;
+    const repository = {
+      transition,
+      getPurchaseOrder: vi
+        .fn()
+        .mockResolvedValue({ id: "00000000-0000-4000-8000-000000000007", siteId: ids.site, createdBy: ids.other }),
+    } as unknown as ProcurementRepository;
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
     const testServer = await createTestServer(repository);
     server = testServer.server;
