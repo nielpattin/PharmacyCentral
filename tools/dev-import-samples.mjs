@@ -1,6 +1,7 @@
 // Development only. Refuses NODE_ENV=production and any API_BASE_URL that is not a loopback host, so it cannot write
 // to a deployed stack.
 import { spawnSync } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
@@ -393,31 +394,193 @@ async function seedActivity() {
       const units = await admin.call(`/api/products/${products.get(sku).id}/units`, { headers: catalogHeaders });
       return need(units.find((unit) => unit.isDefaultSaleUnit) ?? units[0], `a sale unit for ${sku}`);
     };
-    const place = async (sku, quantity, status) => {
-      const unit = await unitFor(sku);
-      const created = await customer.call("/api/orders", {
+    // Each order is placed the way checkout places it: the order, then its payment invoice under the same id. A QR
+    // order is paid by a signed SePay webhook, a cash order by the counter; the rest wait for payment, as a real queue
+    // does. `paid` says how far the order got: "qr" or "cash" settles it, and `refunded` returns the money after.
+    const sePaySecret = requireEnv("SEPAY_WEBHOOK_SECRET");
+    const sePayWebhook = async (invoice, transactionId) => {
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const body = JSON.stringify({
+        id: transactionId,
+        transferType: "in",
+        transferAmount: Number(invoice.amount),
+        content: `${invoice.paymentCode} thanh toan don hang`,
+        gateway: "Vietcombank",
+      });
+      const signature = createHmac("sha256", sePaySecret).update(`${timestamp}.`).update(body).digest("hex");
+      const response = await fetch(new URL("/api/payments/sepay/webhook", baseUrl), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-SePay-Timestamp": timestamp,
+          "X-SePay-Signature": `sha256=${signature}`,
+        },
+        body,
+      });
+      if (!response.ok) throw new Error(`The SePay webhook answered ${response.status}`);
+    };
+    /** Payment reaches the order through RabbitMQ, so wait until the order shows it before moving the order on. */
+    const untilOrder = async (shopper, id, ready) => {
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        const order = await shopper.call(`/api/orders/${id}`, { headers: await salesHeaders(shopper) });
+        if (ready(order)) return order;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      throw new Error(`Order ${id} did not reach the expected payment state`);
+    };
+    let transactionNumber = 1_000_000;
+    const place = async ({ shopper, payment, lines, steps = [], paid, refunded = false, deliverTo, note }) => {
+      const created = await shopper.call("/api/orders", {
         method: "POST",
         body: {
           selectedStoreId: sites.get("SITE-RTL").id,
-          fulfillmentType: "pickup",
-          paymentMethod: "cash_on_delivery",
-          lines: [{ productId: products.get(sku).id, productUnitId: unit.id, quantity }],
+          fulfillmentType: deliverTo ? "delivery" : "pickup",
+          paymentMethod: payment,
+          lines: await Promise.all(
+            lines.map(async ([sku, quantity]) => ({
+              productId: products.get(sku).id,
+              productUnitId: (await unitFor(sku)).id,
+              quantity,
+            })),
+          ),
+          ...(deliverTo ? { delivery: { destination: deliverTo, addressNote: note } } : {}),
         },
-        headers: await salesHeaders(customer),
+        headers: await salesHeaders(shopper),
       });
-      for (const next of status) {
+      const invoice = await shopper.call("/api/payments/invoices", {
+        method: "POST",
+        body: {
+          invoiceId: created.id,
+          orderId: created.id,
+          paymentMethod: payment,
+          lines: created.lines.map((line) => ({
+            productId: line.productId,
+            productUnitId: line.productUnitId,
+            description: line.productNameSnapshot,
+            quantity: Number(line.quantity),
+            unitPrice: Number(line.unitPriceSnapshot),
+            currency: created.currency,
+          })),
+        },
+        headers: { ...(await withContext(shopper, "payment-service")), "Idempotency-Key": created.id },
+      });
+      // A QR payment confirms the order by itself, so it is paid first and the staff steps start after it.
+      if (paid === "qr") {
+        transactionNumber += 1;
+        await sePayWebhook(invoice, transactionNumber);
+        await untilOrder(shopper, created.id, (order) => order.paymentStatus === "Paid");
+      }
+      for (const next of steps) {
         await manager.call(`/api/orders/${created.id}/transition`, {
           method: "POST",
           body: { status: next },
           headers: await salesHeaders(manager),
         });
       }
+      if (paid === "cash") {
+        await manager.call(`/api/payments/${invoice.id}/cash-paid`, {
+          method: "POST",
+          body: {},
+          headers: await withContext(manager, "payment-service"),
+        });
+      }
+      if (refunded) {
+        await manager.call(`/api/payments/${invoice.id}/refund`, {
+          method: "POST",
+          body: { reason: "Khách đổi ý, hoàn tiền toàn bộ" },
+          headers: await withContext(manager, "payment-service"),
+        });
+        await untilOrder(shopper, created.id, (order) => order.status === "Cancelled");
+      }
     };
-    await place("THU-0001", 2, []);
-    await place("THU-0004", 1, ["Confirmed", "Preparing"]);
-    await place("THU-0031", 3, ["Confirmed", "Preparing", "Ready"]);
-    await place("THU-0006", 2, ["Confirmed", "Preparing", "Ready", "Completed"]);
-    await place("THU-0025", 1, ["Cancelled"]);
+    const cash = "cash_on_delivery";
+    const qr = "sepay_qr";
+    const served = ["Confirmed", "Preparing", "Ready", "Completed"];
+    const lan = await signIn({ email: "nguyen.lan@example.com" });
+    const khoa = await signIn({ email: "tran.minh.khoa@example.com" });
+    const huong = await signIn({ email: "le.thanh.huong@example.com" });
+    const viet = await signIn({ email: "pham.quoc.viet@example.com" });
+    const mai = await signIn({ email: "vo.ngoc.mai@example.com" });
+    const nam = await signIn({ email: "dang.hoang.nam@example.com" });
+    // Two addresses in HCMC, inside the delivery range of SITE-RTL.
+    const quan3 = { latitude: 10.7769, longitude: 106.7009 };
+    const quan7 = { latitude: 10.7295, longitude: 106.7218 };
+
+    // The demo shopper owns one order in every state the customer site draws, oldest first. The newest order that is
+    // ready or out for delivery is the one the page features, so the delivery order goes last.
+    await place({ shopper: customer, payment: cash, lines: [["THU-0001", 1]], steps: served, paid: "cash" });
+    await place({
+      shopper: customer,
+      payment: qr,
+      lines: [
+        ["THU-0004", 1],
+        ["THU-0031", 1],
+      ],
+      steps: ["Preparing", "Ready", "Delivering", "Completed"],
+      paid: "qr",
+      deliverTo: quan3,
+      note: "Tầng 3, nhấn chuông căn 302",
+    });
+    await place({ shopper: customer, payment: cash, lines: [["THU-0025", 1]], steps: ["Cancelled"] });
+    await place({ shopper: customer, payment: qr, lines: [["THU-0006", 2]], paid: "qr", refunded: true });
+    await place({ shopper: customer, payment: qr, lines: [["THU-0033", 1]] });
+    await place({ shopper: customer, payment: qr, lines: [["THU-0001", 3]], paid: "qr" });
+    await place({
+      shopper: customer,
+      payment: cash,
+      lines: [
+        ["THU-0004", 2],
+        ["THU-0031", 1],
+        ["THU-0006", 1],
+      ],
+      steps: ["Confirmed", "Preparing"],
+    });
+    await place({
+      shopper: customer,
+      payment: qr,
+      lines: [["THU-0034", 1]],
+      steps: ["Preparing", "Ready"],
+      paid: "qr",
+    });
+    await place({
+      shopper: customer,
+      payment: cash,
+      lines: [
+        ["THU-0025", 1],
+        ["THU-0001", 2],
+      ],
+      steps: ["Confirmed", "Preparing", "Ready", "Delivering"],
+      deliverTo: quan7,
+      note: "Gọi trước khi đến, cổng sau",
+    });
+
+    // The other shoppers hold one state each, so signing in as one of them shows the page with only that state.
+    await place({
+      shopper: lan,
+      payment: qr,
+      lines: [
+        ["THU-0004", 1],
+        ["THU-0006", 1],
+      ],
+    });
+    await place({ shopper: khoa, payment: cash, lines: [["THU-0031", 2]], steps: served, paid: "cash" });
+    await place({
+      shopper: huong,
+      payment: cash,
+      lines: [
+        ["THU-0033", 1],
+        ["THU-0001", 1],
+      ],
+      steps: ["Confirmed", "Preparing"],
+    });
+    await place({ shopper: viet, payment: qr, lines: [["THU-0034", 1]], paid: "qr" });
+    await place({
+      shopper: mai,
+      payment: cash,
+      lines: [["THU-0006", 2]],
+      steps: ["Confirmed", "Preparing", "Ready"],
+    });
+    await place({ shopper: nam, payment: cash, lines: [["THU-0025", 1]], steps: ["Cancelled"] });
   }
   // Goods receipts: one against the approved purchase order, giving the shop floor stock of two prescription medicines.
   // New batches wait for quality review, so the pharmacist-facing steps below release them first.
@@ -473,9 +636,12 @@ async function seedActivity() {
       headers: await inventory(admin),
     });
   }
-  const refreshed = await admin.call("/api/inventory/balances?limit=500", { headers: await inventory(admin) });
-  balances.length = 0;
-  balances.push(...refreshed);
+  const reloadBalances = async () => {
+    const rows = await admin.call("/api/inventory/balances?limit=500", { headers: await inventory(admin) });
+    balances.length = 0;
+    balances.push(...rows);
+  };
+  await reloadBalances();
   for (const { balance, batch } of balances) {
     if (batch.batchNumber.startsWith("LOT-2610-") && batch.qualityStatus === "PendingQc") {
       await post(manager, `/api/inventory/batches/${batch.id}/quality`, {
@@ -484,6 +650,8 @@ async function seedActivity() {
       });
     }
   }
+  // Read again after the release, or `stock` would still see the batches as PendingQc.
+  await reloadBalances();
 
   // Replenishment requests from the shop floor: waiting, approved, rejected.
   const replenishments = await admin.call("/api/inventory/replenishment?limit=100", {

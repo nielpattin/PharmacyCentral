@@ -72,6 +72,55 @@ const accounts = [
     roles: ["Warehouse Staff"],
     siteCodes: ["SITE-WH"],
   },
+  // More shoppers, so the order lists and the pharmacist queue show different people rather than one account.
+  {
+    id: "00000000-0000-4000-8000-000000000006",
+    actorType: "customer",
+    email: "nguyen.lan@example.com",
+    displayName: "Nguyễn Thị Lan Anh",
+    roles: [],
+    siteCodes: [],
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000007",
+    actorType: "customer",
+    email: "tran.minh.khoa@example.com",
+    displayName: "Trần Minh Khoa",
+    roles: [],
+    siteCodes: [],
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000008",
+    actorType: "customer",
+    email: "le.thanh.huong@example.com",
+    displayName: "Lê Thanh Hương",
+    roles: [],
+    siteCodes: [],
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000009",
+    actorType: "customer",
+    email: "pham.quoc.viet@example.com",
+    displayName: "Phạm Quốc Việt",
+    roles: [],
+    siteCodes: [],
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000010",
+    actorType: "customer",
+    email: "vo.ngoc.mai@example.com",
+    displayName: "Võ Ngọc Mai",
+    roles: [],
+    siteCodes: [],
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000011",
+    actorType: "customer",
+    email: "dang.hoang.nam@example.com",
+    displayName: "Đặng Hoàng Nam",
+    roles: [],
+    siteCodes: [],
+  },
 ];
 
 // Sites are imported master data with generated ids, so the seed looks their codes up rather than inventing ids.

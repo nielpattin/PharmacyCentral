@@ -65,6 +65,7 @@ The `pnpm run dev:data` command seeds one account per role (`tools/dev-import-sa
 | Pharmacist | `pharmacist@pharmacycentral.vn` | `SITE-RTL` |
 | Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH` |
 | Customer (Customer Web only) | `khachhang@pharmacycentral.vn` | None; customer account |
+| Customer (sample shoppers, Customer Web only) | `nguyen.lan@example.com`, `tran.minh.khoa@example.com`, `le.thanh.huong@example.com`, `pham.quoc.viet@example.com`, `vo.ngoc.mai@example.com`, `dang.hoang.nam@example.com` | None; customer accounts with their own orders |
 
 Site access uses the site codes from `data/import-samples/sites.csv`. If the sites have not been imported when the seed runs, the seed still creates the accounts, warns which sites are missing, and `dev:data` seeds again after the import. Each run resets the demo accounts' roles and site access to the table above.
 
