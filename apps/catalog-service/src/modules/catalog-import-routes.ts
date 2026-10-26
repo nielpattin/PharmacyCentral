@@ -1,15 +1,19 @@
 import { Router } from "express";
 
 import { catalogImportSchema } from "../contracts/imports.ts";
+import { requireEmployee, type IdentityOptions } from "../shared/authorization/access.ts";
+import { ROLE_RULES } from "../shared/authorization/policy.ts";
 
 import type { CatalogImportService } from "./catalog-import-service.ts";
 
 export const createCatalogImportRouter = (
   importService: CatalogImportService | undefined,
+  identity: IdentityOptions,
   onProductsChanged?: () => void,
 ): Router => {
   const router = Router();
-  router.post("/products/imports", async (request, response) => {
+  const managers = requireEmployee(identity, ROLE_RULES.pharmacyManager);
+  router.post("/products/imports", managers, async (request, response) => {
     if (!importService) return response.status(503).json({ title: "Catalog database is not configured", status: 503 });
     const parsed = catalogImportSchema.safeParse(request.body);
     if (!parsed.success)

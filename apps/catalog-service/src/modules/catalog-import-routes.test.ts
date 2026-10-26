@@ -3,13 +3,40 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createTrustedRequestMiddleware, signInternalIdentityContext } from "../middleware/trusted-request.ts";
 import { createCatalogImportRouter } from "./catalog-import-routes.ts";
 import type { CatalogImportService } from "./catalog-import-service.ts";
+
+const SECRET = "test-internal-identity-secret";
+
+const signedHeaders = (roles: string[]): Record<string, string> => {
+  const now = Date.now();
+  return {
+    "x-internal-identity-context": signInternalIdentityContext(
+      {
+        version: "v1",
+        requestId: "request-1",
+        correlationId: "correlation-1",
+        actorId: "66666666-6666-4666-8666-666666666666",
+        actorType: "employee",
+        roles,
+        siteIds: [],
+        issuedAt: new Date(now - 1_000).toISOString(),
+        expiresAt: new Date(now + 300_000).toISOString(),
+        audience: "catalog-service",
+      },
+      SECRET,
+    ),
+  };
+};
+
+const MANAGER = signedHeaders(["Pharmacy Manager"]);
 
 const createTestServer = async (importService: CatalogImportService | undefined) => {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
-  app.use(createCatalogImportRouter(importService));
+  app.use(createTrustedRequestMiddleware({ identitySecret: SECRET, expectedAudience: "catalog-service" }));
+  app.use(createCatalogImportRouter(importService, { identitySecret: SECRET, audience: "catalog-service" }));
   const server: Server = createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -40,7 +67,7 @@ describe("catalog import API", () => {
 
     const response = await fetch(`${testServer.url}/products/imports`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...MANAGER },
       body: JSON.stringify({
         schemaVersion: 1,
         products: [
@@ -66,6 +93,22 @@ describe("catalog import API", () => {
     });
   });
 
+  it("refuses an import from a Pharmacist with 403 role_forbidden, before reading the payload", async () => {
+    const importCatalog = vi.fn<(input: unknown) => Promise<unknown>>();
+    const testServer = await createTestServer({ import: importCatalog } as unknown as CatalogImportService);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/products/imports`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...signedHeaders(["Pharmacist"]) },
+      body: JSON.stringify({ schemaVersion: 1, suppliers: [{ code: "SUP", name: "Supplier" }] }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "role_forbidden", status: 403 });
+    expect(importCatalog).not.toHaveBeenCalled();
+  });
+
   it("rejects an empty or malformed payload", async () => {
     const testServer = await createTestServer({
       import: vi.fn<(input: unknown) => Promise<unknown>>(),
@@ -74,12 +117,12 @@ describe("catalog import API", () => {
 
     const emptyResponse = await fetch(`${testServer.url}/products/imports`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...MANAGER },
       body: JSON.stringify({ schemaVersion: 1 }),
     });
     const malformedResponse = await fetch(`${testServer.url}/products/imports`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...MANAGER },
       body: JSON.stringify({ schemaVersion: 2, sites: [{ code: "S" }] }),
     });
 
@@ -98,7 +141,7 @@ describe("catalog import API", () => {
 
     const response = await fetch(`${testServer.url}/products/imports`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...MANAGER },
       body: JSON.stringify({
         schemaVersion: 1,
         storageLocations: [{ siteCode: "SITE-WH", code: "WH-A", name: "A", locationType: "Warehouse" }],
@@ -118,7 +161,7 @@ describe("catalog import API", () => {
 
     const response = await fetch(`${testServer.url}/products/imports`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...MANAGER },
       body: JSON.stringify({ schemaVersion: 1, suppliers: [{ code: "SUP", name: "Supplier" }] }),
     });
 

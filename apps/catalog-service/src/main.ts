@@ -106,21 +106,19 @@ app.use("/products", express.raw({ type: ["image/jpeg", "image/png", "image/webp
 app.use("/products/imports", express.json({ limit: "25mb" }));
 app.use(express.json({ limit: "1mb" }));
 // Browser routes authenticate with the signed identity context minted by identity-service
-// (/auth/context); handlers enforce the remaining session and role rules.
+// (/auth/context); handlers enforce the remaining session and role rules. Only these reads answer without a session:
+// the published price list is public and its handler narrows a non-staff caller to Published rows.
+const identity = { identitySecret: requireEnv("INTERNAL_IDENTITY_SECRET"), audience: serviceName };
 const publicCatalogPaths: readonly string[] = [
-  "/sites",
-  "/storage-locations",
   "/products",
-  "/suppliers",
-  "/pricing",
+  "/pricing/active",
+  "/pricing/prices",
   "/stores",
   "/availability",
 ];
 app.use(
   createTrustedRequestMiddleware({
     expectedAudience: serviceName,
-    // A single-site employee's location list is narrowed to their site; listing every site's locations is denied.
-    siteScopedPaths: ["/storage-locations"],
     isPublic: (request) =>
       ["GET", "HEAD"].includes(request.method) &&
       publicCatalogPaths.some((prefix) => matchesPathPrefix(request.path, prefix)),
@@ -144,18 +142,18 @@ if (vault) {
     response.status(503).json({ title: "Credential storage is not configured", status: 503 }),
   );
 }
-app.use("/", createCatalogImportRouter(catalogImportService, requestSearchSweep));
+app.use("/", createCatalogImportRouter(catalogImportService, identity, requestSearchSweep));
 app.use(
   "/",
   createSearchSynonymRouter({
     service: synonymService,
-    identitySecret: requireEnv("INTERNAL_IDENTITY_SECRET"),
-    audience: serviceName,
+    ...identity,
   }),
 );
 app.use(
   "/",
   createCatalogRouter(storeRepository, mediaStore, {
+    ...identity,
     search: { index: searchIndex, embedders: withQueryEmbeddingCache(embedders) },
     onProductsChanged: requestSearchSweep,
     warn: (error) => logger.warn({ error }, "product search degraded"),

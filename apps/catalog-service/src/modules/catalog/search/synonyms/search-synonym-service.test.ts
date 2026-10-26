@@ -69,10 +69,10 @@ describe("SearchSynonymService", () => {
     expect(await service.list()).toEqual([edited]);
   });
 
-  it("refuses a self-approval with self_review_forbidden", async () => {
+  it("refuses a self-approval with self_approval_forbidden", async () => {
     const created = await service.create({ actorId: SUBMITTER, terms: TERMS });
 
-    await expectError(service.approve({ actorId: SUBMITTER, id: created.id, version: 1 }), "self_review_forbidden");
+    await expectError(service.approve({ actorId: SUBMITTER, id: created.id, version: 1 }), "self_approval_forbidden");
   });
 
   it("approves a group submitted by someone else and records the approver", async () => {

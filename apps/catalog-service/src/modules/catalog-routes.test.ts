@@ -6,14 +6,65 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProductMediaStore } from "./catalog/product-media-store.ts";
 import { createCatalogRouter } from "./catalog-routes.ts";
 import { DrizzleStoreRepository } from "./stores/infrastructure/drizzle-store-repository.ts";
+import {
+  createTrustedRequestMiddleware,
+  matchesPathPrefix,
+  signInternalIdentityContext,
+} from "../middleware/trusted-request.ts";
 import { encodePageCursor } from "../shared/pagination/page-cursor.ts";
 
+const SECRET = "test-internal-identity-secret";
+const CATALOG = "catalog-service";
 const ids = {
   site: "00000000-0000-4000-8000-000000000001",
   product: "00000000-0000-4000-8000-000000000002",
   unit: "00000000-0000-4000-8000-000000000003",
   supplier: "00000000-0000-4000-8000-000000000004",
 };
+
+/** The same public catalog reads as `main.ts`: anything else needs a signed identity context. */
+const PUBLIC_CATALOG_PATHS = ["/products", "/pricing/active", "/pricing/prices", "/stores", "/availability"];
+
+const signedHeaders = (
+  actorType: "customer" | "employee",
+  actorId: string,
+  roles: string[],
+  siteIds: string[] = [],
+): Record<string, string> => {
+  const now = Date.now();
+  return {
+    "x-internal-identity-context": signInternalIdentityContext(
+      {
+        version: "v1",
+        requestId: "request-1",
+        correlationId: "correlation-1",
+        actorId,
+        actorType,
+        roles,
+        siteIds,
+        issuedAt: new Date(now - 1_000).toISOString(),
+        expiresAt: new Date(now + 300_000).toISOString(),
+        audience: CATALOG,
+      },
+      SECRET,
+    ),
+  };
+};
+
+const actors = {
+  customer: { headers: signedHeaders("customer", "11111111-1111-4111-8111-111111111111", []) },
+  warehouse: {
+    headers: signedHeaders("employee", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", ["Warehouse Staff"]),
+  },
+  manager: {
+    headers: signedHeaders("employee", "66666666-6666-4666-8666-666666666666", ["Pharmacy Manager"]),
+  },
+  admin: {
+    headers: signedHeaders("employee", "55555555-5555-4555-8555-555555555555", ["Platform Admin"]),
+  },
+} as const;
+
+const JSON_HEADERS = { "content-type": "application/json" } as const;
 
 const createTestServer = async (
   repository: DrizzleStoreRepository,
@@ -22,7 +73,16 @@ const createTestServer = async (
   const app = express();
   app.use(express.raw({ type: "image/*", limit: "5mb" }));
   app.use(express.json());
-  app.use(createCatalogRouter(repository, mediaStore));
+  app.use(
+    createTrustedRequestMiddleware({
+      identitySecret: SECRET,
+      expectedAudience: CATALOG,
+      isPublic: (request) =>
+        ["GET", "HEAD"].includes(request.method) &&
+        PUBLIC_CATALOG_PATHS.some((prefix) => matchesPathPrefix(request.path, prefix)),
+    }),
+  );
+  app.use(createCatalogRouter(repository, mediaStore, { identitySecret: SECRET, audience: CATALOG }));
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
     response.status(500).json({ error: String(error) }),
   );
@@ -63,7 +123,7 @@ describe("catalog API", () => {
 
     const productResponse = await fetch(`${testServer.url}/products`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { ...JSON_HEADERS, ...actors.manager.headers },
       body: JSON.stringify({
         sku: "SKU-001",
         name: "Product",
@@ -85,7 +145,7 @@ describe("catalog API", () => {
     });
     const updateResponse = await fetch(`${testServer.url}/products/${ids.product}/units/${ids.unit}`, {
       method: "PUT",
-      headers: { "content-type": "application/json" },
+      headers: { ...JSON_HEADERS, ...actors.manager.headers },
       body: JSON.stringify({
         unitName: "Box",
         conversionFactorToBaseUnit: 10,
@@ -97,6 +157,7 @@ describe("catalog API", () => {
     });
     const deleteResponse = await fetch(`${testServer.url}/products/${ids.product}/units/${ids.unit}`, {
       method: "DELETE",
+      headers: actors.manager.headers,
     });
 
     expect(productResponse.status).toBe(201);
@@ -132,11 +193,11 @@ describe("catalog API", () => {
 
     const siteResponse = await fetch(`${testServer.url}/sites`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { ...JSON_HEADERS, ...actors.admin.headers },
       body: JSON.stringify({
         code: "SITE-001",
         name: "Site",
-        siteType: "Retail",
+        siteType: "RetailStore",
         address: "Address",
         status: "Active",
         notes: "Site note",
@@ -145,7 +206,7 @@ describe("catalog API", () => {
     });
     const supplierResponse = await fetch(`${testServer.url}/suppliers`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { ...JSON_HEADERS, ...actors.manager.headers },
       body: JSON.stringify({
         code: "SUP-001",
         name: "Supplier",
@@ -175,7 +236,7 @@ describe("catalog API", () => {
 
     const response = await fetch(`${testServer.url}/pricing/prices`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { ...JSON_HEADERS, ...actors.admin.headers },
       body: JSON.stringify({
         productId: ids.product,
         productUnitId: ids.unit,
@@ -206,7 +267,7 @@ describe("catalog API", () => {
 
     const response = await fetch(`${testServer.url}/products/${ids.product}/image`, {
       method: "PUT",
-      headers: { "content-type": "image/jpeg" },
+      headers: { "content-type": "image/jpeg", ...actors.manager.headers },
       body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
     });
 
@@ -311,7 +372,27 @@ describe("catalog API", () => {
       after: undefined,
       limit: 500,
     });
-    expect(listPrices).toHaveBeenNthCalledWith(2, { after: undefined, limit: 100 });
+    // A caller with no session reads Published prices, so the default status is the one a shopper sees.
+    expect(listPrices).toHaveBeenNthCalledWith(2, { status: "Published", after: undefined, limit: 100 });
+  });
+
+  it("lets staff read Draft and Archived prices, and narrows every other caller to Published", async () => {
+    const listPrices = vi
+      .fn<(input: Record<string, unknown>) => Promise<unknown>>()
+      .mockResolvedValue({ rows: [], hasMore: false });
+    const countPrices = vi.fn<(input: Record<string, unknown>) => Promise<number>>().mockResolvedValue(0);
+    const repository = { listPrices, countPrices } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    await fetch(`${testServer.url}/pricing/prices?status=Draft`, { headers: actors.manager.headers });
+    await fetch(`${testServer.url}/pricing/prices?status=Archived`);
+    await fetch(`${testServer.url}/pricing/prices?status=Draft`, { headers: actors.customer.headers });
+    await fetch(`${testServer.url}/pricing/prices/count?status=Draft`);
+    await fetch(`${testServer.url}/pricing/prices/count?status=Draft`, { headers: actors.warehouse.headers });
+
+    expect(listPrices.mock.calls.map(([input]) => input.status)).toEqual(["Draft", "Published", "Published"]);
+    expect(countPrices.mock.calls.map(([input]) => input.status)).toEqual(["Published", "Draft"]);
   });
 
   it("counts products and prices, and never reads the count paths as a product id", async () => {
@@ -343,9 +424,13 @@ describe("catalog API", () => {
     const testServer = await createTestServer(repository);
     server = testServer.server;
 
-    const dated = await fetch(`${testServer.url}/pricing/base-prices?day=2026-10-20`);
-    const today = await fetch(`${testServer.url}/pricing/base-prices`);
-    const invalid = await fetch(`${testServer.url}/pricing/base-prices?day=2026-13-01`);
+    const dated = await fetch(`${testServer.url}/pricing/base-prices?day=2026-10-20`, {
+      headers: actors.customer.headers,
+    });
+    const today = await fetch(`${testServer.url}/pricing/base-prices`, { headers: actors.customer.headers });
+    const invalid = await fetch(`${testServer.url}/pricing/base-prices?day=2026-13-01`, {
+      headers: actors.customer.headers,
+    });
 
     expect(await dated.json()).toEqual(rows);
     expect(today.status).toBe(200);
@@ -401,7 +486,7 @@ describe("catalog API", () => {
   });
 
   it("filters sites, storage locations and suppliers by code or name with q, and leaves them whole without it", async () => {
-    const listSites = vi.fn<(search?: string) => Promise<unknown[]>>().mockResolvedValue([]);
+    const listSites = vi.fn<(search?: string, siteIds?: string[]) => Promise<unknown[]>>().mockResolvedValue([]);
     const listStorageLocations = vi
       .fn<(siteIds?: string[], search?: string) => Promise<unknown[]>>()
       .mockResolvedValue([]);
@@ -410,14 +495,16 @@ describe("catalog API", () => {
     const testServer = await createTestServer(repository);
     server = testServer.server;
 
-    await fetch(`${testServer.url}/sites?q=SITE`);
-    await fetch(`${testServer.url}/sites`);
-    await fetch(`${testServer.url}/storage-locations?siteId=${ids.site}&q=shelf`);
-    await fetch(`${testServer.url}/suppliers?q=%25`);
-    const tooLong = await fetch(`${testServer.url}/suppliers?q=${"a".repeat(201)}`);
+    await fetch(`${testServer.url}/sites?q=SITE`, { headers: actors.admin.headers });
+    await fetch(`${testServer.url}/sites`, { headers: actors.admin.headers });
+    await fetch(`${testServer.url}/storage-locations?siteId=${ids.site}&q=shelf`, { headers: actors.admin.headers });
+    await fetch(`${testServer.url}/suppliers?q=%25`, { headers: actors.warehouse.headers });
+    const tooLong = await fetch(`${testServer.url}/suppliers?q=${"a".repeat(201)}`, {
+      headers: actors.warehouse.headers,
+    });
 
-    expect(listSites).toHaveBeenNthCalledWith(1, "SITE");
-    expect(listSites).toHaveBeenNthCalledWith(2, undefined);
+    expect(listSites).toHaveBeenNthCalledWith(1, "SITE", undefined);
+    expect(listSites).toHaveBeenNthCalledWith(2, undefined, undefined);
     expect(listStorageLocations).toHaveBeenCalledWith([ids.site], "shelf");
     expect(listSuppliers).toHaveBeenCalledWith("%");
     expect(tooLong.status).toBe(400);

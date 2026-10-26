@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { SearchSynonymGroup, SearchSynonymTerms } from "../../../../contracts/synonyms.ts";
+import { isSelfApproval } from "../../../../shared/authorization/policy.ts";
 import { foldSearchText } from "../search-text.ts";
 import type { SynonymSetItem } from "../product-search-index.ts";
 import type { SearchSynonymStore, SearchSynonymTransaction } from "./search-synonym-store.ts";
@@ -8,7 +9,7 @@ import type { SearchSynonymStore, SearchSynonymTransaction } from "./search-syno
 export type SearchSynonymErrorCode =
   | "search_synonym_not_found"
   | "version_conflict"
-  | "self_review_forbidden"
+  | "self_approval_forbidden"
   | "already_approved"
   | "invalid_request";
 
@@ -116,7 +117,7 @@ export class SearchSynonymService {
     return this.store.transaction(async (tx) => {
       const current = await requireGroup(tx, options.id);
       if (current.status === "approved") throw new SearchSynonymError("already_approved");
-      if (current.submittedBy === options.actorId) throw new SearchSynonymError("self_review_forbidden");
+      if (isSelfApproval(options.actorId, current.submittedBy)) throw new SearchSynonymError("self_approval_forbidden");
       requireVersion(current, options.version);
       const approved: SearchSynonymGroup = {
         id: current.id,

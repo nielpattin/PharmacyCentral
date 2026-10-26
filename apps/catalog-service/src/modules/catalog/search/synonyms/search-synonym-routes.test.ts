@@ -176,7 +176,8 @@ describe("catalog search synonym routes", () => {
       for (const editor of EDITORS) {
         expect((await call("GET", BASE, editor)).status).toBe(200);
         const created = await createGroup(editor, TERMS);
-        const reviewer = editor === "admin" ? "manager" : "admin";
+        // Platform Admin edits but never approves, so a Pharmacist or Pharmacy Manager reviews every edit.
+        const reviewer = editor === "pharmacist" ? "manager" : "pharmacist";
         const edited = await call("PUT", `${BASE}/${created.id}`, editor, { terms: TERMS, version: 1 });
         expect(edited.status).toBe(200);
         const approved = await call("POST", `${BASE}/${created.id}/approve`, reviewer, {
@@ -185,6 +186,38 @@ describe("catalog search synonym routes", () => {
         expect(approved.status).toBe(200);
         expect((await call("DELETE", `${BASE}/${created.id}`, editor)).status).toBe(204);
       }
+    });
+
+    it("refuses Platform Admin an approval with 403 role_forbidden, and leaves the group pending", async () => {
+      const created = await createGroup("admin", TERMS);
+
+      const result = await call("POST", `${BASE}/${created.id}/approve`, "admin", { version: 1 });
+
+      expect(result.status).toBe(403);
+      expect(result.json).toMatchObject({ code: "role_forbidden", status: 403 });
+      const listed = (await call("GET", BASE, "manager")).json as { items: Array<{ id: string; status: string }> };
+      expect(listed.items.find((group) => group.id === created.id)?.status).toBe("pending");
+    });
+
+    it("lets a Pharmacist approve a group a Pharmacy Manager proposed", async () => {
+      const created = await createGroup("manager", TERMS);
+
+      const result = await call("POST", `${BASE}/${created.id}/approve`, "pharmacist", { version: 1 });
+
+      expect(result.status).toBe(200);
+      expect(result.json).toMatchObject({ status: "approved", approvedBy: PHARMACIST });
+    });
+
+    it("refuses a Pharmacy Manager the approval of a group the manager last edited", async () => {
+      const created = await createGroup("pharmacist", TERMS);
+      const edited = await call("PUT", `${BASE}/${created.id}`, "manager", { terms: TERMS, version: 1 });
+
+      const result = await call("POST", `${BASE}/${created.id}/approve`, "manager", {
+        version: groupRefSchema.parse(edited.json).version,
+      });
+
+      expect(result.status).toBe(403);
+      expect(result.json).toMatchObject({ code: "self_approval_forbidden" });
     });
   });
 
@@ -213,20 +246,20 @@ describe("catalog search synonym routes", () => {
       expect(approve.json).toMatchObject({ code: "version_conflict" });
     });
 
-    it("answers 409 self_review_forbidden when the submitter approves", async () => {
+    it("answers 403 self_approval_forbidden when the submitter approves", async () => {
       const created = await createGroup("manager", TERMS);
 
       const result = await call("POST", `${BASE}/${created.id}/approve`, "manager", { version: 1 });
 
-      expect(result.status).toBe(409);
-      expect(result.json).toMatchObject({ code: "self_review_forbidden" });
+      expect(result.status).toBe(403);
+      expect(result.json).toMatchObject({ code: "self_approval_forbidden" });
     });
 
     it("answers 409 already_approved for a second approval", async () => {
       const created = await createGroup("manager", TERMS);
       await call("POST", `${BASE}/${created.id}/approve`, "pharmacist", { version: 1 });
 
-      const result = await call("POST", `${BASE}/${created.id}/approve`, "admin", { version: 2 });
+      const result = await call("POST", `${BASE}/${created.id}/approve`, "manager", { version: 2 });
 
       expect(result.status).toBe(409);
       expect(result.json).toMatchObject({ code: "already_approved" });
@@ -247,7 +280,7 @@ describe("catalog search synonym routes", () => {
       expect(syncSynonyms).toHaveBeenLastCalledWith([]);
 
       // Only a second approval puts the edited group back in the set. A pending group's delete does not push.
-      await call("POST", `${BASE}/${created.id}/approve`, "admin", { version: 3 });
+      await call("POST", `${BASE}/${created.id}/approve`, "pharmacist", { version: 3 });
       await service.pushesSettled();
       expect(syncSynonyms).toHaveBeenCalledTimes(3);
 

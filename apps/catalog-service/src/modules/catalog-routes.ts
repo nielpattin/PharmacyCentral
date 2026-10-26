@@ -4,6 +4,18 @@ import { z } from "zod";
 
 import { productMatchRequestSchema, productSearchQuerySchema } from "../contracts/catalog.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
+import type { products } from "../shared/infrastructure/schema.ts";
+import {
+  isOutsideSiteScope,
+  refuse,
+  requireEmployee,
+  siteScopeOf,
+  staffActorOf,
+  SITE_ACCESS_DENIED,
+  type IdentityOptions,
+} from "../shared/authorization/access.ts";
+import { ROLE_RULES } from "../shared/authorization/policy.ts";
+import { REFUSALS, RefusalError } from "../shared/refusal.ts";
 import { decodePageCursor, encodePageCursor } from "../shared/pagination/page-cursor.ts";
 
 import { ProductMediaStore } from "./catalog/product-media-store.ts";
@@ -70,6 +82,11 @@ const storageLocationInputSchema = z.object({
   capacity: z.number().nonnegative().nullable().optional(),
   isActive: z.boolean().optional(),
 });
+/** A location's site is fixed once it exists, so an update may name the site only to confirm it is the same one. */
+const storageLocationUpdateSchema = storageLocationInputSchema
+  .omit({ siteId: true })
+  .partial()
+  .extend({ siteId: z.string().uuid().optional() });
 const supplierInputSchema = z.object({
   code: z.string().trim().min(1).max(50),
   name: z.string().trim().min(1).max(300),
@@ -82,8 +99,8 @@ const supplierInputSchema = z.object({
   isActive: z.boolean().optional(),
 });
 /**
- * Store locations and stock levels are public reads, so a shopper's `?siteId=` still narrows them to the chosen
- * store; a site-scoped employee gets their own scope from `listSiteIds` instead.
+ * Availability is a public read, so a shopper's `?siteId=` narrows it to the chosen store. A signed-in employee gets
+ * their own scope from the trusted layer instead (`listSiteIds`).
  */
 const publicListSiteIds = (request: Request): string[] | undefined => {
   const requested = typeof request.query.siteId === "string" ? request.query.siteId.trim() : "";
@@ -119,6 +136,7 @@ const priceQuerySchema = z.object({
 });
 /** Matches the code or the name of the list's own rows, case-insensitively. */
 const searchQuerySchema = z.object({ q: z.string().trim().max(200).optional() });
+const storageLocationQuerySchema = searchQuerySchema.extend({ siteId: z.string().trim().optional() });
 const cursorQuerySchema = z.object({ cursor: z.string().optional() });
 const priceCountQuerySchema = z.object({
   productId: z.string().uuid().optional(),
@@ -143,40 +161,48 @@ const activePriceQuerySchema = z.object({
   effectiveDate: z.string().date(),
 });
 
+export type CatalogRouterOptions = IdentityOptions & {
+  search?: { index: ProductSearchIndex; embedders?: TextEmbedderSource | undefined };
+  onProductsChanged?: (() => void) | undefined;
+  warn?: ((error: unknown) => void) | undefined;
+};
+
 export const createCatalogRouter = (
   repository: DrizzleStoreRepository | undefined,
-  mediaStore?: ProductMediaStore,
-  options: {
-    search?: { index: ProductSearchIndex; embedders?: TextEmbedderSource | undefined };
-    onProductsChanged?: (() => void) | undefined;
-    warn?: ((error: unknown) => void) | undefined;
-  } = {},
+  mediaStore: ProductMediaStore | undefined,
+  options: CatalogRouterOptions,
 ): Router => {
   const router = Router();
+  const identity: IdentityOptions = { identitySecret: options.identitySecret, audience: options.audience };
   const searchCache = createSearchResponseCache();
   // Whatever changes a product also drops the remembered list answers of this replica.
   const productsChanged = (): void => {
     searchCache.clear();
     options.onProductsChanged?.();
   };
+  // Each write route names the rule it needs; Platform Admin passes every rule except the excluded ones (ROLE_RULES).
+  const managers = requireEmployee(identity, ROLE_RULES.pharmacyManager);
+  const platformAdminOnly = requireEmployee(identity, ROLE_RULES.platformAdminOnly);
+  const staff = requireEmployee(identity);
 
-  router.get("/sites", async (request, response) => {
+  router.get("/sites", staff, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = searchQuerySchema.safeParse(request.query);
     if (!parsed.success) return invalidRequest(response);
-    response.json(await repository.listSites(parsed.data.q));
+    response.json(await repository.listSites(parsed.data.q, siteScopeOf(staffActorOf(response))));
   });
 
-  router.get("/sites/:id", async (request, response) => {
+  router.get("/sites/:id", staff, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);
     const site = await repository.getSite(id.data.id);
     if (!site) return response.status(404).json({ title: "Site not found", status: 404 });
+    if (isOutsideSiteScope(staffActorOf(response), site.id)) return refuse(response, SITE_ACCESS_DENIED);
     response.json(site);
   });
 
-  router.post("/sites", async (request, response) => {
+  router.post("/sites", platformAdminOnly, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = siteInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidRequest(response);
@@ -187,11 +213,14 @@ export const createCatalogRouter = (
     }
   });
 
-  router.put("/sites/:id", async (request, response) => {
+  router.put("/sites/:id", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     const parsed = siteInputSchema.partial().safeParse(request.body);
     if (!id.success || !parsed.success) return invalidRequest(response);
+    const current = await repository.getSite(id.data.id);
+    if (!current) return response.status(404).json({ title: "Site not found", status: 404 });
+    if (isOutsideSiteScope(staffActorOf(response), current.id)) return refuse(response, SITE_ACCESS_DENIED);
     try {
       const site = await repository.updateSite(id.data.id, parsed.data);
       if (!site) return response.status(404).json({ title: "Site not found", status: 404 });
@@ -201,34 +230,46 @@ export const createCatalogRouter = (
     }
   });
 
-  router.delete("/sites/:id", async (request, response) => {
+  router.delete("/sites/:id", platformAdminOnly, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);
-    await repository.deleteSite(id.data.id);
+    const current = await repository.getSite(id.data.id);
+    if (!current) return response.status(404).json({ title: "Site not found", status: 404 });
+    if (isOutsideSiteScope(staffActorOf(response), current.id)) return refuse(response, SITE_ACCESS_DENIED);
+    const outcome = await repository.deleteSite(id.data.id);
+    if (outcome === "in_use") return refuse(response, REFUSALS.siteInUse);
+    if (outcome === "not_found") return response.status(404).json({ title: "Site not found", status: 404 });
     response.status(204).end();
   });
 
-  router.get("/storage-locations", async (request, response) => {
+  router.get("/storage-locations", staff, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
-    const parsed = searchQuerySchema.safeParse(request.query);
+    const parsed = storageLocationQuerySchema.safeParse(request.query);
     if (!parsed.success) return invalidRequest(response);
-    response.json(await repository.listStorageLocations(publicListSiteIds(request), parsed.data.q));
+    const actor = staffActorOf(response);
+    const requested = parsed.data.siteId ? parsed.data.siteId : undefined;
+    if (requested !== undefined && isOutsideSiteScope(actor, requested)) return refuse(response, SITE_ACCESS_DENIED);
+    // A site-scoped employee with no site gets an empty list, not an error: the scope itself is empty.
+    const siteIds = requested !== undefined ? [requested] : siteScopeOf(actor);
+    response.json(await repository.listStorageLocations(siteIds, parsed.data.q));
   });
 
-  router.get("/storage-locations/:id", async (request, response) => {
+  router.get("/storage-locations/:id", staff, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);
     const location = await repository.getStorageLocation(id.data.id);
     if (!location) return response.status(404).json({ title: "Storage location not found", status: 404 });
+    if (isOutsideSiteScope(staffActorOf(response), location.siteId)) return refuse(response, SITE_ACCESS_DENIED);
     response.json(location);
   });
 
-  router.post("/storage-locations", async (request, response) => {
+  router.post("/storage-locations", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = storageLocationInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidRequest(response);
+    if (isOutsideSiteScope(staffActorOf(response), parsed.data.siteId)) return refuse(response, SITE_ACCESS_DENIED);
     try {
       response.status(201).json(await repository.createStorageLocation(parsed.data));
     } catch (error) {
@@ -236,13 +277,20 @@ export const createCatalogRouter = (
     }
   });
 
-  router.put("/storage-locations/:id", async (request, response) => {
+  router.put("/storage-locations/:id", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
-    const parsed = storageLocationInputSchema.omit({ siteId: true }).partial().safeParse(request.body);
+    const parsed = storageLocationUpdateSchema.safeParse(request.body);
     if (!id.success || !parsed.success) return invalidRequest(response);
+    const current = await repository.getStorageLocation(id.data.id);
+    if (!current) return response.status(404).json({ title: "Storage location not found", status: 404 });
+    if (isOutsideSiteScope(staffActorOf(response), current.siteId)) return refuse(response, SITE_ACCESS_DENIED);
+    if (parsed.data.siteId !== undefined && parsed.data.siteId !== current.siteId) {
+      return refuse(response, REFUSALS.locationSiteFixed);
+    }
     try {
-      const location = await repository.updateStorageLocation(id.data.id, parsed.data);
+      const { siteId: _confirmedSiteId, ...changes } = parsed.data;
+      const location = await repository.updateStorageLocation(id.data.id, changes);
       if (!location) return response.status(404).json({ title: "Storage location not found", status: 404 });
       response.json(location);
     } catch (error) {
@@ -250,22 +298,26 @@ export const createCatalogRouter = (
     }
   });
 
-  router.delete("/storage-locations/:id", async (request, response) => {
+  router.delete("/storage-locations/:id", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);
-    await repository.deleteStorageLocation(id.data.id);
+    const current = await repository.getStorageLocation(id.data.id);
+    if (!current) return response.status(404).json({ title: "Storage location not found", status: 404 });
+    if (isOutsideSiteScope(staffActorOf(response), current.siteId)) return refuse(response, SITE_ACCESS_DENIED);
+    const outcome = await repository.deleteStorageLocation(id.data.id);
+    if (outcome === "not_found") return response.status(404).json({ title: "Storage location not found", status: 404 });
     response.status(204).end();
   });
 
-  router.get("/suppliers", async (request, response) => {
+  router.get("/suppliers", staff, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = searchQuerySchema.safeParse(request.query);
     if (!parsed.success) return invalidRequest(response);
     response.json(await repository.listSuppliers(parsed.data.q));
   });
 
-  router.get("/suppliers/:id", async (request, response) => {
+  router.get("/suppliers/:id", staff, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);
@@ -274,7 +326,7 @@ export const createCatalogRouter = (
     response.json(supplier);
   });
 
-  router.post("/suppliers", async (request, response) => {
+  router.post("/suppliers", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = supplierInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidRequest(response);
@@ -285,7 +337,7 @@ export const createCatalogRouter = (
     }
   });
 
-  router.put("/suppliers/:id", async (request, response) => {
+  router.put("/suppliers/:id", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     const parsed = supplierInputSchema.partial().safeParse(request.body);
@@ -299,11 +351,12 @@ export const createCatalogRouter = (
     }
   });
 
-  router.delete("/suppliers/:id", async (request, response) => {
+  router.delete("/suppliers/:id", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);
-    await repository.deleteSupplier(id.data.id);
+    const outcome = await repository.deleteSupplier(id.data.id);
+    if (outcome === "not_found") return response.status(404).json({ title: "Supplier not found", status: 404 });
     response.status(204).end();
   });
 
@@ -377,7 +430,7 @@ export const createCatalogRouter = (
     response.json(await withProductUnits(repository, product));
   });
 
-  router.put("/products/:id/image", async (request, response) => {
+  router.put("/products/:id/image", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     if (!mediaStore)
       return response.status(503).json({ title: "Product media storage is not configured", status: 503 });
@@ -408,7 +461,7 @@ export const createCatalogRouter = (
     response.json(await repository.listProductUnits(id.data.id));
   });
 
-  router.post("/products/:id/units", async (request, response) => {
+  router.post("/products/:id/units", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     const parsed = productUnitInputSchema.omit({ productId: true }).safeParse(request.body);
@@ -426,7 +479,7 @@ export const createCatalogRouter = (
     }
   });
 
-  router.put("/products/:productId/units/:id", async (request, response) => {
+  router.put("/products/:productId/units/:id", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const ids = z.object({ productId: z.string().uuid(), id: z.string().uuid() }).safeParse(request.params);
     const parsed = productUnitInputSchema.omit({ productId: true }).partial().safeParse(request.body);
@@ -440,7 +493,7 @@ export const createCatalogRouter = (
     }
   });
 
-  router.delete("/products/:productId/units/:id", async (request, response) => {
+  router.delete("/products/:productId/units/:id", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const ids = z.object({ productId: z.string().uuid(), id: z.string().uuid() }).safeParse(request.params);
     if (!ids.success) return invalidRequest(response);
@@ -448,7 +501,7 @@ export const createCatalogRouter = (
     response.status(204).end();
   });
 
-  router.post("/products", async (request, response) => {
+  router.post("/products", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = productInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidRequest(response);
@@ -474,7 +527,7 @@ export const createCatalogRouter = (
     }
   });
 
-  router.put("/products/:id", async (request, response) => {
+  router.put("/products/:id", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     const parsed = productInputSchema.partial().safeParse(request.body);
@@ -504,11 +557,13 @@ export const createCatalogRouter = (
     }
   });
 
-  router.delete("/products/:id", async (request, response) => {
+  router.delete("/products/:id", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);
-    await repository.deleteProduct(id.data.id);
+    const outcome = await repository.deleteProduct(id.data.id);
+    if (outcome === "in_use") return refuse(response, REFUSALS.productInUse);
+    if (outcome === "not_found") return response.status(404).json({ title: "Product not found", status: 404 });
     response.status(204).end();
     productsChanged();
   });
@@ -520,7 +575,8 @@ export const createCatalogRouter = (
     const { cursor, limit, ...filters } = parsed.data;
     const after = cursor === undefined ? undefined : decodePageCursor(cursor, priceCursorSortValue);
     if (cursor !== undefined && after === undefined) return invalidCursor(response);
-    const page = await repository.listPrices({ ...filters, after, limit });
+    const status = isStaffCaller(request) ? filters.status : "Published";
+    const page = await repository.listPrices({ ...filters, status, after, limit });
     const last = page.rows.at(-1);
     if (page.hasMore && last) {
       response.set("X-Next-Cursor", encodePageCursor({ sortValue: last.effectiveFrom, id: last.id }));
@@ -533,7 +589,12 @@ export const createCatalogRouter = (
     if (!repository) return databaseUnavailable(response);
     const parsed = priceCountQuerySchema.safeParse(request.query);
     if (!parsed.success) return invalidRequest(response);
-    response.json({ count: await repository.countPrices(parsed.data) });
+    response.json({
+      count: await repository.countPrices({
+        ...parsed.data,
+        status: isStaffCaller(request) ? parsed.data.status : "Published",
+      }),
+    });
   });
 
   // One row per active product with its base-unit price on `day` (today UTC by default), null where none qualifies.
@@ -558,7 +619,7 @@ export const createCatalogRouter = (
     response.json(price);
   });
 
-  router.post("/pricing/prices", async (request, response) => {
+  router.post("/pricing/prices", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = priceInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidRequest(response);
@@ -568,7 +629,7 @@ export const createCatalogRouter = (
           ...parsed.data,
           currency: parsed.data.currency.toUpperCase(),
           unitPrice: String(parsed.data.unitPrice),
-          createdBy: request.header("X-Actor-Id") ?? null,
+          createdBy: staffActorOf(response).actorId,
         }),
       );
     } catch (error) {
@@ -576,7 +637,7 @@ export const createCatalogRouter = (
     }
   });
 
-  router.post("/pricing/prices/:id/:action", async (request, response) => {
+  router.post("/pricing/prices/:id/:action", managers, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     const action = z.enum(["publish", "archive"]).safeParse(request.params.action);
@@ -586,7 +647,7 @@ export const createCatalogRouter = (
       const price = await repository.transitionPrice(
         id.data.id,
         action.data,
-        request.header("X-Actor-Id") ?? undefined,
+        staffActorOf(response).actorId,
         body.data.notes,
       );
       if (!price) return response.status(404).json({ title: "Price not found", status: 404 });
@@ -637,25 +698,33 @@ export const createCatalogRouter = (
   return router;
 };
 
-const databaseUnavailable = (response: import("express").Response) =>
+/**
+ * Staff, and internal services acting for them, read every price status. Any other caller, a shopper or an anonymous
+ * visitor, reads Published prices only. The trusted layer sets `x-actor-type` from the verified context and removes a
+ * client's own copy, so the header is the caller's real type.
+ */
+const isStaffCaller = (request: Request): boolean => {
+  const actorType = request.header("x-actor-type");
+  return actorType === "employee" || actorType === "system";
+};
+const databaseUnavailable = (response: Response) =>
   response.status(503).json({ title: "Catalog database is not configured", status: 503 });
 /** Attaches the units to every product with one query for the whole list, in the order of `products`. */
-const withUnits = async (
-  repository: DrizzleStoreRepository,
-  products: Array<typeof import("../shared/infrastructure/schema.ts").products.$inferSelect>,
-) => {
-  const units = await repository.listUnitsByProductIds(products.map((product) => product.id));
-  return products.map((product) => ({ ...product, units: units.get(product.id) ?? [] }));
+const withUnits = async (repository: DrizzleStoreRepository, rows: Array<typeof products.$inferSelect>) => {
+  const units = await repository.listUnitsByProductIds(rows.map((product) => product.id));
+  return rows.map((product) => ({ ...product, units: units.get(product.id) ?? [] }));
 };
-const withProductUnits = async (
-  repository: DrizzleStoreRepository,
-  product: typeof import("../shared/infrastructure/schema.ts").products.$inferSelect,
-) => ({ ...product, units: await repository.listProductUnits(product.id) });
-const invalidRequest = (response: import("express").Response) =>
+const withProductUnits = async (repository: DrizzleStoreRepository, product: typeof products.$inferSelect) => ({
+  ...product,
+  units: await repository.listProductUnits(product.id),
+});
+const invalidRequest = (response: Response) =>
   response.status(400).json({ title: "Invalid request", status: 400, code: "invalid_request" });
 const invalidCursor = (response: Response) =>
   response.status(400).json({ title: "Invalid cursor", status: 400, code: "invalid_cursor" });
-const writeError = (response: import("express").Response, error: unknown) =>
-  response
+const writeError = (response: Response, error: unknown) => {
+  if (error instanceof RefusalError) return refuse(response, error.refusal);
+  return response
     .status(409)
     .json({ title: error instanceof Error ? error.message : "Catalog write failed", status: 409, code: "conflict" });
+};

@@ -2,6 +2,8 @@ import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } 
 import type { SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { BusinessRuleError } from "../../../shared/business-rule-error.ts";
+import { isSelfApproval } from "../../../shared/authorization/policy.ts";
+import { REFUSALS, RefusalError } from "../../../shared/refusal.ts";
 
 import {
   INGREDIENT_SIMILARITY_FLOOR,
@@ -85,6 +87,12 @@ export type StoreSummary = {
   address: string | null;
   coordinates: Coordinates | null;
 };
+
+/**
+ * The outcome of a delete. `in_use` is returned only when the catalog's own tables refer to the record; the delete is
+ * a single statement that checks those references, so a reference cannot slip in between the check and the delete.
+ */
+export type DeleteOutcome = "deleted" | "in_use" | "not_found";
 
 export class DrizzleStoreRepository {
   public constructor(private readonly database: CatalogDatabase) {}
@@ -344,11 +352,17 @@ export class DrizzleStoreRepository {
       .where(filters.length ? and(...filters) : undefined);
   }
 
-  public async listSites(search?: string | undefined): Promise<Array<typeof sites.$inferSelect>> {
+  /** The sites matching `search`, limited to `siteIds` when given. An empty `siteIds` matches nothing. */
+  public async listSites(
+    search?: string | undefined,
+    siteIds?: readonly string[] | undefined,
+  ): Promise<Array<typeof sites.$inferSelect>> {
     return this.database.db
       .select()
       .from(sites)
-      .where(matchesCodeOrName(sites.code, sites.name, search))
+      .where(
+        and(siteIds ? inArray(sites.id, [...siteIds]) : undefined, matchesCodeOrName(sites.code, sites.name, search)),
+      )
       .orderBy(asc(sites.code));
   }
 
@@ -431,8 +445,23 @@ export class DrizzleStoreRepository {
     return site;
   }
 
-  public async deleteSite(id: string): Promise<void> {
-    await this.database.db.delete(sites).where(eq(sites.id, id));
+  /**
+   * Deletes a site unless a storage location or an availability row of the catalog refers to it. The catalog keeps no
+   * foreign keys, so the check is part of the delete statement itself.
+   */
+  public async deleteSite(id: string): Promise<DeleteOutcome> {
+    const deleted = await this.database.db
+      .delete(sites)
+      .where(
+        and(
+          eq(sites.id, id),
+          sql`NOT EXISTS (SELECT 1 FROM ${storageLocations} WHERE ${storageLocations.siteId} = ${sites.id})`,
+          sql`NOT EXISTS (SELECT 1 FROM ${availabilityProjections} WHERE ${availabilityProjections.siteId} = ${sites.id})`,
+        ),
+      )
+      .returning({ id: sites.id });
+    if (deleted.length > 0) return "deleted";
+    return (await this.getSite(id)) ? "in_use" : "not_found";
   }
 
   public async listStorageLocations(
@@ -507,8 +536,16 @@ export class DrizzleStoreRepository {
     return location;
   }
 
-  public async deleteStorageLocation(id: string): Promise<void> {
-    await this.database.db.delete(storageLocations).where(eq(storageLocations.id, id));
+  /**
+   * The catalog's own tables hold no reference to a storage location; stock lives in inventory-service, which the
+   * catalog cannot see, so this delete is not refused for use.
+   */
+  public async deleteStorageLocation(id: string): Promise<"deleted" | "not_found"> {
+    const deleted = await this.database.db
+      .delete(storageLocations)
+      .where(eq(storageLocations.id, id))
+      .returning({ id: storageLocations.id });
+    return deleted.length > 0 ? "deleted" : "not_found";
   }
 
   public async listSuppliers(search?: string | undefined): Promise<Array<typeof suppliers.$inferSelect>> {
@@ -570,8 +607,16 @@ export class DrizzleStoreRepository {
     return supplier;
   }
 
-  public async deleteSupplier(id: string): Promise<void> {
-    await this.database.db.delete(suppliers).where(eq(suppliers.id, id));
+  /**
+   * The catalog's own tables hold no reference to a supplier; purchase orders live in inventory-service, which the
+   * catalog cannot see, so this delete is not refused for use.
+   */
+  public async deleteSupplier(id: string): Promise<"deleted" | "not_found"> {
+    const deleted = await this.database.db
+      .delete(suppliers)
+      .where(eq(suppliers.id, id))
+      .returning({ id: suppliers.id });
+    return deleted.length > 0 ? "deleted" : "not_found";
   }
 
   public async createProduct(input: {
@@ -675,8 +720,21 @@ export class DrizzleStoreRepository {
     return product;
   }
 
-  public async deleteProduct(id: string): Promise<void> {
-    await this.database.db.delete(products).where(eq(products.id, id));
+  /** Deletes a product unless a unit, a price or an availability row of the catalog refers to it. */
+  public async deleteProduct(id: string): Promise<DeleteOutcome> {
+    const deleted = await this.database.db
+      .delete(products)
+      .where(
+        and(
+          eq(products.id, id),
+          sql`NOT EXISTS (SELECT 1 FROM ${productUnits} WHERE ${productUnits.productId} = ${products.id})`,
+          sql`NOT EXISTS (SELECT 1 FROM ${productPrices} WHERE ${productPrices.productId} = ${products.id})`,
+          sql`NOT EXISTS (SELECT 1 FROM ${availabilityProjections} WHERE ${availabilityProjections.productId} = ${products.id})`,
+        ),
+      )
+      .returning({ id: products.id });
+    if (deleted.length > 0) return "deleted";
+    return (await this.getProduct(id)) ? "in_use" : "not_found";
   }
 
   /**
@@ -780,7 +838,7 @@ export class DrizzleStoreRepository {
   public async transitionPrice(
     id: string,
     action: "publish" | "archive",
-    actorId?: string,
+    actorId: string,
     notes?: string,
   ): Promise<typeof productPrices.$inferSelect | undefined> {
     const current = await this.database.db.select().from(productPrices).where(eq(productPrices.id, id)).limit(1);
@@ -789,6 +847,9 @@ export class DrizzleStoreRepository {
       throw new BusinessRuleError("Only Draft prices can be published");
     if (action === "archive" && current[0].status === "Archived")
       throw new BusinessRuleError("Archived prices cannot be archived again");
+    // Separation of duties: the person who created the draft never publishes it, Platform Admin included.
+    if (action === "publish" && isSelfApproval(actorId, current[0].createdBy))
+      throw new RefusalError(REFUSALS.priceSelfApproval);
     if (action === "publish") {
       const overlap = await this.database.db
         .select({ id: productPrices.id })
@@ -811,8 +872,8 @@ export class DrizzleStoreRepository {
       .update(productPrices)
       .set({
         status: action === "publish" ? "Published" : "Archived",
-        publishedBy: action === "publish" ? (actorId ?? null) : undefined,
-        archivedBy: action === "archive" ? (actorId ?? null) : undefined,
+        publishedBy: action === "publish" ? actorId : undefined,
+        archivedBy: action === "archive" ? actorId : undefined,
         publishedAt: action === "publish" ? now : undefined,
         archivedAt: action === "archive" ? now : undefined,
         ...(notes === undefined ? {} : { notes }),

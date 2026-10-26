@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Response } from "express";
 import { z } from "zod";
 
 import {
@@ -6,7 +6,8 @@ import {
   createSearchSynonymRequestSchema,
   updateSearchSynonymRequestSchema,
 } from "../../../../contracts/synonyms.ts";
-import { verifyInternalIdentityContext } from "../../../../middleware/trusted-request.ts";
+import { requireEmployee, staffActorOf } from "../../../../shared/authorization/access.ts";
+import { ROLE_RULES } from "../../../../shared/authorization/policy.ts";
 import { SearchSynonymError, type SearchSynonymService } from "./search-synonym-service.ts";
 
 export type SearchSynonymRouteOptions = {
@@ -16,64 +17,40 @@ export type SearchSynonymRouteOptions = {
   audience: string;
 };
 
-export type ProblemBody = { type: string; title: string; status: number; code: string };
+export type ProblemBody = { type: string; title: string; status: number; code: string; detail?: string };
 
 const BASE_PATH = "/products/search-synonyms";
 const idParamSchema = z.object({ id: z.string().uuid() });
-const EDITOR_ROLES: readonly string[] = ["Platform Admin", "Pharmacy Manager", "Pharmacist"];
 
-const problem = (status: number, slug: string, title: string, code: string): ProblemBody => ({
+const problem = (status: number, slug: string, title: string, code: string, detail?: string): ProblemBody => ({
   type: `https://api.pharmacycentral.local/problems/${slug}`,
   title,
   status,
   code,
+  ...(detail === undefined ? {} : { detail }),
 });
 
-const UNAUTHORIZED = problem(401, "unauthorized", "Sign in required", "unauthorized");
-const FORBIDDEN = problem(403, "forbidden", "Search synonym access required", "forbidden");
-const INVALID_REQUEST = problem(400, "invalid-request", "Invalid request", "invalid_request");
 const NOT_FOUND = problem(
   404,
   "search-synonym-not-found",
   "Search synonym group not found",
   "search_synonym_not_found",
 );
+const INVALID_REQUEST = problem(400, "invalid-request", "Invalid request", "invalid_request");
 const UNAVAILABLE = problem(503, "catalog-database-unavailable", "Catalog database is not configured", "unavailable");
 
 const SERVICE_ERRORS: Record<SearchSynonymError["code"], ProblemBody> = {
   search_synonym_not_found: NOT_FOUND,
   version_conflict: problem(409, "version-conflict", "The group changed since you loaded it", "version_conflict"),
-  self_review_forbidden: problem(
-    409,
-    "self-review-forbidden",
-    "The person who submitted a group cannot approve it",
-    "self_review_forbidden",
+  self_approval_forbidden: problem(
+    403,
+    "self-approval-forbidden",
+    "The person who proposed a group cannot approve it",
+    "self_approval_forbidden",
+    "Bạn không thể duyệt thay đổi của chính mình. Một nhân viên khác phải duyệt.",
   ),
   already_approved: problem(409, "already-approved", "The group is already approved", "already_approved"),
   invalid_request: INVALID_REQUEST,
-};
-
-/**
- * The trusted middleware lets GET /products through without identity, and it checks only that the caller is signed in
- * on writes. Every route here checks the signed context and the editor roles itself.
- */
-const editorId = (request: Request, response: Response, options: SearchSynonymRouteOptions): string | undefined => {
-  const context = verifyInternalIdentityContext(
-    request.header("x-internal-identity-context"),
-    options.identitySecret,
-    new Date(),
-    options.audience,
-  );
-  if (!context) {
-    response.status(401).json(UNAUTHORIZED);
-    return undefined;
-  }
-  const canEdit = context.actorType === "employee" && context.roles.some((role) => EDITOR_ROLES.includes(role));
-  if (!canEdit || !context.actorId) {
-    response.status(403).json(FORBIDDEN);
-    return undefined;
-  }
-  return context.actorId;
 };
 
 /** Sends a service failure as its problem body. Anything that is not a SearchSynonymError is a bug and goes to Express. */
@@ -85,16 +62,19 @@ const sendServiceError = (error: unknown, response: Response): void => {
 
 export const createSearchSynonymRouter = (options: SearchSynonymRouteOptions): Router => {
   const router = Router();
+  const identity = { identitySecret: options.identitySecret, audience: options.audience };
+  // The trusted middleware lets GET /products through without identity, so every route checks the signed context and
+  // its role here. Platform Admin proposes, edits and deletes but may not approve (see ROLE_RULES).
+  const editor = requireEmployee(identity, ROLE_RULES.searchSynonymEditor);
+  const approver = requireEmployee(identity, ROLE_RULES.searchSynonymApprover);
 
-  router.get(BASE_PATH, async (request, response) => {
-    if (!editorId(request, response, options)) return;
+  router.get(BASE_PATH, editor, async (_request, response) => {
     if (!options.service) return void response.status(UNAVAILABLE.status).json(UNAVAILABLE);
     response.json({ items: await options.service.list() });
   });
 
-  router.post(BASE_PATH, async (request, response) => {
-    const actorId = editorId(request, response, options);
-    if (!actorId) return;
+  router.post(BASE_PATH, editor, async (request, response) => {
+    const actorId = staffActorOf(response).actorId;
     if (!options.service) return void response.status(UNAVAILABLE.status).json(UNAVAILABLE);
     const body = createSearchSynonymRequestSchema.safeParse(request.body);
     if (!body.success) return void response.status(INVALID_REQUEST.status).json(INVALID_REQUEST);
@@ -106,9 +86,8 @@ export const createSearchSynonymRouter = (options: SearchSynonymRouteOptions): R
     }
   });
 
-  router.put(`${BASE_PATH}/:id`, async (request, response) => {
-    const actorId = editorId(request, response, options);
-    if (!actorId) return;
+  router.put(`${BASE_PATH}/:id`, editor, async (request, response) => {
+    const actorId = staffActorOf(response).actorId;
     if (!options.service) return void response.status(UNAVAILABLE.status).json(UNAVAILABLE);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return void response.status(NOT_FOUND.status).json(NOT_FOUND);
@@ -127,9 +106,8 @@ export const createSearchSynonymRouter = (options: SearchSynonymRouteOptions): R
     }
   });
 
-  router.post(`${BASE_PATH}/:id/approve`, async (request, response) => {
-    const actorId = editorId(request, response, options);
-    if (!actorId) return;
+  router.post(`${BASE_PATH}/:id/approve`, approver, async (request, response) => {
+    const actorId = staffActorOf(response).actorId;
     if (!options.service) return void response.status(UNAVAILABLE.status).json(UNAVAILABLE);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return void response.status(NOT_FOUND.status).json(NOT_FOUND);
@@ -143,8 +121,7 @@ export const createSearchSynonymRouter = (options: SearchSynonymRouteOptions): R
     }
   });
 
-  router.delete(`${BASE_PATH}/:id`, async (request, response) => {
-    if (!editorId(request, response, options)) return;
+  router.delete(`${BASE_PATH}/:id`, editor, async (request, response) => {
     if (!options.service) return void response.status(UNAVAILABLE.status).json(UNAVAILABLE);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return void response.status(NOT_FOUND.status).json(NOT_FOUND);

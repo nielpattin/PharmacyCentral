@@ -3,7 +3,9 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createTrustedRequestMiddleware } from "./trusted-request.ts";
+import type { InternalIdentityContext } from "../contracts/common.ts";
+
+import { createTrustedRequestMiddleware, signInternalIdentityContext } from "./trusted-request.ts";
 
 const identitySecret = "test-identity-secret-1234567890123456";
 const serviceSecret = "test-service-secret-1234567890123456";
@@ -65,5 +67,95 @@ describe("trusted request actor headers", () => {
       headers: { "x-actor-id": spoofedActorId, "x-actor-type": "employee" },
     });
     expect(response.status).toBe(401);
+  });
+});
+
+describe("trusted request role restatement", () => {
+  let activeServer: Server | undefined;
+
+  afterEach(async () => {
+    if (!activeServer) return;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    activeServer.close(() => resolve());
+    activeServer = undefined;
+    await promise;
+  });
+
+  // Mirrors the employee and shopper cases of policy.mjs. A request the middleware admits reaches the fallback (200).
+  const callAs = async (
+    actorType: "employee" | "customer",
+    roles: string[],
+    path: string,
+    method: string,
+  ): Promise<Response> => {
+    const app = express();
+    app.use(express.json());
+    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+    app.use((_request, response) => response.json({ ok: true }));
+    const { server, url } = await startServer(app);
+    activeServer = server;
+    const context: InternalIdentityContext = {
+      version: "v1",
+      requestId: "req-role",
+      correlationId: "corr-role",
+      actorId: "00000000-0000-4000-8000-000000000001",
+      actorType,
+      roles,
+      siteIds: ["00000000-0000-4000-8000-000000000010"],
+      issuedAt: new Date(Date.now() - 1000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      audience: "catalog-service",
+    };
+    return fetch(`${url}${path}`, {
+      method,
+      headers: {
+        "x-internal-identity-context": signInternalIdentityContext(context, identitySecret),
+        "content-type": "application/json",
+      },
+      ...(method === "GET" ? {} : { body: "{}" }),
+    });
+  };
+
+  it("refuses a Pharmacy Manager creating a site, which only Platform Admin may do", async () => {
+    const response = await callAs("employee", ["Pharmacy Manager"], "/sites", "POST");
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("lets a Pharmacy Manager edit a site", async () => {
+    const response = await callAs(
+      "employee",
+      ["Pharmacy Manager"],
+      "/sites/00000000-0000-4000-8000-000000000010",
+      "PUT",
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it("refuses Platform Admin the synonym approval, which a clinician makes", async () => {
+    const response = await callAs(
+      "employee",
+      ["Platform Admin"],
+      "/products/search-synonyms/00000000-0000-4000-8000-000000000020/approve",
+      "POST",
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("lets a Pharmacist approve a synonym group", async () => {
+    const response = await callAs(
+      "employee",
+      ["Pharmacist"],
+      "/products/search-synonyms/00000000-0000-4000-8000-000000000020/approve",
+      "POST",
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it("refuses a shopper the staff site list with employee_required", async () => {
+    const response = await callAs("customer", [], "/sites", "GET");
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "employee_required" });
   });
 });
