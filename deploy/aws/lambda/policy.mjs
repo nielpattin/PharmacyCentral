@@ -9,7 +9,6 @@ export const publicPrefixes = [
   "/api/sites",
   "/api/pricing/active",
   "/api/availability",
-  "/api/carts",
   "/api/delivery/calculate",
   "/api/delivery/reverse-geocode",
   "/api/delivery/addresses/search",
@@ -17,7 +16,7 @@ export const publicPrefixes = [
   "/api/payments/sepay/webhook",
 ];
 
-export const optionalIdentityPrefixes = ["/api/carts", "/api/delivery/calculate"];
+export const optionalIdentityPrefixes = ["/api/delivery/calculate"];
 
 export const aiCredentialPaths = [
   "/api/chatbot/credential",

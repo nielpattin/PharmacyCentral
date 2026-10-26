@@ -115,17 +115,15 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
     });
   });
 
-  describe("optional identity routes", () => {
-    it("allows unauthenticated guest carts", async () => {
+  describe("cart routes need a session", () => {
+    it("denies access to /api/carts without session", async () => {
       const event = {
         rawPath: "/api/carts",
         requestContext: { http: { method: "GET", path: "/api/carts" } },
       };
 
       const result = await authorizer(event);
-      assert.equal(result.isAuthorized, true);
-      assert.equal(result.context.actorType, "anonymous");
-      assert.equal(result.context.actorId, "");
+      assert.equal(result.isAuthorized, false);
     });
 
     it("resolves customer identity on carts when session cookie is provided", async () => {
@@ -141,19 +139,7 @@ describe("authorizer - API Gateway HTTP API v2 request authorizer", () => {
       assert.equal(result.context.actorId, mockCustomer.id);
     });
 
-    it("falls back to guest identity when optional session returns 401", async () => {
-      const event = {
-        rawPath: "/api/carts",
-        headers: { cookie: "pharmacy_session=invalid-session" },
-        requestContext: { http: { method: "GET", path: "/api/carts" } },
-      };
-
-      const result = await authorizer(event);
-      assert.equal(result.isAuthorized, true);
-      assert.equal(result.context.actorType, "anonymous");
-    });
-
-    it("fails when identity-service is down on optional route with cookie", async () => {
+    it("fails when identity-service is down on a cart read with cookie", async () => {
       const event = {
         rawPath: "/api/carts",
         headers: { cookie: "pharmacy_session=session-error" },

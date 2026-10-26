@@ -86,8 +86,8 @@ export const ROUTE_TABLE: readonly RouteRow[] = [
   {
     path: "/api/carts*",
     service: "sales-service",
-    access: { kind: "public" },
-    note: "Carts work for guests. Orders need a sign-in.",
+    access: { kind: "signed-in" },
+    note: "A signed-out cart stays in the browser. Carts need a sign-in.",
   },
   { path: "/api/orders*", service: "sales-service", access: { kind: "signed-in" } },
   {

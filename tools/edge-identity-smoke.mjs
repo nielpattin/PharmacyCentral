@@ -2,9 +2,8 @@
 //
 //   node --env-file=.env tools/edge-identity-smoke.mjs
 //
-// API_BASE_URL and COOKIE_SECURE come from the environment and have no defaults: an unset value stops the script
-// rather than testing the wrong origin or expecting the wrong cookie flags. Every check prints PASS or FAIL, and the
-// process exits non-zero when any check fails.
+// API_BASE_URL comes from the environment and has no default: an unset value stops the script rather than testing the
+// wrong origin. Every check prints PASS or FAIL, and the process exits non-zero when any check fails.
 //
 // The 401 check describes the local gateway. On AWS the authorizer refuses the merge call for its missing CSRF token
 // before it reaches sales-service.
@@ -20,16 +19,6 @@ if (!apiBaseUrl) {
   fail("Missing required environment variable: API_BASE_URL. Set it in .env (node --env-file=.env ...).");
 }
 
-const cookieSecureValue = process.env.COOKIE_SECURE;
-if (!cookieSecureValue) {
-  fail("Missing required environment variable: COOKIE_SECURE. Set it to true or false in .env.");
-}
-if (cookieSecureValue !== "true" && cookieSecureValue !== "false") {
-  fail(`Invalid COOKIE_SECURE: expected "true" or "false", got "${cookieSecureValue}".`);
-}
-const expectSecure = cookieSecureValue === "true";
-
-const cookieName = "pharmacy_guest_cart";
 const base = apiBaseUrl.replace(/\/$/, "");
 
 const send = async (path, init = {}) => {
@@ -41,57 +30,20 @@ const expect = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
-// The guest cart request is shared by the cookie checks, so it is sent once.
-let guestCartRequest;
-const guestCart = () => {
-  guestCartRequest ??= send("/api/carts", { headers: { "x-actor-id": randomUUID() } });
-  return guestCartRequest;
-};
-
-const guestCookie = async () => {
-  const response = await guestCart();
-  return response.headers.getSetCookie().find((value) => value.startsWith(`${cookieName}=`));
-};
-
-const cookieAttributes = (setCookie) =>
-  setCookie
-    .split(";")
-    .slice(1)
-    .map((part) => part.trim().toLowerCase());
-
 const checks = [
   [
-    "GET /api/carts with a client X-Actor-Id answers 200",
+    "GET /api/carts with a client X-Actor-Id and no identity context answers 401 trusted_request_required",
     async () => {
-      const response = await guestCart();
-      expect(response.status === 200, `status ${response.status}`);
+      const response = await send("/api/carts", { headers: { "x-actor-id": randomUUID() } });
+      expect(response.status === 401, `status ${response.status}`);
+      expect(response.body.includes("trusted_request_required"), "response body lacks trusted_request_required");
     },
   ],
   [
-    "GET /api/carts sets the pharmacy_guest_cart cookie",
+    "GET /api/carts with no identity context sets no cookie",
     async () => {
-      const setCookie = await guestCookie();
-      expect(setCookie !== undefined, "no pharmacy_guest_cart Set-Cookie header");
-      expect(setCookie.split(";")[0].length > `${cookieName}=`.length, "pharmacy_guest_cart has an empty value");
-    },
-  ],
-  [
-    "pharmacy_guest_cart is HttpOnly and SameSite=Lax",
-    async () => {
-      const setCookie = await guestCookie();
-      expect(setCookie !== undefined, "no pharmacy_guest_cart Set-Cookie header");
-      const attributes = cookieAttributes(setCookie);
-      expect(attributes.includes("httponly"), "HttpOnly is missing");
-      expect(attributes.includes("samesite=lax"), "SameSite=Lax is missing");
-    },
-  ],
-  [
-    `pharmacy_guest_cart Secure flag matches COOKIE_SECURE=${cookieSecureValue}`,
-    async () => {
-      const setCookie = await guestCookie();
-      expect(setCookie !== undefined, "no pharmacy_guest_cart Set-Cookie header");
-      const hasSecure = cookieAttributes(setCookie).includes("secure");
-      expect(hasSecure === expectSecure, `Secure is ${hasSecure ? "present" : "absent"}`);
+      const response = await send("/api/carts", { headers: { "x-actor-id": randomUUID() } });
+      expect(response.headers.getSetCookie().length === 0, "a Set-Cookie header was sent");
     },
   ],
   [

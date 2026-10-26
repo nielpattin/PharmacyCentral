@@ -51,7 +51,9 @@ describe("policy - route classification", () => {
     assert.equal(isPublicRoute("/api/stores"), true);
     assert.equal(isPublicRoute("/api/pricing/active"), true);
     assert.equal(isPublicRoute("/api/availability"), true);
-    assert.equal(isPublicRoute("/api/carts"), true);
+    // A cart belongs to a signed-in customer, so no cart path is open to an anonymous caller.
+    assert.equal(isPublicRoute("/api/carts"), false);
+    assert.equal(isPublicRoute("/api/carts/lines"), false);
     assert.equal(isPublicRoute("/api/delivery/calculate"), true);
     assert.equal(isPublicRoute("/api/delivery/reverse-geocode"), true);
     assert.equal(isPublicRoute("/api/delivery/addresses/search"), true);
@@ -70,9 +72,9 @@ describe("policy - route classification", () => {
   });
 
   it("identifies optional identity routes", () => {
-    assert.equal(isOptionalIdentityRoute("/api/carts"), true);
-    assert.equal(isOptionalIdentityRoute("/carts"), true);
-    assert.equal(isOptionalIdentityRoute("/api/carts/123/items"), true);
+    assert.equal(isOptionalIdentityRoute("/api/carts"), false);
+    assert.equal(isOptionalIdentityRoute("/carts"), false);
+    assert.equal(isOptionalIdentityRoute("/api/carts/123/items"), false);
     assert.equal(isOptionalIdentityRoute("/api/delivery/calculate"), true);
     assert.equal(isOptionalIdentityRoute("/api/products"), false);
     assert.equal(isOptionalIdentityRoute("/api/orders"), false);

@@ -137,9 +137,9 @@ locals {
   # search-service is a Go binary: no node entrypoint, no Drizzle migration, and its own health endpoint.
   go_services = ["search-service"]
 
-  # sales-service and identity-service set the guest cart and session cookies with Secure. AWS serves them over HTTPS
-  # only, and both services refuse to start without COOKIE_SECURE (ADR 0010).
-  cookie_secure_services = ["identity-service", "sales-service"]
+  # identity-service sets the session and CSRF cookies with Secure. AWS serves them over HTTPS only, and the services
+  # listed here refuse to start without COOKIE_SECURE (ADR 0010).
+  cookie_secure_services = ["identity-service"]
 
   # Services that need more than the shared task size. sales-service writes every order and runs its outbox relay
   # in the same process; at 0.5 vCPU it was the first container to hit its CPU cap under the checkout load test.
@@ -1017,7 +1017,7 @@ resource "aws_apigatewayv2_api" "public" {
 
   cors_configuration {
     allow_credentials = true
-    allow_headers     = ["content-type", "cookie", "idempotency-key", "x-csrf-token", "x-guest-cart-token", "x-request-id"]
+    allow_headers     = ["content-type", "cookie", "idempotency-key", "x-csrf-token", "x-request-id"]
     allow_methods     = ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]
     allow_origins     = var.allowed_origins
     max_age           = 3600

@@ -273,7 +273,8 @@ export const governanceLiterals: Record<string, string> = {
     "Ghi đơn đặt hàng cần vai trò Quản lý nhà thuốc. Phiếu nhập hàng cần vai trò Nhân viên kho.",
   "Batches, movements, adjustments, transfers, stocktakes and returns need Warehouse Staff.":
     "Lô, biến động, điều chỉnh, điều chuyển, kiểm kê và trả hàng cần vai trò Nhân viên kho.",
-  "Carts work for guests. Orders need a sign-in.": "Giỏ hàng dùng được với khách vãng lai. Đơn hàng cần đăng nhập.",
+  "A signed-out cart stays in the browser. Carts need a sign-in.":
+    "Giỏ hàng của khách chưa đăng nhập nằm trong trình duyệt. Giỏ hàng cần đăng nhập.",
   "Delivery fee estimates, reverse geocoding and address lookup are public.":
     "Ước tính phí giao hàng, tìm địa chỉ ngược và tra cứu địa chỉ là công khai.",
   "Shoppers can upload their own prescriptions and request consultations.":
