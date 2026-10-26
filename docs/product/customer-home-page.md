@@ -27,6 +27,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 - Source: `[observed]`, matching the [user guide](../user-guide.md#browsing-and-search). Targets: Decisions 1, 2, 15, 16.
 - Accepted when:
   - `/` shows, top to bottom: the hero, the quick actions, the product section (`#san-pham`), the pharmacy section (`#nha-thuoc`), then the footer.
+  - While a search term is set (`/?q=x`) the hero and the quick actions are not shown: the product results come first, then the pharmacy section.
   - With no search or category, the heading is **Tất cả sản phẩm** and the description gives the total of active products, read from `GET /api/products/count` (for example "128 sản phẩm"). (gap G1, G2)
   - Submitting "x" in the header search navigates to `/?q=x`, the heading becomes **Kết quả tìm kiếm**, the description contains `cho “x”`, and the page scrolls to `#san-pham`. Submitting an empty box removes `q`. A submit adds a history entry; a sort change replaces it.
   - **Xoá bộ lọc** appears only when a search or category is set. It removes `q` and `danh-muc` and resets the sort to **Mặc định**.

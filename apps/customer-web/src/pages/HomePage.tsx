@@ -101,9 +101,12 @@ export const HomePage = (): React.JSX.Element => {
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
         {error ? <Alert variant="danger">{error}</Alert> : null}
 
-        <HeroPanel />
-
-        <QuickActions onFindNearest={() => scrollToSection("nha-thuoc")} />
+        {filters.search ? null : (
+          <>
+            <HeroPanel />
+            <QuickActions onFindNearest={() => scrollToSection("nha-thuoc")} />
+          </>
+        )}
 
         <CatalogSection
           key={`${filters.search}|${filters.category ?? ""}`}
