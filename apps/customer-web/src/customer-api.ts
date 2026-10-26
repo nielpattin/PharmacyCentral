@@ -158,7 +158,14 @@ export type OrderLine = {
   quantity: string;
 };
 
-export type Customer = { id: string; displayName: string; email: string; phoneNumber: string | null };
+export type Customer = {
+  id: string;
+  displayName: string;
+  email: string;
+  phoneNumber: string | null;
+  /** `customer` for a shopper; staff sessions carry `employee` (or `system`) and never own orders. */
+  actorType: string;
+};
 /** A row of `GET /orders`: the sales service lists orders without their lines or delivery snapshot. */
 export type CustomerOrder = {
   id: string;
@@ -349,6 +356,15 @@ export const sendChatbotMessage = async (sessionId: string, content: string): Pr
     ),
   );
 export const listOrders = (): Promise<CustomerOrder[]> => request("/api/orders");
+/**
+ * The sales service answers every shopper's rows to a staff session, because the staff portal reviews them there. The
+ * customer site therefore asks for a list only on behalf of a shopper; a staff account gets an empty list, never
+ * another shopper's data.
+ */
+export const forShopper = <T>(
+  account: Pick<Customer, "actorType"> | undefined,
+  load: () => Promise<T[]>,
+): Promise<T[]> => (account?.actorType === "customer" ? load() : Promise.resolve([]));
 export const getOrder = (id: string): Promise<CustomerOrderDetail> => request(`/api/orders/${id}`);
 /** The invoice as the payment service has it now, which is how a shopper's page learns the transfer has landed. */
 export const getPaymentInvoice = (id: string): Promise<PaymentInvoice> => request(`/api/payments/invoices/${id}`);

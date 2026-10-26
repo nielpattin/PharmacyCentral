@@ -4,6 +4,7 @@ import { Link as RouterLink, useNavigate, useSearch } from "@tanstack/react-rout
 import { useState } from "react";
 import {
   deleteDeliveryAddress,
+  forShopper,
   listDeliveryAddresses,
   listOrders,
   listPrescriptionConsultations,
@@ -99,18 +100,18 @@ export const AccountPage = (): React.JSX.Element => {
   const ordersQuery = useQuery({
     queryKey: ["customer-orders"],
     enabled: Boolean(customer) && (section === "tong-quan" || section === "don-hang"),
-    queryFn: async () => listOrders(),
+    queryFn: async () => forShopper(customer, listOrders),
   });
   const prescriptionsQuery = useQuery({
     queryKey: ["customer-prescriptions"],
     // The overview tile shows this count, so the panel is not the only thing that needs it.
     enabled: Boolean(customer) && (section === "don-thuoc" || section === "tong-quan"),
-    queryFn: async () => listPrescriptions(),
+    queryFn: async () => forShopper(customer, listPrescriptions),
   });
   const consultationsQuery = useQuery({
     queryKey: ["customer-prescription-consultations"],
     enabled: Boolean(customer) && section === "don-thuoc",
-    queryFn: listPrescriptionConsultations,
+    queryFn: () => forShopper(customer, listPrescriptionConsultations),
   });
 
   const orders = ordersQuery.data ?? [];

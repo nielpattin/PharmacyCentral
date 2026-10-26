@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
 import {
+  forShopper,
   listOrders,
   listStores,
   resolveCustomerSession,
@@ -49,7 +50,7 @@ export const OrdersPage = (): React.JSX.Element => {
     queryFn: async () => {
       const customer = await resolveCustomerSession();
       if (!customer) return { orders: [] as CustomerOrder[], stores: [] as CatalogStore[] };
-      const [orders, stores] = await Promise.all([listOrders(), listStores()]);
+      const [orders, stores] = await Promise.all([forShopper(customer, listOrders), listStores()]);
       return { orders, stores };
     },
     refetchInterval: session.authenticated ? REFRESH_INTERVAL_MS : false,
