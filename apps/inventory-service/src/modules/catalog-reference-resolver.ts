@@ -1,4 +1,5 @@
 import type { OpeningBalanceImportRow } from "../contracts/imports.ts";
+import { internalServiceHeaders } from "../internal-service-headers.ts";
 
 import type { OpeningBalanceReference, OpeningBalanceReferenceResolver } from "./inventory-import-service.ts";
 
@@ -43,7 +44,7 @@ export class CatalogServiceReferenceResolver implements OpeningBalanceReferenceR
 
   private async getJson<T>(path: string): Promise<T> {
     const response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...internalServiceHeaders() },
     });
     if (!response.ok) throw new Error(`Catalog service request failed with status ${response.status} for ${path}`);
     return (await response.json()) as T;

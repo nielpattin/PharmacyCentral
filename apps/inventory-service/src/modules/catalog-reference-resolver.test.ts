@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CatalogServiceReferenceResolver } from "./catalog-reference-resolver.ts";
 
@@ -38,6 +38,28 @@ const resolverFor = (fetchImplementation: typeof fetch) =>
   new CatalogServiceReferenceResolver("http://catalog.local", fetchImplementation);
 
 describe("CatalogServiceReferenceResolver", () => {
+  beforeEach(() => {
+    vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-service-secret");
+  });
+
+  it("authenticates every catalog lookup with the service secret", async () => {
+    const { fetchImplementation } = createFetch();
+    await resolverFor(fetchImplementation).resolve({
+      productId: ids.product,
+      siteCode: "SITE-WH",
+      storageLocationCode: "WH-A",
+      batchNumber: "LOT-1",
+      quantityOnHand: 100,
+      expiryDate: "2028-01-05",
+      qualityStatus: "Released" as const,
+    });
+
+    const calls = fetchImplementation.mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [, init] of calls)
+      expect(init?.headers).toMatchObject({ "x-internal-service-secret": "test-service-secret" });
+  });
+
   it("resolves natural keys and caches catalog lookups", async () => {
     const { fetchImplementation, productsSearch } = createFetch();
     const resolver = resolverFor(fetchImplementation);
