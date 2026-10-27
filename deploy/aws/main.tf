@@ -1,42 +1,34 @@
 locals {
   environment_name = "${var.project_name}-${var.environment}"
+  namespace        = "${var.environment}.pharmacy.internal"
 
   backend_services = {
     identity-service = {
-      port  = 3001
-      image = var.images["identity-service"]
+      port = 3001
     }
     catalog-service = {
-      port  = 3002
-      image = var.images["catalog-service"]
+      port = 3002
     }
     inventory-service = {
-      port  = 3004
-      image = var.images["inventory-service"]
+      port = 3004
     }
     sales-service = {
-      port  = 3005
-      image = var.images["sales-service"]
+      port = 3005
     }
     payment-service = {
-      port  = 3006
-      image = var.images["payment-service"]
+      port = 3006
     }
     operations-query-service = {
-      port  = 3007
-      image = var.images["operations-query-service"]
+      port = 3007
     }
     chatbot-service = {
-      port  = 3008
-      image = var.images["chatbot-service"]
+      port = 3008
     }
     search-service = {
-      port  = 3009
-      image = var.images["search-service"]
+      port = 3009
     }
     ops-console-service = {
-      port  = 3010
-      image = var.images["ops-console-service"]
+      port = 3010
     }
   }
 
@@ -48,7 +40,13 @@ locals {
     }
     catalog-service = {
       priority = 20
-      paths    = ["/sites*", "/storage-locations*", "/products*", "/suppliers*", "/pricing*", "/stores*", "/availability*"]
+      paths    = ["/sites*", "/storage-locations*", "/products*", "/suppliers*", "/pricing*"]
+      service  = "catalog-service"
+    }
+    # An ALB rule takes at most 5 condition values, so the catalog paths are split over two rules.
+    catalog-stores = {
+      priority = 25
+      paths    = ["/stores*", "/availability*"]
       service  = "catalog-service"
     }
     procurement = {
@@ -88,58 +86,35 @@ locals {
     }
   }
 
-  authorizer_secret_env = merge(
-    { for k in ["INTERNAL_IDENTITY_SECRET", "INTERNAL_SERVICE_SECRET"] : k => var.shared_secrets[k] if contains(keys(var.shared_secrets), k) },
-    var.authorizer_secrets
-  )
-
-  service_secret_arns = distinct(compact(concat(
-    values(var.shared_secrets),
-    flatten([for s in values(var.service_secrets) : values(s)])
-  )))
-
-  execution_secret_arns = distinct(compact(concat(
-    local.service_secret_arns,
-    [var.embedder_api_key_secret_arn],
-    var.repository_credentials_secret_arn != null && var.repository_credentials_secret_arn != "" ? [var.repository_credentials_secret_arn] : []
-  )))
-
-  authorizer_secret_arns = distinct(compact(concat(
-    values(local.authorizer_secret_env),
-    values(var.authorizer_secrets)
-  )))
-
-  embedder_name     = "embedder"
-  embedder_port     = 80
-  embedder_model_id = "intfloat/multilingual-e5-small"
-  embedder_url      = "http://${aws_service_discovery_service.embedder.name}.${aws_service_discovery_private_dns_namespace.this.name}:${local.embedder_port}/v1"
-
-  # Keys are Fargate CPU units; values are [min, max] task memory in MiB.
-  fargate_memory_bounds = {
-    "1024" = [2048, 8192]
-    "2048" = [4096, 16384]
-    "4096" = [8192, 30720]
+  # Which backend services each service calls. Each becomes <NAME>_SERVICE_URL pointing at its Cloud Map name.
+  service_dependencies = {
+    inventory-service        = ["catalog-service"]
+    sales-service            = ["catalog-service", "inventory-service", "identity-service"]
+    payment-service          = ["catalog-service", "sales-service"]
+    operations-query-service = ["catalog-service", "inventory-service", "sales-service"]
+    chatbot-service          = ["catalog-service"]
+    search-service           = ["catalog-service"]
+    ops-console-service      = ["identity-service", "catalog-service", "search-service", "inventory-service", "sales-service", "payment-service", "operations-query-service", "chatbot-service"]
   }
 
-  embedder_clients = ["catalog-service", "search-service"]
+  # Non-secret settings TFCore owns. The OTLP endpoint is unreachable unless otel_collector_enabled, so spans are dropped.
+  service_environment = {
+    for name in keys(local.backend_services) : name => merge(
+      { OTEL_EXPORTER_OTLP_ENDPOINT = "http://otel-collector.${local.namespace}:4318" },
+      { for dep in lookup(local.service_dependencies, name, []) : "${replace(upper(dep), "-", "_")}_URL" => "http://${dep}.${local.namespace}:${local.backend_services[dep].port}" },
+      name == "ops-console-service" ? {
+        PROMETHEUS_URL     = "http://prometheus.${local.namespace}:9090"
+        GRAFANA_PUBLIC_URL = "https://grafana.invalid"
+      } : {},
+    )
+  }
 
-  # The clients' four AI_EMBEDDING_* settings are set together here, and the key is the secret the embedder reads, so
-  # the two sides cannot drift apart.
-  embedder_client_environment = {
-    AI_EMBEDDING_PROVIDER = "openai-compatible"
-    AI_EMBEDDING_BASE_URL = local.embedder_url
-    AI_EMBEDDING_MODEL    = local.embedder_model_id
-  }
-  embedder_client_secrets = {
-    AI_EMBEDDING_API_KEY = var.embedder_api_key_secret_arn
-  }
+  # identity-service sets the session and CSRF cookies with Secure when var.cookie_secure is true. The services listed
+  # here refuse to start without COOKIE_SECURE (ADR 0010).
+  cookie_secure_services = ["identity-service"]
 
   # search-service is a Go binary: no node entrypoint, no Drizzle migration, and its own health endpoint.
   go_services = ["search-service"]
-
-  # identity-service sets the session and CSRF cookies with Secure. AWS serves them over HTTPS only, and the services
-  # listed here refuse to start without COOKIE_SECURE (ADR 0010).
-  cookie_secure_services = ["identity-service"]
 
   # Services that need more than the shared task size. sales-service writes every order and runs its outbox relay
   # in the same process; at 0.5 vCPU it was the first container to hit its CPU cap under the checkout load test.
@@ -153,29 +128,50 @@ locals {
   databaseless_services = ["search-service", "ops-console-service"]
   migrating_services    = { for name, service in local.backend_services : name => service if !contains(local.databaseless_services, name) }
 
+  embedder_name        = "embedder"
+  embedder_port        = 80
+  embedder_model_id    = "intfloat/multilingual-e5-small"
+  embedder_url         = "http://${local.embedder_name}.${local.namespace}:${local.embedder_port}/v1"
+  embedder_task_cpu    = 2048
+  embedder_task_memory = 4096
+
+  # The clients' four AI_EMBEDDING_* settings are set together, and the key is the secret the embedder reads, so the two
+  # sides cannot drift apart. Both are empty unless embedder_enabled, because the group is all or none (AGENTS.md).
+  embedder_client_services = var.embedder_enabled ? ["catalog-service", "search-service"] : []
+  embedder_client_environment = var.embedder_enabled ? {
+    AI_EMBEDDING_PROVIDER = "openai-compatible"
+    AI_EMBEDDING_BASE_URL = local.embedder_url
+    AI_EMBEDDING_MODEL    = local.embedder_model_id
+  } : {}
+  embedder_client_secrets = var.embedder_enabled ? {
+    AI_EMBEDDING_API_KEY = local.secret_arn["shared/AI_EMBEDDING_API_KEY"]
+  } : {}
+
   # Container environment and secrets per backend service. The service and the migration task definitions both use these.
   task_environment = {
-    for name in keys(local.backend_services) :
-    name => merge(
-      lookup(var.service_environment, name, {}),
-      contains(local.cookie_secure_services, name) ? { COOKIE_SECURE = "true" } : {},
-      contains(local.embedder_clients, name) ? local.embedder_client_environment : {}
+    for name in keys(local.backend_services) : name => merge(
+      lookup(var.service_environment_extra, name, {}),
+      lookup(local.web_service_environment, name, {}),
+      local.service_environment[name],
+      contains(local.cookie_secure_services, name) ? { COOKIE_SECURE = tostring(var.cookie_secure) } : {},
+      contains(local.embedder_client_services, name) ? local.embedder_client_environment : {},
     )
   }
   task_secrets = {
-    for name in keys(local.backend_services) :
-    name => merge(
-      var.shared_secrets,
-      lookup(var.service_secrets, name, {}),
-      contains(local.embedder_clients, name) ? local.embedder_client_secrets : {}
+    for name in keys(local.backend_services) : name => merge(
+      local.service_secret_arns[name],
+      contains(local.embedder_client_services, name) ? local.embedder_client_secrets : {},
     )
   }
+
+  # The execution role reads every secret the stack creates.
+  execution_secret_arns = concat(values(local.secret_arn), [for secret in aws_secretsmanager_secret.catalog_media : secret.arn])
 }
 
 resource "aws_security_group" "vpc_link" {
   name        = "${local.environment_name}-vpc-link"
   description = "Security group for API Gateway HTTP API VPC link"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.this.id
 
   tags = {
     Name = "${local.environment_name}-vpc-link"
@@ -185,7 +181,7 @@ resource "aws_security_group" "vpc_link" {
 resource "aws_security_group" "alb" {
   name        = "${local.environment_name}-alb"
   description = "Security group for internal Application Load Balancer"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.this.id
 
   tags = {
     Name = "${local.environment_name}-alb"
@@ -195,7 +191,7 @@ resource "aws_security_group" "alb" {
 resource "aws_security_group" "ecs_tasks" {
   name        = "${local.environment_name}-ecs-tasks"
   description = "Security group for backend ECS Fargate tasks"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.this.id
 
   tags = {
     Name = "${local.environment_name}-ecs-tasks"
@@ -205,7 +201,7 @@ resource "aws_security_group" "ecs_tasks" {
 resource "aws_security_group" "lambda" {
   name        = "${local.environment_name}-authorizer-lambda"
   description = "Security group for authorizer Lambda in private VPC subnets"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.this.id
 
   tags = {
     Name = "${local.environment_name}-authorizer-lambda"
@@ -256,7 +252,7 @@ resource "aws_security_group_rule" "tasks_ingress_alb" {
   type                     = "ingress"
   description              = "Allow inbound traffic from internal ALB on backend service ports"
   from_port                = 3001
-  to_port                  = 3009
+  to_port                  = 3010
   protocol                 = "tcp"
   security_group_id        = aws_security_group.ecs_tasks.id
   source_security_group_id = aws_security_group.alb.id
@@ -267,6 +263,16 @@ resource "aws_security_group_rule" "tasks_ingress_self" {
   description       = "Allow service-to-service Cloud Map communication between ECS tasks"
   from_port         = 3001
   to_port           = 3010
+  protocol          = "tcp"
+  security_group_id = aws_security_group.ecs_tasks.id
+  self              = true
+}
+
+resource "aws_security_group_rule" "tasks_ingress_typesense" {
+  type              = "ingress"
+  description       = "Allow backend ECS tasks to reach Typesense"
+  from_port         = 8108
+  to_port           = 8108
   protocol          = "tcp"
   security_group_id = aws_security_group.ecs_tasks.id
   self              = true
@@ -293,9 +299,11 @@ resource "aws_security_group_rule" "lambda_egress_all" {
 }
 
 resource "aws_security_group" "embedder" {
+  count = var.embedder_enabled ? 1 : 0
+
   name        = "${local.environment_name}-embedder"
   description = "Security group for the embedder ECS Fargate task"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.this.id
 
   tags = {
     Name = "${local.environment_name}-embedder"
@@ -305,9 +313,11 @@ resource "aws_security_group" "embedder" {
 # Attached to the catalog-service and search-service tasks only. The embedder group allows traffic from this group, not
 # from the shared ECS tasks group, so no other backend service can reach the embedder.
 resource "aws_security_group" "embedder_client" {
+  count = var.embedder_enabled ? 1 : 0
+
   name        = "${local.environment_name}-embedder-client"
   description = "Attached to catalog-service and search-service ECS tasks, the only clients allowed to reach the embedder"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.this.id
 
   tags = {
     Name = "${local.environment_name}-embedder-client"
@@ -315,22 +325,26 @@ resource "aws_security_group" "embedder_client" {
 }
 
 resource "aws_security_group_rule" "embedder_ingress_clients" {
+  count = var.embedder_enabled ? 1 : 0
+
   type                     = "ingress"
   description              = "Allow inbound HTTP on port 80 from catalog-service and search-service tasks only"
   from_port                = 80
   to_port                  = 80
   protocol                 = "tcp"
-  security_group_id        = aws_security_group.embedder.id
-  source_security_group_id = aws_security_group.embedder_client.id
+  security_group_id        = aws_security_group.embedder[0].id
+  source_security_group_id = aws_security_group.embedder_client[0].id
 }
 
 resource "aws_security_group_rule" "embedder_egress_all" {
+  count = var.embedder_enabled ? 1 : 0
+
   type              = "egress"
-  description       = "Allow outbound traffic for ECR image pulls, CloudWatch Logs, Secrets Manager, and NAT gateway"
+  description       = "Allow outbound traffic for image pulls, CloudWatch Logs, Secrets Manager, and NAT gateway"
   from_port         = 0
   to_port           = 0
   protocol          = "-1"
-  security_group_id = aws_security_group.embedder.id
+  security_group_id = aws_security_group.embedder[0].id
   cidr_blocks       = ["0.0.0.0/0"]
 }
 
@@ -344,12 +358,14 @@ resource "aws_ecs_cluster" "this" {
 }
 
 resource "aws_cloudwatch_log_group" "service" {
-  for_each          = local.backend_services
+  for_each          = toset(concat(keys(local.backend_services), ["ops", "typesense"]))
   name              = "/ecs/${local.environment_name}/${each.key}"
   retention_in_days = var.log_retention_in_days
 }
 
 resource "aws_cloudwatch_log_group" "embedder" {
+  count = var.embedder_enabled ? 1 : 0
+
   name              = "/ecs/${local.environment_name}/${local.embedder_name}"
   retention_in_days = var.log_retention_in_days
 }
@@ -375,9 +391,8 @@ resource "aws_iam_role_policy_attachment" "task_execution" {
 }
 
 resource "aws_iam_policy" "task_execution_secrets" {
-  count       = length(local.execution_secret_arns) > 0 ? 1 : 0
   name        = "${local.environment_name}-ecs-execution-secrets"
-  description = "Allow ECS task execution role to read configured Secrets Manager secrets and optional repository credentials"
+  description = "Allow ECS task execution role to read the secrets this stack creates"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -392,9 +407,8 @@ resource "aws_iam_policy" "task_execution_secrets" {
 }
 
 resource "aws_iam_role_policy_attachment" "task_execution_secrets" {
-  count      = length(local.execution_secret_arns) > 0 ? 1 : 0
   role       = aws_iam_role.task_execution.name
-  policy_arn = aws_iam_policy.task_execution_secrets[0].arn
+  policy_arn = aws_iam_policy.task_execution_secrets.arn
 }
 
 resource "aws_iam_role" "task" {
@@ -417,17 +431,17 @@ resource "aws_lb" "internal" {
   internal           = true
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = var.private_subnet_ids
+  subnets            = aws_subnet.private[*].id
 }
 
 resource "aws_lb_target_group" "service" {
   for_each = local.backend_services
 
-  name        = substr("${local.environment_name}-${replace(each.key, "_", "-")}", 0, 32)
+  name        = trimsuffix(substr("${local.environment_name}-${replace(each.key, "_", "-")}", 0, 32), "-")
   port        = each.value.port
   protocol    = "HTTP"
   target_type = "ip"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.this.id
 
   health_check {
     enabled             = true
@@ -501,31 +515,14 @@ resource "aws_lb_listener_rule" "search_products" {
 }
 
 resource "aws_service_discovery_private_dns_namespace" "this" {
-  name = "${var.environment}.pharmacy.internal"
-  vpc  = var.vpc_id
+  name = local.namespace
+  vpc  = aws_vpc.this.id
 }
 
 resource "aws_service_discovery_service" "service" {
   for_each = local.backend_services
 
   name = each.key
-
-  dns_config {
-    namespace_id = aws_service_discovery_private_dns_namespace.this.id
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-    routing_policy = "MULTIVALUE"
-  }
-
-  health_check_custom_config {
-    failure_threshold = 1
-  }
-}
-
-resource "aws_service_discovery_service" "embedder" {
-  name = local.embedder_name
 
   dns_config {
     namespace_id = aws_service_discovery_private_dns_namespace.this.id
@@ -561,7 +558,7 @@ resource "aws_ecs_task_definition" "service" {
     merge(
       {
         name      = each.key
-        image     = each.value.image
+        image     = "${aws_ecr_repository.service[each.key].repository_url}:${var.image_tag}"
         essential = true
         cpu       = try(local.task_sizes[each.key].cpu, var.task_cpu)
         memory    = try(local.task_sizes[each.key].memory, var.task_memory)
@@ -611,11 +608,6 @@ resource "aws_ecs_task_definition" "service" {
           startPeriod = 30
         }
       },
-      var.repository_credentials_secret_arn != null && var.repository_credentials_secret_arn != "" ? {
-        repositoryCredentials = {
-          credentialsParameter = var.repository_credentials_secret_arn
-        }
-      } : {}
     )
   ])
 }
@@ -637,49 +629,89 @@ resource "aws_ecs_task_definition" "migration" {
   }
 
   container_definitions = jsonencode([
-    merge(
-      {
-        name      = "${each.key}-migration"
-        image     = each.value.image
-        essential = true
-        cpu       = var.task_cpu
-        memory    = var.task_memory
-        user      = "node"
-        command   = ["node", "dist/migrate.js"]
-        environment = concat(
-          [
-            { name = "NODE_ENV", value = "production" },
-            { name = "PORT", value = tostring(each.value.port) },
-          ],
-          [
-            for name, value in local.task_environment[each.key] : {
-              name  = name
-              value = value
-            }
-          ],
-        )
-        secrets = [
-          for name, value_from in local.task_secrets[each.key] : {
-            name      = name
-            valueFrom = value_from
+    {
+      name      = "${each.key}-migration"
+      image     = "${aws_ecr_repository.service[each.key].repository_url}:${var.image_tag}"
+      essential = true
+      cpu       = var.task_cpu
+      memory    = var.task_memory
+      user      = "node"
+      command   = ["node", "dist/migrate.js"]
+      environment = concat(
+        [
+          { name = "NODE_ENV", value = "production" },
+          { name = "PORT", value = tostring(each.value.port) },
+        ],
+        [
+          for name, value in local.task_environment[each.key] : {
+            name  = name
+            value = value
           }
-        ]
-        readonlyRootFilesystem = true
-        logConfiguration = {
-          logDriver = "awslogs"
-          options = {
-            "awslogs-group"         = aws_cloudwatch_log_group.service[each.key].name
-            "awslogs-region"        = var.aws_region
-            "awslogs-stream-prefix" = "migration"
-          }
+        ],
+      )
+      secrets = [
+        for name, value_from in local.task_secrets[each.key] : {
+          name      = name
+          valueFrom = value_from
         }
-      },
-      var.repository_credentials_secret_arn != null && var.repository_credentials_secret_arn != "" ? {
-        repositoryCredentials = {
-          credentialsParameter = var.repository_credentials_secret_arn
+      ]
+      readonlyRootFilesystem = true
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.service[each.key].name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "migration"
         }
-      } : {}
-    )
+      }
+    }
+  ])
+}
+
+# Runs the database roles and databases, and seeds the demo accounts (see deploy/aws/ops/Dockerfile). Its command is
+# given at run time with --overrides.
+resource "aws_ecs_task_definition" "ops" {
+  family                   = "${local.environment_name}-ops"
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  execution_role_arn       = aws_iam_role.task_execution.arn
+  task_role_arn            = aws_iam_role.task.arn
+
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "X86_64"
+  }
+
+  container_definitions = jsonencode([
+    {
+      name                   = "ops"
+      image                  = "${aws_ecr_repository.service["ops"].repository_url}:${var.image_tag}"
+      essential              = true
+      cpu                    = var.task_cpu
+      memory                 = var.task_memory
+      readonlyRootFilesystem = true
+      environment = [
+        { name = "PGHOST", value = aws_db_instance.this.address },
+        { name = "PGSSLMODE", value = "require" },
+        { name = "POSTGRES_USER", value = local.admin_user },
+      ]
+      secrets = [
+        for name, value_from in local.ops_secret_arns : {
+          name      = name
+          valueFrom = value_from
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.service["ops"].name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ops"
+        }
+      }
+    }
   ])
 }
 
@@ -699,8 +731,8 @@ resource "aws_ecs_service" "service" {
   propagate_tags                     = "SERVICE"
 
   network_configuration {
-    subnets          = var.private_subnet_ids
-    security_groups  = contains(local.embedder_clients, each.key) ? [aws_security_group.ecs_tasks.id, aws_security_group.embedder_client.id] : [aws_security_group.ecs_tasks.id]
+    subnets          = aws_subnet.private[*].id
+    security_groups  = concat([aws_security_group.ecs_tasks.id], contains(local.embedder_client_services, each.key) ? aws_security_group.embedder_client[*].id : [])
     assign_public_ip = false
   }
 
@@ -769,10 +801,33 @@ resource "aws_appautoscaling_policy" "service_memory" {
   }
 }
 
+resource "aws_service_discovery_service" "embedder" {
+  count = var.embedder_enabled ? 1 : 0
+
+  name = local.embedder_name
+
+  dns_config {
+    namespace_id = aws_service_discovery_private_dns_namespace.this.id
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
+  }
+}
+
+# Self-hosted product search embeddings, off by default. The model downloads on start (no volume on Fargate), so the
+# container keeps a writable /tmp for the model cache.
 resource "aws_ecs_task_definition" "embedder" {
+  count = var.embedder_enabled ? 1 : 0
+
   family                   = "${local.environment_name}-${local.embedder_name}"
-  cpu                      = var.embedder_task_cpu
-  memory                   = var.embedder_task_memory
+  cpu                      = local.embedder_task_cpu
+  memory                   = local.embedder_task_memory
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   execution_role_arn       = aws_iam_role.task_execution.arn
@@ -783,78 +838,57 @@ resource "aws_ecs_task_definition" "embedder" {
     cpu_architecture        = "X86_64"
   }
 
-  lifecycle {
-    precondition {
-      condition = (
-        var.embedder_task_memory % 1024 == 0 &&
-        var.embedder_task_memory >= local.fargate_memory_bounds[tostring(var.embedder_task_cpu)][0] &&
-        var.embedder_task_memory <= local.fargate_memory_bounds[tostring(var.embedder_task_cpu)][1]
-      )
-      error_message = "embedder_task_memory is not a valid Fargate memory size for embedder_task_cpu."
-    }
-  }
-
   container_definitions = jsonencode([
-    merge(
-      {
-        name      = local.embedder_name
-        image     = var.embedder_image
-        essential = true
-        cpu       = var.embedder_task_cpu
-        memory    = var.embedder_task_memory
-        user      = "10001"
-        # The image's entrypoint is text-embeddings-router. The shell only expands API_KEY, which ECS injects from
-        # Secrets Manager, so the key never appears in Terraform state or in this file. The :? guard stops the container
-        # if the secret is empty.
-        entryPoint = ["/bin/sh", "-c"]
-        command = [
-          ": \"$${API_KEY:?API_KEY is not set}\"; exec text-embeddings-router --model-id ${local.embedder_model_id} --api-key \"$API_KEY\""
-        ]
-        portMappings = [{
-          containerPort = local.embedder_port
-          hostPort      = local.embedder_port
-          protocol      = "tcp"
-        }]
-        secrets = [{
-          name      = "API_KEY"
-          valueFrom = var.embedder_api_key_secret_arn
-        }]
-        readonlyRootFilesystem = true
-        healthCheck = {
-          command  = ["CMD-SHELL", "curl -fsS http://127.0.0.1:${local.embedder_port}/health || exit 1"]
-          interval = 30
-          timeout  = 10
-          retries  = 3
-          # Loading the ONNX model takes minutes on 2 vCPU. Failures inside this window do not count against the task.
-          startPeriod = 300
+    {
+      name      = local.embedder_name
+      image     = "ghcr.io/huggingface/text-embeddings-inference@sha256:2538ea1c9640d3763b15af668039d24172d063b42337b0c27796fc2be180c78d"
+      essential = true
+      cpu       = local.embedder_task_cpu
+      memory    = local.embedder_task_memory
+      user      = "10001"
+      # The shell only expands API_KEY, which ECS injects from Secrets Manager, so the key never appears in Terraform
+      # state or in this file. The :? guard stops the container if the secret is empty.
+      entryPoint = ["/bin/sh", "-c"]
+      command = [
+        ": \"$${API_KEY:?API_KEY is not set}\"; exec text-embeddings-router --model-id ${local.embedder_model_id} --api-key \"$API_KEY\""
+      ]
+      environment = [{ name = "HUGGINGFACE_HUB_CACHE", value = "/tmp" }]
+      portMappings = [{
+        containerPort = local.embedder_port
+        hostPort      = local.embedder_port
+        protocol      = "tcp"
+      }]
+      secrets = [{
+        name      = "API_KEY"
+        valueFrom = local.secret_arn["shared/AI_EMBEDDING_API_KEY"]
+      }]
+      readonlyRootFilesystem = false
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -fsS http://127.0.0.1:${local.embedder_port}/health || exit 1"]
+        interval    = 30
+        timeout     = 10
+        retries     = 3
+        startPeriod = 300
+      }
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.embedder[0].name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
         }
-        logConfiguration = {
-          logDriver = "awslogs"
-          options = {
-            "awslogs-group"         = aws_cloudwatch_log_group.embedder.name
-            "awslogs-region"        = var.aws_region
-            "awslogs-stream-prefix" = "ecs"
-          }
-        }
-      },
-      var.repository_credentials_secret_arn != null && var.repository_credentials_secret_arn != "" ? {
-        repositoryCredentials = {
-          credentialsParameter = var.repository_credentials_secret_arn
-        }
-      } : {}
-    )
+      }
+    }
   ])
 }
 
-# One task, deliberately, with no autoscaling. While the embedder is down, catalog search falls back to keywords, so a
-# second replica buys little. Deployments start the new task before stopping the old one, so search keeps its
-# embeddings through a release.
+# One task, deliberately, with no autoscaling. While the embedder is down, catalog search falls back to keywords.
 resource "aws_ecs_service" "embedder" {
-  count = var.services_enabled ? 1 : 0
+  count = var.services_enabled && var.embedder_enabled ? 1 : 0
 
   name                               = "${local.environment_name}-${local.embedder_name}"
   cluster                            = aws_ecs_cluster.this.id
-  task_definition                    = aws_ecs_task_definition.embedder.arn
+  task_definition                    = aws_ecs_task_definition.embedder[0].arn
   desired_count                      = 1
   launch_type                        = "FARGATE"
   platform_version                   = "1.4.0"
@@ -864,13 +898,13 @@ resource "aws_ecs_service" "embedder" {
   propagate_tags                     = "SERVICE"
 
   network_configuration {
-    subnets          = var.private_subnet_ids
-    security_groups  = [aws_security_group.embedder.id]
+    subnets          = aws_subnet.private[*].id
+    security_groups  = [aws_security_group.embedder[0].id]
     assign_public_ip = false
   }
 
   service_registries {
-    registry_arn = aws_service_discovery_service.embedder.arn
+    registry_arn = aws_service_discovery_service.embedder[0].arn
   }
 }
 
@@ -905,9 +939,8 @@ resource "aws_iam_role_policy_attachment" "authorizer_vpc" {
 }
 
 resource "aws_iam_policy" "authorizer_secrets" {
-  count       = length(local.authorizer_secret_arns) > 0 ? 1 : 0
   name        = "${local.environment_name}-authorizer-secrets"
-  description = "Allow authorizer Lambda to read Secrets Manager secrets"
+  description = "Allow authorizer Lambda to read the internal identity and service secrets"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -915,16 +948,15 @@ resource "aws_iam_policy" "authorizer_secrets" {
       {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = local.authorizer_secret_arns
+        Resource = values(local.authorizer_secret_env)
       }
     ]
   })
 }
 
 resource "aws_iam_role_policy_attachment" "authorizer_secrets" {
-  count      = length(local.authorizer_secret_arns) > 0 ? 1 : 0
   role       = aws_iam_role.authorizer.name
-  policy_arn = aws_iam_policy.authorizer_secrets[0].arn
+  policy_arn = aws_iam_policy.authorizer_secrets.arn
 }
 
 resource "aws_iam_role" "csrf" {
@@ -963,7 +995,7 @@ resource "aws_lambda_function" "authorizer" {
   memory_size      = 256
 
   vpc_config {
-    subnet_ids         = var.private_subnet_ids
+    subnet_ids         = aws_subnet.private[*].id
     security_group_ids = [aws_security_group.lambda.id]
   }
 
@@ -973,7 +1005,6 @@ resource "aws_lambda_function" "authorizer" {
         NODE_ENV             = "production"
         IDENTITY_SERVICE_URL = "http://${aws_lb.internal.dns_name}"
       },
-      var.authorizer_environment,
       local.authorizer_secret_env
     )
   }
@@ -1001,7 +1032,7 @@ resource "aws_lambda_function" "csrf" {
 
   environment {
     variables = {
-      COOKIE_SECURE = "true"
+      COOKIE_SECURE = tostring(var.cookie_secure)
     }
   }
 
@@ -1011,23 +1042,17 @@ resource "aws_lambda_function" "csrf" {
   ]
 }
 
+# No CORS: the browsers call /api on the origin of their app, and that origin proxies it here, so no cross-origin
+# request exists.
 resource "aws_apigatewayv2_api" "public" {
   name          = "${local.environment_name}-public"
   protocol_type = "HTTP"
-
-  cors_configuration {
-    allow_credentials = true
-    allow_headers     = ["content-type", "cookie", "idempotency-key", "x-csrf-token", "x-request-id"]
-    allow_methods     = ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]
-    allow_origins     = var.allowed_origins
-    max_age           = 3600
-  }
 }
 
 resource "aws_apigatewayv2_vpc_link" "services" {
   name               = "${local.environment_name}-services"
   security_group_ids = [aws_security_group.vpc_link.id]
-  subnet_ids         = var.api_gateway_subnet_ids
+  subnet_ids         = aws_subnet.private[*].id
 }
 
 resource "aws_cloudwatch_log_group" "api_gateway_access_logs" {
@@ -1143,12 +1168,11 @@ resource "aws_apigatewayv2_integration" "sepay_webhook" {
   connection_id          = aws_apigatewayv2_vpc_link.services.id
   payload_format_version = "1.0"
 
+  # API Gateway drops an empty-string override, so it cannot blank the identity headers here. payment-service removes
+  # them itself (stripIdentityHeaders).
   request_parameters = {
-    "overwrite:path"                               = "/payments/sepay/webhook"
-    "overwrite:header.x-actor-id"                  = ""
-    "overwrite:header.x-actor-type"                = ""
-    "overwrite:header.x-internal-identity-context" = ""
-    "overwrite:header.x-request-id"                = "$context.requestId"
+    "overwrite:path"                = "/payments/sepay/webhook"
+    "overwrite:header.x-request-id" = "$context.requestId"
   }
 }
 

@@ -5,7 +5,7 @@
 set -eu
 
 ensure_role() {
-  psql -v ON_ERROR_STOP=1 -h postgres -U "$POSTGRES_USER" -d postgres -v name="$1" -v password="$2" -v admin="$POSTGRES_USER" <<'SQL'
+  psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres -v name="$1" -v password="$2" -v admin="$POSTGRES_USER" <<'SQL'
 SELECT format('CREATE ROLE %I LOGIN', :'name') WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'name') \gexec
 SELECT format('ALTER ROLE %I PASSWORD %L', :'name', :'password') \gexec
 SELECT format('ALTER DATABASE %I OWNER TO %I', :'name', :'name') \gexec

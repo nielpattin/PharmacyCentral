@@ -3,6 +3,9 @@ set -e
 
 if [ -n "$API_BASE_URL" ]; then
   TARGET="${API_BASE_URL%/}"
+  # API Gateway routes by Host and needs SNI, so send the host of API_BASE_URL (with its port, if it has one).
+  API_HOST="${TARGET#*://}"
+  API_HOST="${API_HOST%%/*}"
   cat << EOF > /etc/nginx/conf.d/default.conf
 server {
     listen 8080;
@@ -15,7 +18,8 @@ server {
         client_max_body_size 25m;
         proxy_pass $TARGET/api/;
         proxy_http_version 1.1;
-        proxy_set_header Host \$proxy_host;
+        proxy_ssl_server_name on;
+        proxy_set_header Host $API_HOST;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;

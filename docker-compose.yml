@@ -58,6 +58,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      PGHOST: postgres
       PGPASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_USER: ${POSTGRES_USER}
       IDENTITY_DB_PASSWORD: ${IDENTITY_DB_PASSWORD}
