@@ -10,6 +10,7 @@ import { OperationsRepository } from "./operations-repository.ts";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle/migrations", import.meta.url));
 const scopeHeader = "x-actor-site-ids";
+const identity = () => "signed-for-catalog";
 const siteA = "00000000-0000-4000-8000-00000000005a";
 
 const json = (body: unknown): Response =>
@@ -82,7 +83,7 @@ describe("OperationsRepository counts come from the owning services", () => {
       "/procurement/goods-receipts/count": 900,
     };
 
-    await expect(repository.dashboard([siteA])).resolves.toMatchObject({
+    await expect(repository.dashboard(identity, [siteA])).resolves.toMatchObject({
       totalProducts: 1234,
       pendingTransferCount: 250,
       openPrescriptionCount: 310,
@@ -109,7 +110,7 @@ describe("OperationsRepository counts come from the owning services", () => {
   it("keeps a reachable zero count and uses the projection counter only for an unreachable service", async () => {
     counts = { "/prescriptions/count": 0, "/inventory/transfers/count": "fail" };
 
-    await expect(repository.dashboard()).resolves.toMatchObject({
+    await expect(repository.dashboard(identity)).resolves.toMatchObject({
       openPrescriptionCount: 0,
       pendingTransferCount: 5,
     });
@@ -118,7 +119,9 @@ describe("OperationsRepository counts come from the owning services", () => {
   it("fails a scoped dashboard when a count endpoint does not answer, rather than report a fallback", async () => {
     counts = { "/inventory/transfers/count": "fail" };
 
-    await expect(repository.dashboard([siteA])).rejects.toThrow(/Scoped read of \/inventory\/transfers\/count/);
+    await expect(repository.dashboard(identity, [siteA])).rejects.toThrow(
+      /Scoped read of \/inventory\/transfers\/count/,
+    );
   });
 
   it("answers the receipt and dispense quantities from the all-time stock ledger", async () => {
@@ -128,7 +131,7 @@ describe("OperationsRepository counts come from the owning services", () => {
       { movementType: "Dispense", count: 5, quantityIn: 0, quantityOut: 12 },
     ];
 
-    await expect(repository.financeSummary(undefined, undefined, [siteA])).resolves.toMatchObject({
+    await expect(repository.financeSummary(identity, undefined, undefined, [siteA])).resolves.toMatchObject({
       receiptCount: 3,
       receiptQuantity: 40,
       dispensedQuantity: 12,

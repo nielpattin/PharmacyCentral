@@ -188,6 +188,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Event delivery made durable and recoverable.
 - Telemetry from sources other than this system's services is dropped.
 - Edge authorizer: the signed identity context keeps the services' schema key order, so catalog, inventory and the other services accept it instead of answering 401, and the Lambda entrypoint no longer re-exports removed policy names.
+- Dashboard and finance summary: operations-query-service reads the catalog's sites, storage locations and suppliers as the employee who asked, so the totals are no longer 0 for Platform Admin and a Pharmacy Manager no longer gets a 500 (the catalog answered its staff-only lists 401 to the service secret).
 - Opening balance import: inventory-service signs the importing employee's identity for catalog-service, so the catalog applies its role and site rules to each lookup. The lookups carried no identity and the import ended in a 409 "status 401 for /sites".
 - Deploy fixes for chatbot migrations, the ops-console migration task and cache headers, and for customer prescription routes on AWS.
 - Express service template requires `PORT`.

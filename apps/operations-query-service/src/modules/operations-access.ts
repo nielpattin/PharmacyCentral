@@ -19,7 +19,7 @@ export type RoleRefusal = {
   detail: string;
 };
 
-const actorRoles = (request: Request): string[] =>
+export const actorRoles = (request: Request): string[] =>
   (request.header("x-actor-roles") ?? "")
     .split(",")
     .map((role) => role.trim())

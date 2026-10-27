@@ -13,6 +13,9 @@ export type IntegrationEvent = {
   actorId?: string | undefined;
   payload: Record<string, unknown>;
 };
+/** Signs the asking employee for catalog-service; called for each catalog read. */
+export type CatalogIdentity = () => string;
+
 export type OperationsServiceOptions = {
   catalogUrl?: string | undefined;
   inventoryUrl?: string | undefined;
@@ -185,9 +188,9 @@ export class OperationsRepository {
     };
   }
 
-  public async dashboard(siteIds?: string[]) {
+  public async dashboard(catalogIdentity: CatalogIdentity, siteIds?: string[]) {
     const rows = await this.database.db.select().from(projectionCounters);
-    const live = await this.loadLiveOperations(siteIds);
+    const live = await this.loadLiveOperations(catalogIdentity, siteIds);
     const counts = await this.loadCounts(siteIds);
     // The projection counters span every site, so a site-scoped reader is answered from the live reads alone, and a
     // network-wide reader falls back to them only when the owning service did not answer its count.
@@ -256,7 +259,7 @@ export class OperationsRepository {
    * product has no published price is listed as missing a price and adds nothing to the value. The movement figures
    * are the stock ledger of the period, summed by inventory-service.
    */
-  public async financeSummary(from?: string, to?: string, siteIds?: string[]) {
+  public async financeSummary(catalogIdentity: CatalogIdentity, from?: string, to?: string, siteIds?: string[]) {
     const fromDate = from ?? new Date(0).toISOString();
     const toDate = to ?? new Date().toISOString();
     const period = new URLSearchParams({
@@ -265,7 +268,7 @@ export class OperationsRepository {
     });
     const today = new Date().toISOString().slice(0, 10);
     const [live, counts, movementSummary, allTimeMovements, prices] = await Promise.all([
-      this.loadLiveOperations(siteIds),
+      this.loadLiveOperations(catalogIdentity, siteIds),
       this.loadCounts(siteIds),
       this.fetchRows(this.options.inventoryUrl, `/inventory/movements/summary?${period.toString()}`, siteIds),
       this.fetchRows(this.options.inventoryUrl, "/inventory/movements/summary", siteIds),
@@ -365,12 +368,12 @@ export class OperationsRepository {
    * Reads the other services as the caller would: `siteIds` is forwarded as the actor's site scope, so every
    * site-bound list answers only those sites and the totals never count another pharmacy's stock.
    */
-  private async loadLiveOperations(siteIds?: string[]): Promise<LiveOperations> {
+  private async loadLiveOperations(catalogIdentity: CatalogIdentity, siteIds?: string[]): Promise<LiveOperations> {
     // Only the lists the dashboard sums in full are read here; every count comes from `loadCounts`, so no list is cut.
     const [sites, locations, suppliers, balances, batches] = await Promise.all([
-      this.fetchRows(this.options.catalogUrl, "/sites"),
-      this.fetchRows(this.options.catalogUrl, "/storage-locations", siteIds),
-      this.fetchRows(this.options.catalogUrl, "/suppliers"),
+      this.fetchRows(this.options.catalogUrl, "/sites", undefined, catalogIdentity),
+      this.fetchRows(this.options.catalogUrl, "/storage-locations", siteIds, catalogIdentity),
+      this.fetchRows(this.options.catalogUrl, "/suppliers", undefined, catalogIdentity),
       this.fetchRows(this.options.inventoryUrl, "/inventory/balances", siteIds),
       this.fetchRows(this.options.inventoryUrl, "/inventory/batches"),
     ]);
@@ -406,8 +409,9 @@ export class OperationsRepository {
     baseUrl: string | undefined,
     path: string,
     siteIds?: string[],
+    identity?: CatalogIdentity,
   ): Promise<Array<Record<string, unknown>>> {
-    const value = await this.readJson(baseUrl, path, siteIds);
+    const value = await this.readJson(baseUrl, path, siteIds, identity);
     if (!Array.isArray(value)) {
       if (siteIds) throw new Error(`Scoped read of ${path} did not answer a list`);
       return [];
@@ -428,14 +432,21 @@ export class OperationsRepository {
    * keeps the lenient behavior: a network-wide dashboard is still useful without one read. `undefined` means that
    * unscoped read did not answer.
    */
-  private async readJson(baseUrl: string | undefined, path: string, siteIds?: string[]): Promise<unknown> {
+  private async readJson(
+    baseUrl: string | undefined,
+    path: string,
+    siteIds?: string[],
+    identity?: CatalogIdentity,
+  ): Promise<unknown> {
     if (!baseUrl) return undefined;
     try {
       const response = await fetch(`${baseUrl}${path}`, {
-        headers: {
-          ...internalServiceHeaders(),
-          ...(siteIds ? { [ACTOR_SITE_IDS_HEADER]: siteIds.join(",") } : {}),
-        },
+        headers: identity
+          ? { "x-internal-identity-context": identity() }
+          : {
+              ...internalServiceHeaders(),
+              ...(siteIds ? { [ACTOR_SITE_IDS_HEADER]: siteIds.join(",") } : {}),
+            },
         signal: AbortSignal.timeout(2_000),
       });
       if (!response.ok) {

@@ -11,6 +11,7 @@ import { OperationsRepository } from "./operations-repository.ts";
 const migrationsFolder = fileURLToPath(new URL("../../drizzle/migrations", import.meta.url));
 const scopeHeader = "x-actor-site-ids";
 
+const identity = () => "signed-for-catalog";
 const siteA = "00000000-0000-4000-8000-00000000000a";
 const siteB = "00000000-0000-4000-8000-00000000000b";
 const batchA = "00000000-0000-4000-8000-00000000001a";
@@ -18,6 +19,8 @@ const batchB = "00000000-0000-4000-8000-00000000001b";
 const batchElsewhere = "00000000-0000-4000-8000-00000000001c";
 const locationA = "00000000-0000-4000-8000-00000000002a";
 const locationB = "00000000-0000-4000-8000-00000000002b";
+
+const staffOnlyCatalogPaths = ["/sites", "/storage-locations", "/suppliers"];
 
 const dayFromNow = (days: number): string => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 
@@ -51,6 +54,13 @@ describe("OperationsRepository dashboard site scope", () => {
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
       const scope = new Headers(init?.headers).get(scopeHeader)?.split(",") ?? [];
+      // The catalog lists these to a signed employee only; the service secret alone is answered 401.
+      if (
+        staffOnlyCatalogPaths.includes(url.pathname) &&
+        !new Headers(init?.headers).get("x-internal-identity-context")
+      ) {
+        return new Response("{}", { status: 401 });
+      }
       if (url.pathname.endsWith("/count")) {
         return new Response(JSON.stringify({ count: 0 }), {
           status: 200,
@@ -95,14 +105,46 @@ describe("OperationsRepository dashboard site scope", () => {
   it("keeps another site's expiring batch out of a scoped dashboard", async () => {
     stubLiveServices([balance(siteA, batchA), balance(siteB, batchB)]);
 
-    await expect(repository.dashboard([siteA])).resolves.toMatchObject({ expiringBatchCount: 1 });
-    await expect(repository.dashboard()).resolves.toMatchObject({ expiringBatchCount: 3 });
+    await expect(repository.dashboard(identity, [siteA])).resolves.toMatchObject({ expiringBatchCount: 1 });
+    await expect(repository.dashboard(identity)).resolves.toMatchObject({ expiringBatchCount: 3 });
   });
 
   it("counts no expiring batch when a scoped balance carries no batch reference", async () => {
     stubLiveServices([balance(siteA)]);
 
-    await expect(repository.dashboard([siteA])).resolves.toMatchObject({ expiringBatchCount: 0 });
+    await expect(repository.dashboard(identity, [siteA])).resolves.toMatchObject({ expiringBatchCount: 0 });
+  });
+
+  it("counts sites, storage locations and suppliers by reading the catalog as the employee who asked", async () => {
+    const sentIdentity: string[] = [];
+    stubLiveServices([], {
+      "/sites": [
+        { id: siteA, isActive: true },
+        { id: siteB, isActive: false },
+      ],
+      "/storage-locations": [{ id: locationA, siteId: siteA, isActive: true }],
+      "/suppliers": [{ id: "00000000-0000-4000-8000-0000000000a1" }, { id: "00000000-0000-4000-8000-0000000000a2" }],
+    });
+    const fetchStub = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const header = new Headers(init?.headers).get("x-internal-identity-context");
+      if (header) sentIdentity.push(header);
+      return fetchStub(input, init);
+    });
+
+    await expect(repository.dashboard(identity)).resolves.toMatchObject({
+      totalSites: 2,
+      activeSites: 1,
+      totalStorageLocations: 1,
+      totalSuppliers: 2,
+    });
+    expect(sentIdentity).toEqual(["signed-for-catalog", "signed-for-catalog", "signed-for-catalog"]);
+  });
+
+  it("answers a scoped dashboard from the catalog instead of failing on its storage locations", async () => {
+    stubLiveServices([], { "/storage-locations": [{ id: locationA, siteId: siteA, isActive: true }] });
+
+    await expect(repository.dashboard(identity, [siteA])).resolves.toMatchObject({ totalStorageLocations: 1 });
   });
 
   it("keeps another site's storage locations out of a scoped dashboard", async () => {
@@ -118,11 +160,11 @@ describe("OperationsRepository dashboard site scope", () => {
       ],
     });
 
-    await expect(repository.dashboard([siteA])).resolves.toMatchObject({
+    await expect(repository.dashboard(identity, [siteA])).resolves.toMatchObject({
       totalStorageLocations: 1,
       activeStorageLocations: 1,
     });
-    await expect(repository.dashboard()).resolves.toMatchObject({
+    await expect(repository.dashboard(identity)).resolves.toMatchObject({
       totalStorageLocations: 2,
       activeStorageLocations: 2,
     });
@@ -139,8 +181,8 @@ describe("OperationsRepository dashboard site scope", () => {
       return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
     });
 
-    await expect(repository.dashboard([siteA])).rejects.toThrow(/Scoped read of \/inventory\/balances/);
-    await expect(repository.dashboard()).resolves.toBeDefined();
+    await expect(repository.dashboard(identity, [siteA])).rejects.toThrow(/Scoped read of \/inventory\/balances/);
+    await expect(repository.dashboard(identity)).resolves.toBeDefined();
   });
 
   it("values stock at the base-unit published price and lists a product without one as missing a price", async () => {
@@ -175,7 +217,7 @@ describe("OperationsRepository dashboard site scope", () => {
       },
     );
 
-    const summary = await repository.financeSummary(undefined, undefined, [siteA]);
+    const summary = await repository.financeSummary(identity, undefined, undefined, [siteA]);
 
     expect(summary).toMatchObject({
       inventoryValue: 150_000,

@@ -2,6 +2,7 @@ import { Router, type Response } from "express";
 import { z } from "zod";
 
 import { listSiteIds } from "../middleware/trusted-request.ts";
+import { signCatalogIdentity } from "./catalog-identity.ts";
 import { DASHBOARD_ROLES, REPORT_ROLES, roleRefusal } from "./operations-access.ts";
 import { decodePageCursor, encodePageCursor } from "./page-cursor.ts";
 import { OperationsRepository, type AuditFilters, type IntegrationEvent } from "./operations-repository.ts";
@@ -35,7 +36,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       return;
     }
     try {
-      response.json(await repository.dashboard(listSiteIds(request)));
+      response.json(await repository.dashboard(() => signCatalogIdentity(request), listSiteIds(request)));
     } catch (error) {
       next(error);
     }
@@ -96,6 +97,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
     try {
       response.json(
         await repository.financeSummary(
+          () => signCatalogIdentity(request),
           queryString(request.query.from),
           queryString(request.query.to),
           listSiteIds(request),
