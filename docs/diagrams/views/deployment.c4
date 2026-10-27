@@ -13,8 +13,9 @@ views {
   deployment view awsEcs {
     title "Production topology, AWS ECS Fargate"
     description """
-      The public edge is the API Gateway with a Lambda authorizer, the private path goes through the
-      VPC Link to the internal ALB, and the services run as ECS Fargate tasks.
+      The browser reaches a web app through its own public ALB. The web container proxies /api to the
+      API Gateway, which asks the Lambda authorizer, then goes through the VPC Link to the internal ALB
+      and on to the ECS Fargate tasks of the services.
     """
     include aws.**
   }

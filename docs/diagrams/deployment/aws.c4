@@ -1,10 +1,10 @@
 deployment {
   aws = environment "AWS, ECS Fargate" {
-    summary "The production topology of deploy/aws. Configuration only, no AWS resource has been created."
+    summary "The topology of deploy/aws in us-east-1, sized as the low cost demo of docs/design/0006: one task per service, one database instance, one NAT gateway."
 
     edge = zone "Public edge" {
-      webTier = workload "Web tier" {
-        summary "The two single page applications, published as digest addressed images to GHCR."
+      webAlb = managed "Public ALBs, one per web app" {
+        summary "Plain HTTP on port 80, because the demo has no domain or certificate. Two hostnames keep the cookies of staff-web and customer-web apart."
       }
 
       apiGateway = managed "API Gateway, HTTP API" {
@@ -24,13 +24,22 @@ deployment {
       }
 
       alb = managed "Internal Application Load Balancer" {
-        summary "Routes the paths to the ECS services, the same routing map as the local gateway."
+        summary "Routes the paths to the ECS services, the same routing map as the local gateway. Unknown paths answer a JSON 404."
       }
     }
 
     compute = zone "Private subnets" {
       ecs = cluster "ECS Fargate cluster" {
-        summary "One long running task per service and one for the embedder, and one shot migration tasks that never run on start."
+        summary "One long running task per service, the web apps and Typesense, plus one shot migration and ops tasks that never run on start. The collector and the embedder are optional and off by default."
+
+        customerWebTask = workload "customer-web :8080" {
+          summary "nginx serving the Vite build. It proxies /api to the API Gateway."
+          instanceOf pharmacyCentral.web.customerWeb
+        }
+        staffWebTask = workload "staff-web :8080" {
+          summary "nginx serving the Vite build. It proxies /api to the API Gateway."
+          instanceOf pharmacyCentral.web.staffWeb
+        }
 
         identityTask = workload "identity-service :3001" {
           instanceOf pharmacyCentral.services.identityService
@@ -58,7 +67,7 @@ deployment {
           instanceOf pharmacyCentral.services.opsConsoleService
         }
         otelCollectorTask = workload "otel-collector :4318" {
-          summary "One ADOT task. The services push OTLP/HTTP to it through Cloud Map; it forwards metrics, traces and logs to AWS."
+          summary "Optional (otel_collector_enabled, off by default). One ADOT task. The services push OTLP/HTTP to it through Cloud Map; it forwards metrics, traces and logs to AWS."
           instanceOf pharmacyCentral.data.telemetry
         }
         searchTask = workload "search-service :3009" {
@@ -66,32 +75,37 @@ deployment {
           instanceOf pharmacyCentral.services.searchService
         }
         embedderTask = workload "embedder :80" {
-          summary "Self-hosted text embeddings. The model is baked into the image, one task, no autoscaling, internal only."
+          summary "Optional (embedder_enabled, off by default). Self-hosted text embeddings. The model is baked into the image, one task, no autoscaling, internal only."
           instanceOf pharmacyCentral.data.embedder
+        }
+        typesenseTask = workload "typesense :8108" {
+          summary "One task named typesense in Cloud Map, on ephemeral disk. The index is a derived copy that catalog-service rebuilds from PostgreSQL."
+          instanceOf pharmacyCentral.data.typesense
         }
       }
     }
 
     managedData = zone "Managed data services" {
-      summary "Not provisioned by the first stack. Their keys come from Secrets Manager ARNs."
+      summary "Provisioned by deploy/aws, single instance each, in the private subnets with no public address. Connection strings live in Secrets Manager."
 
-      rds = workload "RDS PostgreSQL" {
+      rds = workload "RDS PostgreSQL 18, db.t4g.small" {
         instanceOf pharmacyCentral.data.postgres
       }
-      redisManaged = workload "ElastiCache Redis" {
+      redisManaged = workload "ElastiCache Redis 7.1, cache.t4g.micro" {
         instanceOf pharmacyCentral.data.redis
       }
-      rabbitManaged = workload "Amazon MQ for RabbitMQ" {
+      rabbitManaged = workload "Amazon MQ for RabbitMQ 4.2" {
         instanceOf pharmacyCentral.data.rabbitmq
       }
-      typesenseManaged = workload "Typesense, three node cluster or Typesense Cloud" {
-        instanceOf pharmacyCentral.data.typesense
+      mediaBucket = managed "S3 media bucket" {
+        summary "Product images. Objects under product-images/ are public read, because the catalog stores their plain URLs. catalog-service writes with a scoped IAM user key."
+        instanceOf pharmacyCentral.data.seaweedfs
       }
       secrets = managed "Secrets Manager" {
         summary "Holds DATABASE_URL (one secret per service, each with its own database role), RABBITMQ_URL, REDIS_URL, TYPESENSE_* and the internal secrets."
       }
       prometheusManaged = managed "Amazon Managed Service for Prometheus" {
-        summary "Receives the metrics by remote write. Queries need SigV4, so ops-console-service cannot read it directly yet."
+        summary "Only with the collector. Receives the metrics by remote write. Queries need SigV4, so ops-console-service cannot read it directly yet."
       }
       xray = managed "AWS X-Ray" {
         summary "Receives the traces."

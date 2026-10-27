@@ -1,5 +1,14 @@
 deployment {
-  aws.edge.webTier -> aws.edge.apiGateway "HTTPS /api" {
+  aws.edge.webAlb -> aws.compute.ecs.customerWebTask "HTTP on port 8080" {
+    technology "HTTP"
+  }
+  aws.edge.webAlb -> aws.compute.ecs.staffWebTask "HTTP on port 8080" {
+    technology "HTTP"
+  }
+  aws.compute.ecs.customerWebTask -> aws.edge.apiGateway "Proxy /api to API_BASE_URL" {
+    technology "HTTPS"
+  }
+  aws.compute.ecs.staffWebTask -> aws.edge.apiGateway "Proxy /api to API_BASE_URL" {
     technology "HTTPS"
   }
 
@@ -19,7 +28,7 @@ deployment {
   aws.edge.alb -> aws.compute.ecs.identityTask "route /api/auth, /api/admin, /api/customers" {
     technology "HTTP"
   }
-  aws.edge.alb -> aws.compute.ecs.catalogTask "route /api/sites, /api/products/*, /api/pricing, /api/stores, /api/availability" {
+  aws.edge.alb -> aws.compute.ecs.catalogTask "route /api/sites, /api/storage-locations, /api/products/*, /api/suppliers, /api/pricing, /api/stores, /api/availability" {
     technology "HTTP"
   }
   aws.edge.alb -> aws.compute.ecs.searchTask "route GET /api/products, the list only" {
@@ -28,13 +37,13 @@ deployment {
   aws.edge.alb -> aws.compute.ecs.inventoryTask "route /api/procurement, /api/inventory" {
     technology "HTTP"
   }
-  aws.edge.alb -> aws.compute.ecs.salesTask "route /api/carts, /api/orders, /api/delivery, /api/prescriptions" {
+  aws.edge.alb -> aws.compute.ecs.salesTask "route /api/carts, /api/orders, /api/delivery, /api/prescriptions, /api/counter-transactions" {
     technology "HTTP"
   }
   aws.edge.alb -> aws.compute.ecs.paymentTask "route /api/payments" {
     technology "HTTP"
   }
-  aws.edge.alb -> aws.compute.ecs.operationsTask "route /api/dashboard, /api/finance, /api/reports" {
+  aws.edge.alb -> aws.compute.ecs.operationsTask "route /api/operations, /api/dashboard, /api/finance, /api/audit, /api/reports" {
     technology "HTTP"
   }
   aws.edge.alb -> aws.compute.ecs.chatbotTask "route /api/chatbot" {
@@ -46,7 +55,7 @@ deployment {
   aws.compute.ecs.opsConsoleTask -> aws.managedData.rabbitManaged "Queues, management API" {
     technology "HTTPS"
   }
-  aws.compute.ecs.opsConsoleTask -> aws.managedData.typesenseManaged "Collections" {
+  aws.compute.ecs.opsConsoleTask -> aws.compute.ecs.typesenseTask "Collections" {
     technology "HTTP"
   }
   aws.compute.ecs.otelCollectorTask -> aws.managedData.prometheusManaged "Metrics, remote write with SigV4" {
@@ -68,10 +77,13 @@ deployment {
   aws.compute.ecs.catalogTask -> aws.compute.ecs.embedderTask "Product embeddings, OpenAI-compatible, only catalog-service and search-service may call it" {
     technology "HTTP, POST /v1/embeddings"
   }
-  aws.compute.ecs.catalogTask -> aws.managedData.typesenseManaged "Writes the product index catalog_products_v3" {
+  aws.compute.ecs.catalogTask -> aws.managedData.mediaBucket "Product images, S3 API with a static key" {
+    technology "S3"
+  }
+  aws.compute.ecs.catalogTask -> aws.compute.ecs.typesenseTask "Writes the product index catalog_products_v3" {
     technology "HTTP"
   }
-  aws.compute.ecs.searchTask -> aws.managedData.typesenseManaged "Product search, payload field only" {
+  aws.compute.ecs.searchTask -> aws.compute.ecs.typesenseTask "Product search, payload field only" {
     technology "HTTP"
   }
   aws.compute.ecs.searchTask -> aws.compute.ecs.catalogTask "Fallback: the same request, when Typesense is down" {

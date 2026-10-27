@@ -95,6 +95,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - `dev:data` loader, product image folder and sample orders in every state, with demo accounts seeded only through it.
 - Shared UI: sortable virtualized tables, DataTable v2, toasts, focus-trapped dialogs, status primitives and segmented tabs with a popover.
 - LikeC4 architecture model.
+- AWS staging deployment (`deploy/aws`): VPC with NAT, RDS, ElastiCache, Amazon MQ, S3 media, ECR with immutable tags, API Gateway with the edge authorizer, two HTTPS web ALBs (`shop.` and `staff.`) and a Typesense task, with `tools/aws-env.mjs`, `tools/aws-push-images.mjs` and `tools/aws-upload-media.mjs`. Design: `docs/design/0006-aws-demo-deployment.md`.
 
 ### Changed
 
@@ -184,6 +185,8 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 - Event delivery made durable and recoverable.
 - Telemetry from sources other than this system's services is dropped.
+- Edge authorizer: the signed identity context keeps the services' schema key order, so catalog, inventory and the other services accept it instead of answering 401, and the Lambda entrypoint no longer re-exports removed policy names.
+- Opening balance import sends the service secret to catalog-service, which refused its lookups with 401.
 - Deploy fixes for chatbot migrations, the ops-console migration task and cache headers, and for customer prescription routes on AWS.
 - Express service template requires `PORT`.
 - Shared UI: table toolbar, header casing, quiet row delete, readable site types, StatTile edge, honest warning tone and grouped dashboard KPIs.
