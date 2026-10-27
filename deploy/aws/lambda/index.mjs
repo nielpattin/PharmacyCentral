@@ -30,17 +30,13 @@ export {
   isOptionalIdentityRoute,
   isPublicRoute,
   isSiteScopedListRoute,
-  managementOnlyPaths,
-  managementPaths,
   matchesPrefix,
   normalizeApiPath,
   optionalIdentityPrefixes,
   platformAdminPaths,
   publicPrefixes,
-  replenishmentPaths,
   selectTargetService,
   siteScopedListPrefixes,
-  warehousePaths,
 } from "./policy.mjs";
 
 export {

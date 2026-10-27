@@ -57,6 +57,19 @@ describe("identity - create, sign, and verify context", () => {
     assert.equal(context.audience, "inventory-service");
     assert.equal(context.issuedAt, "2026-01-01T00:00:00.000Z");
     assert.equal(context.expiresAt, "2026-01-01T00:01:00.000Z");
+    // A service verifies the signature over its own schema order, so a different order here is rejected.
+    assert.deepEqual(Object.keys(context), [
+      "version",
+      "requestId",
+      "correlationId",
+      "actorId",
+      "actorType",
+      "roles",
+      "siteIds",
+      "issuedAt",
+      "expiresAt",
+      "audience",
+    ]);
   });
 
   it("signs and encodes context", () => {

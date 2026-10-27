@@ -13,10 +13,12 @@ export const createIdentityContext = ({
   const safeRequestId = String(requestId || "unknown").slice(0, 128);
   const safeCorrelationId = String(correlationId || safeRequestId || "unknown").slice(0, 128);
 
+  // Key order is part of the signature: services re-serialize the context in their schema order, actorId fourth.
   const context = {
     version: "v1",
     requestId: safeRequestId,
     correlationId: safeCorrelationId,
+    ...(identity?.id ? { actorId: identity.id } : {}),
     actorType: identity?.actorType ?? "anonymous",
     roles: Array.isArray(identity?.roles) ? identity.roles.slice(0, 32) : [],
     siteIds: Array.isArray(identity?.siteIds) ? identity.siteIds.slice(0, 500) : [],
@@ -24,10 +26,6 @@ export const createIdentityContext = ({
     expiresAt,
     audience: String(audience || "pharmacy-backend").slice(0, 128),
   };
-
-  if (identity?.id) {
-    context.actorId = identity.id;
-  }
 
   return context;
 };
