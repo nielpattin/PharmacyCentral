@@ -254,6 +254,12 @@ resource "aws_ecs_task_definition" "rabbitmq" {
     cpu_architecture        = "X86_64"
   }
 
+  # The image declares /var/lib/rabbitmq as a volume. Without an explicit task volume the node cannot read its Erlang cookie
+  # there (eacces) and exits at once; an empty task volume starts it, as it does for a root-owned empty directory.
+  volume {
+    name = "data"
+  }
+
   container_definitions = jsonencode([{
     name      = "rabbitmq"
     image     = "rabbitmq:4.3.5-management@sha256:397fde82bc04522d88680b57cbf5d70caae715a76c957404e52e3f0fa056b8f3"
@@ -264,6 +270,7 @@ resource "aws_ecs_task_definition" "rabbitmq" {
       { containerPort = 5672, hostPort = 5672, protocol = "tcp" },
       { containerPort = 15672, hostPort = 15672, protocol = "tcp" },
     ]
+    mountPoints = [{ sourceVolume = "data", containerPath = "/var/lib/rabbitmq" }]
     environment = [{ name = "RABBITMQ_DEFAULT_USER", value = local.rabbitmq_user }]
     secrets = [{
       name      = "RABBITMQ_DEFAULT_PASS"
