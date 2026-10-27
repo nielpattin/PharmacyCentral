@@ -3,8 +3,8 @@ deployment {
     summary "The topology of deploy/aws in us-east-1, sized as the low cost demo of docs/design/0006: one task per service, one database instance, one NAT gateway."
 
     edge = zone "Public edge" {
-      webAlb = managed "Public ALBs, one per web app" {
-        summary "Plain HTTP on port 80, because the demo has no domain or certificate. Two hostnames keep the cookies of staff-web and customer-web apart."
+      webAlb = managed "Public ALB, both web apps" {
+        summary "HTTPS with one ACM certificate; port 80 redirects. Host rules for shop. and staff. keep the cookies of customer-web and staff-web apart."
       }
 
       apiGateway = managed "API Gateway, HTTP API" {
@@ -86,23 +86,23 @@ deployment {
     }
 
     managedData = zone "Managed data services" {
-      summary "Provisioned by deploy/aws, single instance each, in the private subnets with no public address. Connection strings live in Secrets Manager."
+      summary "Provisioned by deploy/aws, single instance each, in the private subnets with no public address. Connection strings live in SSM Parameter Store."
 
-      rds = workload "RDS PostgreSQL 18, db.t4g.small" {
+      rds = workload "RDS PostgreSQL 18, db.t4g.micro" {
         instanceOf pharmacyCentral.data.postgres
       }
       redisManaged = workload "ElastiCache Redis 7.1, cache.t4g.micro" {
         instanceOf pharmacyCentral.data.redis
       }
-      rabbitManaged = workload "Amazon MQ for RabbitMQ 4.2" {
+      rabbitManaged = workload "RabbitMQ 4, one Fargate task" {
         instanceOf pharmacyCentral.data.rabbitmq
       }
       mediaBucket = managed "S3 media bucket" {
         summary "Product images. Objects under product-images/ are public read, because the catalog stores their plain URLs. catalog-service writes with a scoped IAM user key."
         instanceOf pharmacyCentral.data.seaweedfs
       }
-      secrets = managed "Secrets Manager" {
-        summary "Holds DATABASE_URL (one secret per service, each with its own database role), RABBITMQ_URL, REDIS_URL, TYPESENSE_* and the internal secrets."
+      secrets = managed "SSM Parameter Store" {
+        summary "SecureString parameters: DATABASE_URL (one per service, each with its own database role), RABBITMQ_URL, REDIS_URL, TYPESENSE_*. Only the two internal secrets the authorizer Lambda reads are in Secrets Manager."
       }
       prometheusManaged = managed "Amazon Managed Service for Prometheus" {
         summary "Only with the collector. Receives the metrics by remote write. Queries need SigV4, so ops-console-service cannot read it directly yet."

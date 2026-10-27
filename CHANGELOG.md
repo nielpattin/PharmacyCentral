@@ -95,7 +95,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - `dev:data` loader, product image folder and sample orders in every state, with demo accounts seeded only through it.
 - Shared UI: sortable virtualized tables, DataTable v2, toasts, focus-trapped dialogs, status primitives and segmented tabs with a popover.
 - LikeC4 architecture model.
-- AWS staging deployment (`deploy/aws`): VPC with NAT, RDS, ElastiCache, Amazon MQ, S3 media, ECR with immutable tags, API Gateway with the edge authorizer, two HTTPS web ALBs (`shop.` and `staff.`) and a Typesense task, with `tools/aws-env.mjs`, `tools/aws-push-images.mjs` and `tools/aws-upload-media.mjs`. Design: `docs/design/0006-aws-demo-deployment.md`.
+- AWS staging deployment (`deploy/aws`): VPC with NAT, RDS, ElastiCache, S3 media, ECR with immutable tags, API Gateway with the edge authorizer, one HTTPS web ALB with `shop.` and `staff.` host rules, and RabbitMQ and Typesense tasks, with `tools/aws-env.mjs`, `tools/aws-push-images.mjs` and `tools/aws-upload-media.mjs`. Design: `docs/design/0006-aws-demo-deployment.md`.
 
 ### Changed
 
@@ -141,6 +141,8 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Local development runs every app on the host through Nx with a dev gateway, named portless URLs and separate ports for the web apps.
 - Documentation updated for prescriptions, procurement, cache policy, paging conventions, the System page and alert runbooks.
 - docs/UserGuide.md, docs/ApiGuide.md and docs/BusinessRules.md renamed to docs/user-guide.md, docs/api-guide.md and docs/business-rules.md and cleaned up: named URLs, a broken table fixed, history notes moved here, and "Giới hạn đã biết" moved to the end of BusinessRules.
+- Service and `ops` images use an Alpine runtime with only the Node binary, and `drizzle-kit` is a dev dependency, so they no longer ship it. Backend images shrink from 430-470 MB to 240-290 MB.
+- AWS staging cost: RabbitMQ runs as a Fargate task instead of Amazon MQ, one public ALB serves both web apps, RDS is `db.t4g.micro`, secrets are SSM parameters, and autoscaling and Container Insights are gone. The design lists about 505 USD a month before and about 235 after.
 
 ### Removed
 

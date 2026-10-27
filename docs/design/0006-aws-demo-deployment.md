@@ -19,7 +19,7 @@
 ## Goals
 
 - `terraform apply` from a clean account produces a working stack: sign in as the admin, import the sample data, place an order, see it in staff-web.
-- A monthly cost of about 230 USD with services running, about 125 USD with `services_enabled = false` between demos (see Cost).
+- A monthly cost of about 235 USD with services running, about 136 USD with `services_enabled = false` between demos (see Cost).
 - Everything is in `deploy/aws` and reproducible; no console clicks except the first admin sign-in.
 
 ## Non-goals
@@ -43,14 +43,14 @@ A new VPC `10.20.0.0/16` with two public and two private subnets in two AZs, an 
 
 | Need | Choice | Why |
 | --- | --- | --- |
-| PostgreSQL | RDS `db.t4g.small`, engine 18.x, 20 GiB gp3, single AZ, one instance, seven databases | The local stack uses PostgreSQL 18 with PostGIS; RDS 18 supports PostGIS. `micro` (1 GiB) is too small for seven databases |
+| PostgreSQL | RDS `db.t4g.micro`, engine 18.x, 20 GiB gp3, single AZ, one instance, seven databases | The local stack uses PostgreSQL 18 with PostGIS; RDS 18 supports PostGIS. Measured memory use of every service is under 30 percent of its task, and the staging stack has almost no traffic |
 | Roles | One-shot ECS task from the `postgres:18` image that runs `deploy/local/postgres/roles.sh` logic against RDS | RDS is private; the task runs inside the VPC. Same SQL as local |
 | Redis | ElastiCache `cache.t4g.micro`, one node | Used by identity-service and sales-service |
-| RabbitMQ | Amazon MQ for RabbitMQ 4.2, `mq.t3.micro`, single instance | Managed, no state on Fargate. The local stack uses RabbitMQ 4 |
-| Typesense | One Fargate task (`typesense/typesense` pinned by digest, 512 CPU / 1024 MiB), Cloud Map name `typesense`, empty task volume at `/data` | The index is a derived copy; catalog-service rebuilds it (README). Not HA, by design |
+| RabbitMQ | One Fargate task (`rabbitmq:4.3.5-management`, 512 CPU / 1024 MiB), Cloud Map name `rabbitmq`, ephemeral storage | Amazon MQ offers RabbitMQ 4 only from `mq.m7g.medium`, about 100 USD a month, which costs more than every Fargate task together. The services declare their queues on connect; a restart loses only events that were queued and not yet consumed |
+| Typesense | One Fargate task (`typesense/typesense` pinned by digest, 256 CPU / 512 MiB), Cloud Map name `typesense`, empty task volume at `/data` | The index is a derived copy; catalog-service rebuilds it (README). Not HA, by design |
 | Product media | S3 bucket + IAM user key for catalog-service | `catalog-service` talks S3 with `forcePathStyle` and static keys (`product-media-store.ts`), so `SEAWEEDFS_ENDPOINT = https://s3.us-east-1.amazonaws.com` works unchanged |
 
-Connection strings and keys are written to Secrets Manager by Terraform from the resources' own outputs (`random_password` for database and broker passwords), so no secret value is typed in a tfvars file. `shared_secrets` and `service_secrets` are built from those secrets.
+Connection strings and keys are written by Terraform as SSM SecureString parameters, which cost nothing; only the two internal secrets that the authorizer Lambda reads stay in Secrets Manager. They are written from the resources' own outputs (`random_password` for database and broker passwords), so no secret value is typed in a tfvars file. `shared_secrets` and `service_secrets` are built from those secrets.
 
 ### Images (`registry.tf`)
 
@@ -58,11 +58,11 @@ One ECR repository per service plus `ops`, none for the embedder, with immutable
 
 ### Web (`web.tf`)
 
-Two public ALBs, one per app, each in front of one Fargate task that runs the existing web image (nginx proxies `/api` to the API Gateway URL). Two hostnames keep the staff and customer cookies apart (AGENTS.md: the apps must not share a host): `shop.<domain_name>` and `staff.<domain_name>`. CloudFront was dropped because the account could not create distributions without an AWS Support verification. One ACM certificate covers both hosts; the DNS stays at the owner's provider (Cloudflare, DNS only), so the certificate validation records and the two CNAMEs to the ALBs are added by hand from the `certificate_validation_records` and `site_cnames` outputs. HTTPS is terminated at the ALB, port 80 redirects to 443, and `COOKIE_SECURE` is true. `PUBLIC_APP_URL` comes from the hostname. Product images are read straight from a public `product-images/*` prefix of the media bucket.
+One public ALB with a host rule per app, each rule in front of one Fargate task that runs the existing web image (nginx proxies `/api` to the API Gateway URL). Two hostnames keep the staff and customer cookies apart (AGENTS.md: the apps must not share a host): `shop.<domain_name>` and `staff.<domain_name>`. CloudFront was dropped because the account could not create distributions without an AWS Support verification. One ACM certificate covers both hosts; the DNS stays at the owner's provider (Cloudflare, DNS only), so the certificate validation records and the two CNAMEs to the ALB are added by hand from the `certificate_validation_records` and `site_cnames` outputs. HTTPS is terminated at the ALB, port 80 redirects to 443, and `COOKIE_SECURE` is true. `PUBLIC_APP_URL` comes from the hostname. Product images are read straight from a public `product-images/*` prefix of the media bucket.
 
 ### Demo sizing (`variables.tf`, `main.tf`)
 
-- `task_cpu = 256`, `task_memory = 512`, `sales_task_cpu = 512`, `sales_task_memory = 1024`, `desired_count = 1`, `max_count = 1`. Total 3 vCPU, under the 6 vCPU quota; a migration task adds 0.25 vCPU while it runs.
+- `task_cpu = 256`, `task_memory = 512` for every service, `desired_count = 1`, no autoscaling, Container Insights off, log retention 7 days. Peak memory of every service stayed under 30 percent of 512 MiB and sales-service under 10 percent, so sales-service no longer has a larger size. A migration task adds 0.25 vCPU while it runs.
 - `embedder_*` and the OpenTelemetry collector (`telemetry.tf`) become optional (`count` on a boolean, default `false`). When the embedder is off, the four `AI_EMBEDDING_*` variables are not set on `catalog-service` and `search-service` (the group is all-or-none, AGENTS.md). Their `OTEL_EXPORTER_OTLP_ENDPOINT` is required by the services, so it points at a no-op address supplied through `service_environment`; see Open questions.
 - Service-specific variables the code requires (identity, sales, payment, chatbot, ops-console) get a documented block in `terraform.tfvars.example`, filled by `tools/aws-env.mjs` from `.env.example` names so that the list cannot drift from the code.
 
@@ -72,28 +72,30 @@ Two public ALBs, one per app, each in front of one Fargate task that runs the ex
 
 ### Security
 
-- Terraform runs as an IAM user (profile `pharmacy`) with a long-lived key, because an apply that creates RDS and Amazon MQ outlives a one-hour `aws login` session. Delete the key and the user when the stack is destroyed.
+- Terraform runs as an IAM user (profile `pharmacy`) with a long-lived key, because an apply that creates RDS outlives a one-hour `aws login` session. Delete the key and the user when the stack is destroyed.
 - Security groups follow the README: only the ALB reaches tasks, only tasks reach RDS, Redis, MQ and Typesense. None of the data stores has a public address.
 - State is local in `deploy/aws/terraform.tfstate`, which is git-ignored; it contains the generated secrets. A remote S3 backend is out of scope.
 - CSRF and trusted headers are unchanged ([ADR 0006](../adr/0006-edge-identity-context.md)).
 
-### Cost (us-east-1, 730 h/month, approximate)
+### Cost (us-east-1, 730 h/month, list prices, approximate)
 
-| Item | Per month |
-| --- | --- |
-| Fargate: 8 services at 0.25 vCPU / 0.5 GiB, sales at 0.5 / 1, Typesense at 0.5 / 1 | 110 |
-| NAT gateway (one) | 33 |
-| Application Load Balancer | 17 |
-| RDS `db.t4g.small` + 20 GiB | 25 |
-| ElastiCache `cache.t4g.micro` | 12 |
-| Amazon MQ `mq.t3.micro` | 26 |
-| Secrets Manager (about 25 secrets) | 10 |
-| CloudWatch Logs, S3, API Gateway, Lambda | 5 |
-| **Total with services running** | **about 238** |
-| With `services_enabled = false` (Fargate off) | about 128 |
-| `terraform destroy` | 0, but all data is lost and must be re-imported |
+| Item | Before | After | Why it changed |
+| --- | --- | --- | --- |
+| Fargate: 14 task-units of 0.25 vCPU / 0.5 GiB | 126 | 126 | sales-service and Typesense shrank by one unit each; RabbitMQ added two |
+| NAT gateway | 33 | 33 | Still used by image pulls, the Lambda and outbound APIs |
+| Application Load Balancers | 49 | 33 | One public ALB for both web apps instead of two |
+| Public IPv4 addresses (ALB 2 each, NAT 1) | 18 | 11 | Two fewer ALB addresses |
+| RDS PostgreSQL 20 GiB | 26 | 14 | `db.t4g.small` to `db.t4g.micro` |
+| ElastiCache `cache.t4g.micro` | 12 | 12 | |
+| RabbitMQ | 100 (Amazon MQ `mq.m7g.medium`) | in Fargate | The 18 USD of Fargate is counted above |
+| Container Insights (393 metrics at 0.30) | 118 | 0 | Turned off |
+| Secrets Manager (36 secrets at 0.40) | 14 | 1 | 34 moved to SSM parameters |
+| Autoscaling alarms (36 at 0.10) | 4 | 0 | Removed; one task per service |
+| CloudWatch Logs, S3, API Gateway, Lambda | about 5 | about 5 | Retention 30 to 7 days |
+| **Total with services running** | **about 505** | **about 235** | |
+| With `services_enabled = false` (RabbitMQ and Typesense keep running) | about 397 | about 136 | |
 
-These are list prices, not a quote. The stack has no budget alarm.
+Not done, with the saving: Fargate Spot for the stateless services (about 70 USD, but a reclaimed task is a one to two minute outage), and replacing the NAT gateway with VPC endpoints or public-subnet tasks (about 25 USD, but it changes the network design). These are list prices, not a quote. The stack has no budget alarm.
 
 ## Alternatives considered
 
@@ -106,7 +108,7 @@ These are list prices, not a quote. The stack has no budget alarm.
 ## Rollout and migration
 
 1. Create the IAM user and its access key, and set `AWS_PROFILE`.
-2. `terraform apply` with `services_enabled = false`: network, data tier, ECR, S3, web ALBs, API Gateway, task definitions. The apply pauses at `aws_acm_certificate_validation` until the DNS records exist, so first run `terraform apply -target=aws_acm_certificate.web`, add the records in Cloudflare, then apply everything.
+2. `terraform apply` with `services_enabled = false`: network, data tier, ECR, S3, web ALB, API Gateway, task definitions. The apply pauses at `aws_acm_certificate_validation` until the DNS records exist, so first run `terraform apply -target=aws_acm_certificate.web`, add the records in Cloudflare, then apply everything.
 3. `tools/aws-push-images.mjs <tag>`, then re-apply with `-var image_tag=<tag>` so the task definitions reference it.
 4. Run the roles task, then the seven migration tasks (README, step 2).
 5. `terraform apply` with `services_enabled = true`.
