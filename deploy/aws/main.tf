@@ -116,11 +116,6 @@ locals {
   # search-service is a Go binary: no node entrypoint, no Drizzle migration, and its own health endpoint.
   go_services = ["search-service"]
 
-  # Services that need more than the shared task size. sales-service writes every order and runs its outbox relay
-  # in the same process; at 0.5 vCPU it was the first container to hit its CPU cap under the checkout load test.
-  task_sizes = {
-    sales-service = { cpu = var.sales_task_cpu, memory = var.sales_task_memory }
-  }
   health_check_paths = {
     search-service = "/healthz"
   }
@@ -165,7 +160,7 @@ locals {
   }
 
   # The execution role reads every secret the stack creates.
-  execution_secret_arns = concat(values(local.secret_arn), [for secret in aws_secretsmanager_secret.catalog_media : secret.arn])
+  execution_secret_arns = concat(values(local.secret_arn), [for parameter in aws_ssm_parameter.catalog_media : parameter.arn])
 }
 
 resource "aws_security_group" "vpc_link" {
@@ -268,6 +263,16 @@ resource "aws_security_group_rule" "tasks_ingress_self" {
   self              = true
 }
 
+resource "aws_security_group_rule" "tasks_ingress_rabbitmq" {
+  type              = "ingress"
+  description       = "Allow backend ECS tasks to reach RabbitMQ (AMQP and the management API)"
+  from_port         = 5672
+  to_port           = 15672
+  protocol          = "tcp"
+  security_group_id = aws_security_group.ecs_tasks.id
+  self              = true
+}
+
 resource "aws_security_group_rule" "tasks_ingress_typesense" {
   type              = "ingress"
   description       = "Allow backend ECS tasks to reach Typesense"
@@ -353,12 +358,12 @@ resource "aws_ecs_cluster" "this" {
 
   setting {
     name  = "containerInsights"
-    value = "enabled"
+    value = "disabled"
   }
 }
 
 resource "aws_cloudwatch_log_group" "service" {
-  for_each          = toset(concat(keys(local.backend_services), ["ops", "typesense"]))
+  for_each          = toset(concat(keys(local.backend_services), ["ops", "typesense", "rabbitmq"]))
   name              = "/ecs/${local.environment_name}/${each.key}"
   retention_in_days = var.log_retention_in_days
 }
@@ -399,7 +404,7 @@ resource "aws_iam_policy" "task_execution_secrets" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
+        Action   = ["secretsmanager:GetSecretValue", "ssm:GetParameters"]
         Resource = local.execution_secret_arns
       }
     ]
@@ -542,8 +547,8 @@ resource "aws_ecs_task_definition" "service" {
   for_each = local.backend_services
 
   family                   = "${local.environment_name}-${each.key}"
-  cpu                      = try(local.task_sizes[each.key].cpu, var.task_cpu)
-  memory                   = try(local.task_sizes[each.key].memory, var.task_memory)
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   execution_role_arn       = aws_iam_role.task_execution.arn
@@ -560,8 +565,8 @@ resource "aws_ecs_task_definition" "service" {
         name      = each.key
         image     = "${aws_ecr_repository.service[each.key].repository_url}:${var.image_tag}"
         essential = true
-        cpu       = try(local.task_sizes[each.key].cpu, var.task_cpu)
-        memory    = try(local.task_sizes[each.key].memory, var.task_memory)
+        cpu       = var.task_cpu
+        memory    = var.task_memory
         portMappings = [{
           containerPort = each.value.port
           hostPort      = each.value.port
@@ -746,59 +751,7 @@ resource "aws_ecs_service" "service" {
     registry_arn = aws_service_discovery_service.service[each.key].arn
   }
 
-  lifecycle {
-    ignore_changes = [desired_count]
-  }
-
   depends_on = [aws_lb_listener_rule.service, aws_lb_listener_rule.search_products]
-}
-
-resource "aws_appautoscaling_target" "service" {
-  for_each = var.services_enabled ? local.backend_services : {}
-
-  max_capacity       = var.max_count
-  min_capacity       = var.desired_count
-  resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.service[each.key].name}"
-  scalable_dimension = "ecs:service:DesiredCount"
-  service_namespace  = "ecs"
-}
-
-resource "aws_appautoscaling_policy" "service_cpu" {
-  for_each = var.services_enabled ? local.backend_services : {}
-
-  name               = "${local.environment_name}-${each.key}-cpu-autoscaling"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.service[each.key].resource_id
-  scalable_dimension = aws_appautoscaling_target.service[each.key].scalable_dimension
-  service_namespace  = aws_appautoscaling_target.service[each.key].service_namespace
-
-  target_tracking_scaling_policy_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageCPUUtilization"
-    }
-    target_value       = var.autoscaling_cpu_target_value
-    scale_in_cooldown  = 300
-    scale_out_cooldown = 60
-  }
-}
-
-resource "aws_appautoscaling_policy" "service_memory" {
-  for_each = var.services_enabled ? local.backend_services : {}
-
-  name               = "${local.environment_name}-${each.key}-memory-autoscaling"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.service[each.key].resource_id
-  scalable_dimension = aws_appautoscaling_target.service[each.key].scalable_dimension
-  service_namespace  = aws_appautoscaling_target.service[each.key].service_namespace
-
-  target_tracking_scaling_policy_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageMemoryUtilization"
-    }
-    target_value       = var.autoscaling_memory_target_value
-    scale_in_cooldown  = 300
-    scale_out_cooldown = 60
-  }
 }
 
 resource "aws_service_discovery_service" "embedder" {

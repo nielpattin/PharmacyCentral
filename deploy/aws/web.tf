@@ -27,7 +27,7 @@ locals {
     }
   }
   web_service_secrets = {
-    catalog-service = { for name, secret in aws_secretsmanager_secret.catalog_media : name => secret.arn }
+    catalog-service = { for name, parameter in aws_ssm_parameter.catalog_media : name => parameter.arn }
   }
 }
 
@@ -65,7 +65,7 @@ resource "aws_s3_bucket_policy" "media" {
   })
 }
 
-# One ALB per web app, so staff and customer get different hostnames and their cookies never collide. The DNS lives
+# One public ALB serves both web apps on two hostnames, so staff and customer cookies never collide. The DNS lives
 # outside AWS: add the records from the certificate_validation_records and site_cnames outputs at your DNS provider.
 resource "aws_acm_certificate" "web" {
   domain_name               = local.web_hosts["customer-web"]
@@ -84,7 +84,7 @@ resource "aws_acm_certificate_validation" "web" {
 
 resource "aws_security_group" "web_alb" {
   name        = "${local.environment_name}-web-alb"
-  description = "Public ALBs in front of the web app containers"
+  description = "Public ALB in front of the web app containers"
   vpc_id      = aws_vpc.this.id
 
   ingress {
@@ -114,7 +114,7 @@ resource "aws_security_group" "web_alb" {
 
 resource "aws_security_group_rule" "tasks_ingress_web_alb" {
   type                     = "ingress"
-  description              = "Allow HTTP on port 8080 from the web app ALBs"
+  description              = "Allow HTTP on port 8080 from the web app ALB"
   from_port                = 8080
   to_port                  = 8080
   protocol                 = "tcp"
@@ -123,9 +123,7 @@ resource "aws_security_group_rule" "tasks_ingress_web_alb" {
 }
 
 resource "aws_lb" "web" {
-  for_each = local.web_apps
-
-  name               = substr("${local.environment_name}-${each.key}", 0, 32)
+  name               = substr("${local.environment_name}-web", 0, 32)
   load_balancer_type = "application"
   security_groups    = [aws_security_group.web_alb.id]
   subnets            = aws_subnet.public[*].id
@@ -147,24 +145,41 @@ resource "aws_lb_target_group" "web" {
 }
 
 resource "aws_lb_listener" "web" {
-  for_each = local.web_apps
-
-  load_balancer_arn = aws_lb.web[each.key].arn
+  load_balancer_arn = aws_lb.web.arn
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = aws_acm_certificate_validation.web.certificate_arn
 
   default_action {
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "Not found"
+      status_code  = "404"
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "web" {
+  for_each = local.web_apps
+
+  listener_arn = aws_lb_listener.web.arn
+
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.web[each.key].arn
+  }
+
+  condition {
+    host_header {
+      values = [local.web_hosts[each.key]]
+    }
   }
 }
 
 resource "aws_lb_listener" "web_http" {
-  for_each = local.web_apps
-
-  load_balancer_arn = aws_lb.web[each.key].arn
+  load_balancer_arn = aws_lb.web.arn
   port              = 80
   protocol          = "HTTP"
 
@@ -249,7 +264,7 @@ resource "aws_ecs_service" "web" {
     container_port   = 8080
   }
 
-  depends_on = [aws_lb_listener.web]
+  depends_on = [aws_lb_listener_rule.web]
 }
 
 resource "aws_iam_user" "catalog_media" {
@@ -273,18 +288,12 @@ resource "aws_iam_access_key" "catalog_media" {
   user = aws_iam_user.catalog_media.name
 }
 
-resource "aws_secretsmanager_secret" "catalog_media" {
+resource "aws_ssm_parameter" "catalog_media" {
   for_each = toset(["SEAWEEDFS_ACCESS_KEY", "SEAWEEDFS_SECRET_KEY"])
 
-  name                    = "${local.environment_name}/catalog-service/${each.key}"
-  recovery_window_in_days = 0
-}
-
-resource "aws_secretsmanager_secret_version" "catalog_media" {
-  for_each = aws_secretsmanager_secret.catalog_media
-
-  secret_id     = each.value.id
-  secret_string = each.key == "SEAWEEDFS_SECRET_KEY" ? aws_iam_access_key.catalog_media.secret : aws_iam_access_key.catalog_media.id
+  name  = "/${local.environment_name}/catalog-service/${each.key}"
+  type  = "SecureString"
+  value = each.key == "SEAWEEDFS_SECRET_KEY" ? aws_iam_access_key.catalog_media.secret : aws_iam_access_key.catalog_media.id
 }
 
 output "web" {
@@ -307,5 +316,5 @@ output "certificate_validation_records" {
 
 output "site_cnames" {
   description = "CNAME records that send each host to its load balancer."
-  value       = { for app, host in local.web_hosts : host => aws_lb.web[app].dns_name }
+  value       = { for app, host in local.web_hosts : host => aws_lb.web.dns_name }
 }

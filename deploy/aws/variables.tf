@@ -28,7 +28,7 @@ variable "service_environment_extra" {
 }
 
 variable "service_secret_values" {
-  description = "Secret environment variables per service, from the root .env. Each becomes a Secrets Manager secret injected into that service."
+  description = "Secret environment variables per service, from the root .env. Each becomes an SSM SecureString parameter injected into that service."
   type        = map(map(string))
   default     = {}
   sensitive   = true
@@ -71,20 +71,8 @@ variable "task_memory" {
   default     = 512
 }
 
-variable "sales_task_cpu" {
-  description = "Fargate task CPU units for sales-service, which overrides task_cpu."
-  type        = number
-  default     = 512
-}
-
-variable "sales_task_memory" {
-  description = "Fargate task memory in MiB for sales-service. Must be a valid Fargate pair with sales_task_cpu."
-  type        = number
-  default     = 1024
-}
-
 variable "desired_count" {
-  description = "Minimum number of tasks per backend service."
+  description = "Number of tasks per backend service."
   type        = number
   default     = 1
 
@@ -92,29 +80,6 @@ variable "desired_count" {
     condition     = var.desired_count >= 1
     error_message = "Services must keep at least one task running."
   }
-}
-
-variable "max_count" {
-  description = "Maximum number of tasks per backend service for autoscaling."
-  type        = number
-  default     = 1
-
-  validation {
-    condition     = var.max_count >= 1
-    error_message = "Autoscaling max count must be at least 1."
-  }
-}
-
-variable "autoscaling_cpu_target_value" {
-  description = "Target average CPU utilization percentage for backend service autoscaling."
-  type        = number
-  default     = 70.0
-}
-
-variable "autoscaling_memory_target_value" {
-  description = "Target average memory utilization percentage for backend service autoscaling."
-  type        = number
-  default     = 80.0
 }
 
 variable "throttling_burst_limit" {
@@ -132,5 +97,5 @@ variable "throttling_rate_limit" {
 variable "log_retention_in_days" {
   description = "CloudWatch log retention in days for ECS services, Lambda functions, and API Gateway access logs."
   type        = number
-  default     = 30
+  default     = 7
 }
