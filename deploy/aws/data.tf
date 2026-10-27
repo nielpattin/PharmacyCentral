@@ -29,6 +29,7 @@ locals {
       "shared/RABBITMQ_MANAGEMENT_URL"      = "http://${local.rabbitmq_host}:15672"
       "shared/RABBITMQ_MANAGEMENT_USER"     = local.rabbitmq_user
       "shared/RABBITMQ_MANAGEMENT_PASSWORD" = random_password.rabbitmq.result
+      "shared/RABBITMQ_ERLANG_COOKIE_ARGS"  = "-setcookie ${random_password.rabbitmq_cookie.result}"
       "shared/AI_EMBEDDING_API_KEY"         = random_password.embedder_api_key.result
       "ops/PGPASSWORD"                      = random_password.postgres_admin.result
       "ops/DATABASE_URL"                    = "postgresql://${local.admin_user}:${random_password.postgres_admin.result}@${aws_db_instance.this.address}:5432/postgres?sslmode=no-verify"
@@ -99,6 +100,11 @@ resource "random_password" "database" {
 }
 
 resource "random_password" "rabbitmq" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "rabbitmq_cookie" {
   length  = 32
   special = false
 }
@@ -254,8 +260,9 @@ resource "aws_ecs_task_definition" "rabbitmq" {
     cpu_architecture        = "X86_64"
   }
 
-  # The image declares /var/lib/rabbitmq as a volume. Without an explicit task volume the node cannot read its Erlang cookie
-  # there (eacces) and exits at once; an empty task volume starts it, as it does for a root-owned empty directory.
+  # On Fargate the Erlang cookie file in /var/lib/rabbitmq appears owned by root with mode 400, so the rabbitmq user cannot
+  # read it (eacces) and the node exits at start. The cookie therefore comes from -setcookie, which skips the file, and the
+  # health check below does not use rabbitmq-diagnostics, which would read the file too.
   volume {
     name = "data"
   }
@@ -272,12 +279,18 @@ resource "aws_ecs_task_definition" "rabbitmq" {
     ]
     mountPoints = [{ sourceVolume = "data", containerPath = "/var/lib/rabbitmq" }]
     environment = [{ name = "RABBITMQ_DEFAULT_USER", value = local.rabbitmq_user }]
-    secrets = [{
-      name      = "RABBITMQ_DEFAULT_PASS"
-      valueFrom = local.secret_arn["shared/RABBITMQ_MANAGEMENT_PASSWORD"]
-    }]
+    secrets = [
+      {
+        name      = "RABBITMQ_DEFAULT_PASS"
+        valueFrom = local.secret_arn["shared/RABBITMQ_MANAGEMENT_PASSWORD"]
+      },
+      {
+        name      = "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS"
+        valueFrom = local.secret_arn["shared/RABBITMQ_ERLANG_COOKIE_ARGS"]
+      },
+    ]
     healthCheck = {
-      command  = ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      command  = ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/5672'"]
       interval = 30
       timeout  = 10
       retries  = 5
