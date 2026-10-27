@@ -30,7 +30,6 @@
     "@opentelemetry/sdk-metrics": "catalog:",
     "@opentelemetry/sdk-node": "catalog:",
     "amqplib": "catalog:",
-    "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "express": "catalog:",
     "ioredis": "catalog:",
@@ -47,6 +46,7 @@
     "@types/node": "catalog:",
     "@types/nodemailer": "catalog:",
     "@types/pg": "catalog:",
+    "drizzle-kit": "catalog:",
     "vitest": "catalog:"
   },
   "nx": {

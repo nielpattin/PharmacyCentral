@@ -15,12 +15,22 @@ RUN pnpm deploy --legacy --filter "${APP_NAME}" --prod /out
 RUN mkdir -p "/out/dist" && cp -R "/workspace/${APP_DIR}/dist/." "/out/dist/"
 RUN if [ -d "/workspace/${APP_DIR}/drizzle/migrations" ]; then mkdir -p /out/drizzle/migrations && cp -R "/workspace/${APP_DIR}/drizzle/migrations/." /out/drizzle/migrations/; fi
 
-FROM node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS runtime
+# The runtime is Alpine with only the Node binary: the official Node image adds npm, yarn and a Debian base the
+# services never use. The binary comes from the same Node release as the build stage; stripping drops its debug symbols.
+FROM node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS node
+RUN apk add --no-cache binutils \
+  && cp /usr/local/bin/node /node \
+  && strip --strip-unneeded /node
+
+FROM alpine:3.22@sha256:d406446bc05b82480756ce8f1287964d28768c23955fa9480d2a74a2eae7a654 AS runtime
 ARG BUILD_VERSION
 WORKDIR /app
 ENV NODE_ENV=production
 # service.version in target_info comes from the build version (OTel reads OTEL_RESOURCE_ATTRIBUTES).
 ENV OTEL_RESOURCE_ATTRIBUTES=service.version=${BUILD_VERSION}
+RUN apk add --no-cache libstdc++ \
+  && adduser -S -D -H -u 1000 node
+COPY --from=node /node /usr/local/bin/node
 USER node
 COPY --from=build --chown=node:node /out ./
 EXPOSE 3000

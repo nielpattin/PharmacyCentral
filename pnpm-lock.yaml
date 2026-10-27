@@ -450,9 +450,6 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
-      drizzle-kit:
-        specifier: 'catalog:'
-        version: 0.31.11
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
@@ -481,6 +478,9 @@ importers:
       '@types/pg':
         specifier: 'catalog:'
         version: 8.23.1
+      drizzle-kit:
+        specifier: 'catalog:'
+        version: 0.31.11
       vitest:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -584,9 +584,6 @@ importers:
       amqplib:
         specifier: 'catalog:'
         version: 2.0.1
-      drizzle-kit:
-        specifier: 'catalog:'
-        version: 0.31.11
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
@@ -630,6 +627,9 @@ importers:
       '@types/pg':
         specifier: 'catalog:'
         version: 8.23.1
+      drizzle-kit:
+        specifier: 'catalog:'
+        version: 0.31.11
       vitest:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -760,9 +760,6 @@ importers:
       amqplib:
         specifier: 'catalog:'
         version: 2.0.1
-      drizzle-kit:
-        specifier: 'catalog:'
-        version: 0.31.11
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
@@ -791,6 +788,9 @@ importers:
       '@types/pg':
         specifier: 'catalog:'
         version: 8.23.1
+      drizzle-kit:
+        specifier: 'catalog:'
+        version: 0.31.11
       vitest:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -894,9 +894,6 @@ importers:
       amqplib:
         specifier: 'catalog:'
         version: 2.0.1
-      drizzle-kit:
-        specifier: 'catalog:'
-        version: 0.31.11
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
@@ -928,6 +925,9 @@ importers:
       '@types/pg':
         specifier: 'catalog:'
         version: 8.23.1
+      drizzle-kit:
+        specifier: 'catalog:'
+        version: 0.31.11
       vitest:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -979,9 +979,6 @@ importers:
       amqplib:
         specifier: 'catalog:'
         version: 2.0.1
-      drizzle-kit:
-        specifier: 'catalog:'
-        version: 0.31.11
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
@@ -1022,6 +1019,9 @@ importers:
       '@types/qrcode':
         specifier: 'catalog:'
         version: 1.5.6
+      drizzle-kit:
+        specifier: 'catalog:'
+        version: 0.31.11
       jsqr:
         specifier: 'catalog:'
         version: 1.4.0

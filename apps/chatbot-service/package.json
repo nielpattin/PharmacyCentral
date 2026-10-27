@@ -27,7 +27,6 @@
     "@opentelemetry/sdk-logs": "catalog:",
     "@opentelemetry/sdk-metrics": "catalog:",
     "@opentelemetry/sdk-node": "catalog:",
-    "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "express": "catalog:",
     "pg": "catalog:",
@@ -39,6 +38,7 @@
     "@types/express": "catalog:",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
+    "drizzle-kit": "catalog:",
     "vitest": "catalog:"
   },
   "engines": {
