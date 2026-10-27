@@ -48,7 +48,7 @@ model {
   pharmacyCentral.web.staffWeb -> pharmacyCentral.services.searchService "Product list (GET /api/products)" {
     technology "HTTPS"
   }
-  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.inventoryService "Stock, quality, procurement (/api/inventory, /api/quality)" {
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.inventoryService "Stock, quality, procurement (/api/inventory, /api/procurement)" {
     technology "HTTPS"
   }
   pharmacyCentral.web.staffWeb -> pharmacyCentral.services.salesService "Consultations, prescriptions, counter (/api/prescriptions)" {

@@ -121,7 +121,8 @@ views {
     description """
       The session cookie is the only credential of the browser. The edge authorizer resolves it
       against identity-service and hands the services a short lived signed identity context, and
-      every mutating request needs the CSRF token.
+      every mutating request needs the CSRF token. The edge and each service check the role of the
+      caller again, and nobody approves a record they created.
     """
     include customer
     include pharmacist

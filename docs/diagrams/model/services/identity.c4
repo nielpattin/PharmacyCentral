@@ -14,7 +14,7 @@ model {
       }
 
       admin = component "Employee administration" {
-        summary "Employee accounts, role groups and the sites each employee may act on."
+        summary "Employee accounts, role groups, the sites each employee may act on, deactivation and the forced password change."
       }
 
       customers = component "Customer directory" {

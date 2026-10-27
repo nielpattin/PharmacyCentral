@@ -3,6 +3,9 @@ views {
     variant sequence
     title "Checkout, from the cart to the paid invoice"
     description """
+      A signed-out cart lives only in the browser. The order needs a signed-in customer: the browser merges
+      its lines into the account cart, and sales-service orders the lines that are ticked there.
+
       The price, the distance and the fee of the order are recalculated by sales-service, and the stock of
       the store is held for the order before it exists for the shopper: the hold is all or nothing, taken
       from the earliest expiry first, and an order the store cannot cover is cancelled and answered 409.
@@ -15,8 +18,8 @@ views {
       minutes (24 hours for cash on delivery), and a refunded order that was not handed over give the hold back.
     """
 
-    customer -> pharmacyCentral.web.customerWeb "adds a product to the cart"
-    pharmacyCentral.web.customerWeb -> pharmacyCentral.services.salesService "POST /api/carts, POST /api/orders"
+    customer -> pharmacyCentral.web.customerWeb "adds a product to the cart and ticks the lines to buy"
+    pharmacyCentral.web.customerWeb -> pharmacyCentral.services.salesService "POST /api/carts/merge on sign-in, then POST /api/orders with fromCart"
     pharmacyCentral.services.salesService -> pharmacyCentral.services.catalogService "GET /api/products, GET /api/pricing/active"
     pharmacyCentral.services.catalogService -> pharmacyCentral.services.salesService "the product and the published price"
     pharmacyCentral.services.salesService -> pharmacyCentral.services.inventoryService "POST /api/inventory/reservations, the order id is the reservation id"
@@ -128,7 +131,6 @@ views {
   }
 
   dynamic view outboxDelivery {
-    variant sequence
     title "A stock change reaches the storefront, through the outbox"
     description """
       The stock change and its event commit in one transaction, so a crash or a broker outage after
@@ -148,7 +150,6 @@ views {
   }
 
   dynamic view traceThroughOutbox {
-    variant sequence
     title "One trace follows an event from the request to its consumers"
     description """
       The example is the import of the opening balances. The request span, the stock change and the outbox
@@ -174,7 +175,6 @@ views {
   }
 
   dynamic view asyncReliability {
-    variant sequence
     title "What the messaging layer does when something fails"
     description """
       The example is payment.invoice.paid.v1 on its way to sales-service. Inventory, sales and payment
