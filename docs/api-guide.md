@@ -85,7 +85,7 @@ Every `/api/carts*` route needs a signed-in customer. A signed-out shopper's car
 
 `GET /api/products/count` is served by `catalog-service` and answers `{ "count": n }`: the active products the product list shows, under the same optional `search`, `category` and `prescriptionRequired` filters. It is a count of the catalog itself, not of the search index.
 
-- `GET /api/stores`, `GET /api/stores/nearest`
+- `GET /api/stores`, `GET /api/stores/nearest`, `GET /api/stores/:id`
 - `GET /api/pricing/active`
 - `GET /api/carts`
 - `POST /api/carts/lines` (a product the catalog marks `prescriptionRequired` answers `409 prescription_required` with its `productId` and is not added)
@@ -239,7 +239,7 @@ Public reads need no session: `/api/products` (except `search-synonyms` and the 
 - `POST /api/pricing/prices`
 - `POST /api/pricing/prices/{id}/publish` or `archive`. Publish refuses the creator of the draft (`403 self_approval_forbidden`).
 - `GET /api/pricing/active` answers the active price for a product unit at a site on a date.
-- `GET /api/stores` takes `limit` (1 to 100, default 50) and `cursor`. Stores come in code order, and `X-Next-Cursor` works as it does for the price list. `GET /api/stores/nearest` answers the nearest stores to a point.
+- `GET /api/stores` takes `limit` (1 to 100, default 50) and `cursor`. Stores come in code order, and `X-Next-Cursor` works as it does for the price list. `GET /api/stores/nearest` answers the nearest stores to a point. `GET /api/stores/:id` answers one active, customer-facing store (`id`, `code`, `name`, `address`, `coordinates`), or `404`; sales-service reads it to place a delivery or pickup.
 - `GET /api/availability`
 
 `GET /api/sites`, `GET /api/storage-locations`, and `GET /api/suppliers` take `q`, a case-insensitive match on the code or the name (up to 200 characters; `%` and `_` match literally). Without `q` they answer the whole list in code order.

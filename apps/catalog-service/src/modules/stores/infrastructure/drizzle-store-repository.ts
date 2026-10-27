@@ -119,6 +119,16 @@ export class DrizzleStoreRepository {
     );
   }
 
+  /** One store a shopper can order from, by id; undefined for a site that is inactive or not customer-facing. */
+  public async findActiveStore(id: string): Promise<StoreSummary | undefined> {
+    const [row] = await this.database.db
+      .select({ id: sites.id, code: sites.code, name: sites.name, address: sites.address, location: sites.location })
+      .from(sites)
+      .where(and(eq(sites.id, id), eq(sites.isActive, true), eq(sites.isCustomerFacing, true)))
+      .limit(1);
+    return row ? this.toSummary(row) : undefined;
+  }
+
   public async findNearestStores(
     point: Coordinates,
     limit = 5,

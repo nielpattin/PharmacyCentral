@@ -485,6 +485,30 @@ describe("catalog API", () => {
     expect(listActiveStores).toHaveBeenCalledTimes(2);
   });
 
+  it("answers one active store to a caller that signed in as nobody, and 404 for any other", async () => {
+    const store = {
+      id: ids.site,
+      code: "SITE-001",
+      name: "Nhà thuốc Quận 4",
+      address: "268 Tôn Đản",
+      coordinates: { latitude: 10.773, longitude: 106.704 },
+    };
+    const findActiveStore = vi
+      .fn<(id: string) => Promise<unknown>>()
+      .mockImplementation(async (id) => (id === ids.site ? store : undefined));
+    const testServer = await createTestServer({ findActiveStore } as unknown as DrizzleStoreRepository);
+    server = testServer.server;
+
+    const found = await fetch(`${testServer.url}/stores/${ids.site}`);
+    const missing = await fetch(`${testServer.url}/stores/00000000-0000-4000-8000-0000000000e9`);
+    const malformed = await fetch(`${testServer.url}/stores/not-an-id`);
+
+    expect(found.status).toBe(200);
+    expect(await found.json()).toEqual(store);
+    expect(missing.status).toBe(404);
+    expect(malformed.status).toBe(400);
+  });
+
   it("filters sites, storage locations and suppliers by code or name with q, and leaves them whole without it", async () => {
     const listSites = vi.fn<(search?: string, siteIds?: string[]) => Promise<unknown[]>>().mockResolvedValue([]);
     const listStorageLocations = vi

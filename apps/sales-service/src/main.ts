@@ -6,7 +6,6 @@ import { createServer } from "node:http";
 import { Redis } from "ioredis";
 import { z } from "zod";
 
-import { internalServiceHeaders } from "./internal-service-headers.ts";
 import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware, matchesPathPrefix } from "./middleware/trusted-request.ts";
 
@@ -14,11 +13,12 @@ import { DrizzleCredentialStore } from "./infrastructure/drizzle-credential-stor
 import { readAiProviderSettings } from "./infrastructure/ai-provider-config.ts";
 import { SecretBox } from "./infrastructure/secret-box.ts";
 import { DeliveryCalculator } from "./modules/delivery/domain/delivery-calculator.ts";
+import { createCatalogStoreLookup } from "./modules/delivery/infrastructure/catalog-store-lookup.ts";
 import { InMemoryDeliveryCache } from "./modules/delivery/infrastructure/in-memory-delivery-cache.ts";
 import { OpenRouteServiceClient } from "./modules/delivery/infrastructure/open-route-service-client.ts";
 import { RedisDeliveryCache } from "./modules/delivery/infrastructure/redis-delivery-cache.ts";
 import { VietmapGeocoder } from "./modules/delivery/infrastructure/vietmap-geocoder.ts";
-import { createDeliveryRouter } from "./modules/delivery/presentation/delivery-routes.ts";
+import { createDeliveryRouter, type StoreCoordinateLookup } from "./modules/delivery/presentation/delivery-routes.ts";
 import { OrderStock, OrderStockSweeper } from "./modules/orders/application/order-stock.ts";
 import { InventoryReservations } from "./modules/orders/infrastructure/inventory-reservations.ts";
 import { SalesOutboxPublisher } from "./modules/outbox-publisher.ts";
@@ -130,23 +130,9 @@ app.get("/health/ready", (_request, response) =>
     .status(database ? 200 : 503)
     .json({ status: database ? "ok" : "degraded", service: serviceName, redis: Boolean(redisClient) }),
 );
-const lookupStore = async (
-  storeId: string,
-): Promise<{ id: string; latitude: number; longitude: number } | undefined> => {
-  const configured = storeCoordinates.get(storeId);
-  if (configured) return configured;
-  try {
-    const upstream = await fetch(`${catalogServiceUrl}/sites/${storeId}`, {
-      headers: internalServiceHeaders(),
-      signal: AbortSignal.timeout(2_000),
-    });
-    if (!upstream.ok) return undefined;
-    const site = (await upstream.json()) as { id: string; location?: { x: number; y: number } | null };
-    return site.location ? { id: site.id, longitude: site.location.x, latitude: site.location.y } : undefined;
-  } catch {
-    return undefined;
-  }
-};
+const lookupStoreInCatalog = createCatalogStoreLookup(catalogServiceUrl);
+const lookupStore: StoreCoordinateLookup = async (storeId) =>
+  storeCoordinates.get(storeId) ?? lookupStoreInCatalog(storeId);
 
 const environmentSettings = readAiProviderSettings("prescription-reader", process.env);
 const vault = database

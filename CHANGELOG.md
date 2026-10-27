@@ -174,10 +174,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 **sales-service**
 
 - Cart creation and pricing hardened.
+- A delivery estimate or a delivery order no longer answers `404 store_not_found`: the store is read from the public `GET /stores/:id` of catalog-service, not from the staff-only `/sites/:id` with a service secret.
 
 **catalog-service**
 
 - Global product pricing enforced.
+- `GET /stores/:id` answers one active, customer-facing store (code, name, address, coordinates) with no sign-in.
 
 **payment-service**
 

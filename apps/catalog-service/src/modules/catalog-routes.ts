@@ -695,6 +695,16 @@ export const createCatalogRouter = (
     response.json(await repository.findNearestStores({ latitude, longitude }, Number.isFinite(limit) ? limit : 5));
   });
 
+  // Public like the list: it is how sales-service finds where a delivery or a pickup starts, with no employee to sign.
+  router.get("/stores/:id", async (request, response) => {
+    if (!repository) return databaseUnavailable(response);
+    const id = idParamSchema.safeParse(request.params);
+    if (!id.success) return invalidRequest(response);
+    const store = await repository.findActiveStore(id.data.id);
+    if (!store) return response.status(404).json({ title: "Store not found", status: 404 });
+    response.json(store);
+  });
+
   return router;
 };
 
