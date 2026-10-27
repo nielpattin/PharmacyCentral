@@ -4,6 +4,7 @@ import { openingBalanceImportSchema } from "../contracts/imports.ts";
 import { actorSiteIds } from "../middleware/trusted-request.ts";
 
 import { actorIdOf, allowRoles } from "./access-control.ts";
+import { signCatalogIdentity } from "./catalog-identity.ts";
 import { ImportSiteAccessError, type InventoryImportService } from "./inventory-import-service.ts";
 import { today } from "./site-availability.ts";
 
@@ -36,6 +37,7 @@ export const createInventoryImportRouter = (importService: InventoryImportServic
       const summary = await importService.importOpeningBalances(parsed.data, {
         actorId: actorIdOf(request) ?? null,
         allowedSiteIds: actorSiteIds(request),
+        catalogIdentity: () => signCatalogIdentity(request),
       });
       return response.json({ status: "imported", summary });
     } catch (error) {

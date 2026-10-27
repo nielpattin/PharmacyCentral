@@ -1,5 +1,4 @@
 import type { OpeningBalanceImportRow } from "../contracts/imports.ts";
-import { internalServiceHeaders } from "../internal-service-headers.ts";
 
 import type { OpeningBalanceReference, OpeningBalanceReferenceResolver } from "./inventory-import-service.ts";
 
@@ -12,18 +11,13 @@ export class CatalogServiceReferenceResolver implements OpeningBalanceReferenceR
   private suppliers: Promise<Map<string, string>> | undefined;
   private readonly products = new Map<string, string>();
 
+  /** One resolver serves one import: its lookups carry that import's identity and its caches die with it. */
   public constructor(
     baseUrl: string,
+    private readonly identity: () => string,
     private readonly fetchImplementation: typeof fetch = fetch,
   ) {
     this.baseUrl = baseUrl.trim().replace(/\/+$/, "");
-  }
-
-  public reset(): void {
-    this.sites = undefined;
-    this.storageLocations = undefined;
-    this.suppliers = undefined;
-    this.products.clear();
   }
 
   public async resolve(row: OpeningBalanceImportRow): Promise<OpeningBalanceReference> {
@@ -44,7 +38,7 @@ export class CatalogServiceReferenceResolver implements OpeningBalanceReferenceR
 
   private async getJson<T>(path: string): Promise<T> {
     const response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
-      headers: { Accept: "application/json", ...internalServiceHeaders() },
+      headers: { Accept: "application/json", "x-internal-identity-context": this.identity() },
     });
     if (!response.ok) throw new Error(`Catalog service request failed with status ${response.status} for ${path}`);
     return (await response.json()) as T;

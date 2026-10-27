@@ -44,7 +44,7 @@ const repository = database ? new InventoryRepository(database) : undefined;
 const expiryAvailabilitySweeper = repository ? new ExpiryAvailabilitySweeper(repository, logger) : undefined;
 expiryAvailabilitySweeper?.start();
 const inventoryImportService = database
-  ? new InventoryImportService(database, new CatalogServiceReferenceResolver(catalogServiceUrl))
+  ? new InventoryImportService(database, (identity) => new CatalogServiceReferenceResolver(catalogServiceUrl, identity))
   : undefined;
 const procurementRepository = database
   ? new ProcurementRepository(database, async (input) => {

@@ -75,7 +75,7 @@ describe("inventory opening balance import API", () => {
       expect.objectContaining({
         balances: [expect.objectContaining({ productSku: "THU-0001", qualityStatus: "Released" })],
       }),
-      expect.objectContaining({ actorId: null, allowedSiteIds: undefined }),
+      expect.objectContaining({ actorId: null, allowedSiteIds: undefined, catalogIdentity: expect.any(Function) }),
     );
   });
 

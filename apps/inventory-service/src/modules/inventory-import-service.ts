@@ -19,13 +19,16 @@ export type OpeningBalanceReference = {
 
 export type OpeningBalanceReferenceResolver = {
   resolve(row: OpeningBalanceImportRow): Promise<OpeningBalanceReference>;
-  reset?(): void;
 };
+
+/** Makes the resolver for one import. `identity` signs the importing employee for catalog-service, once per lookup. */
+export type OpeningBalanceResolverFactory = (identity: () => string) => OpeningBalanceReferenceResolver;
 
 /** A row names a site the importing user is not assigned to. Nothing is written when one is found. */
 export class ImportSiteAccessError extends Error {}
 
 export type OpeningBalanceImportOptions = {
+  catalogIdentity: () => string;
   /** The user importing; recorded as the creator of each batch the import creates. */
   actorId: string | null;
   /** The sites the importer may write to; undefined for Platform Admin, which has no site limit. */
@@ -35,17 +38,17 @@ export type OpeningBalanceImportOptions = {
 export class InventoryImportService {
   public constructor(
     private readonly database: InventoryDatabase,
-    private readonly resolver: OpeningBalanceReferenceResolver,
+    private readonly createResolver: OpeningBalanceResolverFactory,
   ) {}
 
   public async importOpeningBalances(
     input: OpeningBalanceImport,
-    options: OpeningBalanceImportOptions = { actorId: null },
+    options: OpeningBalanceImportOptions,
   ): Promise<OpeningBalanceImportResult> {
-    this.resolver.reset?.();
+    const resolver = this.createResolver(options.catalogIdentity);
     const resolved: Array<{ row: OpeningBalanceImportRow; reference: OpeningBalanceReference }> = [];
     for (const row of input.balances) {
-      resolved.push({ row, reference: await this.resolver.resolve(row) });
+      resolved.push({ row, reference: await resolver.resolve(row) });
     }
     if (options.allowedSiteIds) {
       const allowed = options.allowedSiteIds;
