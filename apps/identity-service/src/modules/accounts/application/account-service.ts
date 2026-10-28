@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { Account, CustomerMatch } from "../domain/account.ts";
+import type { Account, CustomerMatch, StaffMember } from "../domain/account.ts";
 import { AccountError, accountErrors } from "../domain/account-error.ts";
 import { assertEmail } from "../domain/email-address.ts";
 import { canonicalPhoneDigits } from "../domain/phone-number.ts";
@@ -30,6 +30,8 @@ export type AccountRepository = Pick<
   | "searchActiveCustomers"
   | "findActiveCustomerById"
   | "findActiveCustomersByIds"
+  | "findActiveEmployeeById"
+  | "listActiveEmployees"
 >;
 export type SessionRepository = Pick<InMemorySessionRepository, "create" | "findActive" | "revoke" | "revokeAll">;
 
@@ -312,6 +314,19 @@ export class AccountService {
     const distinct = [...new Set(customerIds)];
     const customers = await this.accounts.findActiveCustomersByIds(distinct);
     return customers.map(toCustomerContact);
+  }
+
+  /**
+   * The active employees the staff directory lists, by name. Left out, every active employee; given the viewer's
+   * sites, only those sharing one of them. Customers and deactivated accounts never appear.
+   */
+  public async listActiveEmployees(sharingSiteIds?: readonly string[]): Promise<StaffMember[]> {
+    return this.accounts.listActiveEmployees(sharingSiteIds);
+  }
+
+  /** An active employee by id, for the owner check. A customer, a deactivated account or an unknown id is `undefined`. */
+  public async findActiveEmployee(employeeId: string): Promise<StaffMember | undefined> {
+    return this.accounts.findActiveEmployeeById(employeeId);
   }
 
   public async createEmployee(

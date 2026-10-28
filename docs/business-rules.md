@@ -250,6 +250,22 @@ Người duyệt là Pharmacy Manager hoặc Platform Admin, và không phải n
 
 `cancel` bị từ chối khi đơn ở `Received` hoặc `Cancelled`. Đơn Draft, Approved hoặc PartiallyReceived vẫn hủy được.
 
+### BR-PROC-007. Gợi ý bổ sung hàng tính từ tốc độ bán, tồn, tồn tối thiểu và thời gian giao hàng
+
+Với một site, tốc độ bán ngày là tổng số lượng có `Dispense` trong sổ kho của site trong cửa sổ chọn (mặc định 30 ngày) chia số ngày. Tồn tối thiểu là 10 đơn vị cơ sở (ngưỡng của BR-REPORT-002), hoặc tốc độ bán nhân số ngày tồn an toàn (mặc định 7) nếu lớn hơn. Thời gian giao hàng là trung vị số ngày từ lúc tạo đơn mua đến phiếu nhận đầu tiên của nhà cung cấp trong 12 tháng gần nhất; chưa có lịch sử thì dùng số ngày mặc định người dùng nhập (mặc định 7) và dòng gợi ý ghi rõ đó là mặc định. Điểm đặt lại là tốc độ bán nhân thời gian giao hàng cộng tồn tối thiểu; tồn mục tiêu là tốc độ bán nhân (thời gian giao hàng cộng số ngày bao phủ, mặc định 14) cộng tồn tối thiểu. Sản phẩm được gợi ý khi `khả dụng + đang về <= điểm đặt lại` (đang về là phần chưa nhận của đơn mua Draft, Approved hoặc PartiallyReceived tại site) và có bán trong cửa sổ hoặc đang dưới tồn tối thiểu. Số lượng gợi ý là `ceil(tồn mục tiêu - khả dụng - đang về)`, tối thiểu 1. Nhà cung cấp của sản phẩm là nhà cung cấp của phiếu nhận gần nhất tại site, rồi ở mọi site; không có thì dòng đó phải được chọn nhà cung cấp trước khi tạo đơn. Hệ thống chưa có trường tồn tối thiểu theo sản phẩm hay thời gian giao hàng theo nhà cung cấp.
+
+### BR-PROC-008. Tạo đơn nháp hàng loạt từ gợi ý chỉ tạo Draft
+
+Pharmacy Manager hoặc Platform Admin chọn các dòng gợi ý, sửa số lượng (số nguyên dương) và tạo mỗi nhà cung cấp một đơn mua ở `Draft` tại site đã chọn, trong một transaction: hoặc tạo hết hoặc không tạo gì. Việc kiểm tra nhà cung cấp, site và sản phẩm như BR-PROC-002. Hệ thống không tự duyệt hay gửi đơn; duyệt vẫn theo BR-PROC-005 và BR-AUTH-009.
+
+### BR-PLAN-001. Kế hoạch hành động có chủ sở hữu, hạn và trạng thái
+
+Một kế hoạch tạo từ gợi ý hoặc cảnh báo (`replenishment`, `expiry`, `dead_stock`, `price_warning`) có chủ sở hữu, hạn (ngày, không ở quá khứ khi tạo) và trạng thái `open`, `in_progress` hoặc `done`. Chỉ Pharmacy Manager và Platform Admin tạo kế hoạch; chủ sở hữu phải là nhân viên đang hoạt động làm việc tại site của kế hoạch (Platform Admin làm chủ sở hữu được ở mọi site). Mỗi cảnh báo (`sourceType` và `sourceRef`) chỉ có một kế hoạch `open` hoặc `in_progress` cùng lúc. Kế hoạch không tự thực hiện hành động nào trên cảnh báo.
+
+### BR-PLAN-002. Ai xem và sửa kế hoạch
+
+Quản lý và Platform Admin xem kế hoạch trong các site của mình (kế hoạch không có site chỉ Platform Admin xem) và sửa mọi trường; nhân viên khác chỉ xem kế hoạch mình sở hữu. Chủ sở hữu chỉ đổi được trạng thái. Chuyển sang `done` ghi thời điểm hoàn thành; chuyển khỏi `done` xóa thời điểm đó và bị từ chối nếu đã có kế hoạch sống cho cùng cảnh báo.
+
 ### BR-RECV-001. Phiếu nhận hàng có số phiếu và ít nhất một dòng
 
 `receiptNumber` bắt buộc (1–100 ký tự) và `lines` không rỗng.
@@ -740,6 +756,22 @@ Gồm Draft, Pending và PartiallyDispensed.
 ### BR-REPORT-006. Kiểm kê đang mở là phiên chưa Completed và chưa Cancelled
 
 ### BR-REPORT-007. Điều chỉnh đang chờ là điều chỉnh ở Pending
+
+### BR-REPORT-008. Doanh thu kỳ phân tích là hóa đơn đã thanh toán của đơn hoặc đơn thuốc tạo trong kỳ
+
+Một giao dịch bán là đơn hàng online hoặc đơn thuốc tại quầy có hóa đơn ở trạng thái `Paid`. Doanh thu là tổng số tiền các hóa đơn đó; hóa đơn đã hoàn tiền (`Refunded`) không còn là doanh thu. Giao dịch thuộc kỳ theo `createdAt` của đơn hoặc đơn thuốc và thuộc site của chính chứng từ đó (đơn online: cửa hàng đã chọn). Số đơn là số giao dịch bán; giá trị đơn trung bình là doanh thu chia số đơn và để trống khi số đơn là 0. Kỳ trước là kỳ cùng độ dài, kết thúc tại đầu kỳ đang xem; kỳ dài tối đa 366 ngày. Bộ lọc kênh (`counter`, `online`) chỉ áp dụng cho các chỉ số bán hàng.
+
+### BR-REPORT-009. Lợi nhuận gộp chỉ tính khi có giá vốn
+
+Hệ thống chưa lưu giá vốn nhập hàng nên lợi nhuận gộp hiển thị "—" kèm lý do `no_cost_data`; không ước lượng theo tỷ lệ (BR-FIN-002, BR-FIN-003).
+
+### BR-REPORT-010. Chỉ số sức khỏe tồn kho
+
+Vòng quay tồn kho là số lượng đã xuất bán (`Dispense`) trong kỳ chia tồn trung bình; tồn trung bình là (tồn đầu kỳ + tồn hiện tại) / 2, với tồn đầu kỳ bằng tồn hiện tại trừ biến động sổ kho trong kỳ. Số ngày tồn kho là số ngày của kỳ chia vòng quay. Hàng tồn lâu là tồn của sản phẩm tại một site mà lần biến động sổ kho gần nhất cách đây hơn 90 ngày hoặc chưa từng có. Tỷ lệ hết hàng là tỷ lệ cặp (site, sản phẩm) có dòng tồn hoặc dòng sổ kho mà số khả dụng (tồn trừ giữ chỗ) từ 0 trở xuống tại thời điểm xem, không phải tỷ lệ trong kỳ vì hệ thống không lưu ảnh chụp tồn theo ngày. Giá trị tồn tính theo giá bán cơ sở đang hiệu lực như báo cáo Tài chính; sản phẩm chưa có giá không cộng vào giá trị và được đếm riêng.
+
+### BR-REPORT-011. Nhóm hạn dùng
+
+Số lượng tồn (>0) của lô đã hết hạn, hết hạn trong 0–30 ngày, 31–60 ngày và 61–90 ngày kể từ hôm nay (theo ngày UTC). Các nhóm không chồng nhau. Trang Phân tích chỉ mở cho Platform Admin và Pharmacy Manager (BR-AUTH-002).
 
 ### BR-FIN-001. Tài chính là đọc, không ghi sổ kế toán
 

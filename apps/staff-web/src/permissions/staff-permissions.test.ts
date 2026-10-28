@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { setLanguage, translateText } from "../i18n.ts";
-import { can, canAtSite, staffActions, STAFF_ROLES, type StaffAction, type StaffRole } from "./staff-permissions.ts";
+import {
+  can,
+  canAtSite,
+  canChangeActionPlanStatus,
+  canEditActionPlan,
+  staffActions,
+  STAFF_ROLES,
+  type StaffAction,
+  type StaffRole,
+} from "./staff-permissions.ts";
 
 const PA = "Platform Admin";
 const PM = "Pharmacy Manager";
@@ -26,6 +35,7 @@ const admitted: Record<StaffAction, readonly StaffRole[]> = {
   "purchaseOrder.approve": [PM],
   "purchaseOrder.cancel": [PM],
   "price.publish": [PM],
+  "replenishment.suggestions.view": [PM],
   "goodsReceipt.view": [WAREHOUSE],
   "goodsReceipt.create": [WAREHOUSE],
   "inventory.balances.view": [PHARMACIST, PM, WAREHOUSE],
@@ -52,6 +62,8 @@ const admitted: Record<StaffAction, readonly StaffRole[]> = {
   "replenishment.create": [PHARMACIST, PM],
   "replenishment.decide": [WAREHOUSE],
   "replenishment.cancel": [WAREHOUSE],
+  "actionPlan.create": [PM],
+  "actionPlan.edit": [PM],
   "catalog.write": [PM],
   "catalog.site.create": [],
   "catalog.site.delete": [],
@@ -233,6 +245,51 @@ describe("site scope", () => {
       allowed: false,
       reason: "Chỉ Quản lý nhà thuốc được thay đổi danh mục và dữ liệu nền.",
     });
+  });
+});
+
+describe("action plan access", () => {
+  const plan = { ownerId: "owner-1", siteId: "site-a" };
+  const manager = { roles: [PM], userId: "manager-1", siteIds: ["site-a"] };
+  const owner = { roles: [PHARMACIST], userId: "owner-1", siteIds: ["site-a"] };
+  const otherPharmacist = { roles: [PHARMACIST], userId: "user-9", siteIds: ["site-a"] };
+
+  it("lets a manager edit the owner, due date, title and detail of a plan at their site", () => {
+    expect(canEditActionPlan(manager, plan)).toEqual({ allowed: true });
+  });
+
+  it("refuses the plan's owner the field edits, since the owner may change status only", () => {
+    expect(canEditActionPlan(owner, plan).allowed).toBe(false);
+  });
+
+  it("refuses a manager the edit of a plan at a site they are not assigned", () => {
+    expect(canEditActionPlan(manager, { ownerId: "owner-1", siteId: "site-b" }).allowed).toBe(false);
+  });
+
+  it("refuses a manager the edit of a plan with no site, and lets Platform Admin edit it", () => {
+    expect(canEditActionPlan(manager, { ownerId: "owner-1", siteId: null }).allowed).toBe(false);
+    expect(canEditActionPlan({ roles: [PA], userId: "admin" }, { ownerId: "owner-1", siteId: null })).toEqual({
+      allowed: true,
+    });
+  });
+
+  it("lets the plan's owner change its status, whatever the site", () => {
+    expect(canChangeActionPlanStatus(owner, { ownerId: "owner-1", siteId: "site-z" })).toEqual({ allowed: true });
+  });
+
+  it("lets a manager at the site change the status of someone else's plan", () => {
+    expect(canChangeActionPlanStatus(manager, plan)).toEqual({ allowed: true });
+  });
+
+  it("refuses another pharmacist the status change of a plan they do not own", () => {
+    expect(canChangeActionPlanStatus(otherPharmacist, plan)).toEqual({
+      allowed: false,
+      reason: translateText("Only the plan's owner or a Pharmacy Manager can change its status."),
+    });
+  });
+
+  it("refuses a session with no user id the status change of a plan", () => {
+    expect(canChangeActionPlanStatus({ roles: [PHARMACIST] }, plan).allowed).toBe(false);
   });
 });
 

@@ -8,6 +8,8 @@ import { hasStaffRole } from "./staff-permissions.ts";
  */
 export const sectionRoles: Record<Section, readonly string[]> = {
   dashboard: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
+  analytics: ["Platform Admin", "Pharmacy Manager"],
+  actionPlans: ["Platform Admin", "Pharmacy Manager", "Pharmacist", "Warehouse Staff"],
   pharmacistOverview: ["Platform Admin", "Pharmacist"],
   prescriptions: ["Platform Admin", "Pharmacy Manager", "Pharmacist"],
   orders: ["Platform Admin", "Pharmacy Manager", "Pharmacist"],

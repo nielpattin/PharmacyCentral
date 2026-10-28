@@ -3,6 +3,8 @@ import { useSyncExternalStore } from "react";
 export type SessionSnapshot = {
   authenticated: boolean;
   userId?: string;
+  /** The employee's name, from `/api/auth/me` and `/api/auth/login`. */
+  displayName?: string;
   roles?: string[];
   /** The sites the employee is assigned to, from `/api/auth/me`. */
   siteIds?: string[];

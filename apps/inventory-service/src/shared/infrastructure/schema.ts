@@ -352,3 +352,34 @@ export const goodsReceiptLines = pgTable("goods_receipt_lines", {
   quantity: integer("quantity").notNull(),
   notes: text("notes"),
 });
+
+/**
+ * A follow-up item for a suggestion or an alert (design 0007). The owner is an employee in identity-service, checked at
+ * write time; the source reference is a stable key of the origin, unique among the plans still open or in progress.
+ */
+export const actionPlans = pgTable(
+  "action_plans",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceType: varchar("source_type", { length: 30 }).notNull(),
+    sourceRef: varchar("source_ref", { length: 200 }).notNull(),
+    title: varchar("title", { length: 300 }).notNull(),
+    detail: text("detail"),
+    siteId: uuid("site_id"),
+    productId: uuid("product_id"),
+    ownerId: uuid("owner_id").notNull(),
+    dueDate: date("due_date").notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("open"),
+    createdBy: uuid("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("action_plans_created_id_idx").on(table.createdAt.desc(), table.id.desc()),
+    index("action_plans_owner_status_idx").on(table.ownerId, table.status),
+    uniqueIndex("action_plans_live_source_unique")
+      .on(table.sourceType, table.sourceRef)
+      .where(sql`${table.status} <> 'done'`),
+  ],
+);

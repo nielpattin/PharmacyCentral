@@ -1,5 +1,21 @@
-import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, lt, ne, notInArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  gte,
+  ilike,
+  inArray,
+  lt,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 
+import type { SalesDocument } from "../contracts/sales.ts";
 import type { SalesDatabase } from "../shared/infrastructure/database.ts";
 import {
   afterCursor,
@@ -887,6 +903,55 @@ export class SalesRepository {
     limit: number;
   }) {
     return this.listPrescriptions(input);
+  }
+
+  /**
+   * The online orders and counter prescriptions created in `[from, to)`, for the period analytics. Each side is narrowed
+   * to its own site column: `siteIds` omitted means every site, and an empty list matches nothing.
+   */
+  public async listSalesDocuments(input: {
+    from: Date;
+    to: Date;
+    siteIds?: string[] | undefined;
+  }): Promise<SalesDocument[]> {
+    const [orderRows, prescriptionRows] = await Promise.all([
+      this.database.db
+        .select({ id: orders.id, siteId: orders.selectedStoreId, createdAt: orders.createdAt })
+        .from(orders)
+        .where(
+          and(
+            gte(orders.createdAt, input.from),
+            lt(orders.createdAt, input.to),
+            input.siteIds ? inArray(orders.selectedStoreId, input.siteIds) : undefined,
+          ),
+        )
+        .orderBy(asc(orders.createdAt), asc(orders.id)),
+      this.database.db
+        .select({ id: prescriptions.id, siteId: prescriptions.siteId, createdAt: prescriptions.createdAt })
+        .from(prescriptions)
+        .where(
+          and(
+            gte(prescriptions.createdAt, input.from),
+            lt(prescriptions.createdAt, input.to),
+            input.siteIds ? inArray(prescriptions.siteId, input.siteIds) : undefined,
+          ),
+        )
+        .orderBy(asc(prescriptions.createdAt), asc(prescriptions.id)),
+    ]);
+    return [
+      ...orderRows.map((row) => ({
+        id: row.id,
+        kind: "order" as const,
+        siteId: row.siteId,
+        createdAt: row.createdAt.toISOString(),
+      })),
+      ...prescriptionRows.map((row) => ({
+        id: row.id,
+        kind: "prescription" as const,
+        siteId: row.siteId,
+        createdAt: row.createdAt.toISOString(),
+      })),
+    ];
   }
 
   private async findCart(database: SalesDatabase["db"], customerId: string) {

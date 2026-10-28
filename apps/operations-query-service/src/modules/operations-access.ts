@@ -12,6 +12,9 @@ export const DASHBOARD_ROLES: readonly string[] = ["Platform Admin", "Pharmacy M
 /** Reporting: Platform Admin and Pharmacy Manager only. Warehouse Staff have no reporting screen. */
 export const REPORT_ROLES: readonly string[] = ["Platform Admin", "Pharmacy Manager"];
 
+/** Period analytics (design 0007): the reporting roles. Warehouse Staff and Pharmacist have no analytics screen. */
+export const ANALYTICS_ROLES: readonly string[] = ["Platform Admin", "Pharmacy Manager"];
+
 export type RoleRefusal = {
   status: 403;
   title: string;

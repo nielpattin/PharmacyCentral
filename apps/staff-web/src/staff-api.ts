@@ -183,7 +183,7 @@ export const lookupCustomers = (query: string): Promise<JsonRecord[]> =>
 
 export const writeJson = async <T = JsonRecord>(
   path: string,
-  method: "POST" | "PUT" | "DELETE",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   body?: JsonRecord,
 ): Promise<T> => request<T>(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
 

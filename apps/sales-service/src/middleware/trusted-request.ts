@@ -135,6 +135,12 @@ export const IDENTITY_PUBLIC_AUTH_PATHS: readonly string[] = [
   "/auth/google/callback",
 ];
 
+/**
+ * Paths answered only to another service's call that carries the service secret. The analytics reads are the owning
+ * service's internal surface: no browser route forwards them, and a caller carrying an identity never reaches them.
+ */
+export const SERVICE_ONLY_PREFIXES: readonly string[] = ["/internal/analytics"];
+
 export const normalizePath = (path: string): string => {
   const clean = path.split("?")[0]?.trim() ?? "/";
   return clean.startsWith("/") ? clean : `/${clean}`;
@@ -511,6 +517,16 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       delete request.headers["x-actor-id"];
       delete request.headers["x-actor-type"];
       delete request.headers[ACTOR_ROLES_HEADER];
+    }
+
+    // The service-only reads take the service secret alone. A verified identity of any kind, or an actor type the secret
+    // did not vouch for as `system`, is refused before a handler runs.
+    if (
+      SERVICE_ONLY_PREFIXES.some((prefix) => matchesPathPrefix(request.path, prefix)) &&
+      (verifiedContext || request.headers["x-actor-type"] !== "system")
+    ) {
+      response.status(403).json({ title: "Service access required", status: 403, code: "service_required" });
+      return;
     }
 
     // A shopper's own paths stay open; anything behind the counter stops here even though the context verifies.

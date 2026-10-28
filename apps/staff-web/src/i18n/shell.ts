@@ -2,6 +2,7 @@
 export const shellLiterals: Record<string, string> = {
   Operations: "Vận hành",
   Dashboard: "Bảng điều khiển",
+  Analytics: "Phân tích",
   "Pharmacist overview": "Tổng quan quầy",
   Prescriptions: "Đơn thuốc",
   Transfers: "Điều chuyển",

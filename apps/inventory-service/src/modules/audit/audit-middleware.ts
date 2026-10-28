@@ -18,6 +18,11 @@ export type AuditRule = {
   /** The path parameter holding the entity id. Defaults to `id`. When the route has none, the response's `id` is used. */
   idParam?: string;
   details?: readonly string[];
+  /**
+   * The response field holding an array of records the request created (a batch of orders). Each record is audited as
+   * the single created record would be. Without it, the response body is the one created record.
+   */
+  collection?: string;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,6 +35,8 @@ const uuidOf = (value: unknown): string | undefined =>
 const recordOf = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
+const recordsOf = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value.map(recordOf) : []);
+
 const actionOf = (rule: AuditRule, request: Request): string | undefined => {
   if (typeof rule.action === "string") return rule.action;
   const raw = "param" in rule.action ? request.params[rule.action.param] : recordOf(request.body)[rule.action.body];
@@ -38,24 +45,23 @@ const actionOf = (rule: AuditRule, request: Request): string | undefined => {
 };
 
 /**
- * The audit entry for a request that succeeded, or undefined when no rule names the route or the verb is not a plain
+ * The audit entries for a request that succeeded, or none when no rule names the route or the verb is not a plain
  * word. The entity id comes from the path, else from the created record in the response; the site from the response,
- * else from the request.
+ * else from the request. A rule with a `collection` audits each record of that response array.
  */
-export const resolveAuditEntry = (
+export const resolveAuditEntries = (
   rules: readonly AuditRule[],
   request: Request,
   responseBody: unknown,
-): AuditEntry | undefined => {
+): AuditEntry[] => {
   const route = (request.route as { path?: unknown } | undefined)?.path;
-  if (typeof route !== "string") return undefined;
+  if (typeof route !== "string") return [];
   const rule = rules.find((candidate) => candidate.method === request.method && candidate.route === route);
-  if (!rule) return undefined;
+  if (!rule) return [];
   const action = actionOf(rule, request);
-  if (!action) return undefined;
+  if (!action) return [];
   const requestBody = recordOf(request.body);
   const created = recordOf(responseBody);
-  const siteId = SITE_KEYS.map((key) => uuidOf(created[key]) ?? uuidOf(requestBody[key])).find(Boolean);
   const details: Record<string, string | number | boolean | null> = {};
   for (const key of rule.details ?? []) {
     const value = requestBody[key];
@@ -63,14 +69,15 @@ export const resolveAuditEntry = (
       details[key] = value as string | number | boolean | null;
     }
   }
-  return {
+  const records = rule.collection === undefined ? [created] : recordsOf(created[rule.collection]);
+  return records.map((record) => ({
     action,
     entityType: rule.entityType,
-    entityId: uuidOf(request.params[rule.idParam ?? "id"]) ?? uuidOf(created.id),
-    siteId,
+    entityId: uuidOf(request.params[rule.idParam ?? "id"]) ?? uuidOf(record.id),
+    siteId: SITE_KEYS.map((key) => uuidOf(record[key]) ?? uuidOf(requestBody[key])).find(Boolean),
     actorId: uuidOf(request.header("x-actor-id")),
     ...(Object.keys(details).length > 0 ? { details } : {}),
-  };
+  }));
 };
 
 /**
@@ -93,8 +100,7 @@ export const createAuditMiddleware =
     };
     response.on("finish", () => {
       if (response.statusCode < 200 || response.statusCode >= 300) return;
-      const entry = resolveAuditEntry(rules, request, responseBody);
-      if (entry) void recorder.record(entry);
+      for (const entry of resolveAuditEntries(rules, request, responseBody)) void recorder.record(entry);
     });
     return next();
   };

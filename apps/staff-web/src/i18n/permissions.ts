@@ -17,6 +17,7 @@ export const permissionLiterals: Record<string, string> = {
   "Only a Pharmacy Manager can create purchase orders.": "Chỉ Quản lý nhà thuốc được tạo đơn mua hàng.",
   "Only a Pharmacy Manager can approve purchase orders.": "Chỉ Quản lý nhà thuốc được duyệt đơn mua hàng.",
   "Only a Pharmacy Manager can cancel purchase orders.": "Chỉ Quản lý nhà thuốc được hủy đơn mua hàng.",
+  "Only a Pharmacy Manager can view reorder suggestions.": "Chỉ Quản lý nhà thuốc được xem gợi ý đặt hàng.",
   "Only Warehouse Staff can view goods receipts.": "Chỉ Nhân viên kho được xem phiếu nhập hàng.",
   "Only Warehouse Staff can receive goods.": "Chỉ Nhân viên kho được nhận hàng.",
   "Only a Pharmacist, Pharmacy Manager or Warehouse Staff can view stock balances.":

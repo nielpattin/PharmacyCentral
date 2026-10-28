@@ -789,6 +789,7 @@ describe("identity browser session paths", () => {
       "/auth/csrf",
       "/auth/context",
       "/auth/me",
+      "/auth/staff-directory",
       "/auth/logout",
       "/auth/change-password",
       "/auth/request-password-reset",
@@ -833,5 +834,14 @@ describe("trusted request role restatement", () => {
   it("lets a Pharmacist look up a customer, and refuses a Pharmacy Manager the same lookup", async () => {
     expect((await callAs(["Pharmacist"], "/customers/00000000-0000-4000-8000-000000000060")).status).toBe(200);
     expect((await callAs(["Pharmacy Manager"], "/customers/00000000-0000-4000-8000-000000000060")).status).toBe(403);
+  });
+
+  it("lets a Pharmacy Manager and Platform Admin read the staff directory, and refuses other staff roles", async () => {
+    expect((await callAs(["Pharmacy Manager"], "/auth/staff-directory")).status).toBe(200);
+    expect((await callAs(["Platform Admin"], "/auth/staff-directory")).status).toBe(200);
+    const refused = await callAs(["Pharmacist"], "/auth/staff-directory");
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+    expect((await callAs(["Warehouse Staff"], "/auth/staff-directory")).status).toBe(403);
   });
 });

@@ -182,6 +182,22 @@ export const dispensePrescriptionRequestSchema = z.object({
     .min(1),
 });
 
+/** The period of `GET /internal/analytics/sales-documents`: `from` inclusive, `to` exclusive. */
+export const salesDocumentsQuerySchema = z.object({
+  from: z.string().datetime({ offset: true }),
+  to: z.string().datetime({ offset: true }),
+});
+
+/** An online order (`order`, `siteId` the selected store) or a counter prescription (`prescription`). */
+export const salesDocumentSchema = z.object({
+  id: z.string().uuid(),
+  kind: z.enum(["order", "prescription"]),
+  siteId: z.string().uuid(),
+  createdAt: z.string().datetime({ offset: true }),
+});
+
+export const salesDocumentsResponseSchema = z.object({ documents: z.array(salesDocumentSchema) });
+
 export type OrderChangedEvent = z.infer<typeof orderChangedEventSchema>;
 export type CartLine = z.infer<typeof cartLineSchema>;
 export type DeliveryPoint = z.infer<typeof deliveryPointSchema>;
@@ -195,3 +211,5 @@ export type OrderTransition = z.infer<typeof orderTransitionSchema>;
 export type PrescriptionLine = z.infer<typeof prescriptionLineSchema>;
 export type CreatePrescriptionRequest = z.infer<typeof createPrescriptionRequestSchema>;
 export type DispensePrescriptionRequest = z.infer<typeof dispensePrescriptionRequestSchema>;
+export type SalesDocument = z.infer<typeof salesDocumentSchema>;
+export type SalesDocumentsResponse = z.infer<typeof salesDocumentsResponseSchema>;

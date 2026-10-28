@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   createGoodsReceiptRequestSchema,
   createPurchaseOrderRequestSchema,
+  createReplenishmentDraftOrdersRequestSchema,
   purchaseOrderActionSchema,
 } from "../contracts/procurement.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
@@ -12,6 +13,7 @@ import { listSiteIds } from "../middleware/trusted-request.ts";
 import { allowRoles, refuseOutOfSiteScope, refuseSelfApproval } from "./access-control.ts";
 import { signCatalogIdentity } from "./catalog-identity.ts";
 import { ProcurementRepository } from "./procurement-repository.ts";
+import { replenishmentSuggestions } from "./replenishment-suggestions.ts";
 import { invalidCursor, sendPage } from "./keyset-page.ts";
 import { readPageRequest, readSearchText, type PageOptions } from "./page-cursor.ts";
 
@@ -21,6 +23,28 @@ const actor = (request: import("express").Request): string =>
 
 /** Lists answer 100 rows by default, newest first, and at most 500 per page. */
 const listPage: PageOptions = { kind: "timestamp", defaultLimit: 100, maxLimit: 500 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** The note of a draft created from a suggestion, unless the manager writes another one. */
+const REPLENISHMENT_DRAFT_NOTE = "Tạo từ gợi ý bổ sung hàng; cần kiểm tra và duyệt trước khi đặt.";
+
+/** An integer query parameter with its default and its range (design 0007): the answer is 400 outside the range. */
+const integerQuery = (fallback: number, min: number, max: number) =>
+  z
+    .string()
+    .regex(/^\d+$/)
+    .transform(Number)
+    .pipe(z.number().int().min(min).max(max))
+    .optional()
+    .transform((value) => value ?? fallback);
+
+const replenishmentQuerySchema = z.object({
+  siteId: z.string().uuid(),
+  windowDays: integerQuery(30, 7, 180),
+  coverDays: integerQuery(14, 1, 90),
+  safetyDays: integerQuery(7, 0, 60),
+  defaultLeadTimeDays: integerQuery(7, 1, 90),
+});
 
 export type ProcurementRouterOptions = {
   /** Validated at boot by main.ts, so a missing one is a type error and never a localhost guess. */
@@ -77,13 +101,69 @@ export const createProcurementRouter = (
       await assertCatalogReferences(
         options.catalogServiceUrl,
         signCatalogIdentity(request),
-        parsed.data.supplierId,
+        [parsed.data.supplierId],
         parsed.data.siteId,
         parsed.data.lines.map((line) => line.productId),
       );
       return response
         .status(201)
         .json(await repository.createPurchaseOrder({ ...parsed.data, createdBy: actor(request) }));
+    } catch (error) {
+      return next(error);
+    }
+  });
+  // Suggestions are computed from the stock, the ledger and the open orders of one site, at request time; nothing is stored.
+  router.get("/procurement/replenishment-suggestions", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager"])) return;
+    const parsed = replenishmentQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalid(response);
+    if (refuseOutOfSiteScope(request, response, [parsed.data.siteId])) return;
+    const { siteId, windowDays, coverDays, safetyDays, defaultLeadTimeDays } = parsed.data;
+    const params = { windowDays, coverDays, safetyDays, defaultLeadTimeDays };
+    try {
+      const now = new Date();
+      const inputs = await repository.replenishmentInputs({
+        siteId,
+        windowStart: new Date(now.getTime() - windowDays * DAY_MS),
+        now,
+      });
+      return response.json({
+        siteId,
+        params,
+        generatedAt: now.toISOString(),
+        suggestions: replenishmentSuggestions({ ...inputs, params }),
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+  // One Draft order per supplier, all or nothing. Every reference is checked in the catalog before the first write.
+  router.post("/procurement/replenishment-suggestions/draft-orders", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager"])) return;
+    const parsed = createReplenishmentDraftOrdersRequestSchema.safeParse(request.body);
+    if (!parsed.success) return invalid(response);
+    const { siteId, orders } = parsed.data;
+    if (refuseOutOfSiteScope(request, response, [siteId])) return;
+    try {
+      await assertCatalogReferences(
+        options.catalogServiceUrl,
+        signCatalogIdentity(request),
+        orders.map((order) => order.supplierId),
+        siteId,
+        orders.flatMap((order) => order.lines.map((line) => line.productId)),
+      );
+      const purchaseOrders = await repository.createPurchaseOrders(
+        orders.map((order) => ({
+          supplierId: order.supplierId,
+          siteId,
+          createdBy: actor(request),
+          notes: order.notes ? order.notes : REPLENISHMENT_DRAFT_NOTE,
+          lines: order.lines,
+        })),
+      );
+      return response.status(201).json({ purchaseOrders });
     } catch (error) {
       return next(error);
     }
@@ -164,7 +244,7 @@ export const createProcurementRouter = (
       await assertCatalogReferences(
         options.catalogServiceUrl,
         signCatalogIdentity(request),
-        parsed.data.supplierId,
+        [parsed.data.supplierId],
         parsed.data.siteId,
         parsed.data.lines.map((line) => line.productId),
         parsed.data.storageLocationId,
@@ -192,16 +272,16 @@ const invalid = (response: import("express").Response) =>
 const assertCatalogReferences = async (
   baseUrl: string,
   identity: string,
-  supplierId: string,
+  supplierIds: string[],
   siteId: string,
   productIds: string[],
   storageLocationId?: string,
 ): Promise<void> => {
   const paths = [
-    `/suppliers/${supplierId}`,
+    ...[...new Set(supplierIds)].map((supplierId) => `/suppliers/${supplierId}`),
     `/sites/${siteId}`,
     ...(storageLocationId ? [`/storage-locations/${storageLocationId}`] : []),
-    ...productIds.map((id) => `/products/${id}`),
+    ...[...new Set(productIds)].map((id) => `/products/${id}`),
   ];
   const responses = await Promise.all(
     paths.map((path) =>

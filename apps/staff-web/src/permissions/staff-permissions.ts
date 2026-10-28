@@ -100,6 +100,10 @@ export const staffActions = {
     reason: "Only a Pharmacy Manager can approve purchase orders.",
   },
   "purchaseOrder.cancel": { roles: manager, reason: "Only a Pharmacy Manager can cancel purchase orders." },
+  "replenishment.suggestions.view": {
+    roles: manager,
+    reason: "Only a Pharmacy Manager can view reorder suggestions.",
+  },
   "goodsReceipt.view": { roles: warehouse, reason: "Only Warehouse Staff can view goods receipts." },
   "goodsReceipt.create": { roles: warehouse, reason: "Only Warehouse Staff can receive goods." },
   "inventory.balances.view": {
@@ -183,6 +187,11 @@ export const staffActions = {
     ownerRoles: ["Pharmacist", "Pharmacy Manager"],
     reason: "Only Warehouse Staff or the person who requested it can cancel a replenishment request.",
   },
+  "actionPlan.create": { roles: manager, reason: "Only a Pharmacy Manager can create action plans." },
+  "actionPlan.edit": {
+    roles: manager,
+    reason: "Only a Pharmacy Manager can change an action plan's owner, due date, title or detail.",
+  },
   "catalog.write": { roles: manager, reason: "Only a Pharmacy Manager can change the catalog and master data." },
   "catalog.site.create": { roles: platformAdmin, reason: "Only a Platform Admin can create or delete a site." },
   "catalog.site.delete": { roles: platformAdmin, reason: "Only a Platform Admin can create or delete a site." },
@@ -250,3 +259,25 @@ export const ownerOf = (value: unknown): RecordOwner => ({ ownerId: typeof value
 /** A tab with no action behind it is open to every signed-in staff member. */
 export const tabGate = (action: StaffAction | undefined, session: PermissionSession): AccessResult =>
   action === undefined ? { allowed: true } : can(action, session);
+
+/** The plan fields a permission rule reads: who owns the plan and which site it belongs to. */
+export type ActionPlanAccessTarget = { ownerId: string; siteId: string | null };
+
+const ACTION_PLAN_STATUS_REASON = "Only the plan's owner or a Pharmacy Manager can change its status.";
+
+/**
+ * Owner, due date, title and detail of an action plan: a Pharmacy Manager (or Platform Admin) inside the plan's site.
+ * A plan with no site is Platform Admin's alone, as the server's site scope says.
+ */
+export const canEditActionPlan = (session: PermissionSession, plan: ActionPlanAccessTarget): AccessResult =>
+  canAtSite("actionPlan.edit", session, plan.siteId ?? undefined);
+
+/**
+ * Status of an action plan: its owner may move it through open, in progress and done; anyone else needs the rights
+ * of `canEditActionPlan`.
+ */
+export const canChangeActionPlanStatus = (session: PermissionSession, plan: ActionPlanAccessTarget): AccessResult => {
+  if (session.userId !== undefined && plan.ownerId === session.userId) return { allowed: true };
+  const editing = canEditActionPlan(session, plan);
+  return editing.allowed ? editing : denied(ACTION_PLAN_STATUS_REASON);
+};

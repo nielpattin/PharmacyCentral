@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { adminLiterals } from "./admin.ts";
+import { actionPlansLiterals } from "./action-plans.ts";
+import { analyticsLiterals } from "./analytics.ts";
 import { catalogLiterals } from "./catalog.ts";
 import { commonLiterals } from "./common.ts";
 import { governanceLiterals } from "./governance.ts";
@@ -14,6 +16,8 @@ import { shellLiterals } from "./shell.ts";
 // in i18n.ts, so this test fails the build instead.
 const areas: Record<string, Record<string, string>> = {
   shell: shellLiterals,
+  analytics: analyticsLiterals,
+  actionPlans: actionPlansLiterals,
   admin: adminLiterals,
   catalog: catalogLiterals,
   inventory: inventoryLiterals,

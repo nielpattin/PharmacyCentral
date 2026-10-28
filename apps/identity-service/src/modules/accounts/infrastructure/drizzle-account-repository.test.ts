@@ -179,4 +179,43 @@ describe("DrizzleAccountRepository", () => {
     await expect(repository.findById(employeeId)).resolves.toMatchObject({ isActive: true });
     await expect(sessions.findActive(session.rawToken)).resolves.toMatchObject({ accountId: employeeId });
   });
+
+  it("lists active employees by name with their roles and sites, narrowed by site, and never a customer", async () => {
+    const siteA = "00000000-0000-4000-8000-0000000000e1";
+    const siteB = "00000000-0000-4000-8000-0000000000e2";
+    const unknownSite = "00000000-0000-4000-8000-0000000000e9";
+    await db.insert(schema.userSiteScopes).values([
+      { userId: employeeId, siteId: siteA },
+      { userId: employeeId, siteId: siteB },
+    ]);
+    const deactivated = await repository.create({
+      actorType: "employee",
+      isActive: false,
+      mustChangePassword: false,
+      email: "nghi-viec@example.com",
+      displayName: "Nghỉ việc",
+      passwordHash: "hash",
+      roles: ["Pharmacist"],
+      siteIds: [siteA],
+    });
+
+    const everyone = await repository.listActiveEmployees();
+    expect(everyone.map((member) => member.id)).toEqual([employeeId, adminId]);
+    expect(everyone[0]?.roles).toEqual(["Pharmacist"]);
+    expect([...(everyone[0]?.siteIds ?? [])].sort()).toEqual([siteA, siteB]);
+    expect(everyone[1]).toEqual({ id: adminId, displayName: "Quản trị", roles: ["Platform Admin"], siteIds: [] });
+    // The directory answer carries no contact field: the employee's email never reaches it.
+    expect(JSON.stringify(everyone)).not.toContain("duocsi@example.com");
+
+    // An employee is listed for any one of their sites; a deactivated colleague at the same site never is.
+    expect((await repository.listActiveEmployees([siteB])).map((member) => member.id)).toEqual([employeeId]);
+    expect((await repository.listActiveEmployees([siteA])).map((member) => member.id)).toEqual([employeeId]);
+    expect(await repository.listActiveEmployees([unknownSite])).toEqual([]);
+    expect(await repository.listActiveEmployees([])).toEqual([]);
+    expect((await repository.listActiveEmployees([siteA])).map((member) => member.id)).not.toContain(deactivated.id);
+
+    await expect(repository.findActiveEmployeeById(employeeId)).resolves.toMatchObject({ id: employeeId });
+    await expect(repository.findActiveEmployeeById(countryCodeId)).resolves.toBeUndefined();
+    await expect(repository.findActiveEmployeeById(deactivated.id)).resolves.toBeUndefined();
+  });
 });

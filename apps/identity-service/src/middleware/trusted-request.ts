@@ -135,6 +135,7 @@ export const IDENTITY_PUBLIC_AUTH_PATHS: readonly string[] = [
   "/auth/csrf",
   "/auth/context",
   "/auth/me",
+  "/auth/staff-directory",
   "/auth/logout",
   "/auth/change-password",
   "/auth/request-password-reset",
@@ -209,6 +210,7 @@ type RoleRule = Route & { roles: readonly string[] };
 const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/admin", roles: ["Platform Admin"] },
   { methods: ["*"], path: "/customers", roles: ["Pharmacist"] },
+  { methods: ["GET"], path: "/auth/staff-directory", exact: true, roles: ["Pharmacy Manager", "Platform Admin"] },
 ];
 
 const PLATFORM_ADMIN_EXCLUDED: readonly Route[] = [];

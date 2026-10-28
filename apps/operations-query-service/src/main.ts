@@ -25,11 +25,16 @@ if (!inventoryUrl)
 const salesUrl = process.env.SALES_SERVICE_URL;
 if (!salesUrl)
   throw new Error("Missing required environment variable: SALES_SERVICE_URL. Please set it in your .env file.");
+const paymentUrl = process.env.PAYMENT_SERVICE_URL;
+if (!paymentUrl)
+  throw new Error("Missing required environment variable: PAYMENT_SERVICE_URL. Please set it in your .env file.");
 // The live dashboard reads the other services with the shared internal service secret.
 if (!process.env.INTERNAL_SERVICE_SECRET)
   throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
 const database = createOperationsDatabase();
-const repository = database ? new OperationsRepository(database, { catalogUrl, inventoryUrl, salesUrl }) : undefined;
+const repository = database
+  ? new OperationsRepository(database, { catalogUrl, inventoryUrl, salesUrl, paymentUrl })
+  : undefined;
 const rabbitmqUrl = process.env.RABBITMQ_URL;
 if (!rabbitmqUrl)
   throw new Error("Missing required environment variable: RABBITMQ_URL. Please set it in your .env file.");

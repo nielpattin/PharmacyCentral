@@ -78,9 +78,9 @@ Staff Web has four business roles. Access is decided by role, and non-admin user
 | Role | Sidebar workspaces |
 | --- | --- |
 | Platform Admin | Every sidebar workspace, including Governance (Users, Audit, AI integrations) |
-| Pharmacy Manager | Dashboard, Prescriptions, Online orders, Procurement, Reporting, Finance, Sites, Storage locations, Catalog, Search synonyms, Units, Pricing, Suppliers, Data import, Transfers, Replenishment, Stocktake, Inventory, Adjustments, Returns and removals, Quality |
-| Pharmacist | Pharmacist overview, Prescriptions, Online orders, Replenishment, Search synonyms, Inventory, Quality |
-| Warehouse Staff | Dashboard, Transfers, Replenishment, Receiving, Stocktake, Inventory, Adjustments, Returns and removals, Quality, Data import (Stock only) |
+| Pharmacy Manager | Dashboard, Analytics, Action plans, Prescriptions, Online orders, Procurement, Reporting, Finance, Sites, Storage locations, Catalog, Search synonyms, Units, Pricing, Suppliers, Data import, Transfers, Replenishment, Stocktake, Inventory, Adjustments, Returns and removals, Quality |
+| Pharmacist | Pharmacist overview, Action plans, Prescriptions, Online orders, Replenishment, Search synonyms, Inventory, Quality |
+| Warehouse Staff | Dashboard, Action plans, Transfers, Replenishment, Receiving, Stocktake, Inventory, Adjustments, Returns and removals, Quality, Data import (Stock only) |
 
 Permissions per role, including which actions each role may perform, are defined in [Business rules](business-rules.md#4-quy-t%E1%BA%AFc-role-v%C3%A0-ph%C3%A2n-quy%E1%BB%81n).
 
@@ -99,6 +99,14 @@ A Pharmacy Manager sees the prescription, counter and consultation records as a 
 3. Review the rows: type, subject, value, occurred time and details.
 
 Reporting does not show stock-risk summaries; low-stock and expiring batch counts are on the Dashboard.
+
+**Analytics** ("Phân tích", Platform Admin and Pharmacy Manager) shows how a chosen period went:
+
+1. Choose the period (7, 30 or 90 days, this month, or two dates), a site and a channel (all, counter or online).
+2. Read the tiles: revenue, number of orders and average order value, each beside the previous period of the same length with the change in percent. Gross profit shows "—" because the system records no purchase cost.
+3. Read the inventory health block: stock turnover, days of inventory, stockout rate (the state right now), dead stock (no movement for 90 days), stock value by site and the expiry buckets (already expired, within 30, 31 to 60 and 61 to 90 days). The channel does not change the inventory figures.
+
+A figure that could not be read shows "—", never 0. A sale counts once its invoice is paid; a refunded invoice is not revenue.
 
 ## Master data
 
@@ -162,6 +170,24 @@ Imports are repeatable: matching codes, SKUs and batch numbers update existing r
 1. Choose **Create order** (or press **N**). A side drawer opens: enter a purchase order number, supplier, site and the order lines, then choose **Create order**. The order lines are not kept in the autosaved draft.
 2. **Approve** a Draft purchase order from the list, as a Pharmacy Manager other than the one who created it. Only Draft orders can be approved. **Cancel** is available until the order is received or cancelled.
 3. Goods arriving against the order are recorded in Receiving (below). The order moves to partially received or received as quantities arrive.
+
+### Reorder suggestions
+
+**Gợi ý đặt hàng** (Procurement, Platform Admin and Pharmacy Manager) lists what to reorder at one site:
+
+1. Choose the site. Adjust the sales window, cover days, safety days and default lead time if needed.
+2. Review the products grouped by supplier. A product with no known supplier needs one chosen before it can be selected. Change a suggested quantity if you know better.
+3. Tick the rows and choose **Tạo đơn nháp**. One Draft purchase order is created for each supplier. Nothing is sent: a different Pharmacy Manager approves each draft in Purchase orders as usual.
+
+## Action plans
+
+**Kế hoạch hành động** (all staff roles) lists the plans that follow up an alert.
+
+1. A Pharmacy Manager or Platform Admin chooses **Tạo kế hoạch** on a reorder suggestion, a dead stock row in Analytics, an expired or soon expiring batch in Inventory, or a missing price in Finance.
+2. Choose the owner (an employee who works at the same site) and the due date, then save. The same alert cannot have two open plans.
+3. The owner opens **Kế hoạch hành động**, sees only their own plans, and moves each between Mở, Đang thực hiện and Hoàn thành. A manager also sees every plan of their sites, filters by owner and status, and can change the owner, the due date and the title.
+
+An open plan past its due date is marked overdue.
 
 ### Receiving (goods receipts)
 

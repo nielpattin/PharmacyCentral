@@ -91,6 +91,17 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
   - The purchase order and receipt detail drawers have a **History** tab listing that record's events with time, action and actor (gap G18).
   - Anyone who can open the record can open its History. The tab does not call `/api/audit/logs`, which is Platform Admin only (gap G18).
 
+### US6. As a Pharmacy Manager, I review reorder suggestions and create draft purchase orders in bulk, so that I stop reordering by eye
+
+- Source: `[owner]` 2026-10-28; formulas `[standard]` (BR-PROC-007, BR-PROC-008, [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md)).
+- Accepted when:
+  - Procurement has the tab **Gợi ý đặt hàng** for Platform Admin and Pharmacy Manager only; the site is required and defaults to the first assigned site.
+  - The list shows, per product grouped by supplier: available, on order, daily sales speed, lead time (marked when it is the default and not observed), reorder point, suggested quantity and days of cover. The window, cover days, safety days and default lead time are inputs.
+  - A row with no known supplier cannot be selected until a supplier is chosen. Quantities are editable positive integers.
+  - **Tạo đơn nháp** creates one `Draft` purchase order per supplier for the selected rows in one step, or none when any reference fails. Nothing is approved or sent; approval stays with another manager (US2).
+  - A product already on a Draft or Approved order at the site counts as on order, so creating the drafts twice does not suggest it again.
+  - Test: sell stock below its reorder point, open the tab, select two products of one supplier and create; one Draft order with two lines appears in Purchase orders, and the tab no longer suggests those two.
+
 ## Contents and behavior
 
 `[observed]` unless marked otherwise.

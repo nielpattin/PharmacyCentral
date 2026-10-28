@@ -13,7 +13,7 @@ import {
   createAccountRouter,
   createAdminRouter,
   createCustomerRouter,
-  createInternalCustomerRouter,
+  createInternalRouter,
 } from "./modules/accounts/presentation/http/account-routes.ts";
 import {
   createAccountService,
@@ -64,7 +64,7 @@ app.use(createCsrfMiddleware());
 app.use("/auth", createAccountRouter(accountService, googleSignIn, authRateLimit.limiter, audit, cookieSecure));
 app.use("/admin", createAdminRouter(accountService));
 app.use("/customers", createCustomerRouter(accountService));
-app.use("/internal", createInternalCustomerRouter(accountService));
+app.use("/internal", createInternalRouter(accountService));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   logger.error({ error }, "unhandled request error");

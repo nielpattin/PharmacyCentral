@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { z } from "zod";
 
-import { createInvoiceRequestSchema, invoiceListQuerySchema } from "../contracts/payment.ts";
+import { createInvoiceRequestSchema, invoiceListQuerySchema, paidInvoicesQuerySchema } from "../contracts/payment.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { actorSiteIds } from "../middleware/trusted-request.ts";
 
@@ -28,6 +28,9 @@ export type PaymentRouterOptions = {
   salesServiceUrl: string;
   catalogServiceUrl: string;
 };
+
+/** The most paid invoices one analytics read answers. A range with more is refused with 422, never cut short. */
+export const PAID_INVOICES_ANALYTICS_CAP = 50_000;
 
 export const createPaymentRouter = (
   repository: PaymentRepository | undefined,
@@ -262,6 +265,32 @@ export const createPaymentRouter = (
       const invoice = await repository.getInvoice(id.data.id);
       if (!invoice) return response.status(404).json({ title: "Invoice not found", status: 404 });
       return response.json(invoice.reconciliation ?? { paymentInvoiceId: id.data.id, state: "Open" });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Read by operations-query for the period analytics. trusted-request admits this path only with the service secret.
+  router.get("/internal/analytics/paid-invoices", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    const parsed = paidInvoicesQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalid(response);
+    try {
+      const rows = await repository.listPaidInvoicesSince(new Date(parsed.data.since), PAID_INVOICES_ANALYTICS_CAP + 1);
+      if (rows.length > PAID_INVOICES_ANALYTICS_CAP)
+        return response.status(422).json({
+          title: "Analytics range is too large",
+          status: 422,
+          code: "analytics_range_too_large",
+        });
+      return response.json({
+        invoices: rows.map((row) => ({
+          orderId: row.orderId,
+          prescriptionId: row.prescriptionId,
+          amount: Number(row.amount),
+          createdAt: row.createdAt.toISOString(),
+        })),
+      });
     } catch (error) {
       return next(error);
     }

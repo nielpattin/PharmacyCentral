@@ -4,6 +4,19 @@ import { internalServiceHeaders } from "../internal-service-headers.ts";
 
 import type { OperationsDatabase } from "../shared/infrastructure/database.ts";
 import { auditEvents, financeEntries, projectionCounters, reportRows } from "../shared/infrastructure/schema.ts";
+import type { z } from "zod";
+import {
+  basePricesAnswerSchema,
+  buildDashboardAnalytics,
+  paidInvoicesAnswerSchema,
+  previousPeriodOf,
+  salesDocumentsAnswerSchema,
+  sitesAnswerSchema,
+  stockHealthAnswerSchema,
+  type AnalyticsChannel,
+  type DashboardAnalytics,
+  type Period,
+} from "./analytics.ts";
 import type { PageCursor } from "./page-cursor.ts";
 
 export type IntegrationEvent = {
@@ -20,6 +33,7 @@ export type OperationsServiceOptions = {
   catalogUrl?: string | undefined;
   inventoryUrl?: string | undefined;
   salesUrl?: string | undefined;
+  paymentUrl?: string | undefined;
 };
 export type AuditFilters = {
   limit?: number;
@@ -46,8 +60,23 @@ export type AuditRow = typeof auditEvents.$inferSelect & {
   occurredAtUtc: Date;
 };
 
+export type AnalyticsQuery = { from: Date; to: Date; siteId?: string | undefined; channel: AnalyticsChannel };
+
+/** A read of an owning service answered an error. `code` is the owner's code when its answer names one. */
+export class AnalyticsReadError extends Error {
+  public constructor(
+    public readonly path: string,
+    public readonly status: number,
+    public readonly code: string | undefined,
+  ) {
+    super(`Analytics read of ${path} answered HTTP ${status}`);
+  }
+}
+
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 500;
+/** The analytics reads cover whole periods, so they wait longer than the dashboard's 2-second reads. */
+const ANALYTICS_READ_TIMEOUT_MS = 15_000;
 
 export class OperationsRepository {
   public constructor(
@@ -332,6 +361,70 @@ export class OperationsRepository {
     };
   }
 
+  /**
+   * Period KPIs and inventory health of design 0007. Every read here is strict: a failed or malformed answer throws, so
+   * the page shows an error rather than figures that leave a service out. `siteIds` is the caller's site scope, which
+   * the site-bound reads receive as `x-actor-site-ids`, as the existing scoped reads do.
+   */
+  public async dashboardAnalytics(
+    query: AnalyticsQuery,
+    catalogIdentity: CatalogIdentity,
+    siteIds: string[] | undefined,
+    now = new Date(),
+  ): Promise<DashboardAnalytics> {
+    const period: Period = { from: query.from, to: query.to };
+    const previous = previousPeriodOf(period);
+    const siteHeaders = siteIds ? { [ACTOR_SITE_IDS_HEADER]: siteIds.join(",") } : {};
+    const salesWindow = new URLSearchParams({ from: previous.from.toISOString(), to: period.to.toISOString() });
+    const invoiceWindow = new URLSearchParams({ since: previous.from.toISOString() });
+    const stockWindow = new URLSearchParams({ from: period.from.toISOString(), to: period.to.toISOString() });
+    const today = now.toISOString().slice(0, 10);
+    const [documents, invoices, stock, prices, sites] = await Promise.all([
+      this.readAnswer(
+        this.options.salesUrl,
+        `/internal/analytics/sales-documents?${salesWindow.toString()}`,
+        { ...internalServiceHeaders(), ...siteHeaders },
+        salesDocumentsAnswerSchema,
+      ),
+      this.readAnswer(
+        this.options.paymentUrl,
+        `/internal/analytics/paid-invoices?${invoiceWindow.toString()}`,
+        internalServiceHeaders(),
+        paidInvoicesAnswerSchema,
+      ),
+      this.readAnswer(
+        this.options.inventoryUrl,
+        `/internal/analytics/stock-health?${stockWindow.toString()}`,
+        { ...internalServiceHeaders(), ...siteHeaders },
+        stockHealthAnswerSchema,
+      ),
+      this.readAnswer(
+        this.options.catalogUrl,
+        `/pricing/base-prices?day=${today}`,
+        internalServiceHeaders(),
+        basePricesAnswerSchema,
+      ),
+      this.readAnswer(
+        this.options.catalogUrl,
+        "/sites",
+        { "x-internal-identity-context": catalogIdentity() },
+        sitesAnswerSchema,
+      ),
+    ]);
+    return buildDashboardAnalytics({
+      now,
+      period,
+      siteId: query.siteId ?? null,
+      scope: siteIds,
+      channel: query.channel,
+      documents: documents.documents,
+      invoices: invoices.invoices,
+      stockRows: stock.rows,
+      basePrices: prices,
+      sites,
+    });
+  }
+
   /** Newest first by `(occurredAt, id)`: one keyset page of at most `limit` rows, the default 100. */
   public async report(
     reportType: string | undefined,
@@ -402,6 +495,29 @@ export class OperationsRepository {
         this.fetchCount(this.options.inventoryUrl, "/procurement/goods-receipts/count", siteIds),
       ]);
     return { products, pendingTransfers, openPrescriptions, openStocktakes, pendingAdjustments, receipts };
+  }
+
+  /** The rows of a list read. Anything that is not a list counts as no rows for an unscoped reader; see `readJson`. */
+  /**
+   * One strict read of an owning service: a missing URL, a non-2xx answer, or a body the schema refuses throws. An
+   * analytics figure never silently leaves a service out.
+   */
+  private async readAnswer<Schema extends z.ZodType>(
+    baseUrl: string | undefined,
+    path: string,
+    headers: Record<string, string>,
+    schema: Schema,
+  ): Promise<z.output<Schema>> {
+    if (!baseUrl) throw new Error(`Analytics read of ${path} has no service URL configured`);
+    const response = await fetch(`${baseUrl}${path}`, {
+      headers,
+      signal: AbortSignal.timeout(ANALYTICS_READ_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      const body = asRecord(await response.json().catch(() => undefined));
+      throw new AnalyticsReadError(path, response.status, typeof body.code === "string" ? body.code : undefined);
+    }
+    return schema.parse(await response.json());
   }
 
   /** The rows of a list read. Anything that is not a list counts as no rows for an unscoped reader; see `readJson`. */

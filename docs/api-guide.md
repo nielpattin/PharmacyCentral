@@ -44,6 +44,7 @@ While an account must change its password, the edge refuses every route except t
 - `POST /api/admin/users/{id}/revoke-sessions` answers `204`. The caller's own account is refused (`403 self_change_forbidden`).
 - `POST /api/admin/users/{id}/deactivate` answers `204`. The account cannot sign in, its sessions end in the same transaction, and no data is deleted. The caller's own account and the last active Platform Admin are refused as above.
 - `POST /api/admin/users/{id}/activate` answers `204`.
+- `GET /api/auth/staff-directory` lists the active employees as `{ employees: [{ id, displayName, roles, siteIds }] }`, never an email. Platform Admin gets every one; a Pharmacy Manager gets those who share a site with them; any other caller answers `403`. Staff Web uses it for the owner picker of action plans.
 
 An id that is not an employee account answers `404 employee_not_found`. Every change is audited with the administrator as actor.
 
@@ -206,6 +207,8 @@ Prescription creation reserves FEFO stock through `inventory-service`. A reserva
 
 `GET /api/counter-transactions` takes `paymentStatus` (the prescription state it maps to), `limit` (default 100, at most 500), `cursor`, and `q`, and answers the same paged prescription rows as `GET /api/prescriptions`. The route shares that query, so the answer is a list of prescriptions and not a list of counter receipts. Staff only; a shopper gets `403`.
 
+Action plans (BR-PLAN-001, BR-PLAN-002) live in `inventory-service`. `GET /api/inventory/action-plans` takes `ownerId`, `status` (`open`, `in_progress`, `done`), `sourceType` (`replenishment`, `expiry`, `dead_stock`, `price_warning`), `siteId`, `q`, `limit` (default 100, at most 500) and `cursor`, and answers a plain array, newest first, with `X-Next-Cursor`. A Pharmacy Manager or Platform Admin reads the plans of their sites; any other employee reads only plans they own. `POST /api/inventory/action-plans` (Pharmacy Manager, Platform Admin) takes `{ sourceType, sourceRef, title, detail?, siteId?, productId?, ownerId, dueDate }` and answers `201` with the plan; an owner who is not an active employee answers `422 owner_not_found`, one who does not hold the site `422 owner_not_at_site`, a due date in the past `400`, and a second live plan for the same `sourceType` and `sourceRef` `409 plan_exists` with `planId`. `PATCH /api/inventory/action-plans/{id}` takes any of `status`, `ownerId`, `dueDate`, `title`, `detail`: a manager changes every field, the plan's owner `status` only (`403` otherwise). A plan is `{ id, sourceType, sourceRef, title, detail, siteId, productId, ownerId, dueDate, status, createdBy, createdAt, updatedAt, completedAt }`.
+
 `POST /api/inventory/imports/opening-balances` takes `{ "schemaVersion", "balances" }` (at least one row, up to 25 MB) and is the import behind the staff-web Data import screen. The committed sample CSVs are in `data/import-samples/`.
 
 ## Procurement
@@ -218,6 +221,8 @@ Prescription creation reserves FEFO stock through `inventory-service`. A reserva
 - `GET /api/procurement/goods-receipts/count`
 - `POST /api/procurement/goods-receipts`
 - `GET /api/procurement/goods-receipts/{id}`
+- `GET /api/procurement/replenishment-suggestions` (Pharmacy Manager, Platform Admin) takes `siteId` (required), `windowDays` (default 30, 7 to 180), `coverDays` (14, 1 to 90), `safetyDays` (7, 0 to 60) and `defaultLeadTimeDays` (7, 1 to 90). It answers `{ siteId, params, generatedAt, suggestions: [{ productId, supplierId (null when unknown), dailyVelocity, dispensedQuantity, onHand, reserved, available, inboundQuantity, minimumStock, leadTimeDays, leadTimeSource (`history` or `default`), sampleCount, reorderPoint, targetStock, suggestedQuantity, daysOfCover }] }` (BR-PROC-007).
+- `POST /api/procurement/replenishment-suggestions/draft-orders` takes `{ siteId, orders: [{ supplierId, lines: [{ productId, orderedQuantity }], notes? }] }`, one entry per supplier, whole-number quantities. It creates one `Draft` purchase order per entry in a single transaction and answers `201 { purchaseOrders }`; any failed reference creates nothing (BR-PROC-008).
 
 Procurement routes check that the supplier, site, products, and storage location exist in `catalog-service` before a receipt is written.
 
@@ -346,6 +351,7 @@ Both metric reads answer `400 invalid_request` for an unknown service or an unsu
 - `GET /api/finance/summary`
 - `GET /api/reports`
 - `GET /api/audit/logs`
+- `GET /api/dashboard/analytics`
 
 `operations-query-service` also serves `GET /api/operations/dashboard`, `GET /api/operations/audit`, and `GET /api/operations/finance`, which answer the same data as the dashboard, audit, and finance routes above.
 
@@ -358,5 +364,7 @@ Dashboard routes are for Pharmacy Manager and Warehouse Staff, finance and repor
 `GET /api/reports` takes `reportType`, matched case-insensitively against the start of the event type: `sales` lists every `sales.*` event and `payment.invoice.paid.v1` lists one type. Audit events (`*.audit.v1`) are not report rows; read them from `/api/audit/logs`. The dashboard's `recentActivity` rows carry the real `action`, `entityType`, `entityId`, `userId` and `siteId` of the latest audit entries.
 
 `GET /api/dashboard/summary` and `GET /api/finance/summary` count from the owning services' `COUNT(*)` endpoints, never from a capped list: `totalProducts` from `GET /api/products/count`, `pendingTransferCount` from `GET /api/inventory/transfers/count?status=PendingApproval,Draft,Approved,InTransit`, `openPrescriptionCount` from `GET /api/prescriptions/count?excludeStatus=Dispensed,Cancelled`, `openStocktakeCount` from `GET /api/inventory/stocktakes/count?excludeStatus=Completed,Cancelled`, `pendingAdjustmentCount` from `GET /api/inventory/adjustments/count?status=Pending`, and `receiptCount` from `GET /api/procurement/goods-receipts/count`. A scoped reader's counts carry its site scope, and a scoped read that fails answers `5xx` rather than a fallback. A network-wide reader falls back to the projection counter only when the owning service does not answer; a reachable zero stays zero.
+
+`GET /api/dashboard/analytics` is for Pharmacy Manager and Platform Admin only ([design 0007](design/0007-period-analytics-replenishment-and-action-plans.md), BR-REPORT-008 to 011). Query: `from` and `to` (ISO date-times, `from` inclusive, `to` exclusive, at most 366 days apart), `siteId` (optional, inside the caller's sites; another site answers `403`), `channel` (`all` default, `counter` or `online`). It answers `kpis` (`revenue`, `orderCount`, `averageOrderValue`, each `{ current, previous }` against the previous period of the same length; `grossProfit` is always `{ current: null, previous: null, available: false, reason: "no_cost_data" }`), `channels` (both channels, current period) and `inventory` (`turnover`, `daysOfInventory`, `stockoutRate` as a 0 to 1 share, `deadStock`, `stockValue` by site, `expiry` buckets). An unanswerable figure is `null`, never 0. The channel filter changes only the sales figures. The route reads `/internal/analytics/sales-documents` (sales-service), `/internal/analytics/paid-invoices` (payment-service) and `/internal/analytics/stock-health` (inventory-service); those three accept only the service secret and are not reachable through the gateway. A read that fails answers `5xx`; a period with more than 50 000 paid invoices answers `422` `analytics_range_too_large`.
 
 Stock is valued from `GET /api/pricing/base-prices?day=` (one row per active product, its base-unit price that day, `null` when none qualifies). A stocked balance whose product has no such price is listed as `Missing price` and counted in `missingPriceCount`. `receiptQuantity` and `dispensedQuantity` are all-time quantities summed by inventory-service from the stock ledger (`GoodsReceipt` quantity in, `Dispense` quantity out), so they are not sums of prescription and receipt lines.

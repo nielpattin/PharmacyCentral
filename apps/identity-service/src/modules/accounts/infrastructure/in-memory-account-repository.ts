@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { Account, CustomerMatch } from "../domain/account.ts";
+import type { Account, CustomerMatch, StaffMember } from "../domain/account.ts";
 import { canonicalPhoneDigits } from "../domain/phone-number.ts";
 
 export class InMemoryAccountRepository {
@@ -72,5 +72,26 @@ export class InMemoryAccountRepository {
       if (match) matches.push(match);
     }
     return matches;
+  }
+
+  public async findActiveEmployeeById(id: string): Promise<StaffMember | undefined> {
+    return (await this.listActiveEmployees()).find((member) => member.id === id);
+  }
+
+  /** The active employees by name. `sharingSiteIds` keeps those holding at least one of the sites; none shares none. */
+  public async listActiveEmployees(sharingSiteIds?: readonly string[]): Promise<StaffMember[]> {
+    if (sharingSiteIds !== undefined && sharingSiteIds.length === 0) return [];
+    return [...this.accounts.values()]
+      .filter((account) => account.actorType === "employee" && account.isActive)
+      .filter(
+        (account) => sharingSiteIds === undefined || account.siteIds.some((siteId) => sharingSiteIds.includes(siteId)),
+      )
+      .sort((left, right) => left.displayName.localeCompare(right.displayName))
+      .map((account) => ({
+        id: account.id,
+        displayName: account.displayName,
+        roles: [...account.roles],
+        siteIds: [...account.siteIds],
+      }));
   }
 }

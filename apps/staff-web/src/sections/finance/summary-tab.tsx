@@ -1,9 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { Alert, DataTable, StatTile } from "@pharmacy/ui";
+import { Alert, Button, DataTable, StatTile } from "@pharmacy/ui";
+import { useState } from "react";
 
 import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { translateText } from "../../i18n.ts";
+import { useCan } from "../../permissions/use-can.ts";
 import { asRows, formatDateTime, formatQuantity, readOne, text, type JsonRecord } from "../../staff-api.ts";
+import { CreatePlanDrawer } from "../action-plans/create-plan-drawer.tsx";
+import { priceWarningDraft, type ActionPlanDraft } from "../action-plans/drafts.ts";
 import { FINANCE_SUMMARY_KEY } from "./query-keys.ts";
 
 /** Headline figures from `/api/finance/summary`: label, summary field, and whether the value is money. */
@@ -29,6 +33,8 @@ export const SummaryTab = (): React.JSX.Element => {
   });
   const summary = summaryQuery.data;
   const currency = text(summary?.currency, "VND");
+  const planGate = useCan("actionPlan.create");
+  const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
 
   return (
     <div className="grid gap-6">
@@ -112,9 +118,37 @@ export const SummaryTab = (): React.JSX.Element => {
               label: translateText("Price status"),
               render: (row) => translateText(text(row.priceStatus)),
             },
+            {
+              key: "actions",
+              label: translateText("Actions"),
+              pinned: "right",
+              enableSorting: false,
+              render: (row) => {
+                const productId = typeof row.productId === "string" ? row.productId : undefined;
+                if (!planGate.allowed || productId === undefined || row.priceStatus !== "Missing price") return null;
+                return (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setPlanDraft(
+                        priceWarningDraft({
+                          productId,
+                          productName: text(row.productName, productId),
+                          siteId: typeof row.siteId === "string" ? row.siteId : null,
+                        }),
+                      )
+                    }
+                  >
+                    {translateText("Create plan")}
+                  </Button>
+                );
+              },
+            },
           ]}
         />
       </section>
+      {planDraft ? <CreatePlanDrawer draft={planDraft} onClose={() => setPlanDraft(undefined)} /> : null}
     </div>
   );
 };

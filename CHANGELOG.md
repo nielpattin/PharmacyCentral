@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**staff-web, operations-query-service, sales-service, payment-service, inventory-service**
+
+- Analytics page (`/analytics`, Platform Admin and Pharmacy Manager): revenue, order count and average order value against the previous period, filtered by period, site and channel (counter or online), plus inventory health (turnover, dead stock, stockout rate, stock value by site, expiry buckets). Gross profit shows "—": no purchase cost is recorded. New `GET /api/dashboard/analytics`, fed by read-only `/internal/analytics/*` routes (service secret only); `operations-query-service` now requires `PAYMENT_SERVICE_URL`. See `docs/design/0007-period-analytics-replenishment-and-action-plans.md` and BR-REPORT-008 to 011.
+- Reorder suggestions (Procurement tab "Gợi ý đặt hàng", Platform Admin and Pharmacy Manager): per site, suggested quantities per product and supplier from sales velocity, stock, the minimum stock threshold and observed supplier lead time, and one **draft** purchase order per supplier created in bulk in one transaction. Nothing is submitted or approved. New `GET /api/procurement/replenishment-suggestions` and `POST /api/procurement/replenishment-suggestions/draft-orders`; BR-PROC-007, BR-PROC-008.
+- Action plans (`/action-plans`): a plan item with owner, due date and status (open, in progress, done) created from a reorder suggestion, a dead stock row, an expiring batch or a missing price, listed in one view filtered by owner and status. New `inventory-service` table `action_plans` (migration `0013`), routes `/api/inventory/action-plans`, and `GET /api/auth/staff-directory` for the owner picker. `inventory-service` now requires `IDENTITY_SERVICE_URL`. BR-PLAN-001, BR-PLAN-002.
+
 **customer-web**
 
 - Saved addresses added and edited in a map dialog, with maps rendered by the Vietmap SDK.

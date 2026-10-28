@@ -10,6 +10,7 @@ const ids = {
   actor: "00000000-0000-4000-8000-000000000001",
   entity: "00000000-0000-4000-8000-000000000002",
   site: "00000000-0000-4000-8000-000000000003",
+  second: "00000000-0000-4000-8000-000000000004",
 };
 
 const rules: readonly AuditRule[] = [
@@ -27,6 +28,7 @@ const rules: readonly AuditRule[] = [
     action: { prefix: "stock.thing", body: "action" },
     details: ["decision"],
   },
+  { method: "POST", route: "/batches", entityType: "thing", action: "stock.thing.created", collection: "things" },
 ];
 
 describe("audit middleware", () => {
@@ -49,6 +51,14 @@ describe("audit middleware", () => {
     app.post("/things/:id/:action", (_request, response) => response.status(204).end());
     app.post("/unaudited", (_request, response) => response.status(201).json({}));
     app.get("/things", (_request, response) => response.json([]));
+    app.post("/batches", (_request, response) =>
+      response.status(201).json({
+        things: [
+          { id: ids.entity, siteId: ids.site },
+          { id: ids.second, siteId: ids.site },
+        ],
+      }),
+    );
     server = createServer(app);
     await new Promise<void>((resolve) => server?.listen(0, "127.0.0.1", resolve));
     const address = server.address();
@@ -117,5 +127,27 @@ describe("audit middleware", () => {
     await send(url, "/things", {}, { "x-actor-id": "not-a-uuid" });
     await settle();
     expect(entries[0]?.actorId).toBeUndefined();
+  });
+
+  it("records each created record of a collection, as the single record would be", async () => {
+    const { url, entries } = await start();
+    await send(url, "/batches", {}, { "x-actor-id": ids.actor });
+    await settle();
+    expect(entries).toEqual([
+      {
+        action: "stock.thing.created",
+        entityType: "thing",
+        entityId: ids.entity,
+        siteId: ids.site,
+        actorId: ids.actor,
+      },
+      {
+        action: "stock.thing.created",
+        entityType: "thing",
+        entityId: ids.second,
+        siteId: ids.site,
+        actorId: ids.actor,
+      },
+    ]);
   });
 });

@@ -92,6 +92,13 @@
       "when": 1793010211641,
       "tag": "0012_batch_creator_stocktake_counter",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793204189103,
+      "tag": "0013_action_plans",
+      "breakpoints": true
     }
   ]
 }

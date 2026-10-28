@@ -24,6 +24,7 @@ import { allocateFefo } from "./stock/application/fefo-allocate.ts";
 import { transitionReplenishment, type ReplenishmentStatus } from "./replenishment/domain/replenishment-request.ts";
 import { transitionTransfer, type TransferStatus } from "./transfers/domain/transfer-order.ts";
 import { recordSiteAvailability, sellableBatch, today } from "./site-availability.ts";
+import { expiryWindows, type StockHealthRow } from "./stock-health.ts";
 import { containsPattern, everything, type PageRequest } from "./page-cursor.ts";
 import { afterCursor, dateSortValue, presentConditions, splitPage, timestampSortValue } from "./keyset-page.ts";
 
@@ -291,6 +292,101 @@ export class InventoryRepository {
       quantityIn: Number(row.quantityIn),
       quantityOut: Number(row.quantityOut),
       latestOccurredAt: new Date(row.latestOccurredAt).toISOString(),
+    }));
+  }
+
+  /**
+   * Stock health per (site, product) that has a balance row or a ledger entry. The shelf figures (on hand, reserved,
+   * expiry buckets) are as of `asOf`. The movement figures count the ledger in `[from, to)`, except `lastMovementAt`,
+   * which is the latest movement of any time. One statement sums both sides, so no site or product is read row by row.
+   */
+  public async stockHealth(input: {
+    from: Date;
+    to: Date;
+    siteIds?: string[] | undefined;
+    asOf?: Date | undefined;
+  }): Promise<StockHealthRow[]> {
+    const windows = expiryWindows(input.asOf ?? new Date());
+    const balanceScope = input.siteIds ? inArray(inventoryBalances.siteId, input.siteIds) : sql`true`;
+    const ledgerScope = input.siteIds ? inArray(stockLedgerEntries.siteId, input.siteIds) : sql`true`;
+    const inPeriod = sql`${stockLedgerEntries.occurredAt} >= ${input.from.toISOString()}::timestamptz and ${stockLedgerEntries.occurredAt} < ${input.to.toISOString()}::timestamptz`;
+    const expiry = productBatches.expiryDate;
+    // Balances never go negative (a movement that would take them below zero is refused), so counting the positive
+    // rows of a bucket is counting the on-hand quantity of its batches.
+    const onHandIn = (inBucket: SQL) =>
+      sql`coalesce(sum(${inventoryBalances.quantityOnHand}) filter (where ${inventoryBalances.quantityOnHand} > 0 and ${inBucket}), 0)`;
+    const { rows } = await this.database.db.execute<{
+      site_id: string;
+      product_id: string;
+      on_hand: string;
+      reserved: string;
+      dispensed: string;
+      net_change: string;
+      last_movement_at: Date | string | null;
+      expired: string;
+      expiring30: string;
+      expiring60: string;
+      expiring90: string;
+    }>(sql`
+      with balance_totals as (
+        select ${inventoryBalances.siteId} as site_id,
+          ${productBatches.productId} as product_id,
+          coalesce(sum(${inventoryBalances.quantityOnHand}), 0) as on_hand,
+          coalesce(sum(${inventoryBalances.quantityReserved}), 0) as reserved,
+          ${onHandIn(sql`${expiry} < ${windows.today}::date`)} as expired,
+          ${onHandIn(sql`${expiry} >= ${windows.today}::date and ${expiry} <= ${windows.within30}::date`)} as "expiring30",
+          ${onHandIn(sql`${expiry} > ${windows.within30}::date and ${expiry} <= ${windows.within60}::date`)} as "expiring60",
+          ${onHandIn(sql`${expiry} > ${windows.within60}::date and ${expiry} <= ${windows.within90}::date`)} as "expiring90"
+        from ${inventoryBalances}
+        inner join ${productBatches} on ${productBatches.id} = ${inventoryBalances.productBatchId}
+        where ${balanceScope}
+        group by ${inventoryBalances.siteId}, ${productBatches.productId}
+      ),
+      ledger_totals as (
+        select ${stockLedgerEntries.siteId} as site_id,
+          ${stockLedgerEntries.productId} as product_id,
+          coalesce(sum(${stockLedgerEntries.quantityDelta}) filter (where ${inPeriod}), 0) as net_change,
+          coalesce(-sum(${stockLedgerEntries.quantityDelta}) filter (
+            where ${stockLedgerEntries.movementType} = 'Dispense' and ${inPeriod}
+          ), 0) as dispensed,
+          max(${stockLedgerEntries.occurredAt}) as last_movement_at
+        from ${stockLedgerEntries}
+        where ${ledgerScope}
+        group by ${stockLedgerEntries.siteId}, ${stockLedgerEntries.productId}
+      )
+      select keys.site_id, keys.product_id,
+        coalesce(balance_totals.on_hand, 0) as on_hand,
+        coalesce(balance_totals.reserved, 0) as reserved,
+        coalesce(ledger_totals.dispensed, 0) as dispensed,
+        coalesce(ledger_totals.net_change, 0) as net_change,
+        ledger_totals.last_movement_at,
+        coalesce(balance_totals.expired, 0) as expired,
+        coalesce(balance_totals.expiring30, 0) as expiring30,
+        coalesce(balance_totals.expiring60, 0) as expiring60,
+        coalesce(balance_totals.expiring90, 0) as expiring90
+      from (
+        select site_id, product_id from balance_totals
+        union
+        select site_id, product_id from ledger_totals
+      ) as keys
+      left join balance_totals
+        on balance_totals.site_id = keys.site_id and balance_totals.product_id = keys.product_id
+      left join ledger_totals
+        on ledger_totals.site_id = keys.site_id and ledger_totals.product_id = keys.product_id
+      order by keys.site_id, keys.product_id
+    `);
+    return rows.map((row) => ({
+      siteId: row.site_id,
+      productId: row.product_id,
+      onHand: Number(row.on_hand),
+      reserved: Number(row.reserved),
+      dispensed: Number(row.dispensed),
+      netChange: Number(row.net_change),
+      lastMovementAt: row.last_movement_at === null ? null : new Date(row.last_movement_at).toISOString(),
+      expired: Number(row.expired),
+      expiring30: Number(row.expiring30),
+      expiring60: Number(row.expiring60),
+      expiring90: Number(row.expiring90),
     }));
   }
 

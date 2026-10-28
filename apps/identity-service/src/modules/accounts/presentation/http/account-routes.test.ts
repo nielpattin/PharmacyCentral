@@ -12,7 +12,7 @@ import {
   createAccountRouter as createAccountRouterFor,
   createAdminRouter,
   createCustomerRouter,
-  createInternalCustomerRouter,
+  createInternalRouter,
 } from "./account-routes.ts";
 
 const startServer = async (app: express.Express): Promise<{ server: Server; url: string }> => {
@@ -523,7 +523,7 @@ describe("internal customer route", () => {
   const startInternalServer = async (findActiveCustomer: Mock): Promise<{ server: Server; url: string }> => {
     const app = express();
     app.use(express.json());
-    app.use("/internal", createInternalCustomerRouter({ findActiveCustomer } as unknown as AccountService));
+    app.use("/internal", createInternalRouter({ findActiveCustomer } as unknown as AccountService));
     return startServer(app);
   };
 
@@ -801,7 +801,7 @@ describe("internal customer batch route", () => {
   const start = async (findActiveCustomers: Mock): Promise<string> => {
     const app = express();
     app.use(express.json());
-    app.use("/internal", createInternalCustomerRouter({ findActiveCustomers } as unknown as AccountService));
+    app.use("/internal", createInternalRouter({ findActiveCustomers } as unknown as AccountService));
     const started = await startServer(app);
     activeServer = started.server;
     return started.url;
@@ -851,5 +851,235 @@ describe("internal customer batch route", () => {
     });
     expect(response.status).toBe(403);
     expect(findActiveCustomers).not.toHaveBeenCalled();
+  });
+});
+
+describe("staff directory route", () => {
+  const siteA = "00000000-0000-4000-8000-0000000000e1";
+  const siteB = "00000000-0000-4000-8000-0000000000e2";
+  type Viewer = {
+    id: string;
+    actorType: string;
+    email: string;
+    displayName: string;
+    passwordHash: string;
+    roles: string[];
+    siteIds: string[];
+    isActive: boolean;
+    mustChangePassword: boolean;
+    createdAt: Date;
+  };
+  const viewer = (roles: string[], siteIds: string[], mustChangePassword = false): Viewer => ({
+    id: "00000000-0000-4000-8000-0000000000f1",
+    actorType: "employee",
+    email: "quan-ly@example.vn",
+    displayName: "Quản lý",
+    passwordHash: "hash",
+    roles,
+    siteIds,
+    isActive: true,
+    mustChangePassword,
+    createdAt: new Date(),
+  });
+
+  const startDirectory = async (
+    account: Viewer | undefined,
+    listActiveEmployees: Mock,
+  ): Promise<{ server: Server; url: string }> => {
+    const stub = {
+      currentSession: async () => (account ? { account, session: {} } : undefined),
+      listActiveEmployees,
+    } as unknown as AccountService;
+    const app = express();
+    app.use(express.json());
+    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
+    return startServer(app);
+  };
+
+  const close = (server: Server): Promise<void> => {
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    server.close((error) => (error ? reject(error) : resolve()));
+    return promise;
+  };
+
+  const sessionCookie = { Cookie: "pharmacy_session=valid" };
+
+  it("lists every active employee for a Platform Admin, with only the name, roles and sites", async () => {
+    // The stub answers the contact fields too: the route must still leave them out of the answer.
+    const listActiveEmployees = vi.fn().mockResolvedValue([
+      {
+        id: "00000000-0000-4000-8000-0000000000f2",
+        displayName: "Dược sĩ",
+        roles: ["Pharmacist"],
+        siteIds: [siteA],
+        email: "duocsi@example.vn",
+        phoneNumber: "0901234567",
+      },
+    ]);
+    const { server, url } = await startDirectory(viewer(["Platform Admin"], []), listActiveEmployees);
+    try {
+      const response = await fetch(`${url}/auth/staff-directory`, { headers: sessionCookie });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        employees: [
+          {
+            id: "00000000-0000-4000-8000-0000000000f2",
+            displayName: "Dược sĩ",
+            roles: ["Pharmacist"],
+            siteIds: [siteA],
+          },
+        ],
+      });
+      // A Platform Admin is not narrowed to any site.
+      expect(listActiveEmployees).toHaveBeenCalledWith(undefined);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it("narrows a Pharmacy Manager to the employees sharing the manager's sites", async () => {
+    const listActiveEmployees = vi.fn().mockResolvedValue([]);
+    const { server, url } = await startDirectory(viewer(["Pharmacy Manager"], [siteA]), listActiveEmployees);
+    try {
+      const response = await fetch(`${url}/auth/staff-directory`, { headers: sessionCookie });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ employees: [] });
+      expect(listActiveEmployees).toHaveBeenCalledWith([siteA]);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it("answers a Pharmacy Manager with no site an empty directory", async () => {
+    const listActiveEmployees = vi.fn().mockResolvedValue([]);
+    const { server, url } = await startDirectory(viewer(["Pharmacy Manager"], [siteA, siteB]), listActiveEmployees);
+    try {
+      expect((await fetch(`${url}/auth/staff-directory`, { headers: sessionCookie })).status).toBe(200);
+      expect(listActiveEmployees).toHaveBeenCalledWith([siteA, siteB]);
+    } finally {
+      await close(server);
+    }
+
+    const noSite = await startDirectory(viewer(["Pharmacy Manager"], []), listActiveEmployees);
+    try {
+      expect(await (await fetch(`${noSite.url}/auth/staff-directory`, { headers: sessionCookie })).json()).toEqual({
+        employees: [],
+      });
+      expect(listActiveEmployees).toHaveBeenLastCalledWith([]);
+    } finally {
+      await close(noSite.server);
+    }
+  });
+
+  it("refuses a Pharmacist, a Warehouse Staff member and a shopper, without reading the directory", async () => {
+    const listActiveEmployees = vi.fn();
+    const refused = [viewer(["Pharmacist"], [siteA]), viewer(["Warehouse Staff"], [siteA]), viewer([], [])];
+    for (const account of refused) {
+      const { server, url } = await startDirectory(account, listActiveEmployees);
+      try {
+        const response = await fetch(`${url}/auth/staff-directory`, { headers: sessionCookie });
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ code: "forbidden" });
+      } finally {
+        await close(server);
+      }
+    }
+    expect(listActiveEmployees).not.toHaveBeenCalled();
+  });
+
+  it("refuses a caller with no session", async () => {
+    const listActiveEmployees = vi.fn();
+    const { server, url } = await startDirectory(undefined, listActiveEmployees);
+    try {
+      const response = await fetch(`${url}/auth/staff-directory`);
+      expect(response.status).toBe(401);
+      expect(listActiveEmployees).not.toHaveBeenCalled();
+    } finally {
+      await close(server);
+    }
+  });
+
+  it("refuses a Pharmacy Manager who must change the password first", async () => {
+    const listActiveEmployees = vi.fn();
+    const { server, url } = await startDirectory(viewer(["Pharmacy Manager"], [siteA], true), listActiveEmployees);
+    try {
+      const response = await fetch(`${url}/auth/staff-directory`, { headers: sessionCookie });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ code: "password_change_required" });
+      expect(listActiveEmployees).not.toHaveBeenCalled();
+    } finally {
+      await close(server);
+    }
+  });
+});
+
+describe("internal employee route", () => {
+  let activeServer: Server | undefined;
+  afterEach(async () => {
+    if (!activeServer) return;
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    activeServer.close((error) => (error ? reject(error) : resolve()));
+    await promise;
+  });
+
+  const systemActor = { "x-actor-type": "system" };
+  const employeeId = "00000000-0000-4000-8000-0000000000f2";
+  const employeeUrl = `/internal/employees/${employeeId}`;
+
+  const startInternalServer = async (findActiveEmployee: Mock): Promise<string> => {
+    const app = express();
+    app.use(express.json());
+    app.use("/internal", createInternalRouter({ findActiveEmployee } as unknown as AccountService));
+    const started = await startServer(app);
+    activeServer = started.server;
+    return started.url;
+  };
+
+  it("resolves an active employee's name, roles and sites for the system actor, never an email", async () => {
+    const findActiveEmployee = vi.fn().mockResolvedValue({
+      id: employeeId,
+      displayName: "Dược sĩ",
+      roles: ["Pharmacist"],
+      siteIds: ["00000000-0000-4000-8000-0000000000e1"],
+      email: "duocsi@example.vn",
+    });
+    const url = await startInternalServer(findActiveEmployee);
+
+    const response = await fetch(`${url}${employeeUrl}`, { headers: systemActor });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      id: employeeId,
+      displayName: "Dược sĩ",
+      roles: ["Pharmacist"],
+      siteIds: ["00000000-0000-4000-8000-0000000000e1"],
+      isActive: true,
+    });
+    expect(findActiveEmployee).toHaveBeenCalledWith(employeeId);
+  });
+
+  it("answers 404 when the id is not an active employee, so a customer or a deactivated account looks the same", async () => {
+    const findActiveEmployee = vi.fn().mockResolvedValue(undefined);
+    const url = await startInternalServer(findActiveEmployee);
+
+    const response = await fetch(`${url}${employeeUrl}`, { headers: systemActor });
+    expect(response.status).toBe(404);
+  });
+
+  it("refuses a caller that is not the system actor", async () => {
+    const findActiveEmployee = vi.fn();
+    const url = await startInternalServer(findActiveEmployee);
+
+    const response = await fetch(`${url}${employeeUrl}`, { headers: { "x-actor-type": "employee" } });
+    expect(response.status).toBe(403);
+    expect(findActiveEmployee).not.toHaveBeenCalled();
+  });
+
+  it("refuses a malformed id without asking the service", async () => {
+    const findActiveEmployee = vi.fn();
+    const url = await startInternalServer(findActiveEmployee);
+
+    const response = await fetch(`${url}/internal/employees/not-a-uuid`, { headers: systemActor });
+    expect(response.status).toBe(400);
+    expect(findActiveEmployee).not.toHaveBeenCalled();
   });
 });

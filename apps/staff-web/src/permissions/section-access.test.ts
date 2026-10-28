@@ -8,6 +8,7 @@ import { canAccessSection, sectionRoles } from "./section-access.ts";
 const opens: Record<"Pharmacist" | "Pharmacy Manager" | "Warehouse Staff", readonly Section[]> = {
   Pharmacist: [
     "pharmacistOverview",
+    "actionPlans",
     "prescriptions",
     "orders",
     "replenishment",
@@ -17,6 +18,8 @@ const opens: Record<"Pharmacist" | "Pharmacy Manager" | "Warehouse Staff", reado
   ],
   "Pharmacy Manager": [
     "dashboard",
+    "analytics",
+    "actionPlans",
     "prescriptions",
     "orders",
     "transfers",
@@ -43,6 +46,7 @@ const opens: Record<"Pharmacist" | "Pharmacy Manager" | "Warehouse Staff", reado
   ],
   "Warehouse Staff": [
     "dashboard",
+    "actionPlans",
     "transfers",
     "replenishment",
     "importStock",

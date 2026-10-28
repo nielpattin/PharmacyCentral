@@ -3,13 +3,21 @@ import { and, desc, eq, ilike, inArray, sql, type SQL } from "drizzle-orm";
 import { BusinessRuleError } from "../shared/business-rule-error.ts";
 import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import {
+  inventoryBalances,
   goodsReceiptLines,
   goodsReceipts,
+  productBatches,
   purchaseOrderLines,
   purchaseOrders,
+  stockLedgerEntries,
 } from "../shared/infrastructure/schema.ts";
 import { containsPattern, everything, type PageRequest } from "./page-cursor.ts";
 import { afterCursor, presentConditions, splitPage, timestampSortValue } from "./keyset-page.ts";
+import {
+  LEAD_TIME_HISTORY_MONTHS,
+  type LeadTimeSample,
+  type ProductStockPosition,
+} from "./replenishment-suggestions.ts";
 
 type InventoryReceipt = {
   productId: string;
@@ -47,6 +55,58 @@ const receiptFilters = (filters: ReceiptFilters): Array<SQL | undefined> => [
   filters.siteIds ? inArray(goodsReceipts.siteId, filters.siteIds) : undefined,
   filters.q ? ilike(goodsReceipts.receiptNumber, containsPattern(filters.q)) : undefined,
 ];
+
+export type PurchaseOrderInput = {
+  purchaseOrderNumber?: string | undefined;
+  supplierId: string;
+  siteId: string;
+  expectedDate?: string | null | undefined;
+  createdBy: string;
+  notes?: string | null | undefined;
+  lines: Array<{ productId: string; orderedQuantity: number; notes?: string | null | undefined }>;
+};
+
+type ProcurementTransaction = Parameters<Parameters<InventoryDatabase["db"]["transaction"]>[0]>[0];
+
+/** The number the single-order route has always generated: `PO-<yyyyMMddHHmmss>-<000-999>`. */
+const purchaseOrderStamp = (now: Date): string =>
+  now
+    .toISOString()
+    .replace(/[-:.TZ]/g, "")
+    .slice(0, 14);
+
+const insertPurchaseOrder = async (transaction: ProcurementTransaction, input: PurchaseOrderInput) => {
+  const purchaseOrderNumber =
+    input.purchaseOrderNumber ??
+    `PO-${purchaseOrderStamp(new Date())}-${Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, "0")}`;
+  const [order] = await transaction
+    .insert(purchaseOrders)
+    .values({
+      purchaseOrderNumber,
+      supplierId: input.supplierId,
+      siteId: input.siteId,
+      expectedDate: input.expectedDate ?? null,
+      createdBy: input.createdBy,
+      notes: input.notes ?? null,
+    })
+    .returning();
+  if (!order) throw new Error("Purchase order insert did not return a row");
+  const lines = await transaction
+    .insert(purchaseOrderLines)
+    .values(
+      input.lines.map((line) => ({
+        purchaseOrderId: order.id,
+        productId: line.productId,
+        orderedQuantity: line.orderedQuantity,
+        receivedQuantity: 0,
+        notes: line.notes ?? null,
+      })),
+    )
+    .returning();
+  return { ...order, lines };
+};
 
 export class ProcurementRepository {
   public constructor(
@@ -102,50 +162,137 @@ export class ProcurementRepository {
     };
   }
 
-  public async createPurchaseOrder(input: {
-    purchaseOrderNumber?: string | undefined;
-    supplierId: string;
-    siteId: string;
-    expectedDate?: string | null | undefined;
-    createdBy: string;
-    notes?: string | null | undefined;
-    lines: Array<{ productId: string; orderedQuantity: number; notes?: string | null | undefined }>;
-  }) {
+  public async createPurchaseOrder(input: PurchaseOrderInput) {
+    return this.database.db.transaction((transaction) => insertPurchaseOrder(transaction, input));
+  }
+
+  /**
+   * Creates every order in one transaction: all of them are written or none is. Each number is unique within the batch
+   * (the sequence of the order in the batch) and across batches (a random suffix), in the shape of a single order's number.
+   */
+  public async createPurchaseOrders(inputs: Array<Omit<PurchaseOrderInput, "purchaseOrderNumber">>) {
+    const stamp = purchaseOrderStamp(new Date());
     return this.database.db.transaction(async (transaction) => {
-      const purchaseOrderNumber =
-        input.purchaseOrderNumber ??
-        `PO-${new Date()
-          .toISOString()
-          .replace(/[-:.TZ]/g, "")
-          .slice(0, 14)}-${Math.floor(Math.random() * 1000)
+      const created = [];
+      for (const [index, input] of inputs.entries()) {
+        const sequence = String(index + 1).padStart(2, "0");
+        const suffix = Math.floor(Math.random() * 1000)
           .toString()
-          .padStart(3, "0")}`;
-      const [order] = await transaction
-        .insert(purchaseOrders)
-        .values({
-          purchaseOrderNumber,
-          supplierId: input.supplierId,
-          siteId: input.siteId,
-          expectedDate: input.expectedDate ?? null,
-          createdBy: input.createdBy,
-          notes: input.notes ?? null,
-        })
-        .returning();
-      if (!order) throw new Error("Purchase order insert did not return a row");
-      const lines = await transaction
-        .insert(purchaseOrderLines)
-        .values(
-          input.lines.map((line) => ({
-            purchaseOrderId: order.id,
-            productId: line.productId,
-            orderedQuantity: line.orderedQuantity,
-            receivedQuantity: 0,
-            notes: line.notes ?? null,
-          })),
-        )
-        .returning();
-      return { ...order, lines };
+          .padStart(3, "0");
+        created.push(
+          await insertPurchaseOrder(transaction, {
+            ...input,
+            purchaseOrderNumber: `PO-${stamp}-${sequence}-${suffix}`,
+          }),
+        );
+      }
+      return created;
     });
+  }
+
+  /**
+   * The inputs of the replenishment suggestions for one site (BR-PROC-007), set-based: one row per product that has a
+   * balance row at the site or a `Dispense` in the window, with its on hand, reserved, dispensed and open inbound
+   * quantities and the supplier of its latest receipt (at the site, else at any site). The lead-time samples are the
+   * days from each purchase order's creation to its first receipt, for the orders whose first receipt is within the
+   * last 12 months and not before the order.
+   */
+  public async replenishmentInputs(input: { siteId: string; windowStart: Date; now: Date }): Promise<{
+    positions: ProductStockPosition[];
+    leadTimeSamples: LeadTimeSample[];
+  }> {
+    const leadTimeSince = new Date(input.now);
+    leadTimeSince.setUTCMonth(leadTimeSince.getUTCMonth() - LEAD_TIME_HISTORY_MONTHS);
+    const { rows } = await this.database.db.execute<{
+      product_id: string;
+      on_hand: string;
+      reserved: string;
+      dispensed: string;
+      inbound: string;
+      supplier_id: string | null;
+    }>(sql`
+      with balance_totals as (
+        select ${productBatches.productId} as product_id,
+          coalesce(sum(${inventoryBalances.quantityOnHand}), 0) as on_hand,
+          coalesce(sum(${inventoryBalances.quantityReserved}), 0) as reserved
+        from ${inventoryBalances}
+        inner join ${productBatches} on ${productBatches.id} = ${inventoryBalances.productBatchId}
+        where ${inventoryBalances.siteId} = ${input.siteId}::uuid
+        group by ${productBatches.productId}
+      ),
+      dispensed_totals as (
+        select ${stockLedgerEntries.productId} as product_id,
+          coalesce(-sum(${stockLedgerEntries.quantityDelta}), 0) as dispensed
+        from ${stockLedgerEntries}
+        where ${stockLedgerEntries.siteId} = ${input.siteId}::uuid
+          and ${stockLedgerEntries.movementType} = 'Dispense'
+          and ${stockLedgerEntries.occurredAt} >= ${input.windowStart.toISOString()}::timestamptz
+        group by ${stockLedgerEntries.productId}
+      ),
+      candidates as (
+        select product_id from balance_totals
+        union
+        select product_id from dispensed_totals
+      ),
+      inbound_totals as (
+        select ${purchaseOrderLines.productId} as product_id,
+          coalesce(sum(greatest(${purchaseOrderLines.orderedQuantity} - ${purchaseOrderLines.receivedQuantity}, 0)), 0) as inbound
+        from ${purchaseOrderLines}
+        inner join ${purchaseOrders} on ${purchaseOrders.id} = ${purchaseOrderLines.purchaseOrderId}
+        where ${purchaseOrders.siteId} = ${input.siteId}::uuid
+          and ${purchaseOrders.status} in ('Draft', 'Approved', 'PartiallyReceived')
+        group by ${purchaseOrderLines.productId}
+      ),
+      supplier_per_product as (
+        select distinct on (${goodsReceiptLines.productId}) ${goodsReceiptLines.productId} as product_id,
+          ${goodsReceipts.supplierId} as supplier_id
+        from ${goodsReceiptLines}
+        inner join ${goodsReceipts} on ${goodsReceipts.id} = ${goodsReceiptLines.goodsReceiptId}
+        where ${goodsReceiptLines.productId} in (select product_id from candidates)
+        order by ${goodsReceiptLines.productId},
+          (${goodsReceipts.siteId} = ${input.siteId}::uuid) desc,
+          ${goodsReceipts.receivedAt} desc,
+          ${goodsReceipts.id} desc
+      )
+      select candidates.product_id,
+        coalesce(balance_totals.on_hand, 0) as on_hand,
+        coalesce(balance_totals.reserved, 0) as reserved,
+        coalesce(dispensed_totals.dispensed, 0) as dispensed,
+        coalesce(inbound_totals.inbound, 0) as inbound,
+        supplier_per_product.supplier_id
+      from candidates
+      left join balance_totals on balance_totals.product_id = candidates.product_id
+      left join dispensed_totals on dispensed_totals.product_id = candidates.product_id
+      left join inbound_totals on inbound_totals.product_id = candidates.product_id
+      left join supplier_per_product on supplier_per_product.product_id = candidates.product_id
+      order by candidates.product_id
+    `);
+    const { rows: samples } = await this.database.db.execute<{ supplier_id: string; lead_time_days: string }>(sql`
+      with first_receipts as (
+        select ${goodsReceipts.purchaseOrderId} as purchase_order_id,
+          min(${goodsReceipts.receivedAt}) as first_received_at
+        from ${goodsReceipts}
+        where ${goodsReceipts.purchaseOrderId} is not null
+        group by ${goodsReceipts.purchaseOrderId}
+      )
+      select ${purchaseOrders.supplierId} as supplier_id,
+        extract(epoch from (first_receipts.first_received_at - ${purchaseOrders.createdAt})) / 86400 as lead_time_days
+      from first_receipts
+      inner join ${purchaseOrders} on ${purchaseOrders.id} = first_receipts.purchase_order_id
+      where first_receipts.first_received_at >= ${leadTimeSince.toISOString()}::timestamptz
+        and first_receipts.first_received_at >= ${purchaseOrders.createdAt}
+    `);
+    return {
+      positions: rows.map((row) => ({
+        productId: row.product_id,
+        onHand: Number(row.on_hand),
+        reserved: Number(row.reserved),
+        dispensedQuantity: Number(row.dispensed),
+        inboundQuantity: Number(row.inbound),
+        supplierId: row.supplier_id,
+      })),
+      leadTimeSamples: samples.map((row) => ({ supplierId: row.supplier_id, days: Number(row.lead_time_days) })),
+    };
   }
 
   public async transition(id: string, action: "approve" | "cancel", actorId: string, notes?: string | null) {

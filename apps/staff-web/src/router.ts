@@ -6,6 +6,8 @@ import { StaffNotFoundPage } from "./pages/NotFoundPage.tsx";
 
 export type Section =
   | "dashboard"
+  | "analytics"
+  | "actionPlans"
   | "pharmacistOverview"
   | "prescriptions"
   | "orders"
@@ -39,6 +41,8 @@ export type Section =
 
 export const sectionPaths = {
   dashboard: "/",
+  analytics: "/analytics",
+  actionPlans: "/action-plans",
   pharmacistOverview: "/pharmacist-overview",
   prescriptions: "/prescriptions",
   orders: "/orders",
@@ -80,6 +84,8 @@ export type StaffPath = (typeof sectionPaths)[Section];
 
 const sectionsByPath: Record<string, Section> = {
   "/": "dashboard",
+  "/analytics": "analytics",
+  "/action-plans": "actionPlans",
   "/pharmacist-overview": "pharmacistOverview",
   "/prescriptions": "prescriptions",
   "/orders": "orders",
@@ -138,6 +144,8 @@ const sectionRoute = <const TPath extends string>(path: TPath) =>
   createRoute({ getParentRoute: () => rootRoute, path, validateSearch: (search) => listSearchSchema.parse(search) });
 
 const dashboardRoute = sectionRoute("/");
+const analyticsRoute = sectionRoute("/analytics");
+const actionPlansRoute = sectionRoute("/action-plans");
 const pharmacistOverviewRoute = sectionRoute("/pharmacist-overview");
 const prescriptionsRoute = sectionRoute("/prescriptions");
 const ordersRoute = sectionRoute("/orders");
@@ -171,6 +179,8 @@ const systemRoute = sectionRoute("/system");
 
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
+  analyticsRoute,
+  actionPlansRoute,
   pharmacistOverviewRoute,
   prescriptionsRoute,
   ordersRoute,

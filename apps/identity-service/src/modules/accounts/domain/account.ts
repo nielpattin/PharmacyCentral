@@ -28,3 +28,15 @@ export type CustomerMatch = {
   email: string;
   phoneNumber: string | null;
 };
+
+/**
+ * An active employee as the staff directory and the owner check see them: the name, the roles and the sites. It
+ * carries no email, phone or password hash, because a colleague's contact is not something a shift lead needs to pick
+ * an owner.
+ */
+export type StaffMember = {
+  id: string;
+  displayName: string;
+  roles: string[];
+  siteIds: string[];
+};

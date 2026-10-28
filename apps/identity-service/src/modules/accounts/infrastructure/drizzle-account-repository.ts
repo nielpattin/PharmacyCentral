@@ -1,8 +1,8 @@
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 
 import type { IdentityExecutor } from "../../../shared/infrastructure/database.ts";
 import { userRoles, userSiteScopes, users } from "../../../shared/infrastructure/schema.ts";
-import type { Account, CustomerMatch } from "../domain/account.ts";
+import type { Account, CustomerMatch, StaffMember } from "../domain/account.ts";
 
 /** The customer fields a look-up may hand out; selecting them directly keeps the password hash out of the result. */
 const customerColumns = {
@@ -92,6 +92,29 @@ export class DrizzleAccountRepository {
     return rows.map((row) => ({ ...row, phoneNumber: row.phoneNumber ?? null }));
   }
 
+  public async findActiveEmployeeById(id: string): Promise<StaffMember | undefined> {
+    return (await this.activeEmployees(eq(users.id, id)))[0];
+  }
+
+  /**
+   * The active employees by name, with their roles and sites. `sharingSiteIds` keeps those holding at least one of the
+   * sites; left out, every active employee is returned. An empty list shares no site, so it returns nobody.
+   */
+  public async listActiveEmployees(sharingSiteIds?: readonly string[]): Promise<StaffMember[]> {
+    if (sharingSiteIds !== undefined && sharingSiteIds.length === 0) return [];
+    const sharesSite =
+      sharingSiteIds === undefined
+        ? undefined
+        : inArray(
+            users.id,
+            this.executor
+              .select({ userId: userSiteScopes.userId })
+              .from(userSiteScopes)
+              .where(inArray(userSiteScopes.siteId, [...sharingSiteIds])),
+          );
+    return this.activeEmployees(sharesSite);
+  }
+
   public async list(): Promise<Account[]> {
     const allUsers = await this.executor.select().from(users).orderBy(users.email);
     return Promise.all(allUsers.map((user) => this.toAccount(user)));
@@ -136,6 +159,27 @@ export class DrizzleAccountRepository {
       siteIds: siteIds.map((scope) => scope.siteId),
       createdAt: user.createdAt,
     };
+  }
+
+  /** Active employees by name, each with its roles and sites. `condition` narrows the users read. */
+  private async activeEmployees(condition: SQL | undefined): Promise<StaffMember[]> {
+    const rows = await this.executor
+      .select({ id: users.id, displayName: users.displayName })
+      .from(users)
+      .where(and(eq(users.actorType, "employee"), eq(users.isActive, true), condition))
+      .orderBy(users.displayName, users.id);
+    if (rows.length === 0) return [];
+    const ids = rows.map((row) => row.id);
+    const [roles, siteScopes] = await Promise.all([
+      this.executor.select().from(userRoles).where(inArray(userRoles.userId, ids)),
+      this.executor.select().from(userSiteScopes).where(inArray(userSiteScopes.userId, ids)),
+    ]);
+    return rows.map((row) => ({
+      id: row.id,
+      displayName: row.displayName,
+      roles: roles.filter((role) => role.userId === row.id).map((role) => role.roleName),
+      siteIds: siteScopes.filter((scope) => scope.userId === row.id).map((scope) => scope.siteId),
+    }));
   }
 
   private async replaceAccess(

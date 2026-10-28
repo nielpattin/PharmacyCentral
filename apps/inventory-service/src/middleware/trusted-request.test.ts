@@ -131,4 +131,32 @@ describe("trusted request role restatement", () => {
     expect((await callAs(["Pharmacy Manager"], stocktakePath, "POST")).status).toBe(200);
     expect((await callAs(["Warehouse Staff"], stocktakePath, "POST")).status).toBe(403);
   });
+
+  it("admits a Pharmacy Manager and Platform Admin to replenishment suggestions and drafts, and refuses the rest", async () => {
+    const suggestions = "/procurement/replenishment-suggestions";
+    expect((await callAs(["Pharmacy Manager"], suggestions, "GET")).status).toBe(200);
+    expect((await callAs(["Pharmacy Manager"], `${suggestions}/draft-orders`, "POST")).status).toBe(200);
+    expect((await callAs(["Platform Admin"], suggestions, "GET")).status).toBe(200);
+    expect((await callAs(["Pharmacist"], suggestions, "GET")).status).toBe(403);
+    const refused = await callAs(["Warehouse Staff"], `${suggestions}/draft-orders`, "POST");
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("admits only a Pharmacy Manager and Platform Admin to create an action plan, and every staff role to read and move one", async () => {
+    const plans = "/inventory/action-plans";
+    const planPath = `${plans}/00000000-0000-4000-8000-000000000060`;
+    expect((await callAs(["Pharmacy Manager"], plans, "POST")).status).toBe(200);
+    expect((await callAs(["Platform Admin"], plans, "POST")).status).toBe(200);
+    const refused = await callAs(["Pharmacist"], plans, "POST");
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+    expect((await callAs(["Warehouse Staff"], plans, "POST")).status).toBe(403);
+
+    expect((await callAs(["Pharmacist"], plans, "GET")).status).toBe(200);
+    expect((await callAs(["Warehouse Staff"], plans, "GET")).status).toBe(200);
+    expect((await callAs(["Pharmacist"], planPath, "PATCH")).status).toBe(200);
+    expect((await callAs(["Warehouse Staff"], planPath, "PATCH")).status).toBe(200);
+    expect((await callAs(["Pharmacy Manager"], planPath, "PATCH")).status).toBe(200);
+  });
 });

@@ -1,0 +1,177 @@
+# 0007. Period analytics, replenishment suggestions and action plans
+
+- **Status:** Implemented on the owner's instruction; review still welcome
+- **Author:** @nielpattin
+- **Date:** 2026-10-28
+
+## Summary
+
+Three staff-web features for Pharmacy Managers and Platform Admin. (1) An **Analytics** page with period KPIs (revenue, orders, average order value, gross profit, each against the previous period) filtered by site and channel, and inventory health (turnover, dead stock, stockout rate, stock value by site, expiry buckets). (2) **Replenishment suggestions** on the Procurement page: suggested order quantities per product and supplier from sales velocity, stock, minimum stock and supplier lead time, reviewed by the user and turned into one **draft** purchase order per supplier. (3) **Action plans**: a plan item (owner, due date, open / in progress / done) created from any suggestion or alert, with one list filtered by owner and status.
+
+Services touched: `operations-query-service` (aggregation, read only), `sales-service` and `payment-service` (one internal read each), `inventory-service` (one internal read, the suggestion routes, the action plan module and its table), `identity-service` (one read-only staff directory route), `staff-web`, and the edge policy.
+
+## Motivation
+
+The dashboard shows counts only ([staff dashboard spec](../product/staff-dashboard-and-reporting.md), "No charts" and "Financial values ... see Finance"). Managers have no period view of takings, no stock turnover figure, no list of what to reorder, and nowhere to record who will act on an alert. Reordering is done by eye from the low-stock tile.
+
+## Goals
+
+- A manager answers "how did we sell and how healthy is stock over this period, at this site, in this channel" from one page, with the previous period beside every KPI.
+- A manager gets a reviewable reorder list and creates drafts in bulk through the existing procurement flow. Nothing is submitted or approved automatically.
+- Any alert or suggestion becomes an owned, dated plan item that its owner can move to done.
+
+## Non-goals
+
+- No new write path for analytics. Analytics routes only read.
+- No purchase cost, no supplier lead time field, no per-product minimum stock field (see Open questions: gross profit, minimum stock, lead time). Nothing is guessed to fill them.
+- No auto-submit, auto-approve or auto-receive of a purchase order.
+- No integration events and no change to existing events. No cross-service table change.
+- No charts library. Figures use `StatTile` and tables.
+
+## Proposed design
+
+### Contracts
+
+All new service-to-service reads live under `/internal/...`, which neither the local gateway (`routes.conf`) nor the ALB forwards, so a browser can never reach them. They require the service secret (`internalServiceHeaders()`); site scope travels in `x-actor-site-ids` as every existing read of `operations-query-service` does. The path routing map is unchanged: the browser routes below use the prefixes that already exist.
+
+Browser routes (all behind the edge role rules and the service role check):
+
+| Route | Service | Roles | Purpose |
+| --- | --- | --- | --- |
+| `GET /api/dashboard/analytics` | operations-query | Platform Admin, Pharmacy Manager | Period KPIs and inventory health |
+| `GET /api/procurement/replenishment-suggestions` | inventory | Platform Admin, Pharmacy Manager | Suggestion list for one site |
+| `POST /api/procurement/replenishment-suggestions/draft-orders` | inventory | Platform Admin, Pharmacy Manager | One Draft purchase order per supplier |
+| `GET /api/inventory/action-plans` | inventory | any employee (managers all, others own) | Plan list |
+| `POST /api/inventory/action-plans` | inventory | Platform Admin, Pharmacy Manager | Create a plan item |
+| `PATCH /api/inventory/action-plans/:id` | inventory | owner or manager | Change status, owner, due date |
+| `GET /api/auth/staff-directory` | identity | Platform Admin, Pharmacy Manager | Employee names for the owner picker |
+
+Internal routes (ops-query to owner services):
+
+| Route | Service | Answer |
+| --- | --- | --- |
+| `GET /internal/analytics/sales-documents?from&to` | sales | `{ documents: [{ id, kind: "order" \| "prescription", siteId, createdAt }] }` created in `[from, to)`. `kind: "order"` is an online order (`siteId` = `selectedStoreId`), `"prescription"` is a counter sale. Site-scoped by header. |
+| `GET /internal/analytics/paid-invoices?since` | payment | `{ invoices: [{ orderId \| null, prescriptionId \| null, amount, createdAt }] }` for invoices with status `Paid` created at or after `since`. Hard cap 50 000 rows; more answers 422 `analytics_range_too_large`. |
+| `GET /internal/analytics/stock-health?from&to` | inventory | `{ from, to, asOf, deadStockDays: 90, rows: [{ siteId, productId, onHand, reserved, dispensed, netChange, lastMovementAt, expired, expiring30, expiring60, expiring90 }] }`, one row per (site, product) that has a balance row or a ledger entry; quantities are base units. Site-scoped by header. |
+
+#### `GET /api/dashboard/analytics`
+
+Query: `from`, `to` (ISO date-time, `from` inclusive, `to` exclusive, at most 366 days apart), `siteId` (optional, inside the caller's scope), `channel` (`all` default, `counter`, `online`).
+
+The previous period is the same length ending at `from`. Answer:
+
+```
+{
+  currency: "VND", generatedAt,
+  period: { from, to }, previousPeriod: { from, to },
+  siteId: string | null, channel: "all" | "counter" | "online",
+  kpis: {
+    revenue: { current, previous },
+    orderCount: { current, previous },
+    averageOrderValue: { current: number | null, previous: number | null },
+    grossProfit: { current: null, previous: null, available: false, reason: "no_cost_data" }
+  },
+  channels: [{ channel: "counter" | "online", revenue, orderCount }],   // current period, site filter applied, channel filter ignored
+  inventory: {
+    turnover: number | null, daysOfInventory: number | null,
+    stockoutRate: number | null, stockedProductCount, outOfStockProductCount,
+    deadStock: { deadStockDays, productCount, quantity, value, items: [{ siteId, productId, productName, quantity, value }] },
+    stockValue: { total, missingPriceCount, bySite: [{ siteId, siteName, quantity, value }] },
+    expiry: { expired, within30, within60, within90 }   // each { productCount, quantity, value }
+  }
+}
+```
+
+A figure that cannot be answered is `null`, never 0 (reporting spec decision 4).
+
+Definitions (also BR-REPORT-008 to 011):
+
+- **Sale:** an online order or a counter prescription that has a `Paid` payment invoice. Revenue is the sum of those invoice amounts; a refunded invoice is not `Paid`, so it is not revenue. A sale belongs to the period of its document's `createdAt` (order or prescription), in the site of the document. Order count is the number of sales; average order value is revenue / order count, `null` when the count is 0.
+- **Join:** operations-query reads sales documents for `[previous.from, to)` from sales-service and `Paid` invoices created since `previous.from` from payment-service, and joins them on `orderId` / `prescriptionId`. An invoice is always created after its document, so a document created in the period has its invoice inside the invoice read.
+- **Turnover:** units dispensed in the period / average stock in units, where average stock = (opening + closing) / 2, closing is on hand now and opening is closing minus the net ledger change in the period. `null` when the average is 0. Days of inventory = period days / turnover.
+- **Dead stock:** on-hand stock of a product at a site whose last ledger movement is older than 90 days (or that has none). Value at today's published price.
+- **Stockout rate:** among the (site, product) pairs that have a balance row or a ledger entry, the share whose available quantity (on hand minus reserved) is 0 or less now. Point in time: the system keeps no daily stock snapshots, so this is not a rate over the period.
+- **Stock value:** on hand times today's published base-unit selling price (`GET /pricing/base-prices`), the same valuation as the Finance summary. A product with no published price adds nothing and is counted in `missingPriceCount`.
+- **Expiry buckets:** on-hand quantity of batches that expire already (`expired`), in 0 to 30 days (`within30`), 31 to 60 (`within60`) and 61 to 90 days (`within90`) from today.
+- **Channel** filters the sales KPIs only. Stock belongs to a site, not to a channel, so inventory health ignores it, and the page says so.
+
+#### `GET /api/procurement/replenishment-suggestions`
+
+Query: `siteId` (required, inside scope), `windowDays` (default 30, 7 to 180), `coverDays` (default 14, 1 to 90), `safetyDays` (default 7, 0 to 60), `defaultLeadTimeDays` (default 7, 1 to 90). Defaults are request parameters shown in the UI, not environment variables.
+
+Per product at the site:
+
+- `dailyVelocity` = base units with a `Dispense` ledger entry in the window / `windowDays`. Online orders and counter dispenses both write `Dispense`, so one ledger gives both channels.
+- `available` = on hand − reserved at the site; `inboundQuantity` = ordered − received of purchase orders at the site in `Draft`, `Approved` or part received (so a draft already created is not suggested again).
+- `minimumStock` = 10 base units, the low-stock threshold of [BR-REPORT-002](../business-rules.md), raised to `dailyVelocity × safetyDays` when that is larger.
+- `leadTimeDays` = median days from purchase order creation to its first goods receipt for the product's supplier over the last 12 months (`leadTimeSource: "history"`, with `sampleCount`); with no history, `defaultLeadTimeDays` (`"default"`).
+- `supplierId` = supplier of the product's latest goods receipt at the site, else at any site, else `null` (the row cannot be drafted until the user picks one).
+- `reorderPoint` = `dailyVelocity × leadTimeDays + minimumStock`; `targetStock` = `dailyVelocity × (leadTimeDays + coverDays) + minimumStock`.
+- A product is suggested when `available + inboundQuantity ≤ reorderPoint` and the product moved in the window or sits below `minimumStock`. `suggestedQuantity` = `ceil(targetStock − available − inboundQuantity)`, at least 1.
+
+Answer: `{ siteId, params, generatedAt, suggestions: [{ productId, supplierId, dailyVelocity, dispensedQuantity, onHand, reserved, available, inboundQuantity, minimumStock, leadTimeDays, leadTimeSource, sampleCount, reorderPoint, targetStock, suggestedQuantity, daysOfCover }] }`. Product and supplier names are resolved by the page from the catalog.
+
+#### `POST /api/procurement/replenishment-suggestions/draft-orders`
+
+Body: `{ siteId, orders: [{ supplierId, lines: [{ productId, orderedQuantity: integer ≥ 1 }], notes? }] }`; one entry per supplier (a repeated supplier is 400). The route reuses the purchase order creation of the procurement flow (`ProcurementRepository.createPurchaseOrder`, the same catalog reference checks), in one transaction, so every order is created or none. The orders are `Draft`; the existing approve and cancel actions (approver is never the creator) are untouched. Answer 201 `{ purchaseOrders: [...] }`. The audit trail records the creation as it does for the existing route.
+
+#### Action plans
+
+`action_plans` in `inventory-service` (see Data model). `GET /api/inventory/action-plans` query: `ownerId`, `status` (`open`, `in_progress`, `done`), `sourceType`, `siteId`, `q`, `limit`, `cursor`; a keyset page newest first like the other lists. A Pharmacy Manager or Platform Admin sees every plan in their sites (plans with no site are visible to Platform Admin only); any other employee sees only plans they own. `POST` body: `{ sourceType, sourceRef, title, detail?, siteId?, productId?, ownerId, dueDate }`. `PATCH` body: any of `{ status, ownerId, dueDate, title, detail }`; the owner may change `status` only; a manager changes anything. Moving to `done` sets `completedAt`; moving back clears it. The owner must be an active employee whose sites include the plan's site (checked through identity-service); an unknown owner is 422 `owner_not_found`.
+
+`sourceType`: `replenishment`, `expiry`, `dead_stock`, `price_warning`. `sourceRef` is a stable text key of the origin (for example `replenishment:<siteId>:<productId>`), unique among open or in progress plans of the same type so the same alert does not get two live plans (409 `plan_exists`).
+
+#### `GET /api/auth/staff-directory`
+
+Read only. Platform Admin gets every active employee; a Pharmacy Manager gets the active employees who share at least one site with them. Fields: `id`, `displayName`, `roles`, `siteIds`; never email. Other callers get 403.
+
+### Data model
+
+`inventory-service`, migration `0013_action_plans.sql`:
+
+`action_plans(id uuid pk, source_type varchar(30), source_ref varchar(200), title varchar(300), detail text, site_id uuid null, product_id uuid null, owner_id uuid, due_date date, status varchar(20) default 'open', created_by uuid, created_at, updated_at, completed_at null)`; indexes `(created_at desc, id desc)`, `(owner_id, status)`, and a partial unique index on `(source_type, source_ref)` where `status <> 'done'`.
+
+No other table changes.
+
+### Events
+
+None. Plans are not published; operations-query keeps reading its own projections and the HTTP reads it already uses.
+
+### Security and CSRF
+
+- Every browser route re-checks its role in the service (ADR 0017) and has a rule in `deploy/aws/lambda/policy.mjs`. The new site-scoped prefixes are added to the site scope lists of the edge and of each service's `trusted-request.ts`.
+- Mutations (`POST`, `PATCH`) are browser mutations, so they need the CSRF token like every other write.
+- Internal routes accept only the service secret and refuse any caller that carries an employee identity.
+- The staff directory returns names and roles only, to the two roles that assign owners.
+- Client input is never authoritative: the suggestion quantities shown are server computed, and the draft route recomputes nothing but validates every reference and that each line is a positive integer; stock, price and identity are not taken from the client.
+
+### Observability
+
+The new routes inherit the services' request tracing and metrics. No new metric.
+
+## Alternatives considered
+
+- **Project the sales figures from events.** The paid and order events carry neither the site nor the channel, so this needs new event fields and a backfill. Rejected for this change; revisit with design 0001.
+- **Add `site_id` to payment invoices.** A cross-service schema and write-path change for a read feature. Rejected.
+- **Put action plans in operations-query.** It owns read models only (ADR 0003). Rejected; inventory already owns replenishment, expiry and quality.
+- **Estimate gross profit from a margin percentage.** That is a guessed value, which BR-FIN-002 and BR-FIN-003 forbid. Rejected.
+
+## Rollout and migration
+
+1. Deploy `inventory-service` (migration `0013`), `sales-service`, `payment-service`, `identity-service`; the new routes are additive.
+2. Deploy `operations-query-service` (it calls the three internal reads), then the edge policy, then `staff-web`.
+3. Run `pnpm run db:migrate`. Rollback: drop `action_plans`; no other data changes.
+
+## Testing
+
+Unit tests for the pure computations (velocity, lead time, reorder quantity, turnover, buckets, join), route tests for role, scope and validation of every new route, and a browser pass over each screen at 1920x1080.
+
+## Open questions
+
+- **Gross profit.** The catalog and the stock keep no purchase cost, so gross profit cannot be computed without guessing. The Analytics page shows "—" with the reason. Owner decision: add a purchase cost to goods receipt lines and batches (a write-path change), or import a cost per product.
+- **Minimum stock and lead time.** There is no per-product minimum stock or supplier lead time field. This design uses the BR-REPORT-002 threshold, a safety-days parameter and the observed lead time of receipts. Owner decision: store a minimum stock per product and site, and a lead time per supplier.
+- **Product to supplier.** The catalog has no preferred supplier per product; the latest goods receipt supplier is used. Owner decision: a preferred supplier per product.
+
+## Related ADRs
+
+- [0003](../adr/0003-transactional-outbox-and-integration-events.md), [0017](../adr/0017-roles-checked-at-the-edge-and-in-each-service.md).

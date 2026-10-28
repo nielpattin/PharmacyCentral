@@ -50,6 +50,9 @@ const sessionCookieName = "pharmacy_session";
 const csrfCookieName = "pharmacy_csrf";
 /** The counter roles that may search the customer accounts a prescription can be linked to. */
 const customerLookupRoles = ["Pharmacist", "Platform Admin"];
+/** The roles that assign plan owners: Platform Admin reads every active employee, Pharmacy Manager those at their sites. */
+const staffDirectoryRoles = ["Pharmacy Manager", "Platform Admin"];
+const platformAdminRole = "Platform Admin";
 
 /**
  * Records a staff member acting on their own account: signing in or out. Shoppers are left out, because the audit log
@@ -313,6 +316,43 @@ export const createAccountRouter = (
     } catch (error) {
       writeServiceError(response, error, 400);
     }
+  });
+
+  /**
+   * The owner picker's directory. Platform Admin reads every active employee; a Pharmacy Manager reads the active
+   * employees sharing one of the manager's sites. Only the name, roles and sites leave this route, never an email.
+   */
+  router.get("/staff-directory", async (request, response) => {
+    const token = getSessionToken(request);
+    const current = token ? await service.currentSession(token) : undefined;
+    if (!current) {
+      response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
+      return;
+    }
+    if (!current.account.roles.some((role) => staffDirectoryRoles.includes(role))) {
+      response.status(403).json({
+        title: "Pharmacy Manager role required",
+        status: 403,
+        code: "forbidden",
+        detail: "Chỉ Quản lý nhà thuốc hoặc Quản trị nền tảng mới được xem danh sách nhân viên.",
+      });
+      return;
+    }
+    if (current.account.mustChangePassword) {
+      writeServiceError(response, accountErrors.passwordChangeRequired(), 403);
+      return;
+    }
+
+    const sharingSiteIds = current.account.roles.includes(platformAdminRole) ? undefined : current.account.siteIds;
+    const employees = await service.listActiveEmployees(sharingSiteIds);
+    response.json({
+      employees: employees.map((employee) => ({
+        id: employee.id,
+        displayName: employee.displayName,
+        roles: employee.roles,
+        siteIds: employee.siteIds,
+      })),
+    });
   });
 
   router.post("/request-password-reset", async (request, response) => {
@@ -599,12 +639,12 @@ export const createCustomerRouter = (service: AccountService): Router => {
 };
 
 /**
- * Service-to-service customer resolution, mounted outside `publicPaths` so the trusted middleware has already
- * proven the internal service secret. The handler then insists on the system actor the middleware stamps for a
- * service call, so an employee's signed context cannot borrow this answer. No gateway routes this path. identity
+ * Service-to-service resolution of customers and employees, mounted outside `publicPaths` so the trusted middleware
+ * has already proven the internal service secret. The handler then insists on the system actor the middleware stamps
+ * for a service call, so an employee's signed context cannot borrow this answer. No gateway routes this path. identity
  * does not check roles or sites: the calling service does, before it asks.
  */
-export const createInternalCustomerRouter = (service: AccountService): Router => {
+export const createInternalRouter = (service: AccountService): Router => {
   const router = Router();
 
   router.use((request, response, next) => {
@@ -661,6 +701,38 @@ export const createInternalCustomerRouter = (service: AccountService): Router =>
     }
 
     response.json(customer);
+  });
+
+  // The owner check of an action plan reads an employee's name, roles and sites. A customer or a deactivated account
+  // answers 404, so a caller cannot use this route to tell a shopper's id from an unknown one.
+  router.get("/employees/:id", async (request, response) => {
+    const parsed = userIdSchema.safeParse(request.params);
+    if (!parsed.success) {
+      response.status(400).json({
+        title: "Invalid employee id",
+        status: 400,
+        code: "invalid_request",
+        detail: "Mã nhân viên không hợp lệ.",
+      });
+      return;
+    }
+    const employee = await service.findActiveEmployee(parsed.data.id);
+    if (!employee) {
+      response.status(404).json({
+        title: "Employee account not found",
+        status: 404,
+        detail: "Không tìm thấy tài khoản nhân viên.",
+      });
+      return;
+    }
+
+    response.json({
+      id: employee.id,
+      displayName: employee.displayName,
+      roles: employee.roles,
+      siteIds: employee.siteIds,
+      isActive: true,
+    });
   });
 
   return router;

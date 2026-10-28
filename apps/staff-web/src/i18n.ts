@@ -1,5 +1,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 
+import { actionPlansLiterals } from "./i18n/action-plans.ts";
+import { analyticsLiterals } from "./i18n/analytics.ts";
 import { shellLiterals } from "./i18n/shell.ts";
 import { catalogLiterals } from "./i18n/catalog.ts";
 import { inventoryLiterals } from "./i18n/inventory.ts";
@@ -2542,6 +2544,8 @@ export function translate(language: Language, key: string, params?: TranslationP
 
 const literalTranslations: Record<string, string> = {
   ...shellLiterals,
+  ...analyticsLiterals,
+  ...actionPlansLiterals,
   ...catalogLiterals,
   ...inventoryLiterals,
   ...procurementLiterals,

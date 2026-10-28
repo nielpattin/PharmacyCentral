@@ -48,6 +48,114 @@ const closeServer = async (server: Server): Promise<void> => {
   await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 };
 
+describe("inventory stock health route", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) await closeServer(server);
+    server = undefined;
+  });
+
+  const period = "from=2026-10-01T00:00:00Z&to=2026-10-28T00:00:00Z";
+  const row = {
+    siteId: ids.sourceSite,
+    productId: ids.productA,
+    onHand: 133,
+    reserved: 3,
+    dispensed: 7,
+    netChange: 3,
+    lastMovementAt: "2026-10-28T00:00:00.000Z",
+    expired: 1,
+    expiring30: 10,
+    expiring60: 10,
+    expiring90: 48,
+  };
+
+  it("refuses every caller that is not the system actor, whatever identity it claims", async () => {
+    const stockHealth = vi.fn().mockResolvedValue([]);
+    const repository = { stockHealth } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const withoutActor = await fetch(`${testServer.url}/internal/analytics/stock-health?${period}`);
+    const employee = await fetch(`${testServer.url}/internal/analytics/stock-health?${period}`, {
+      headers: { "x-actor-type": "employee", "x-actor-roles": "Platform Admin" },
+    });
+    const customer = await fetch(`${testServer.url}/internal/analytics/stock-health?${period}`, {
+      headers: { "x-actor-type": "customer" },
+    });
+
+    expect(withoutActor.status).toBe(403);
+    expect(employee.status).toBe(403);
+    expect(customer.status).toBe(403);
+    expect(stockHealth).not.toHaveBeenCalled();
+  });
+
+  it("refuses a missing, non-date-time or inverted period with 400", async () => {
+    const stockHealth = vi.fn().mockResolvedValue([]);
+    const repository = { stockHealth } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+    const headers = { "x-actor-type": "system" };
+
+    const missingTo = await fetch(`${testServer.url}/internal/analytics/stock-health?from=2026-10-01T00:00:00Z`, {
+      headers,
+    });
+    const dateOnly = await fetch(`${testServer.url}/internal/analytics/stock-health?from=2026-10-01&to=2026-10-28`, {
+      headers,
+    });
+    const inverted = await fetch(
+      `${testServer.url}/internal/analytics/stock-health?from=2026-10-28T00:00:00Z&to=2026-10-01T00:00:00Z`,
+      { headers },
+    );
+
+    expect(missingTo.status).toBe(400);
+    expect(dateOnly.status).toBe(400);
+    expect(inverted.status).toBe(400);
+    expect(stockHealth).not.toHaveBeenCalled();
+  });
+
+  it("answers the period, the as-of instant, the dead stock window and the rows, scoped by the forwarded sites", async () => {
+    const stockHealth = vi.fn().mockResolvedValue([row]);
+    const repository = { stockHealth } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/internal/analytics/stock-health?${period}`, {
+      headers: { "x-actor-type": "system", "x-actor-site-ids": `${ids.sourceSite},${ids.destinationSite}` },
+    });
+    const body = (await response.json()) as { asOf: string };
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      from: "2026-10-01T00:00:00.000Z",
+      to: "2026-10-28T00:00:00.000Z",
+      asOf: expect.any(String),
+      deadStockDays: 90,
+      rows: [row],
+    });
+    expect(new Date(body.asOf).toISOString()).toBe(body.asOf);
+    const [input] = stockHealth.mock.calls[0] ?? [];
+    expect(input.from).toEqual(new Date("2026-10-01T00:00:00Z"));
+    expect(input.to).toEqual(new Date("2026-10-28T00:00:00Z"));
+    expect(input.siteIds).toEqual([ids.sourceSite, ids.destinationSite]);
+    expect(input.asOf).toEqual(new Date(body.asOf));
+  });
+
+  it("reads every site when the system actor forwards no site scope", async () => {
+    const stockHealth = vi.fn().mockResolvedValue([]);
+    const repository = { stockHealth } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    await fetch(`${testServer.url}/internal/analytics/stock-health?${period}`, {
+      headers: { "x-actor-type": "system" },
+    });
+
+    expect(stockHealth.mock.calls[0]?.[0]?.siteIds).toBeUndefined();
+  });
+});
+
 describe("inventory API", () => {
   let server: Server | undefined;
 

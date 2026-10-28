@@ -65,6 +65,7 @@ export const catalogWritePrefixes = [
 export const siteScopedListPrefixes = [
   "/api/procurement/purchase-orders",
   "/api/procurement/goods-receipts",
+  "/api/procurement/replenishment-suggestions",
   "/api/inventory/balances",
   "/api/inventory/batches",
   "/api/inventory/movements",
@@ -72,8 +73,10 @@ export const siteScopedListPrefixes = [
   "/api/inventory/stocktakes",
   "/api/inventory/returns",
   "/api/inventory/replenishment",
+  "/api/inventory/action-plans",
   "/api/inventory/adjustments",
   "/api/dashboard/summary",
+  "/api/dashboard/analytics",
   "/api/operations/dashboard",
   "/api/finance/summary",
   "/api/operations/finance",
@@ -127,6 +130,8 @@ export const employeeRoleRules = [
   { methods: "*", path: "/api/finance", match: "prefix", roles: [PHARMACY_MANAGER] },
   { methods: "*", path: "/api/operations/finance", match: "prefix", roles: [PHARMACY_MANAGER] },
   { methods: "*", path: "/api/reports", match: "prefix", roles: [PHARMACY_MANAGER] },
+  // Period analytics (design 0007): a Pharmacy Manager reads it; Platform Admin passes every rule.
+  { methods: "*", path: "/api/dashboard/analytics", match: "prefix", roles: [PHARMACY_MANAGER] },
   { methods: "*", path: "/api/dashboard", match: "prefix", roles: [PHARMACY_MANAGER, WAREHOUSE_STAFF] },
   { methods: "*", path: "/api/operations/dashboard", match: "prefix", roles: [PHARMACY_MANAGER, WAREHOUSE_STAFF] },
 
@@ -155,6 +160,21 @@ export const employeeRoleRules = [
   { methods: ["POST"], path: "/api/payments/*/refund", match: "exact", roles: [PHARMACIST, PHARMACY_MANAGER] },
   { methods: "READ", path: "/api/payments", match: "prefix", roles: [PHARMACIST, PHARMACY_MANAGER] },
   { methods: "WRITE", path: "/api/payments", match: "prefix", roles: [PHARMACIST] },
+
+  // Replenishment suggestions and the draft orders made from them (design 0007): a Pharmacy Manager reads and drafts;
+  // Platform Admin passes. These rules come before the procurement rules so that no other rule can answer for them.
+  {
+    methods: "READ",
+    path: "/api/procurement/replenishment-suggestions",
+    match: "prefix",
+    roles: [PHARMACY_MANAGER],
+  },
+  {
+    methods: "WRITE",
+    path: "/api/procurement/replenishment-suggestions",
+    match: "prefix",
+    roles: [PHARMACY_MANAGER],
+  },
 
   // Procurement and receiving.
   {
@@ -191,6 +211,21 @@ export const employeeRoleRules = [
     roles: [PHARMACIST, PHARMACY_MANAGER, WAREHOUSE_STAFF],
   },
   { methods: "WRITE", path: "/api/inventory/replenishment", match: "prefix", roles: [WAREHOUSE_STAFF] },
+  // Action plans (design 0007): a Pharmacy Manager creates one; the owner, a manager or Warehouse Staff reads and moves
+  // it. The owning service decides which plans a caller sees and whether an owner may change more than the status.
+  {
+    methods: "READ",
+    path: "/api/inventory/action-plans",
+    match: "prefix",
+    roles: [PHARMACIST, PHARMACY_MANAGER, WAREHOUSE_STAFF],
+  },
+  { methods: ["POST"], path: "/api/inventory/action-plans", match: "exact", roles: [PHARMACY_MANAGER] },
+  {
+    methods: ["PATCH"],
+    path: "/api/inventory/action-plans/*",
+    match: "exact",
+    roles: [PHARMACIST, PHARMACY_MANAGER, WAREHOUSE_STAFF],
+  },
   {
     methods: "READ",
     path: "/api/inventory/batches",

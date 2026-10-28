@@ -21,6 +21,7 @@ import {
 import { InventoryRepository, StockDispenseError } from "./inventory-repository.ts";
 import { invalidCursor, sendPage } from "./keyset-page.ts";
 import { readCommaList, readPageRequest, readSearchText, type PageOptions } from "./page-cursor.ts";
+import { DEAD_STOCK_DAYS } from "./stock-health.ts";
 import { InsufficientStockError } from "./stock/application/fefo-allocate.ts";
 
 const idParam = z.object({ id: z.string().uuid() });
@@ -102,6 +103,13 @@ const periodSchema = z.object({
   from: z.string().datetime({ offset: true }).optional(),
   to: z.string().datetime({ offset: true }).optional(),
 });
+/** The stock-health period: both ends are instants, `from` inclusive and `to` exclusive, and `from` comes first. */
+const stockHealthPeriodSchema = z
+  .object({
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true }),
+  })
+  .refine((period) => Date.parse(period.from) < Date.parse(period.to));
 
 /** Status lists answer 100 rows by default, newest first, and at most 500 per page. */
 const statusListPage: PageOptions = { kind: "timestamp", defaultLimit: 100, maxLimit: 500 };
@@ -729,6 +737,29 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
       return replenishment
         ? response.json(replenishment)
         : response.status(404).json({ title: "Replenishment request not found", status: 404 });
+    } catch (error) {
+      return next(error);
+    }
+  });
+  // Stock health is read by operations-query over the service secret for its analytics page; no browser reaches it.
+  router.get("/internal/analytics/stock-health", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    if (request.header("x-actor-type") !== "system")
+      return response.status(403).json({ title: "System actor required", status: 403, code: "forbidden" });
+    const period = stockHealthPeriodSchema.safeParse(request.query);
+    if (!period.success) return invalid(response);
+    const from = new Date(period.data.from);
+    const to = new Date(period.data.to);
+    const asOf = new Date();
+    try {
+      const rows = await repository.stockHealth({ from, to, siteIds: listSiteIds(request), asOf });
+      return response.json({
+        from: from.toISOString(),
+        to: to.toISOString(),
+        asOf: asOf.toISOString(),
+        deadStockDays: DEAD_STOCK_DAYS,
+        rows,
+      });
     } catch (error) {
       return next(error);
     }

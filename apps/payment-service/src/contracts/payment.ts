@@ -61,9 +61,28 @@ export const paymentStatusResponseSchema = z.object({
   currency: z.string().length(3),
 });
 
+/** The `since` of `GET /internal/analytics/paid-invoices`: the invoices created at or after it. */
+export const paidInvoicesQuerySchema = z.object({
+  since: z.string().datetime({ offset: true }),
+});
+
+/** One `Paid` invoice as the period analytics reads it: exactly one of the two references is set. */
+export const paidInvoiceAnalyticsSchema = z.object({
+  orderId: z.string().uuid().nullable(),
+  prescriptionId: z.string().uuid().nullable(),
+  amount: z.number().nonnegative(),
+  createdAt: z.string().datetime({ offset: true }),
+});
+
+export const paidInvoicesAnalyticsResponseSchema = z.object({
+  invoices: z.array(paidInvoiceAnalyticsSchema),
+});
+
 export type PaymentChangedEvent = z.infer<typeof paymentChangedEventSchema>;
 export type InvoiceLine = z.infer<typeof invoiceLineSchema>;
 export type CreateInvoiceRequest = z.infer<typeof createInvoiceRequestSchema>;
 export type PaymentStatus = z.infer<typeof paymentStatusSchema>;
 export type PaymentStatusResponse = z.infer<typeof paymentStatusResponseSchema>;
 export type InvoiceListQuery = z.infer<typeof invoiceListQuerySchema>;
+export type PaidInvoiceAnalytics = z.infer<typeof paidInvoiceAnalyticsSchema>;
+export type PaidInvoicesAnalyticsResponse = z.infer<typeof paidInvoicesAnalyticsResponseSchema>;

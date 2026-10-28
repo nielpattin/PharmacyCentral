@@ -19,6 +19,10 @@ const matrix = [
   ["dashboard PM", PM, "GET", "/api/dashboard/summary", true],
   ["dashboard WS", WS, "GET", "/api/dashboard", true],
   ["dashboard PH refused", PH, "GET", "/api/dashboard", false],
+  ["analytics PM", PM, "GET", "/api/dashboard/analytics", true],
+  ["analytics PA", PA, "GET", "/api/dashboard/analytics", true],
+  ["analytics WS refused", WS, "GET", "/api/dashboard/analytics", false],
+  ["analytics PH refused", PH, "GET", "/api/dashboard/analytics", false],
   ["operations dashboard WS", WS, "GET", "/api/operations/dashboard", true],
   ["operations dashboard PH refused", PH, "GET", "/api/operations/dashboard", false],
   ["reports PM", PM, "GET", "/api/reports", true],
@@ -110,6 +114,14 @@ const matrix = [
   ["purchase orders action PM", PM, "POST", "/api/procurement/purchase-orders/33333333-3333-4333-8333-333333333333/action", true],
   ["goods receipts read WS", WS, "GET", "/api/procurement/goods-receipts", true],
   ["goods receipts read PM refused", PM, "GET", "/api/procurement/goods-receipts", false],
+  ["replenishment suggestions read PM", PM, "GET", "/api/procurement/replenishment-suggestions", true],
+  ["replenishment suggestions read PA", PA, "GET", "/api/procurement/replenishment-suggestions", true],
+  ["replenishment suggestions read PH refused", PH, "GET", "/api/procurement/replenishment-suggestions", false],
+  ["replenishment suggestions read WS refused", WS, "GET", "/api/procurement/replenishment-suggestions", false],
+  ["replenishment draft orders create PM", PM, "POST", "/api/procurement/replenishment-suggestions/draft-orders", true],
+  ["replenishment draft orders create PA", PA, "POST", "/api/procurement/replenishment-suggestions/draft-orders", true],
+  ["replenishment draft orders create PH refused", PH, "POST", "/api/procurement/replenishment-suggestions/draft-orders", false],
+  ["replenishment draft orders create WS refused", WS, "POST", "/api/procurement/replenishment-suggestions/draft-orders", false],
 
   // Stock
   ["opening balances import WS", WS, "POST", "/api/inventory/imports/opening-balances", true],
@@ -163,6 +175,17 @@ const matrix = [
   ["replenishment approve WS", WS, "POST", "/api/inventory/replenishment/33333333-3333-4333-8333-333333333333/approve", true],
   ["replenishment approve PH refused", PH, "POST", "/api/inventory/replenishment/33333333-3333-4333-8333-333333333333/approve", false],
   ["replenishment fulfil PH refused", PH, "POST", "/api/inventory/replenishment/33333333-3333-4333-8333-333333333333/fulfill", false],
+  // Action plans (design 0007): only a Pharmacy Manager creates; every staff role reads and moves one. The owner check
+  // of a move belongs to the service, so the edge admits each staff role on the path.
+  ["action plan create PM", PM, "POST", "/api/inventory/action-plans", true],
+  ["action plan create PA", PA, "POST", "/api/inventory/action-plans", true],
+  ["action plan create PH refused", PH, "POST", "/api/inventory/action-plans", false],
+  ["action plan create WS refused", WS, "POST", "/api/inventory/action-plans", false],
+  ["action plan read PH", PH, "GET", "/api/inventory/action-plans", true],
+  ["action plan read WS", WS, "GET", "/api/inventory/action-plans", true],
+  ["action plan move PH", PH, "PATCH", "/api/inventory/action-plans/33333333-3333-4333-8333-333333333333", true],
+  ["action plan move WS", WS, "PATCH", "/api/inventory/action-plans/33333333-3333-4333-8333-333333333333", true],
+  ["action plan move PM", PM, "PATCH", "/api/inventory/action-plans/33333333-3333-4333-8333-333333333333", true],
 ];
 
 describe("role matrix - each rule per role and method", () => {

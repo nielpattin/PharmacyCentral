@@ -88,10 +88,16 @@ model {
   pharmacyCentral.services.operationsService -> pharmacyCentral.services.catalogService "Storage locations, the site list of the reader scope" {
     technology "HTTP"
   }
-  pharmacyCentral.services.operationsService -> pharmacyCentral.services.inventoryService "Balances, transfers, stocktakes, receipts" {
+  pharmacyCentral.services.operationsService -> pharmacyCentral.services.inventoryService "Balances, transfers, stocktakes, receipts, the stock health of the period analytics" {
     technology "HTTP"
   }
-  pharmacyCentral.services.operationsService -> pharmacyCentral.services.salesService "Prescriptions, with the scope as x-actor-site-ids" {
+  pharmacyCentral.services.operationsService -> pharmacyCentral.services.salesService "Prescriptions and sales documents of the period analytics, with the scope as x-actor-site-ids" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.operationsService -> pharmacyCentral.services.paymentService "Paid invoices for the period analytics (GET /internal/analytics/paid-invoices)" {
+    technology "HTTP"
+  }
+  pharmacyCentral.services.inventoryService -> pharmacyCentral.services.identityService "GET /internal/employees/{id}, the owner of an action plan" {
     technology "HTTP"
   }
   pharmacyCentral.services.chatbotService -> pharmacyCentral.services.catalogService "search_products, get_product_details" {

@@ -20,6 +20,9 @@ import { InventoryOutboxPublisher } from "./modules/outbox-publisher.ts";
 import { createProcurementRouter } from "./modules/procurement-routes.ts";
 import { ProcurementRepository } from "./modules/procurement-repository.ts";
 import { createInventoryDatabase } from "./shared/infrastructure/database.ts";
+import { ActionPlanRepository } from "./modules/action-plans/action-plan-repository.ts";
+import { createActionPlanRouter } from "./modules/action-plans/action-plan-routes.ts";
+import { IdentityEmployeeClient } from "./modules/action-plans/identity-employee-client.ts";
 
 const serviceName = "inventory-service";
 const logger = createLogger({ name: serviceName });
@@ -30,6 +33,10 @@ const port = Number.parseInt(portStr, 10);
 const catalogServiceUrl = process.env.CATALOG_SERVICE_URL;
 if (!catalogServiceUrl)
   throw new Error("Missing required environment variable: CATALOG_SERVICE_URL. Please set it in your .env file.");
+// Action plans check every owner against identity-service, so a missing URL stops the service here.
+const identityServiceUrl = process.env.IDENTITY_SERVICE_URL;
+if (!identityServiceUrl)
+  throw new Error("Missing required environment variable: IDENTITY_SERVICE_URL. Please set it in your .env file.");
 // Procurement calls the catalog with the shared internal service secret, so a missing one stops the service here.
 if (!process.env.INTERNAL_SERVICE_SECRET)
   throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
@@ -40,6 +47,8 @@ if (!rabbitmqUrl)
 const outboxPublisher = database ? new InventoryOutboxPublisher(database, logger, rabbitmqUrl) : undefined;
 outboxPublisher?.start();
 const repository = database ? new InventoryRepository(database) : undefined;
+const actionPlanRepository = database ? new ActionPlanRepository(database) : undefined;
+const employeeDirectory = new IdentityEmployeeClient(identityServiceUrl);
 // Expiry changes what a site can sell with no movement on the shelf, so it needs its own periodic recompute.
 const expiryAvailabilitySweeper = repository ? new ExpiryAvailabilitySweeper(repository, logger) : undefined;
 expiryAvailabilitySweeper?.start();
@@ -91,6 +100,7 @@ app.get("/health/ready", (_request, response) =>
 );
 app.use(createInventoryImportRouter(inventoryImportService));
 app.use(createInventoryRouter(repository));
+app.use(createActionPlanRouter(actionPlanRepository, { employees: employeeDirectory }));
 app.use(createProcurementRouter(procurementRepository, { catalogServiceUrl }));
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {

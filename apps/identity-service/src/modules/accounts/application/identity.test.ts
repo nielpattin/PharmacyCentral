@@ -871,3 +871,71 @@ describe("customer lookup", () => {
     await expect(service.findActiveCustomer(deactivated.id)).resolves.toBeUndefined();
   });
 });
+
+describe("staff directory", () => {
+  const siteA = "00000000-0000-4000-8000-0000000000e1";
+  const siteB = "00000000-0000-4000-8000-0000000000e2";
+
+  it("lists active employees by name, narrowed to those sharing a site, and never a customer or a deactivated account", async () => {
+    const harness = createHarness();
+    const manager = await addAccount(harness, {
+      displayName: "Quản lý",
+      roles: ["Pharmacy Manager"],
+      siteIds: [siteA],
+    });
+    const pharmacist = await addAccount(harness, {
+      displayName: "Dược sĩ",
+      roles: ["Pharmacist"],
+      siteIds: [siteA, siteB],
+    });
+    const warehouse = await addAccount(harness, {
+      displayName: "Kho hàng",
+      roles: ["Warehouse Staff"],
+      siteIds: [siteB],
+    });
+    await addAccount(harness, { displayName: "Nghỉ việc", siteIds: [siteA], isActive: false });
+    await addAccount(harness, { actorType: "customer", displayName: "Khách", roles: [], siteIds: [siteA] });
+
+    const everyone = await harness.service.listActiveEmployees();
+    expect(everyone.map((member) => member.id)).toEqual([pharmacist.id, warehouse.id, manager.id]);
+    expect((await harness.service.listActiveEmployees([siteA])).map((member) => member.id)).toEqual([
+      pharmacist.id,
+      manager.id,
+    ]);
+    expect((await harness.service.listActiveEmployees([siteB])).map((member) => member.id)).toEqual([
+      pharmacist.id,
+      warehouse.id,
+    ]);
+    await expect(harness.service.listActiveEmployees([])).resolves.toEqual([]);
+  });
+
+  it("answers only the name, roles and sites of an employee, never the contact details", async () => {
+    const harness = createHarness();
+    const employee = await addAccount(harness, {
+      displayName: "Dược sĩ",
+      phoneNumber: "0901234567",
+      roles: ["Pharmacist"],
+      siteIds: [siteA],
+    });
+
+    const [member] = await harness.service.listActiveEmployees();
+    expect(member).toEqual({ id: employee.id, displayName: "Dược sĩ", roles: ["Pharmacist"], siteIds: [siteA] });
+  });
+
+  it("finds one active employee by id and refuses a customer, a deactivated employee and an unknown id", async () => {
+    const harness = createHarness();
+    const employee = await addAccount(harness, { displayName: "Dược sĩ", roles: ["Pharmacist"], siteIds: [siteA] });
+    const deactivated = await addAccount(harness, { isActive: false });
+    const shopper = await addAccount(harness, { actorType: "customer", roles: [] });
+
+    await expect(harness.service.findActiveEmployee(employee.id)).resolves.toEqual({
+      id: employee.id,
+      displayName: "Dược sĩ",
+      roles: ["Pharmacist"],
+      siteIds: [siteA],
+    });
+    await expect(harness.service.findActiveEmployee(deactivated.id)).resolves.toBeUndefined();
+    await expect(harness.service.findActiveEmployee(shopper.id)).resolves.toBeUndefined();
+    await expect(harness.service.findActiveEmployee("00000000-0000-4000-8000-000000000009")).resolves.toBeUndefined();
+  });
+});

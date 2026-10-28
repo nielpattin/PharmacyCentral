@@ -61,6 +61,8 @@ Update the `Last reviewed` date whenever you confirm the spec against the runnin
 | [Shopping assistant (chat widget)](customer-shopping-assistant.md) | customer-web | Current |
 | [Shell: sign-in, navigation, roles](staff-shell-sign-in-and-navigation.md) | staff-web | Current |
 | [Dashboard, pharmacist overview, reporting](staff-dashboard-and-reporting.md) | staff-web | Current |
+| [Analytics (`/analytics`)](staff-analytics.md) | staff-web | Draft |
+| [Action plans (`/action-plans`)](staff-action-plans.md) | staff-web | Draft |
 | [Online orders (`/orders`)](staff-online-orders.md) | staff-web | Current |
 | [Prescriptions and counter (`/prescriptions`)](staff-prescriptions-and-counter.md) | staff-web | Current |
 | [Sites, storage locations, suppliers](staff-master-data.md) | staff-web | Current |

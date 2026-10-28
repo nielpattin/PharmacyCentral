@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, getTableColumns, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gte, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 
 import type { PaymentDatabase } from "../shared/infrastructure/database.ts";
 import type { PageCursor } from "./page-cursor.ts";
@@ -167,6 +167,24 @@ export class PaymentRepository {
       rows: visible.map(({ sortAt: _sortAt, ...invoice }) => invoice),
       next: hasMore && last ? { sortAt: last.sortAt, id: last.id } : undefined,
     };
+  }
+
+  /**
+   * The `Paid` invoices created at or after `since`, oldest first, for the period analytics. At most `limit` rows are
+   * read; the caller asks for one row past its cap so that it can tell a range over the cap from one exactly at it.
+   */
+  public async listPaidInvoicesSince(since: Date, limit: number) {
+    return this.database.db
+      .select({
+        orderId: paymentInvoices.orderId,
+        prescriptionId: paymentInvoices.prescriptionId,
+        amount: paymentInvoices.amount,
+        createdAt: paymentInvoices.createdAt,
+      })
+      .from(paymentInvoices)
+      .where(and(eq(paymentInvoices.status, "Paid"), gte(paymentInvoices.createdAt, since)))
+      .orderBy(asc(paymentInvoices.createdAt), asc(paymentInvoices.id))
+      .limit(limit);
   }
 
   public async markCashPaid(id: string, actorId?: string) {

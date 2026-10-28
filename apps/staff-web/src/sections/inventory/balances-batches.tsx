@@ -14,7 +14,10 @@ import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
 import { useCan } from "../../permissions/use-can.ts";
-import { formatDate, formatQuantity, text, type JsonRecord } from "../../staff-api.ts";
+import { formatDate, formatQuantity, numberValue, text, type JsonRecord } from "../../staff-api.ts";
+import { CreatePlanDrawer } from "../action-plans/create-plan-drawer.tsx";
+import { expiringBatchDraft, type ActionPlanDraft } from "../action-plans/drafts.ts";
+import { expiryState, isIsoDate, todayIsoDate } from "../action-plans/plan-state.ts";
 import { asRecord } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
 import { MOVEMENT_HISTORY_COLUMNS } from "./movements.tsx";
@@ -43,6 +46,9 @@ export const BalancesTab = (): React.JSX.Element => {
     [list.rows],
   );
   const labels = useInventoryLabels(balances.map((row) => text(row.productId, "")));
+  const planGate = useCan("actionPlan.create");
+  const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
+  const today = todayIsoDate();
 
   const columns: Column[] = [
     {
@@ -70,6 +76,41 @@ export const BalancesTab = (): React.JSX.Element => {
       render: (row) => formatQuantity(row.quantityReserved),
     },
     { key: "expiryDate", label: "Expiry", render: (row) => formatDate(row.expiryDate) },
+    {
+      key: "actions",
+      label: "Actions",
+      pinned: "right",
+      align: "right",
+      enableSorting: false,
+      render: (row) => {
+        const expiryDate = text(row.expiryDate, "").slice(0, 10);
+        const quantityOnHand = numberValue(row.quantityOnHand);
+        const expiring = isIsoDate(expiryDate) && expiryState(expiryDate, today) !== "ok";
+        if (!planGate.allowed || !expiring || quantityOnHand <= 0) return null;
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              setPlanDraft(
+                expiringBatchDraft({
+                  siteId: text(row.siteId, ""),
+                  batchId: text(row.id, ""),
+                  productId: text(row.productId, ""),
+                  productName: labels.product(text(row.productId, "")),
+                  batchNumber: text(row.batchNumber, ""),
+                  expiryDate,
+                  quantityOnHand,
+                  today,
+                }),
+              )
+            }
+          >
+            {translateText("Create plan")}
+          </Button>
+        );
+      },
+    },
   ];
 
   return (
@@ -86,6 +127,7 @@ export const BalancesTab = (): React.JSX.Element => {
         storageKey="staff:inventory:balances"
         exportCsv={{ filename: "inventory-balances.csv" }}
       />
+      {planDraft ? <CreatePlanDrawer draft={planDraft} onClose={() => setPlanDraft(undefined)} /> : null}
     </div>
   );
 };

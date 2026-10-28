@@ -58,6 +58,7 @@ export const DEFAULT_HEALTH_PREFIXES: readonly string[] = ["/health", "/api/heal
 export const DEFAULT_SITE_SCOPED_PREFIXES: readonly string[] = [
   "/procurement/purchase-orders",
   "/procurement/goods-receipts",
+  "/procurement/replenishment-suggestions",
   "/inventory/balances",
   "/inventory/batches",
   "/inventory/movements",
@@ -65,6 +66,7 @@ export const DEFAULT_SITE_SCOPED_PREFIXES: readonly string[] = [
   "/inventory/stocktakes",
   "/inventory/returns",
   "/inventory/replenishment",
+  "/inventory/action-plans",
   "/inventory/adjustments",
   "/dashboard/summary",
   "/operations/dashboard",
@@ -207,6 +209,8 @@ type RoleRule = Route & { roles: readonly string[] };
 const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/procurement/purchase-orders", roles: ["Pharmacy Manager", "Warehouse Staff"] },
   { methods: ["WRITE"], path: "/procurement/purchase-orders", roles: ["Pharmacy Manager"] },
+  // Replenishment suggestions and their draft orders (design 0007): a Pharmacy Manager; Platform Admin passes.
+  { methods: ["*"], path: "/procurement/replenishment-suggestions", roles: ["Pharmacy Manager"] },
   { methods: ["*"], path: "/procurement/goods-receipts", roles: ["Warehouse Staff"] },
   { methods: ["*"], path: "/inventory/imports/opening-balances", exact: true, roles: ["Warehouse Staff"] },
   { methods: ["READ"], path: "/inventory/replenishment", roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"] },
@@ -218,6 +222,16 @@ const ROLE_RULES: readonly RoleRule[] = [
     roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
   },
   { methods: ["WRITE"], path: "/inventory/replenishment", roles: ["Warehouse Staff"] },
+  // Action plans (design 0007): a Pharmacy Manager creates; the owner, a manager, or Warehouse Staff reads or moves
+  // it. Which plans a caller sees, and whether the owner may change anything but the status, is checked by the route.
+  { methods: ["READ"], path: "/inventory/action-plans", roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"] },
+  { methods: ["POST"], path: "/inventory/action-plans", exact: true, roles: ["Pharmacy Manager"] },
+  {
+    methods: ["PATCH"],
+    path: "/inventory/action-plans/*",
+    exact: true,
+    roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
+  },
   { methods: ["READ"], path: "/inventory/batches", roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"] },
   { methods: ["POST"], path: "/inventory/batches/*/quality", exact: true, roles: ["Pharmacist", "Pharmacy Manager"] },
   { methods: ["WRITE"], path: "/inventory/batches", roles: ["Warehouse Staff"] },

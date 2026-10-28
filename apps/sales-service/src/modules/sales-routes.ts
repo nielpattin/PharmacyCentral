@@ -11,9 +11,10 @@ import {
   dispensePrescriptionRequestSchema,
   mergeCartRequestSchema,
   orderTransitionSchema,
+  salesDocumentsQuerySchema,
 } from "../contracts/sales.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
-import { listSiteIds } from "../middleware/trusted-request.ts";
+import { actorSiteIds, listSiteIds } from "../middleware/trusted-request.ts";
 import { readCursorParam } from "../shared/page-cursor.ts";
 import { invalidCursor, pagedListQuery, sendPage } from "../shared/presentation/page-response.ts";
 import { sendDatabaseUnavailable as unavailable } from "../shared/presentation/database-unavailable.ts";
@@ -660,6 +661,27 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
       if (siteIds) filter.siteIds = siteIds;
       if (status) filter.status = status;
       return sendPage(response, await repository.listCounterTransactions(filter));
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Read by operations-query for the period analytics. trusted-request admits this path only with the service secret,
+  // so the scope is the header the caller forwards: no `siteId` query narrows it, and no header leaves every site.
+  router.get("/internal/analytics/sales-documents", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    const period = salesDocumentsQuerySchema.safeParse({
+      from: queryString(request.query.from),
+      to: queryString(request.query.to),
+    });
+    if (!period.success) return invalid(response);
+    try {
+      const documents = await repository.listSalesDocuments({
+        from: new Date(period.data.from),
+        to: new Date(period.data.to),
+        siteIds: actorSiteIds(request),
+      });
+      return response.json({ documents });
     } catch (error) {
       return next(error);
     }

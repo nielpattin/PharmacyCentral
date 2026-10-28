@@ -9,6 +9,7 @@ import {
   ClipboardList,
   ChevronDown,
   FileText,
+  ListChecks,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -25,6 +26,7 @@ import {
   ShoppingBag,
   Sparkles,
   Tags,
+  TrendingUp,
   Upload,
   X,
 } from "lucide-react";
@@ -51,6 +53,8 @@ import { StaffNotFoundPage } from "./pages/NotFoundPage.tsx";
 import { toggleLanguage, translateText, useLanguage } from "./i18n.ts";
 import { datasets } from "./import-datasets.ts";
 import { AiIntegrationsSection } from "./sections/ai-integrations-section.tsx";
+import { ActionPlansSection } from "./sections/action-plans-section.tsx";
+import { AnalyticsSection } from "./sections/analytics-section.tsx";
 import { CatalogSection } from "./sections/catalog-section.tsx";
 import { DashboardSection } from "./sections/dashboard-section.tsx";
 import { FinanceSection } from "./sections/finance-section.tsx";
@@ -78,6 +82,7 @@ type StaffAccount = {
   id: string;
   actorType: "employee" | "customer";
   email?: string;
+  displayName: string;
   roles: string[];
   siteIds: string[];
   passwordChangeRequired: boolean;
@@ -114,6 +119,8 @@ const navGroups: NavGroup[] = [
     label: "Operations",
     items: [
       { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} strokeWidth={2} /> },
+      { key: "analytics", label: "Analytics", icon: <TrendingUp size={16} strokeWidth={2} /> },
+      { key: "actionPlans", label: "Action plans", icon: <ListChecks size={16} strokeWidth={2} /> },
       { key: "pharmacistOverview", label: "Pharmacist overview", icon: <FileText size={16} strokeWidth={2} /> },
       { key: "prescriptions", label: "Prescriptions", icon: <FileText size={16} strokeWidth={2} /> },
       { key: "orders", label: "Online orders", icon: <ShoppingBag size={16} strokeWidth={2} /> },
@@ -257,6 +264,7 @@ const StaffApp = (): React.JSX.Element => {
         setSessionSnapshot({
           authenticated: true,
           userId: current.id,
+          displayName: current.displayName,
           roles: current.roles,
           siteIds: current.siteIds,
           passwordChangeRequired: current.passwordChangeRequired,
@@ -283,6 +291,7 @@ const StaffApp = (): React.JSX.Element => {
       setSessionSnapshot({
         authenticated: true,
         userId: account.id,
+        displayName: account.displayName,
         roles: account.roles,
         siteIds: account.siteIds,
         passwordChangeRequired: account.passwordChangeRequired,
@@ -437,6 +446,10 @@ const StaffApp = (): React.JSX.Element => {
         return <SystemSection key={activeSection} />;
       case "dashboard":
         return <DashboardSection key={activeSection} />;
+      case "analytics":
+        return <AnalyticsSection key={activeSection} />;
+      case "actionPlans":
+        return <ActionPlansSection key={activeSection} />;
     }
   };
 

@@ -118,4 +118,12 @@ describe("trusted request role restatement", () => {
     expect(refused.status).toBe(403);
     expect((await callAs(["Platform Admin"], "/audit/logs")).status).toBe(200);
   });
+
+  it("admits a Pharmacy Manager and Platform Admin to the analytics, and refuses Warehouse Staff", async () => {
+    expect((await callAs(["Pharmacy Manager"], "/dashboard/analytics")).status).toBe(200);
+    expect((await callAs(["Platform Admin"], "/dashboard/analytics")).status).toBe(200);
+    const refused = await callAs(["Warehouse Staff"], "/dashboard/analytics");
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+  });
 });

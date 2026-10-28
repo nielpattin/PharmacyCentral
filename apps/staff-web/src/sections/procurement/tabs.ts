@@ -1,6 +1,6 @@
 import type { StaffAction } from "../../permissions/staff-permissions.ts";
 
-export const PROCUREMENT_TABS = ["Purchase orders", "Goods receipts"] as const;
+export const PROCUREMENT_TABS = ["Purchase orders", "Goods receipts", "Reorder suggestions"] as const;
 
 export type ProcurementTab = (typeof PROCUREMENT_TABS)[number];
 
@@ -12,10 +12,11 @@ export const toProcurementTab = (value: string, fallback: ProcurementTab): Procu
 export const PROCUREMENT_TAB_ACTIONS: Record<ProcurementTab, StaffAction | undefined> = {
   "Purchase orders": undefined,
   "Goods receipts": "goodsReceipt.view",
+  "Reorder suggestions": "replenishment.suggestions.view",
 };
 
-/** The action behind each tab's create button, and the label it carries. */
-export const PROCUREMENT_CREATE: Record<ProcurementTab, { action: StaffAction; label: string }> = {
+/** The action behind each tab's header create button, and the label it carries. A tab without an entry has no header button. */
+export const PROCUREMENT_CREATE: Partial<Record<ProcurementTab, { action: StaffAction; label: string }>> = {
   "Purchase orders": { action: "purchaseOrder.create", label: "Create order" },
   "Goods receipts": { action: "goodsReceipt.create", label: "Receive goods" },
 };

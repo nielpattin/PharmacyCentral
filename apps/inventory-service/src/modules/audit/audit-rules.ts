@@ -29,10 +29,27 @@ export const INVENTORY_AUDIT_RULES: readonly AuditRule[] = [
   post("/inventory/returns", "return", "inventory.return.recorded"),
   post("/inventory/replenishment", "replenishment", "inventory.replenishment.requested"),
   post("/inventory/replenishment/:id/:action", "replenishment", { prefix: "inventory.replenishment", param: "action" }),
+  // An action plan keeps its origin and its new status; the title, note, owner and due date stay out of the log.
+  post("/inventory/action-plans", "action-plan", "inventory.action-plan.created", ["sourceType"]),
+  {
+    method: "PATCH",
+    route: "/inventory/action-plans/:id",
+    entityType: "action-plan",
+    action: "inventory.action-plan.updated",
+    details: ["status"],
+  },
   post("/procurement/purchase-orders", "purchase-order", "procurement.purchase-order.created"),
   post("/procurement/purchase-orders/:id/action", "purchase-order", {
     prefix: "procurement.purchase-order",
     body: "action",
   }),
   post("/procurement/goods-receipts", "goods-receipt", "procurement.goods-receipt.recorded"),
+  // A batch of Draft orders is audited order by order, as the single route audits each order it creates.
+  {
+    method: "POST",
+    route: "/procurement/replenishment-suggestions/draft-orders",
+    entityType: "purchase-order",
+    action: "procurement.purchase-order.created",
+    collection: "purchaseOrders",
+  },
 ];
