@@ -255,49 +255,46 @@ services:
     ports:
       - "${GRAFANA_PORT}:3000"
 
-  seaweedfs:
-    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+  # Floci is the local AWS emulator (S3 for product media, ECR for image push tests). The Docker socket lets it start
+  # the backing ECR registry container; its web console sidecar is off.
+  floci:
+    image: floci/floci:latest
     restart: unless-stopped
     environment:
-      SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY}
-      SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY}
-      SEAWEEDFS_MEDIA_BUCKET: ${SEAWEEDFS_MEDIA_BUCKET}
+      FLOCI_HOSTNAME: floci
+      FLOCI_DEFAULT_REGION: ${AWS_REGION}
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_SERVICES_UI_ENABLED: "false"
+      # Docker 29 defaults to the containerd image store, which reaches only localhost over plain HTTP.
+      FLOCI_SERVICES_ECR_URI_STYLE: path
+    volumes:
+      - pharmacy-central-floci-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "${FLOCI_PORT}:4566"
+
+  floci-init:
+    image: amazon/aws-cli:2.39.0@sha256:6014c77975a4ae237395924cc821333f20bf87c91964a45dd4ed5f3b13b424f5
+    depends_on:
+      floci:
+        condition: service_healthy
+    environment:
+      AWS_ENDPOINT_URL_S3: http://floci:4566
+      AWS_REGION: ${AWS_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      MEDIA_BUCKET: ${MEDIA_BUCKET}
     # Writes need the key pair; anonymous visitors may only read the media bucket (public product images).
     entrypoint:
       - /bin/sh
       - -ec
       - |
-        cat > /tmp/s3.json <<EOF
-        {"identities":[{"name":"media-admin","credentials":[{"accessKey":"$$SEAWEEDFS_ACCESS_KEY","secretKey":"$$SEAWEEDFS_SECRET_KEY"}],"actions":["Admin","Read","Write","List","Tagging"]},{"name":"anonymous","actions":["Read:$$SEAWEEDFS_MEDIA_BUCKET"]}]}
-        EOF
-        exec weed server -dir=/data -master.volumeSizeLimitMB=512 -volume.max=0 -s3 -s3.port=9000 -s3.config=/tmp/s3.json
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/healthz >/dev/null"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-    volumes:
-      - pharmacy-central-seaweedfs-data:/data
-    ports:
-      - "${SEAWEEDFS_S3_PORT}:9000"
-
-  seaweedfs-init:
-    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
-    depends_on:
-      seaweedfs:
-        condition: service_healthy
-    environment:
-      SEAWEEDFS_MEDIA_BUCKET: ${SEAWEEDFS_MEDIA_BUCKET}
-    entrypoint:
-      - /bin/sh
-      - -ec
-      - |
-        if echo s3.bucket.list | weed shell -master=seaweedfs:9333 | grep -q "^[[:space:]]*$$SEAWEEDFS_MEDIA_BUCKET[[:space:]]"; then
-          echo "bucket $$SEAWEEDFS_MEDIA_BUCKET already exists"
+        if aws s3api head-bucket --bucket "$$MEDIA_BUCKET" 2>/dev/null; then
+          echo "bucket $$MEDIA_BUCKET already exists"
         else
-          echo "s3.bucket.create -name $$SEAWEEDFS_MEDIA_BUCKET" | weed shell -master=seaweedfs:9333
+          aws s3api create-bucket --bucket "$$MEDIA_BUCKET"
         fi
+        aws s3api put-bucket-policy --bucket "$$MEDIA_BUCKET" --policy "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::$$MEDIA_BUCKET/*\"}]}"
     restart: "no"
 
   gateway:
@@ -397,17 +394,18 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_healthy
-      seaweedfs-init:
+      floci-init:
         condition: service_completed_successfully
     environment:
       <<: *backend-environment
       PORT: 3002
       DATABASE_URL: postgres://catalog_service:${CATALOG_DB_PASSWORD}@postgres:5432/catalog_service
-      SEAWEEDFS_ENDPOINT: http://seaweedfs:9000
-      SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY}
-      SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY}
-      SEAWEEDFS_MEDIA_BUCKET: ${SEAWEEDFS_MEDIA_BUCKET}
-      SEAWEEDFS_PUBLIC_MEDIA_URL: ${SEAWEEDFS_PUBLIC_MEDIA_URL}
+      AWS_ENDPOINT_URL_S3: http://floci:4566
+      AWS_REGION: ${AWS_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      MEDIA_BUCKET: ${MEDIA_BUCKET}
+      PUBLIC_MEDIA_URL: ${PUBLIC_MEDIA_URL}
       TYPESENSE_URL: http://typesense:8108
       TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY}
@@ -672,6 +670,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       LOAD_TARGET_URL: ${LOAD_TARGET_URL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       DEMO_ACCOUNT_PASSWORD: ${DEMO_ACCOUNT_PASSWORD}
       SEPAY_WEBHOOK_SECRET: ${SEPAY_WEBHOOK_SECRET}
       K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
@@ -688,7 +687,7 @@ volumes:
   pharmacy-central-redis-data:
   pharmacy-central-typesense-data:
   pharmacy-central-embedder-data:
-  pharmacy-central-seaweedfs-data:
+  pharmacy-central-floci-data:
   pharmacy-central-tempo-data:
   pharmacy-central-prometheus-data:
   pharmacy-central-loki-data:

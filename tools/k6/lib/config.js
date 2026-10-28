@@ -12,9 +12,9 @@ export function targetUrl() {
   return required("LOAD_TARGET_URL").replace(/\/+$/, "");
 }
 
-/** Password shared by the demo accounts. */
-export function demoPassword() {
-  return required("DEMO_ACCOUNT_PASSWORD");
+/** Password of an account: the default admin has its own (default seed), every other account shares the demo one. */
+export function passwordOf(email) {
+  return required(email === accounts.admin ? "ADMIN_PASSWORD" : "DEMO_ACCOUNT_PASSWORD");
 }
 
 /** HMAC secret that signs SePay webhook bodies. */
@@ -22,7 +22,7 @@ export function sepayWebhookSecret() {
   return required("SEPAY_WEBHOOK_SECRET");
 }
 
-/** Demo accounts seeded by identity-service. */
+/** The default admin and the demo accounts, seeded by identity-service. */
 export const accounts = Object.freeze({
   customer: "khachhang@pharmacycentral.vn",
   admin: "admin@pharmacycentral.vn",

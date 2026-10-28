@@ -8,12 +8,25 @@ Infra always runs on Docker Compose; the apps run either on the host or in conta
 pnpm install --frozen-lockfile
 cp .env.example .env   # then fill in secrets
 pnpm run infra:up
-docker compose ps   # postgres, rabbitmq, redis, mailpit, otel-collector, seaweedfs, gateway-dev healthy
+docker compose ps   # postgres, rabbitmq, redis, mailpit, otel-collector, floci, gateway-dev healthy (floci-init exits 0)
 ```
 
-SeaweedFS is local product-image object storage. `seaweedfs-init` creates the `product-media` bucket, and the S3 gateway allows anonymous reads on that bucket only. The S3 API is at `http://localhost:9000`; set the port and credentials (`SEAWEEDFS_*`) in `.env` before starting Compose. Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies, `/api/prescriptions/intake*` allows 10 MB, and the other groups keep Nginx's 1 MB default. `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; `sales-service` accepts prescription photos up to 8 MB; other JSON routes keep the 1 MB service default.
+Floci is the local AWS emulator (image `floci/floci:latest`, port 4566). It serves S3 for product images and ECR for image push tests. `floci-init` creates the `product-media` bucket and a policy that allows anonymous `GetObject` on it. The S3 API is at `http://localhost:4566` with path-style addressing; set `FLOCI_PORT`, the standard `AWS_*` variables (dummy keys, `us-east-1`), `MEDIA_BUCKET`, and `PUBLIC_MEDIA_URL` in `.env` before starting Compose. Floci mounts the Docker socket so it can start the `registry:2` container behind ECR, and its state lives in the `pharmacy-central-floci-data` volume. ECR URIs use the path style (`localhost:4566/<account>/<region>/<repo>`) because Docker 29's containerd image store reaches only `localhost` over plain HTTP. `.env` holds the emulator's dummy `AWS_*` values, so never load it into a process that talks to real AWS (`tools/aws-upload-media.mjs` refuses to run with `AWS_ENDPOINT_URL_S3` set). Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies, `/api/prescriptions/intake*` allows 10 MB, and the other groups keep Nginx's 1 MB default. `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; `sales-service` accepts prescription photos up to 8 MB; other JSON routes keep the 1 MB service default.
 
-Create the databases. The demo accounts come with `pnpm run dev:data`:
+To try the local ECR, use the host AWS CLI with the dummy keys and the explicit `--endpoint-url`, so nothing reaches a real account:
+
+```bash
+export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
+aws ecr create-repository --repository-name pharmacy-central/smoke --endpoint-url http://localhost:4566
+aws ecr get-login-password --endpoint-url http://localhost:4566 | docker login --username AWS --password-stdin localhost:4566
+docker tag hello-world:latest localhost:4566/000000000000/us-east-1/pharmacy-central/smoke:v1
+docker push localhost:4566/000000000000/us-east-1/pharmacy-central/smoke:v1
+docker pull localhost:4566/000000000000/us-east-1/pharmacy-central/smoke:v1   # after docker rmi of the tag
+```
+
+Floci starts a `floci-ecr-registry` container on first use. It lives outside Compose and keeps running after `docker compose down`; remove it with `docker rm -f floci-ecr-registry`.
+
+Create the databases. The default admin comes with `pnpm run seed:default` and the demo dataset with `pnpm run seed:demo` (see Seeds):
 
 ```bash
 pnpm run db:migrate
@@ -64,7 +77,7 @@ pnpm nx run-many -t dev -p @pharmacy/sales-service @pharmacy/customer-web
 
 Each name is a separate browser origin. On `localhost` the customer and staff apps share one cookie jar (cookies ignore the port), so signing in to one signs the other out; on the named URLs both stay signed in side by side. `*.localhost` is a secure context in browsers, so `crypto` APIs that need HTTPS work without a certificate. The proxy is plain HTTP; run `pnpm exec portless proxy stop`, then `pnpm exec portless proxy start` for HTTPS (it asks to trust a local CA).
 
-Chrome, Edge and Firefox resolve `*.localhost` themselves. `curl` does too; Node scripts and Safari may not, so `API_BASE_URL` stays `http://localhost:8080` and `pnpm run dev:data` is unchanged. `pnpm run urls:down` removes the routes and stops the proxy; `pnpm exec portless doctor` checks it. Port 80 must be free; if another program holds it, `urls:up` fails with the portless error.
+Chrome, Edge and Firefox resolve `*.localhost` themselves. `curl` does too; Node scripts and Safari may not, so `API_BASE_URL` stays `http://localhost:8080` and `pnpm run seed:demo` is unchanged. `pnpm run urls:down` removes the routes and stops the proxy; `pnpm exec portless doctor` checks it. Port 80 must be free; if another program holds it, `urls:up` fails with the portless error.
 
 The web ports are `CUSTOMER_WEB_PORT` (5301) and `STAFF_WEB_PORT` (5302) in the root `.env`. Vite sets `strictPort`, so a busy port makes the app fail instead of moving to another port.
 
@@ -211,19 +224,34 @@ The `postgres-roles` Compose service runs `deploy/local/postgres/roles.sh` after
 
 Migrations run as the owning role (`pnpm run db:migrate` builds each URL from the same passwords), so the tables belong to the role that uses them. On RDS, create the same roles by hand with the equivalent SQL, one secret per service as in `deploy/aws`; Terraform does not create the database tier.
 
-### Seed demo accounts
+### Seeds: default (A) and demo (B)
 
-Only `identity-service` seeds data, and it seeds local login accounts only. Business master data is imported through the staff import center or the catalog/inventory import APIs.
+There are two seeds. They are separate commands with separate code, and neither repeats the other.
+
+| | A. Default seed | B. Demo and reference dataset |
+| --- | --- | --- |
+| Command | `pnpm run seed:default` | `pnpm run seed:demo` |
+| Code | `apps/identity-service/seed.mjs` | `tools/seed-demo.mjs` and `apps/identity-service/seed-demo.mjs` |
+| Creates | Exactly one account: the Platform Admin `admin@pharmacycentral.vn`. Nothing else. | Product images, sites, demo accounts (manager, pharmacist, warehouse staff, shoppers), storage locations (warehouses), suppliers, products with their units of measure, opening balances, search synonyms and demo activity. |
+| Password | `ADMIN_PASSWORD` in `.env` | `DEMO_ACCOUNT_PASSWORD` in `.env` |
+| When | Always: on every start and release. It updates the admin by id, so repeating it is safe. | Opt-in, local only, after A. Every step skips what exists, so repeating it is safe. |
+| Needs | The migrated identity database | A, the running stack, and the sites imported before the accounts (the script keeps that order). |
+
+Business master data in production is imported through the staff import center or the catalog/inventory import APIs, not by seed B.
 
 ```bash
-# Seed one local account per role, with the rest of the demo data (needs pnpm dev running)
-pnpm run dev:data
+# A: the one admin
+pnpm run seed:default
+
+# B: the demo and reference dataset (needs the stack or pnpm dev running)
+pnpm run seed:demo
 
 # Validate without writing
 pnpm --dir apps/identity-service seed -- --dry-run
+pnpm --dir apps/identity-service seed:demo -- --dry-run
 ```
 
-`DEMO_ACCOUNT_PASSWORD` from `.env` becomes the password for the seeded accounts. The seed creates one account per role (Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff, Customer), each holding only that role, and resets their roles and site access on every run. Site access is looked up by code from the imported sites (`SITE-RTL` for the manager and pharmacist, `SITE-WH` for warehouse staff); before the sites import the seed warns which are missing, and `dev:data` seeds again after it imports `data/import-samples/sites.csv`. The account list is in `docs/user-guide.md`.
+Seed A resets the admin's roles to Platform Admin on every run and touches no other account. Seed B creates one account per staff role (Pharmacy Manager, Pharmacist, Warehouse Staff) and the shoppers, each staff account holding only its role, and resets their roles and site access on every run. Site access is looked up by code from the imported sites (`SITE-RTL` for the manager and pharmacist, `SITE-WH` for warehouse staff), so `seed:demo` imports `data/import-samples/sites.csv` first and stops if a site is missing. The account list is in `docs/user-guide.md`.
 
 ### Import staff-managed data
 
@@ -245,10 +273,10 @@ suppliers, then products, then opening balances.
 Source files stay outside the application image. The committed fixture set lives in `data/`: the sample CSVs in
 `data/import-samples/` and the coursework images as the folder `data/product-images/images/`, so a fresh checkout can
 exercise both flows. Any other file comes from the operator machine (`~/Downloads/...`), and the API never reads a
-server-side path. Dependency order matters. Images come first (uploaded by `dev:data`, since `products.csv` carries SeaweedFS URLs whose
+server-side path. Dependency order matters. Images come first (uploaded by `seed:demo`, since `products.csv` carries Floci S3 URLs whose
 object keys are content hashes), then sites, storage locations, suppliers, products, and finally opening balances. After
 an import the truth lives in the owning service database: catalog data in `catalog-service`, stock in
-`inventory-service`, images in SeaweedFS. Original downloads, source-verification records
+`inventory-service`, images in Floci S3. Original downloads, source-verification records
 (`provenance/`), and research dumps (`research/`) stay local.
 
 Imports are idempotent on natural keys (`code`, `sku`, `batchNumber`). An opening balance row is accepted only while the batch and storage location have no stock balance or ledger history. Reimporting the same quantity is a no-op; changing an existing balance requires a stock adjustment so the ledger keeps an audit trail.
@@ -266,25 +294,26 @@ A fresh local database has no accounts and no master data. Migrations create emp
 ```bash
 pnpm run infra:up   # infra + gateway-dev (host networking on Docker Desktop)
 pnpm run db:migrate
-pnpm dev            # the services must be running: the import goes through the API
-pnpm run dev:data   # in another terminal
+pnpm run seed:default   # A: the one admin (needs only the identity database)
+pnpm dev                # the services must be running: seed B goes through the API
+pnpm run seed:demo      # B: the demo dataset, in another terminal
 ```
 
-`dev:data` runs `tools/dev-import-samples.mjs` and performs the steps in order. It seeds the demo accounts, uploads the product images to SeaweedFS, and signs in as the demo admin (`admin@pharmacycentral.vn`, password `DEMO_ACCOUNT_PASSWORD`). It posts the sample CSVs from `data/import-samples/` to the same endpoints as the Data import screen. Then it seeds the accounts again, so the manager, pharmacist, and warehouse accounts get their `SITE-RTL` / `SITE-WH` access. It reuses the screen's CSV mapping from `apps/staff-web/src/import-datasets.ts`, so the two cannot drift. After the synonyms it adds demo activity through the same APIs, so the list screens have rows in every state: three transfers (waiting, in transit, received), three stock adjustments (pending, approved, rejected), three purchase orders (waiting, approved, cancelled) and fifteen orders at `SITE-RTL`. The demo shopper `khachhang@pharmacycentral.vn` owns nine of them, one in every state the customer site draws: waiting for payment, confirmed, preparing, ready, out for delivery, completed (pickup and delivery), cancelled, and refunded. Each of the six sample shoppers holds one state, so signing in as one of them shows the order page featuring only that state. Each order is placed the way checkout places it, with its payment invoice under the same id. A QR order is paid by a webhook signed with `SEPAY_WEBHOOK_SECRET`, a cash order by the counter, and the refunded one goes back through the refund endpoint. Each record has a fixed number and is skipped when it exists, and the opening balances are skipped once stock has moved, so running the script again is safe. The orders are skipped while any exist, so clear the sales and payment data before reseeding them. Each seed connection uses its own database role and `<SERVICE>_DB_PASSWORD`, as the services do. Stock rows wait for the product search index to catch up, which takes a few seconds after a product import.
+`seed:demo` runs `tools/seed-demo.mjs` and performs the steps in order. It signs in as the default admin (`admin@pharmacycentral.vn`, password `ADMIN_PASSWORD`) and stops with a pointer to `pnpm run seed:default` if that fails. It uploads the product images to Floci S3 and posts the sample CSVs from `data/import-samples/` to the same endpoints as the Data import screen. Right after the sites it creates the demo accounts (`apps/identity-service/seed-demo.mjs`), so the manager, pharmacist, and warehouse accounts get their `SITE-RTL` / `SITE-WH` access in one pass. It reuses the screen's CSV mapping from `apps/staff-web/src/import-datasets.ts`, so the two cannot drift. After the synonyms it adds demo activity through the same APIs, so the list screens have rows in every state: three transfers (waiting, in transit, received), three stock adjustments (pending, approved, rejected), three purchase orders (waiting, approved, cancelled) and fifteen orders at `SITE-RTL`. The demo shopper `khachhang@pharmacycentral.vn` owns nine of them, one in every state the customer site draws: waiting for payment, confirmed, preparing, ready, out for delivery, completed (pickup and delivery), cancelled, and refunded. Each of the six sample shoppers holds one state, so signing in as one of them shows the order page featuring only that state. Each order is placed the way checkout places it, with its payment invoice under the same id. A QR order is paid by a webhook signed with `SEPAY_WEBHOOK_SECRET`, a cash order by the counter, and the refunded one goes back through the refund endpoint. Each record has a fixed number and is skipped when it exists, and the opening balances are skipped once stock has moved, so running the script again is safe. The orders are skipped while any exist, so clear the sales and payment data before reseeding them. Each seed connection uses its own database role and `<SERVICE>_DB_PASSWORD`, as the services do. Stock rows wait for the product search index to catch up, which takes a few seconds after a product import.
 
-Last, it creates and approves the six local search synonym groups, such as `tiêu chảy, đi ngoài, đi lỏng`. The demo admin creates them, and the demo pharmacist approves them, so live search uses them from the start. Production starts with no synonym groups. Staff add them in staff-web under Search synonyms.
+Last, it creates and approves the six local search synonym groups, such as `tiêu chảy, đi ngoài, đi lỏng`. The default admin creates them, and the demo pharmacist approves them, so live search uses them from the start. Production starts with no synonym groups. Staff add them in staff-web under Search synonyms.
 
 This is a development tool, kept apart from production on purpose.
 
-- It only runs from the `dev:data` script, is not part of any image or deployment, and uses the demo admin that only the local seed creates.
+- It only runs from the `seed:demo` script and is not part of any image or deployment. It never creates or changes the admin: that is seed A.
 - It refuses to run with `NODE_ENV=production` and refuses any `API_BASE_URL` that is not `localhost`, `127.0.0.1`, or `[::1]`.
 - The sample files are fabricated coursework data. Production data is imported by an operator on the staff-web Data import screen with a real account, from the operator's own files.
 
-Without the script, run `pnpm --dir apps/identity-service seed`, then upload the same files by hand at `http://127.0.0.1:5302/imports`, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv`, `products.csv`, and `opening-balances.csv`. Finally, run `pnpm --dir apps/identity-service seed` again.
+Without the script, run `pnpm run seed:default`, then upload the same files by hand at `http://127.0.0.1:5302/imports`, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv`, `products.csv`, and `opening-balances.csv`. Right after `sites.csv`, run `pnpm --dir apps/identity-service seed:demo` to create the demo accounts with their site access.
 
 ### Product images
 
-The committed images are one file per product in `data/product-images/images/`, named `<SKU>.<ext>` (PNG, JPEG, or WebP). `pnpm run dev:data` uploads them to the local SeaweedFS bucket under the content-hash key `product-images/<SKU>/<sha256>.<ext>`, so the URL is the same for everyone and matches the `imageUrl` column of `data/import-samples/products.csv`. The upload validates every file before sending any, and the script warns about a product whose `imageUrl` was not uploaded. To add or replace an image, drop `<SKU>.<ext>` into the folder, rerun the command, and copy the new URL into `products.csv`. Original downloads and source-verification records stay local in `data/product-images/originals/` and `provenance/`. `data/` is excluded from container builds via `.dockerignore`.
+The committed images are one file per product in `data/product-images/images/`, named `<SKU>.<ext>` (PNG, JPEG, or WebP). `pnpm run seed:demo` uploads them to the local Floci S3 bucket under the content-hash key `product-images/<SKU>/<sha256>.<ext>`, so the URL is the same for everyone and matches the `imageUrl` column of `data/import-samples/products.csv`. The upload validates every file before sending any, and the script warns about a product whose `imageUrl` was not uploaded. To add or replace an image, drop `<SKU>.<ext>` into the folder, rerun the command, and copy the new URL into `products.csv`. Original downloads and source-verification records stay local in `data/product-images/originals/` and `provenance/`. `data/` is excluded from container builds via `.dockerignore`.
 
 ### Try prescription intake
 
@@ -313,11 +342,11 @@ The intent gate runs one TypeSafe Jev request before each question reaches the c
 
 ### Demo credentials
 
-Demo credentials for local development. The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`.
+Credentials for local development. The admin comes from the default seed (A), and its password is the `ADMIN_PASSWORD` value from `.env`. Every other account comes from the demo seed (B), and its password is the `DEMO_ACCOUNT_PASSWORD` value.
 
 | Role | Email | Site access |
 | --- | --- | --- |
-| Platform Admin | `admin@pharmacycentral.vn` | All sites |
+| Platform Admin (seed A) | `admin@pharmacycentral.vn` | All sites |
 | Pharmacy Manager | `manager@pharmacycentral.vn` | `SITE-RTL` |
 | Pharmacist | `pharmacist@pharmacycentral.vn` | `SITE-RTL` |
 | Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH` |

@@ -130,7 +130,7 @@ model {
   pharmacyCentral.services.searchService -> pharmacyCentral.data.typesense "Product search index, keyword and vector score, payload field only" {
     technology "HTTP"
   }
-  pharmacyCentral.services.catalogService -> pharmacyCentral.data.seaweedfs "Product images in the S3 media bucket" {
+  pharmacyCentral.services.catalogService -> pharmacyCentral.data.mediaStorage "Product images in the S3 media bucket" {
     technology "S3"
   }
   pharmacyCentral.services.salesService -> pharmacyCentral.data.redis "Delivery route cache and prescription intake rate limiter" {

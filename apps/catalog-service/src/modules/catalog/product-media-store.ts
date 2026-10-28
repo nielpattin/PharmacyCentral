@@ -16,18 +16,19 @@ export type StoredProductImage = {
 
 export class ProductMediaStore {
   public static createFromEnvironment(): ProductMediaStore {
-    const endpoint = requiredEnvironmentVariable("SEAWEEDFS_ENDPOINT");
-    // One credential pair for the whole repo: the same account the SeaweedFS S3 gateway boots with, so the value
-    // can never drift out of sync the way a separately-named copy did.
-    const accessKeyId = requiredEnvironmentSecret("SEAWEEDFS_ACCESS_KEY");
-    const secretAccessKey = requiredEnvironmentSecret("SEAWEEDFS_SECRET_KEY");
-    const bucket = requiredEnvironmentVariable("SEAWEEDFS_MEDIA_BUCKET");
-    const publicBaseUrl = requiredEnvironmentVariable("SEAWEEDFS_PUBLIC_MEDIA_URL");
+    // The standard AWS SDK names. Locally they point at Floci (http://localhost:4566, dummy keys); on AWS the endpoint
+    // is the regional S3 endpoint and the keys belong to the scoped IAM user.
+    const endpoint = requiredEnvironmentVariable("AWS_ENDPOINT_URL_S3");
+    const region = requiredEnvironmentVariable("AWS_REGION");
+    const accessKeyId = requiredEnvironmentSecret("AWS_ACCESS_KEY_ID");
+    const secretAccessKey = requiredEnvironmentSecret("AWS_SECRET_ACCESS_KEY");
+    const bucket = requiredEnvironmentVariable("MEDIA_BUCKET");
+    const publicBaseUrl = requiredEnvironmentVariable("PUBLIC_MEDIA_URL");
 
     return new ProductMediaStore(
       new S3Client({
         endpoint,
-        region: "us-east-1",
+        region,
         forcePathStyle: true,
         credentials: { accessKeyId, secretAccessKey },
       }),

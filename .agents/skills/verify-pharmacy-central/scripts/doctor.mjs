@@ -32,7 +32,7 @@ import {
 const execFileAsync = promisify(execFile);
 
 // One-shot init containers in docker-compose.yml that exit 0 by design (restart: "no").
-const ONE_SHOT = new Set(["postgres-roles", "seaweedfs-init"]);
+const ONE_SHOT = new Set(["postgres-roles", "floci-init"]);
 // Distroless images with no healthcheck in docker-compose.yml. They count as healthy while running.
 const NO_HEALTHCHECK = new Set(["loki", "tempo"]);
 
@@ -87,7 +87,11 @@ const accountCheck = async (email) => {
         `${email} actor=${account.actor_type} active=${account.is_active} activeSessions=${account.active_sessions}`,
       );
     } else {
-      line("FAIL", "identity db + account", `no users row for ${email}. Run pnpm run db:migrate and pnpm run dev:data`);
+      line(
+        "FAIL",
+        "identity db + account",
+        `no users row for ${email}. Run pnpm run db:migrate, pnpm run seed:default and pnpm run seed:demo`,
+      );
     }
   } catch (error) {
     line("FAIL", "identity db", `${error.message}. Is postgres healthy?`);

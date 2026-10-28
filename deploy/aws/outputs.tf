@@ -24,7 +24,7 @@ output "api_gateway_url" {
 }
 
 output "ops_task_definition" {
-  description = "Task definition ARN of the ops task that runs roles.sh, the database creation SQL and seed.mjs."
+  description = "Task definition ARN of the ops task that runs roles.sh, the database creation SQL, seed.mjs (default seed) and seed-demo.mjs (demo accounts)."
   value       = aws_ecs_task_definition.ops.arn
 }
 

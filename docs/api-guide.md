@@ -244,7 +244,7 @@ Public reads need no session: `/api/products` (except `search-synonyms` and the 
 
 `GET /api/sites`, `GET /api/storage-locations`, and `GET /api/suppliers` take `q`, a case-insensitive match on the code or the name (up to 200 characters; `%` and `_` match literally). Without `q` they answer the whole list in code order.
 
-There is no single-product create route. Products enter the catalog through `POST /api/products/imports`, and `pnpm run dev:data` uploads the sample images before it imports `products.csv`, so the `imageUrl` keys resolve. `data/` is never served by a web app or baked into a container image.
+There is no single-product create route. Products enter the catalog through `POST /api/products/imports`, and `pnpm run seed:demo` uploads the sample images before it imports `products.csv`, so the `imageUrl` keys resolve. `data/` is never served by a web app or baked into a container image.
 
 ## Search synonyms
 

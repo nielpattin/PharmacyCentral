@@ -23,7 +23,7 @@ Preconditions:
 - Mode chosen with the user. Dev mode: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need catalog-service,customer-web --ai-approved`. The `--ai-approved` flag is required because catalog-service starts an embedding sweep. Container mode: the user's approval is recorded before `pnpm run stack:up`, because the sweep runs when the catalog container starts. No launch.
 - `node .agents/skills/verify-pharmacy-central/scripts/doctor.mjs --mode <dev|container> --need catalog-service,customer-web` reports `RESULT ready`.
 - Typesense is healthy: `docker compose ps` lists `typesense` as healthy. The search index lives there.
-- Products exist. A fresh database has none. The committed sample is `data/import-samples/products.csv`, and `pnpm run dev:data` imports it, which also needs identity-service, catalog-service, and inventory-service running.
+- Products exist. A fresh database has none. The committed sample is `data/import-samples/products.csv`, and `pnpm run seed:demo` imports it, which also needs identity-service, catalog-service, and inventory-service running.
 - The sample product `THU-0001` (name starts `Thuốc Paracetamol 500mg Quapharco`, and continues with the indication and pack size, `data/import-samples/products.csv:2`) is in the catalog. Confirm it with `curl -s "http://127.0.0.1:$GATEWAY_PORT/api/products?search=Paracetamol&limit=5"`. The gateway port is `GATEWAY_PORT` from `.env`, 8080 by default.
 - No saved role state is needed. Open a clean tab with `tab.clearCookies()`.
 

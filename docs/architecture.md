@@ -21,7 +21,7 @@ with an internal Application Load Balancer (ALB) in production. The routing map 
 
 Each business service owns one PostgreSQL database. Services publish integration events to a RabbitMQ topic
 exchange through a transactional outbox, and read each other's data through their HTTP contracts or through
-events. Redis, Typesense, and SeaweedFS are shared infrastructure that individual services use for their own
+events. Redis, Typesense, and the S3 object store (Floci locally) are shared infrastructure that individual services use for their own
 purpose. The diagram below shows the logical architecture and is the only Mermaid diagram in this document.
 
 ```mermaid
@@ -67,7 +67,7 @@ flowchart LR
     rabbit{{"RabbitMQ 4<br/>topic exchange pharmacy.events"}}
     redis[("Redis 8")]
     typesense[("Typesense 30.2")]
-    seaweed[("SeaweedFS S3<br/>media bucket")]
+    s3media[("S3 media bucket<br/>Floci locally")]
     embedder["Embedder<br/>text embeddings"]
   end
 
@@ -81,7 +81,7 @@ flowchart LR
   catalog --> typesense
   search --> typesense
   ops --> typesense
-  catalog --> seaweed
+  catalog --> s3media
   catalog & search --> embedder
 
   search -.->|"fallback for GET /api/products"| catalog
@@ -127,7 +127,7 @@ Module-level detail is in the [LikeC4 domain views](diagrams/README.md#the-views
 | Service | Port | Owns | Talks to |
 | --- | --- | --- | --- |
 | `identity-service` | 3001 | Customer and employee accounts, opaque sessions, password security, email verification, Google OIDC. Schema `identity_service`. | PostgreSQL, Redis (auth rate limits), SMTP (Mailpit locally), RabbitMQ (outbox), Google OIDC |
-| `catalog-service` | 3002 | Products, units, suppliers, sites, storage locations, prices, availability projections, the product search index, product media. Schema `catalog_service`. | PostgreSQL with PostGIS, Typesense (writes the index), SeaweedFS (S3), embedder, RabbitMQ (outbox; consumes `inventory.availability.changed.v1`) |
+| `catalog-service` | 3002 | Products, units, suppliers, sites, storage locations, prices, availability projections, the product search index, product media. Schema `catalog_service`. | PostgreSQL with PostGIS, Typesense (writes the index), S3 media bucket (Floci locally), embedder, RabbitMQ (outbox; consumes `inventory.availability.changed.v1`) |
 | `search-service` | 3009 | The read path of `GET /api/products` only. No database. | Typesense, embedder, `catalog-service` (fallback when Typesense cannot answer) |
 | `inventory-service` | 3004 | Batches, stock, FEFO reservations, movements, transfers, returns, stocktakes, purchase orders, goods receipts, availability events. Schema `inventory_service`. | PostgreSQL, RabbitMQ (outbox), `catalog-service` (HTTP) |
 | `sales-service` | 3005 | Customer carts (a signed-out cart stays in the browser), orders, prescriptions, counter transactions, delivery calculation. Schema `sales_service`. | PostgreSQL, Redis (prescription intake limiter), RabbitMQ (outbox; consumes `payment.invoice.*.v1`), `catalog-service`, `inventory-service`, `identity-service` (HTTP), OpenRouteService, VietMap, AI prescription reader |
@@ -207,7 +207,7 @@ Both topologies run the same Docker images and the same contracts. Details are i
 | --- | --- | --- |
 | Entry | `customer-web` and `staff-web` containers, Nginx `gateway` on `GATEWAY_PORT`. `gateway-dev` (host network) replaces it while services run through `pnpm dev`. | API Gateway HTTP API with a Lambda authorizer and a CSRF Lambda, a VPC Link, and an internal ALB |
 | Compute | One container per backend service, built from `apps/Dockerfile.service` (`apps/search-service/Dockerfile` for `search-service`). Migrations run before each service starts. | One ECS Fargate service per backend, one embedder task, and one-shot migration tasks |
-| Data | PostgreSQL (PostGIS 18), RabbitMQ 4.3, Redis 8.10, Typesense 30.2, SeaweedFS 4.48, embedder, Mailpit | RDS PostgreSQL, ElastiCache Redis, Amazon MQ for RabbitMQ, a Typesense cluster or Typesense Cloud, and Secrets Manager. The first stack does not provision these data services. |
+| Data | PostgreSQL (PostGIS 18), RabbitMQ 4.3, Redis 8.10, Typesense 30.2, Floci (S3 and ECR emulator), embedder, Mailpit | RDS PostgreSQL, ElastiCache Redis, Amazon MQ for RabbitMQ, a Typesense cluster or Typesense Cloud, and Secrets Manager. The first stack does not provision these data services. |
 | Telemetry | `otel-collector` with Tempo, Prometheus, Loki, and Grafana | An ADOT collector task that forwards to Amazon Managed Service for Prometheus, AWS X-Ray, and CloudWatch Logs |
 | Status | Development and integration | Configuration only. No AWS resource has been created. |
 

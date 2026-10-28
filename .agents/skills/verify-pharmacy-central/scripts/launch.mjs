@@ -85,7 +85,7 @@ if (need.includes("identity-service")) {
     fail(`identity database unreachable: ${error.message}`),
   );
   const admin = await accountState(DEMO_ADMIN_EMAIL).catch((error) => fail(error.message));
-  if (!admin) fail("demo accounts are missing. Run pnpm run db:migrate and pnpm run dev:data");
+  if (!admin) fail("the default admin is missing. Run pnpm run db:migrate and pnpm run seed:default");
 }
 for (const target of targets) {
   const owners = await listeningPids(portOf(target));

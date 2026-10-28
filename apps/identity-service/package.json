@@ -12,6 +12,7 @@
     "fmt:check": "oxfmt --check",
     "lint": "oxlint --type-aware src",
     "seed": "node --env-file=../../.env seed.mjs",
+    "seed:demo": "node --env-file=../../.env seed-demo.mjs",
     "start": "node dist/main.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"

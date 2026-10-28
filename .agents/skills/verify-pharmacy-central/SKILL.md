@@ -29,7 +29,7 @@ Ask the user which mode to use at the start of every session, and keep it until 
 - AI gate: `catalog-service`, `chatbot-service`, and `sales-service` call paid AI providers. Start them only with the user's explicit approval for that run. `launch.mjs` refuses `catalog-service` and `chatbot-service` without `--ai-approved`. The proof helpers start neither. UI-only chatbot checks may stub `/api/chatbot/*`; label them `ui-only-stub`.
 - Never kill by process name. Kill only PIDs a dev-mode run recorded, with their trees. Never drive a port the run did not start: a foreign listener makes the doctor and `launch.mjs` refuse.
 - Container mode: if the Docker engine stops answering or a container is unhealthy, report it as an infrastructure issue. Do not restart Docker Desktop from here.
-- Never print or commit `.env` values or state-file cookie values. Read `DEMO_ACCOUNT_PASSWORD` inside the eval cell only.
+- Never print or commit `.env` values or state-file cookie values. Read `ADMIN_PASSWORD` (the admin) or `DEMO_ACCOUNT_PASSWORD` (every demo account) inside the eval cell only.
 - Browser: use the browser tool's default browser only. Never pass `app.path`, and never launch Edge or Chrome.
 
 ## Launch (dev mode only)
@@ -45,7 +45,7 @@ node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-s
 - Launch refuses a needed port that already has a listener. Readiness: a service answers `GET /health/ready` with its own name, a web app answers `GET /` with the `root` div, and identity returns a token from `GET /api/auth/csrf` through the gateway. Wait is up to 240 seconds. On timeout it cleans up the run and exits `1`.
 - Output lines: `START`, `WAIT`, `READY`, `URL`, `PIDS`, `STOP`. The run id is in `.tmp/verify/current`; `--run <id>` selects another run.
 
-From an empty database: `pnpm run infra:up`, `pnpm run db:migrate`, then `launch.mjs`. `pnpm run dev:data` needs the services it calls running, catalog-service included, so it needs `--ai-approved`. Not proven on this machine.
+From an empty database: `pnpm run infra:up`, `pnpm run db:migrate`, then `launch.mjs`. `pnpm run seed:default` then `pnpm run seed:demo`. The demo seed needs the services it calls running, catalog-service included, so it needs `--ai-approved`. Not proven on this machine.
 
 ## Online order stock and invoice pricing
 
@@ -134,10 +134,12 @@ try {
   await tab.waitForSelector("form.login-card, details.profile-menu", { timeout: 60000 });
   let branch = "already-signed-in";
   if ((await tab.count("form.login-card")) > 0) {
+    // The admin is the default seed (ADMIN_PASSWORD); every other account is the demo seed (DEMO_ACCOUNT_PASSWORD).
+    const passwordVariable = email === "admin@pharmacycentral.vn" ? "ADMIN_PASSWORD" : "DEMO_ACCOUNT_PASSWORD";
     const password = readFileSync(join(root, ".env"), "utf8")
-      .match(/^DEMO_ACCOUNT_PASSWORD=(.*)$/m)?.[1]
+      .match(new RegExp(`^${passwordVariable}=(.*)$`, "m"))?.[1]
       ?.trim();
-    if (!password) throw new Error("DEMO_ACCOUNT_PASSWORD is not set in .env");
+    if (!password) throw new Error(`${passwordVariable} is not set in .env`);
     await tab.clearCookies();
     await tab.goto(url);
     await tab.waitForSelector("form.login-card", { timeout: 60000 });

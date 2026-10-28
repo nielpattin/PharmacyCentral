@@ -119,7 +119,7 @@ A `warn` log with `request_id` when the trusted layer sees `x-actor-id` on a req
 4. Cookie: add `COOKIE_SECURE` to every local `.env` before sales-service starts, and document it in the runbook and README. Existing cookies are rewritten on the next guest request, so no migration is needed and carts survive. Rollback reverts the flags; the name is unchanged.
 5. Identity and `csrf.mjs`: switch the `Secure` source. No effect while the values match.
 6. Cleanup: delete the `X-Guest-Cart-Token` branch, the `NODE_ENV` cookie branches, the `system` default for anonymous, and the test expectations that pin `system` (`authorizer.test.mjs`, `identity.test.mjs:25`).
-7. Optional CSRF in nginx, only after confirming every local `/api` mutation sends `X-CSRF-TOKEN`. `tools/k6/lib/session.js:107-111` does; `tools/chaos/lib/gateway.mjs` and `tools/dev-import-samples.mjs` reference it and need checking.
+7. Optional CSRF in nginx, only after confirming every local `/api` mutation sends `X-CSRF-TOKEN`. `tools/k6/lib/session.js:107-111` does; `tools/chaos/lib/gateway.mjs` and `tools/seed-demo.mjs` reference it and need checking.
 
 Compatibility: `.agents/skills/verify-pharmacy-central/scripts/order-stock-proof.mjs` calls services directly with the internal secret and is unaffected by gateway stripping. No repository client sends `X-Guest-Cart-Token`. Rollback runs in reverse order; step 2 can be rolled back only with step 1 already live.
 

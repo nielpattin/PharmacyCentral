@@ -2,7 +2,7 @@
 // because the gateway tokens expire after five.
 import http from "k6/http";
 
-import { demoPassword, targetUrl } from "./config.js";
+import { passwordOf, targetUrl } from "./config.js";
 
 const CONTEXT_REFRESH_MS = 3 * 60 * 1000;
 const IDENTITY = "identity-service";
@@ -143,9 +143,9 @@ function createSession(email) {
   return session;
 }
 
-/** Logs in a demo account (CSRF cookie, then login, then identity contexts) and returns its session. */
+/** Logs in an account (CSRF cookie, then login, then identity contexts) and returns its session. */
 export function login(email) {
-  const password = demoPassword();
+  const password = passwordOf(email);
   const session = createSession(email);
   send(session, "GET", "/api/auth/csrf", null, { name: "GET /auth/csrf" }, false);
   const response = sendJson(session, "POST", "/api/auth/login", { email, password }, { name: "POST /auth/login" });

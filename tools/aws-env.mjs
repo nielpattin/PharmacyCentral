@@ -42,8 +42,10 @@ const ownedKeys = new Set([
   "GRAFANA_PUBLIC_URL",
   "PUBLIC_APP_URL",
   "DRIZZLE_MIGRATIONS_DIR",
+  "MEDIA_BUCKET",
+  "PUBLIC_MEDIA_URL",
 ]);
-const ownedPrefixes = ["OTEL_", "RABBITMQ_MANAGEMENT_", "SEAWEEDFS_", "AI_EMBEDDING_", "GOOGLE_"];
+const ownedPrefixes = ["OTEL_", "RABBITMQ_MANAGEMENT_", "AWS_", "AI_EMBEDDING_", "GOOGLE_"];
 const passesThrough = (key) =>
   !ownedKeys.has(key) && !ownedPrefixes.some((prefix) => key.startsWith(prefix)) && !key.endsWith("_SERVICE_URL");
 const isSecret = (key) => /KEY|SECRET|PASSWORD|TOKEN/.test(key);
@@ -93,8 +95,11 @@ for (const service of services) {
 }
 
 const dotEnv = readDotEnv();
+// The default seed (seed.mjs) needs ADMIN_PASSWORD. The demo seed (seed-demo.mjs) is opt-in and needs
+// DEMO_ACCOUNT_PASSWORD, so that one is passed only when .env has it.
+const adminPassword = dotEnv.ADMIN_PASSWORD;
+if (!adminPassword) throw new Error("ADMIN_PASSWORD must be set in .env for the ops task");
 const demoAccountPassword = dotEnv.DEMO_ACCOUNT_PASSWORD;
-if (!demoAccountPassword) throw new Error("DEMO_ACCOUNT_PASSWORD must be set in .env for the ops task");
 
 const previous = existsSync(output) ? JSON.parse(readFileSync(output, "utf8")) : {};
 const imageTag = process.argv[2] ?? previous.image_tag;
@@ -105,7 +110,10 @@ if (imageTag !== undefined && !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(imageT
 const tfvars = {
   service_environment_extra: serviceEnvironmentExtra,
   service_secret_values: serviceSecretValues,
-  ops_secret_values: { DEMO_ACCOUNT_PASSWORD: demoAccountPassword },
+  ops_secret_values: {
+    ADMIN_PASSWORD: adminPassword,
+    ...(demoAccountPassword === undefined ? {} : { DEMO_ACCOUNT_PASSWORD: demoAccountPassword }),
+  },
   ...(imageTag === undefined ? {} : { image_tag: imageTag }),
 };
 writeFileSync(output, `${JSON.stringify(tfvars, null, 2)}\n`);

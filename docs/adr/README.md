@@ -67,3 +67,4 @@ outlive the feature becomes an ADR. The design document links to the ADRs it rel
 | [0015](0015-server-picks-the-cart-lines-of-an-order.md) | The server picks the cart lines of an order | Accepted | 2026-10-26 |
 | [0016](0016-prescription-only-products-are-not-sold-online.md) | Prescription-only products are not put in the cart or sold online | Accepted | 2026-10-26 |
 | [0017](0017-roles-checked-at-the-edge-and-in-each-service.md) | Roles are checked at the edge and in every service | Accepted | 2026-10-26 |
+| [0018](0018-default-seed-and-demo-seed-are-separate.md) | The default seed and the demo seed are separate | Accepted | 2026-10-28 |

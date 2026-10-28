@@ -94,7 +94,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
 - `[standard]` **Import now** sends the validate-only request first. With errors, the **Import errors** table shows and nothing is confirmed. With none, the confirmation **Nhập file này ngay?** (text: "The import runs in one transaction: if any row fails, nothing is saved.") opens, and the commit follows. (gap G4)
 - **Result:** the success alert, **Result by step** tiles (Sites, Storage locations, Suppliers, Products, Product units, Prices, Balances created, Balances unchanged, Batches created), then `[standard]` **Result by row** (outcome created, updated, unchanged or rejected, with its key). (gap G6)
 - **Stored records:** the read-back from the owning list, for display only. (Decision 8)
-- **Templates:** built in the browser from the dataset's column list. The template is header-only and carries no marker. The web app ships no sample records; `data/import-samples/` holds the samples, which `pnpm run dev:data` imports ([data README](../../data/README.md)). No sample file contains the marker, so `pnpm run dev:data` clears no field.
+- **Templates:** built in the browser from the dataset's column list. The template is header-only and carries no marker. The web app ships no sample records; `data/import-samples/` holds the samples, which `pnpm run seed:demo` imports ([data README](../../data/README.md)). No sample file contains the marker, so `pnpm run seed:demo` clears no field.
 - **Dataset definitions** (`apps/staff-web/src/import-datasets.ts`):
 
 | Page | Template | Endpoint | Read-back list | Key |

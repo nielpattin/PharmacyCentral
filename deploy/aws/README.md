@@ -52,7 +52,7 @@ terraform apply -var domain_name=<domain> -var image_tag=<tag>
 3. Push the images (`node tools/aws-push-images.mjs <tag>`), then run the one-shot tasks in the cluster (`ecs_cluster_name`, `private_subnet_ids`, `ecs_tasks_security_group_id`):
    - the `ops` task (`ops_task_definition`) creates the databases and roles (`ops/001-create-databases.sql`, `ops/roles.sh`);
    - each task in `migration_task_definitions` runs `node dist/migrate.js` and must exit 0;
-   - the `ops` task with the command `node /ops/seed.mjs` seeds the demo accounts.
+   - the `ops` task with the command `node /ops/seed.mjs` runs the default seed (A): the one Platform Admin, with `ADMIN_PASSWORD`.
 4. Start the services:
 
 ```bash
@@ -63,11 +63,11 @@ A release with a new tag repeats the push, a `plan` review, the migration tasks 
 
 ## Loading data
 
-`tools/dev-import-samples.mjs` refuses a non-loopback `API_BASE_URL`, so it cannot load AWS. Use:
+The demo seed (B, `pnpm run seed:demo`) refuses a non-loopback `API_BASE_URL`, so it cannot load AWS. Use these steps, after the default seed (A):
 
-1. `node --env-file=.env tools/aws-upload-media.mjs` uploads `data/product-images/images` to the media bucket under `product-images/<SKU>/<sha256>.<ext>` and writes `tmp/aws-demo/products.csv` with the image URLs moved to the public media base URL.
+1. `node tools/aws-upload-media.mjs` (no `--env-file`: `.env` holds the local Floci dummy keys, and the script refuses to run with `AWS_ENDPOINT_URL_S3` set) uploads `data/product-images/images` to the media bucket under `product-images/<SKU>/<sha256>.<ext>` and writes `tmp/aws-demo/products.csv` with the image URLs moved to the public media base URL.
 2. In staff-web, Data import: sites, storage locations, suppliers, `tmp/aws-demo/products.csv` (not the original), then the opening balances once the products are searchable.
-3. Run the `ops` seed task again so the staff accounts get their site access, then add and approve the search synonym groups.
+3. Run the `ops` task with the command `node /ops/seed-demo.mjs` (needs `DEMO_ACCOUNT_PASSWORD`): it creates the demo staff and shopper accounts with their site access, so the sites must be imported first. Then add and approve the search synonym groups.
 
 ## Outputs
 

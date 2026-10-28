@@ -22,7 +22,7 @@ views {
     include pharmacyCentral.data.rabbitmq
     include pharmacyCentral.data.redis
     include pharmacyCentral.data.typesense
-    include pharmacyCentral.data.seaweedfs
+    include pharmacyCentral.data.mediaStorage
     include pharmacyCentral.data.mailpit
     include pharmacyCentral.data.telemetry
     exclude customer, pharmacist, warehouseStaff, branchManager, platformAdmin
@@ -75,7 +75,7 @@ views {
     include pharmacyCentral.data.rabbitmq
     include pharmacyCentral.data.redis
     include pharmacyCentral.data.typesense
-    include pharmacyCentral.data.seaweedfs
+    include pharmacyCentral.data.mediaStorage
     include pharmacyCentral.data.mailpit
     include pharmacyCentral.data.telemetry
     include customer, pharmacist, warehouseStaff, branchManager, platformAdmin

@@ -23,7 +23,7 @@ Preconditions:
 - `node .agents/skills/verify-pharmacy-central/scripts/doctor.mjs --mode <dev|container> --need identity-service,staff-web --role staff-admin --email admin@pharmacycentral.vn` reports `RESULT ready`.
 - `admin@pharmacycentral.vn` is an active employee with the `Platform Admin` role. The doctor checks it with `--email`.
 - The role state `~/.omp/browser-profiles/staff-admin.json` exists and parses. `<home>` below is `os.homedir()`. If the state is missing or stale, sign in on a clean tab (below) and save it with `tab.saveState`.
-- The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`. Read it inside the eval cell. Never print it.
+- The password is the `ADMIN_PASSWORD` value from `.env` for the admin and `DEMO_ACCOUNT_PASSWORD` for the other staff accounts. Read it inside the eval cell. Never print it.
 - Dev mode only: `API_BASE_URL` is set in the root `.env`. The Vite `/api` proxy of staff-web exists only then (`vite.config.ts:8-13`).
 
 Steps:

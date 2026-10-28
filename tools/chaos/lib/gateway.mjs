@@ -63,7 +63,7 @@ export class GatewayClient {
   async login(email) {
     await this.request("GET", "/api/auth/csrf");
     const response = await this.request("POST", "/api/auth/login", {
-      body: { email, password: requiredEnv("DEMO_ACCOUNT_PASSWORD") },
+      body: { email, password: requiredEnv(email === ACCOUNTS.admin ? "ADMIN_PASSWORD" : "DEMO_ACCOUNT_PASSWORD") },
     });
     if (response.status !== 200) throw new Error(`Login failed for ${email} with status ${response.status}`);
     this.signedIn = true;

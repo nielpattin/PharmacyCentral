@@ -10,6 +10,7 @@ import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import { allowRoles, refuseOutOfSiteScope, refuseSelfApproval } from "./access-control.ts";
+import { signCatalogIdentity } from "./catalog-identity.ts";
 import { ProcurementRepository } from "./procurement-repository.ts";
 import { invalidCursor, sendPage } from "./keyset-page.ts";
 import { readPageRequest, readSearchText, type PageOptions } from "./page-cursor.ts";
@@ -75,6 +76,7 @@ export const createProcurementRouter = (
     try {
       await assertCatalogReferences(
         options.catalogServiceUrl,
+        signCatalogIdentity(request),
         parsed.data.supplierId,
         parsed.data.siteId,
         parsed.data.lines.map((line) => line.productId),
@@ -161,6 +163,7 @@ export const createProcurementRouter = (
       }
       await assertCatalogReferences(
         options.catalogServiceUrl,
+        signCatalogIdentity(request),
         parsed.data.supplierId,
         parsed.data.siteId,
         parsed.data.lines.map((line) => line.productId),
@@ -184,8 +187,11 @@ const unavailable = (response: import("express").Response) =>
   response.status(503).json({ title: "Procurement database is not configured", status: 503 });
 const invalid = (response: import("express").Response) =>
   response.status(400).json({ title: "Invalid procurement request", status: 400, code: "invalid_request" });
+// The catalog answers suppliers, sites and locations to a signed employee only, so each lookup carries the identity of the
+// employee who is writing, next to the service secret.
 const assertCatalogReferences = async (
   baseUrl: string,
+  identity: string,
   supplierId: string,
   siteId: string,
   productIds: string[],
@@ -199,7 +205,10 @@ const assertCatalogReferences = async (
   ];
   const responses = await Promise.all(
     paths.map((path) =>
-      fetch(`${baseUrl}${path}`, { headers: internalServiceHeaders(), signal: AbortSignal.timeout(2_000) }),
+      fetch(`${baseUrl}${path}`, {
+        headers: { ...internalServiceHeaders(), "x-internal-identity-context": identity },
+        signal: AbortSignal.timeout(2_000),
+      }),
     ),
   );
   if (responses.some((response) => !response.ok)) throw new Error("Catalog reference validation failed");

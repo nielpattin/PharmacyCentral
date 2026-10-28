@@ -14,7 +14,7 @@ Each feature file names the launch step for dev mode and the single `stack:up` s
 ## Baseline preconditions
 
 - Dev mode: `pnpm run infra:up` and `launch.mjs --need <names>`. Container mode: `pnpm run stack:up` and every container in `docker compose ps` healthy. Both modes: `pnpm run urls:up` once per session for the named URLs.
-- The migrations and demo accounts exist: `pnpm run db:migrate` and `pnpm run dev:data`. The doctor checks the admin account by default, or the `--email` you pass.
+- The migrations and demo accounts exist: `pnpm run db:migrate`, `pnpm run seed:default` (the admin) and `pnpm run seed:demo` (the demo accounts). The doctor checks the admin account by default, or the `--email` you pass.
 - Dev mode: `.tmp/verify/current` names the run, or pass `--run <id>` to every helper. Container mode: the drive snippet creates `container-<YYYYMMDD-HHMMSS>`.
 - Browser work uses the browser tool's default browser at 1920x1080, with `browser.open({ name, url, viewport, app: { tern: false, relay: false } })`. Signed-in roles are saved state files at `~/.omp/browser-profiles/<role>.json`. Read `xd://eval/browser` before first use.
 

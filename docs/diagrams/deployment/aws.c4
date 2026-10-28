@@ -99,7 +99,7 @@ deployment {
       }
       mediaBucket = managed "S3 media bucket" {
         summary "Product images. Objects under product-images/ are public read, because the catalog stores their plain URLs. catalog-service writes with a scoped IAM user key."
-        instanceOf pharmacyCentral.data.seaweedfs
+        instanceOf pharmacyCentral.data.mediaStorage
       }
       secrets = managed "SSM Parameter Store" {
         summary "SecureString parameters: DATABASE_URL (one per service, each with its own database role), RABBITMQ_URL, REDIS_URL, TYPESENSE_*. Only the two internal secrets the authorizer Lambda reads are in Secrets Manager."

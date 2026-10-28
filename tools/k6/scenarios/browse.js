@@ -16,7 +16,7 @@ const SEARCH_LIMIT = 60; // customer-web's default search limit
 const SEARCHED_FIELDS = ["name", "sku", "barcode", "genericName", "activeIngredient", "indications"];
 
 // Terms from data/import-samples/products.csv. "đi ngoài" is a synonym of "tiêu chảy" in one of the six local search
-// synonym groups that `pnpm run dev:data` creates and approves.
+// synonym groups that `pnpm run seed:demo` creates and approves.
 const SEARCHES = [
   { term: "paracetamol", kind: "literal" },
   { term: "tiêu chảy", kind: "literal" },

@@ -56,20 +56,20 @@ Browsing and searching work without an account. Checkout, orders, prescription i
 
 ### Demo credentials
 
-The `pnpm run dev:data` command seeds one account per role (`tools/dev-import-samples.mjs` runs the identity seed in `apps/identity-service/seed.mjs`). Each account holds only the role shown. The password is the `DEMO_ACCOUNT_PASSWORD` value from `.env`.
+Two seeds create these accounts. The default seed (A, `pnpm run seed:default`) creates only the Platform Admin, with the password from `ADMIN_PASSWORD` in `.env`. The demo seed (B, `pnpm run seed:demo`, run after A) creates every other account, with the password from `DEMO_ACCOUNT_PASSWORD`. Each account holds only the role shown.
 
 | Role | Email | Site access |
 | --- | --- | --- |
-| Platform Admin | `admin@pharmacycentral.vn` | All sites (no site list needed) |
+| Platform Admin (seed A) | `admin@pharmacycentral.vn` | All sites (no site list needed) |
 | Pharmacy Manager | `manager@pharmacycentral.vn` | `SITE-RTL` |
 | Pharmacist | `pharmacist@pharmacycentral.vn` | `SITE-RTL` |
 | Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH` |
 | Customer (Customer Web only) | `khachhang@pharmacycentral.vn` | None; customer account |
 | Customer (sample shoppers, Customer Web only) | `nguyen.lan@example.com`, `tran.minh.khoa@example.com`, `le.thanh.huong@example.com`, `pham.quoc.viet@example.com`, `vo.ngoc.mai@example.com`, `dang.hoang.nam@example.com` | None; customer accounts with their own orders |
 
-Site access uses the site codes from `data/import-samples/sites.csv`. If the sites have not been imported when the seed runs, the seed still creates the accounts, warns which sites are missing, and `dev:data` seeds again after the import. Each run resets the demo accounts' roles and site access to the table above.
+Site access uses the site codes from `data/import-samples/sites.csv`. The demo seed imports the sites before it creates the accounts, so each account gets its site access in one pass, and it stops if a site is missing. Each run resets the roles and site access of the accounts it seeds to the table above.
 
-Seed accounts are for local development and demonstration only.
+The demo accounts are for local development and demonstration only. The default admin is the one account a real deployment starts with.
 
 ## Roles and workspaces
 
@@ -346,7 +346,7 @@ The **Trợ lý tư vấn** button floats on every Customer Web page and keeps i
 
 ## Demo walkthrough
 
-Use the demo accounts above, with `pnpm run dev:data` already run.
+Use the accounts above, with `pnpm run seed:default` and `pnpm run seed:demo` already run.
 
 1. **Platform Admin**: sign in to Staff Web. Open **Users** to review accounts and access, **Audit** for the activity log, and **AI integrations** for the four AI feature cards.
 2. **Platform Admin or Pharmacy Manager**: open **Sites**, **Storage locations**, **Suppliers** and **Catalog**, then **Units** and **Pricing** to see sale units and price drafts.

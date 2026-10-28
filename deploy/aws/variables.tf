@@ -35,7 +35,7 @@ variable "service_secret_values" {
 }
 
 variable "ops_secret_values" {
-  description = "Secret environment variables for the ops task (for example DEMO_ACCOUNT_PASSWORD)."
+  description = "Secret environment variables for the ops task (ADMIN_PASSWORD, and DEMO_ACCOUNT_PASSWORD for the demo seed)."
   type        = map(string)
   default     = {}
   sensitive   = true

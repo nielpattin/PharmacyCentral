@@ -2,10 +2,12 @@
 // (product-images/<SKU>/<sha256>.<ext>), then writes tmp/aws-demo/products.csv: the same CSV with its image URLs moved to
 // the public media bucket URL. Import that copy in staff-web, not the original, or the product images do not resolve.
 //
-// Usage: node --env-file=.env tools/aws-upload-media.mjs
+// Usage: node tools/aws-upload-media.mjs
+// Do not load .env into the process (no --env-file): its AWS_* values are the Floci emulator's dummy keys and endpoint,
+// and the aws CLI below must use your real credentials. The script reads only PUBLIC_MEDIA_URL from .env.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { extname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,10 +17,19 @@ const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const MAX_BYTES = 5 * 1024 * 1024;
 const IMMUTABLE = "public, max-age=31536000, immutable";
 
-const required = (name) => {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required environment variable: ${name}. Please set it in your .env file.`);
-  return value;
+const emulatorVariables = ["AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_S3"].filter((name) => process.env[name]);
+if (emulatorVariables.length > 0) {
+  throw new Error(
+    `${emulatorVariables.join(", ")} is set, so the aws CLI would talk to an emulator instead of AWS. Run this without --env-file=.env.`,
+  );
+}
+
+const readDotEnvValue = (name) => {
+  const file = fileURLToPath(new URL("../.env", import.meta.url));
+  if (!existsSync(file)) throw new Error(`Missing ${file}. Create it from .env.example first.`);
+  const match = new RegExp(`^\\s*${name}\\s*=\\s*(.*?)\\s*$`, "m").exec(readFileSync(file, "utf8"));
+  if (!match || match[1] === "") throw new Error(`Missing required variable ${name} in .env.`);
+  return match[1].replace(/^(['"])(.*)\1$/, "$2");
 };
 
 // Same signatures and limits as apps/catalog-service/src/modules/catalog/product-image.ts.
@@ -72,7 +83,7 @@ for (const file of files) {
   console.log(`uploaded ${key}`);
 }
 
-const localMediaBase = required("SEAWEEDFS_PUBLIC_MEDIA_URL").trim().replace(/\/+$/, "");
+const localMediaBase = readDotEnvValue("PUBLIC_MEDIA_URL").trim().replace(/\/+$/, "");
 const csv = readFileSync(new URL("../data/import-samples/products.csv", import.meta.url), "utf8");
 const rewritten = csv.replaceAll(`${localMediaBase}/`, `${mediaBase}/`);
 if (rewritten === csv) throw new Error(`products.csv has no image URL under ${localMediaBase}/`);

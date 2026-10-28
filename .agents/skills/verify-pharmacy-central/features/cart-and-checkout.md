@@ -23,7 +23,7 @@ Preconditions:
 - Mode chosen with the user. Dev mode: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-service,catalog-service,inventory-service,sales-service,payment-service,customer-web --ai-approved`. The `--ai-approved` flag covers the catalog startup sweep. Container mode: the user's approval is recorded, `pnpm run stack:up` is healthy, and no launch runs.
 - `node .agents/skills/verify-pharmacy-central/scripts/doctor.mjs --mode <dev|container> --need identity-service,catalog-service,inventory-service,sales-service,payment-service,customer-web --role customer` reports `RESULT ready`.
 - The signed-in customer state `~/.omp/browser-profiles/customer.json` exists and parses. If it is missing or stale, sign in as in customer-sign-in-account.md and save it with `tab.saveState`. Open the tab with `browser.open({ name, url, viewport: { width: 1920, height: 1080 }, app: { tern: false, relay: false } })`, then `tab.loadState` before `tab.goto`. Confirm `GET /api/auth/me` returns `khachhang@pharmacycentral.vn` before the first step.
-- Stock exists. Opening balances come from `POST /api/inventory/imports/opening-balances`, or `pnpm run dev:data`.
+- Stock exists. Opening balances come from `POST /api/inventory/imports/opening-balances`, or `pnpm run seed:demo`.
 - The customer has a delivery address. Address search and route calculation call the VietMap service with `VIETMAP_API_KEY`. That is an external map API, not an AI provider, and it needs network access.
 - Payment: the default method is `sepay_qr`, which shows a bank QR code and waits for SePay. Use `cash_on_delivery` for the proof, so no external payment call happens.
 

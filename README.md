@@ -87,19 +87,25 @@ pnpm --dir apps/payment-service db:migrate
 pnpm --dir apps/operations-query-service db:migrate
 ```
 
-Demo credentials are documented in `docs/runbook.md` and are for local use only.
+Two seeds, kept separate. Demo credentials are documented in `docs/runbook.md` and are for local use only.
 
-Load the demo accounts, product images, and sample master data (development only):
+**A. Default seed.** Exactly one account, the Platform Admin, with the password from `ADMIN_PASSWORD` in `.env`. Nothing else. Safe to run on every start and release:
 
 ```bash
-# Fixtures live in data/. They are sample CSVs and a folder of product images. Needs `pnpm dev` running.
-pnpm run dev:data
+pnpm run seed:default
+```
+
+**B. Demo and reference dataset** (opt-in, development only). Run it after A. It loads the product images, sites, demo accounts (manager, pharmacist, warehouse staff, shoppers), warehouses, suppliers, products with their units, opening balances and search synonyms:
+
+```bash
+# Fixtures live in data/. They are sample CSVs and a folder of product images. Needs the stack or `pnpm dev` running.
+pnpm run seed:demo
 ```
 
 Staff users import CSV files from the Data import screen in `staff-web`, which generates a header-only CSV
 template in the browser, previews the parsed rows, and reads the imported records back from the owning
 service. Master data belongs to the service that owns it (catalog and inventory databases, images in
-SeaweedFS/S3). See `data/README.md` for what is committed and what stays local.
+Floci/S3). See `data/README.md` for what is committed and what stays local.
 
 ## Verification
 

@@ -9,7 +9,7 @@
 // `unchanged` for every row. Re-running the same product file upserts by SKU.
 //
 // Products reach the search index asynchronously, and inventory resolves each balance row's SKU through that search, so
-// the balance import waits until every new SKU is searchable (dev-import-samples.mjs does the same).
+// the balance import waits until every new SKU is searchable (seed-demo.mjs does the same).
 import { check, sleep } from "k6";
 import { Counter, Trend } from "k6/metrics";
 

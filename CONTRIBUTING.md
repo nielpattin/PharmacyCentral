@@ -5,7 +5,7 @@ This file explains how a change moves from a branch to `main`. The project rules
 ## Setup
 
 - Prerequisites, dependency install, and the local stack: [README.md](README.md#prerequisites) and [README.md](README.md#local-development).
-- Migrations, demo accounts, and sample data: [README.md](README.md#migrations-and-seeds) and [docs/runbook.md](docs/runbook.md).
+- Migrations, the default seed (one admin), and the demo dataset: [README.md](README.md#migrations-and-seeds) and [docs/runbook.md](docs/runbook.md).
 - Browser testing and named local URLs: [AGENTS.md](AGENTS.md#browser-testing).
 
 ## Branches

@@ -9,15 +9,15 @@ import { detectProductImage, productImageChecksum } from "../src/modules/catalog
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
 export const uploadProductImages = async (directory) => {
-  const bucket = requiredEnvironmentVariable("SEAWEEDFS_MEDIA_BUCKET");
-  const publicBaseUrl = requiredEnvironmentVariable("SEAWEEDFS_PUBLIC_MEDIA_URL").trim().replace(/\/+$/, "");
+  const bucket = requiredEnvironmentVariable("MEDIA_BUCKET");
+  const publicBaseUrl = requiredEnvironmentVariable("PUBLIC_MEDIA_URL").trim().replace(/\/+$/, "");
   const client = new S3Client({
-    endpoint: requiredEnvironmentVariable("SEAWEEDFS_ENDPOINT"),
-    region: "us-east-1",
+    endpoint: requiredEnvironmentVariable("AWS_ENDPOINT_URL_S3"),
+    region: requiredEnvironmentVariable("AWS_REGION"),
     forcePathStyle: true,
     credentials: {
-      accessKeyId: requiredEnvironmentSecret("SEAWEEDFS_ACCESS_KEY"),
-      secretAccessKey: requiredEnvironmentSecret("SEAWEEDFS_SECRET_KEY"),
+      accessKeyId: requiredEnvironmentSecret("AWS_ACCESS_KEY_ID"),
+      secretAccessKey: requiredEnvironmentSecret("AWS_SECRET_ACCESS_KEY"),
     },
   });
 

@@ -1,3 +1,5 @@
+// Demo seed (B): the demo and reference dataset, opt-in. Run it after the default seed (A, `pnpm run seed:default`),
+// which creates the one admin this signs in as. It never creates or changes that admin.
 // Development only. Refuses NODE_ENV=production and any API_BASE_URL that is not a loopback host, so it cannot write
 // to a deployed stack.
 import { spawnSync } from "node:child_process";
@@ -15,7 +17,7 @@ const requireEnv = (name) => {
 };
 
 if (process.env.NODE_ENV === "production") {
-  throw new Error("dev-import-samples is a development tool and refuses to run with NODE_ENV=production.");
+  throw new Error("seed-demo is a development tool and refuses to run with NODE_ENV=production.");
 }
 
 const baseUrl = new URL(requireEnv("API_BASE_URL"));
@@ -27,6 +29,7 @@ const pharmacistEmail = "pharmacist@pharmacycentral.vn";
 const managerEmail = "manager@pharmacycentral.vn";
 const warehouseEmail = "warehouse@pharmacycentral.vn";
 const customerEmail = "khachhang@pharmacycentral.vn";
+const adminPassword = requireEnv("ADMIN_PASSWORD");
 const demoPassword = requireEnv("DEMO_ACCOUNT_PASSWORD");
 
 const cookieHeader = (cookies) => [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
@@ -70,7 +73,10 @@ const signIn = async ({ email }) => {
   const call = (path, options) => request(cookies, path, options);
   try {
     await call("/api/auth/csrf");
-    const account = await call("/api/auth/login", { method: "POST", body: { email, password: demoPassword } });
+    const account = await call("/api/auth/login", {
+      method: "POST",
+      body: { email, password: email === adminEmail ? adminPassword : demoPassword },
+    });
     return {
       id: account.id,
       call,
@@ -112,9 +118,9 @@ const foldSearchTerm = (text) =>
 const synonymKey = (terms) => JSON.stringify([...new Set(terms.map(foldSearchTerm))].sort());
 
 const pnpm = process.env.npm_execpath;
-// The one place that seeds the demo accounts: the identity-service seed, run through the same pnpm.
-const seedArgs = ["--dir", "apps/identity-service", "seed"];
-if (!pnpm) throw new Error("Run this through pnpm: pnpm run dev:data");
+// The one place that seeds the demo accounts: the identity-service demo seed, run through the same pnpm.
+const seedArgs = ["--dir", "apps/identity-service", "seed:demo"];
+if (!pnpm) throw new Error("Run this through pnpm: pnpm run seed:demo");
 const seedAccounts = ({ show = false } = {}) => {
   // pnpm 12 ships as a native binary. Older installs set npm_execpath to a .js file that node must run.
   const [command, args] = /\.[cm]?js$/.test(pnpm) ? [process.execPath, [pnpm, ...seedArgs]] : [pnpm, seedArgs];
@@ -126,16 +132,21 @@ const seedAccounts = ({ show = false } = {}) => {
   }
 };
 
-console.log("Seeding demo accounts...");
-seedAccounts();
-console.log("Uploading product images to SeaweedFS...");
+// The default admin comes from seed A. Checking it first fails before anything is written.
+const admin = await signIn({ email: adminEmail }).catch((error) => {
+  throw new Error(
+    "The default admin cannot sign in. Run pnpm run seed:default first (ADMIN_PASSWORD in .env), then this again.\n" +
+      String(error instanceof Error ? error.message : error),
+    { cause: error },
+  );
+});
+console.log("Uploading product images to Floci S3...");
 const uploadedImageUrls = new Set(
   (await uploadProductImages(fileURLToPath(new URL("../data/product-images/images", import.meta.url)))).map(
     ({ imageUrl }) => imageUrl,
   ),
 );
 
-const admin = await signIn({ email: adminEmail });
 const { contexts } = await admin.call("/api/auth/context");
 
 const order = ["sites", "storageLocations", "suppliers", "catalog", "openingBalances"];
@@ -175,10 +186,13 @@ for (const id of order) {
     continue;
   }
   console.log(`${dataset.label}: ${JSON.stringify(result?.summary ?? result)}`);
+  // Right after the sites exist, so each account is created with its site access in one pass.
+  if (id === "sites") {
+    console.log("Seeding demo accounts...");
+    seedAccounts({ show: true });
+  }
 }
-console.log("Granting site access to the staff accounts...");
-seedAccounts({ show: true });
-// After the reseed, so the pharmacist's session carries SITE-RTL access when it approves.
+// After the accounts, so the pharmacist's session carries SITE-RTL access when it approves.
 console.log("Seeding search synonyms...");
 await seedSearchSynonyms(admin);
 console.log("Seeding demo activity (transfers, adjustments, purchase orders, orders)...");
@@ -337,7 +351,10 @@ async function seedActivity() {
         },
       ],
     });
-    for (const step of steps) await post(manager, `/api/inventory/transfers/${created.id}/${step}`, {});
+    // The manager approves, Warehouse Staff ships at the source site, and the admin receives at the destination site,
+    // which the warehouse account cannot reach.
+    const actors = { approve: manager, ship: warehouse, receive: admin };
+    for (const step of steps) await post(actors[step], `/api/inventory/transfers/${created.id}/${step}`, {});
   };
   await transfer("TR-DEMO-001", "THU-0031", 30, []);
   await transfer("TR-DEMO-002", "THU-0004", 40, ["approve", "ship"]);
@@ -365,8 +382,8 @@ async function seedActivity() {
 
   // Purchase orders: one approved, one waiting, one cancelled.
   const purchaseOrder = async (number, sku, quantity, action) => {
-    // The warehouse staff approve orders for their own site.
-    const decide = (id) => post(warehouse, `/api/procurement/purchase-orders/${id}/action`, { action });
+    // The manager decides on orders of their own site, never on one the admin created for someone else.
+    const decide = (id) => post(manager, `/api/procurement/purchase-orders/${id}/action`, { action });
     const found = await existing("/api/procurement/purchase-orders", number);
     if (found) {
       // An earlier run may have stopped before the decision; deciding twice is refused, which is fine here.
@@ -376,7 +393,7 @@ async function seedActivity() {
     const created = await post(admin, "/api/procurement/purchase-orders", {
       purchaseOrderNumber: number,
       supplierId: suppliers.get("SUP-001").id,
-      siteId: sites.get("SITE-WH").id,
+      siteId: sites.get("SITE-RTL").id,
       expectedDate: new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10),
       lines: [{ productId: products.get(sku).id, orderedQuantity: quantity }],
     });
@@ -478,10 +495,11 @@ async function seedActivity() {
         });
       }
       if (paid === "cash") {
-        await manager.call(`/api/payments/${invoice.id}/cash-paid`, {
+        // The pharmacist takes the cash at the counter; a refund is the manager's or the pharmacist's.
+        await pharmacist.call(`/api/payments/${invoice.id}/cash-paid`, {
           method: "POST",
           body: {},
-          headers: await withContext(manager, "payment-service"),
+          headers: await withContext(pharmacist, "payment-service"),
         });
       }
       if (refunded) {
@@ -620,8 +638,8 @@ async function seedActivity() {
       body: {
         receiptNumber: "GR-DEMO-002",
         supplierId: suppliers.get("SUP-001").id,
-        siteId: sites.get("SITE-WH").id,
-        storageLocationId: locations.get("WH-A").id,
+        siteId: sites.get("SITE-RTL").id,
+        storageLocationId: locations.get("RTL-FRONT").id,
         purchaseOrderId: order.id,
         receivedAt: new Date().toISOString(),
         lines: [
@@ -673,7 +691,8 @@ async function seedActivity() {
         },
       ],
     });
-    if (action) await post(manager, `/api/inventory/replenishment/${created.id}/${action}`, { reviewNotes: null });
+    // Only Warehouse Staff and Platform Admin decide, and the warehouse account has no access to the shop site.
+    if (action) await post(admin, `/api/inventory/replenishment/${created.id}/${action}`, { reviewNotes: null });
   };
   await replenish("Kệ trưng bày sắp trống", "THU-0031", 40, undefined);
   await replenish("Chuẩn bị cho đợt khuyến mãi", "THU-0004", 60, "approve");
@@ -718,7 +737,8 @@ async function seedActivity() {
       const counted = Number(line.systemQuantity) - (line === detail.lines[0] ? 1 : 0);
       await post(admin, `/api/inventory/stocktake-lines/${line.id}/count`, { countedQuantity: counted });
     }
-    await post(admin, `/api/inventory/stocktakes/${created.id}/post`, {});
+    // Whoever created or counted a stocktake cannot post it, so the manager of the site posts what the admin counted.
+    await post(manager, `/api/inventory/stocktakes/${created.id}/post`, {});
   };
   await stocktake("Kiểm kê quý 4 - quầy thuốc", ["THU-0031", "THU-0004"], true);
   await stocktake("Kiểm kê đột xuất - kệ vitamin", ["THU-0006"], false);

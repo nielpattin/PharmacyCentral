@@ -12,7 +12,7 @@
 
 - [deploy/aws/README.md](../../deploy/aws/README.md) says the stack "does not provision" PostgreSQL, Redis, RabbitMQ or Typesense, and its last line of testing is "Not tested: a real apply".
 - The account (`539792719878`, `us-east-1`) has one default VPC with public subnets only, no NAT, and no ECS, RDS or EC2 resources. The Fargate On-Demand quota is 6 vCPU.
-- `terraform.tfvars.example` lists only service URLs. The services fail fast on missing variables (AGENTS.md), so most would stop at startup. For example `catalog-service` requires `SEAWEEDFS_*` for product media, `identity-service` requires `PUBLIC_APP_URL` and the mail settings, `sales-service` requires the delivery and map settings, and `payment-service` requires `PHARMACY_PAYMENT_SEPAY_*`.
+- `terraform.tfvars.example` lists only service URLs. The services fail fast on missing variables (AGENTS.md), so most would stop at startup. For example `catalog-service` requires the S3 media settings (`AWS_ENDPOINT_URL_S3`, `MEDIA_BUCKET`, and the rest) for product media, `identity-service` requires `PUBLIC_APP_URL` and the mail settings, `sales-service` requires the delivery and map settings, and `payment-service` requires `PHARMACY_PAYMENT_SEPAY_*`.
 - The defaults (`desired_count = 2`, 512 CPU / 1024 MiB per service, a 2 vCPU embedder, an OpenTelemetry collector with Managed Prometheus) cost far more than a demo needs.
 - Staff-web and customer-web have no hosting in Terraform; their `nginx-entrypoint.sh` proxies `/api` to `API_BASE_URL`.
 
@@ -48,7 +48,7 @@ A new VPC `10.20.0.0/16` with two public and two private subnets in two AZs, an 
 | Redis | ElastiCache `cache.t4g.micro`, one node | Used by identity-service and sales-service |
 | RabbitMQ | One Fargate task (`rabbitmq:4.3.5-management`, 512 CPU / 1024 MiB), Cloud Map name `rabbitmq`, ephemeral storage | Amazon MQ offers RabbitMQ 4 only from `mq.m7g.medium`, about 100 USD a month, which costs more than every Fargate task together. The services declare their queues on connect; a restart loses only events that were queued and not yet consumed |
 | Typesense | One Fargate task (`typesense/typesense` pinned by digest, 256 CPU / 512 MiB), Cloud Map name `typesense`, empty task volume at `/data` | The index is a derived copy; catalog-service rebuilds it (README). Not HA, by design |
-| Product media | S3 bucket + IAM user key for catalog-service | `catalog-service` talks S3 with `forcePathStyle` and static keys (`product-media-store.ts`), so `SEAWEEDFS_ENDPOINT = https://s3.us-east-1.amazonaws.com` works unchanged |
+| Product media | S3 bucket + IAM user key for catalog-service | `catalog-service` talks S3 with `forcePathStyle` and static keys (`product-media-store.ts`), so `AWS_ENDPOINT_URL_S3 = https://s3.us-east-1.amazonaws.com` works unchanged |
 
 Connection strings and keys are written by Terraform as SSM SecureString parameters, which cost nothing; only the two internal secrets that the authorizer Lambda reads stay in Secrets Manager. They are written from the resources' own outputs (`random_password` for database and broker passwords), so no secret value is typed in a tfvars file. `shared_secrets` and `service_secrets` are built from those secrets.
 
@@ -68,7 +68,7 @@ One public ALB with a host rule per app, each rule in front of one Fargate task 
 
 ### Data and first admin
 
-`pnpm run dev:data` refuses non-loopback `API_BASE_URL`. The demo uses the seeded test accounts instead: an `ops` one-shot task (the `postgres` client, `roles.sh` and `apps/identity-service/seed.mjs` in one image) creates the database roles and runs the seed, once before and once after the sample sites are imported so staff get site access. The CSVs from `data/import-samples/` are imported through the API as the seeded admin. `tools/aws-upload-media.mjs` uploads the images to the media bucket under the same content-hash keys the CSV expects.
+The demo seed (`pnpm run seed:demo`) refuses non-loopback `API_BASE_URL`, so the demo loads AWS another way. An `ops` one-shot task (the `postgres` client, `roles.sh` and the identity seeds in one image) creates the database roles and runs the default seed (A: the one admin, `ADMIN_PASSWORD`). After the sample sites are imported, the same task runs `seed-demo.mjs` (B, accounts only, `DEMO_ACCOUNT_PASSWORD`) so staff get site access. The CSVs from `data/import-samples/` are imported through the API as the default admin. `tools/aws-upload-media.mjs` uploads the images to the media bucket under the same content-hash keys the CSV expects.
 
 ### Security
 
@@ -112,7 +112,7 @@ Not done, with the saving: Fargate Spot for the stateless services (about 70 USD
 3. `tools/aws-push-images.mjs <tag>`, then re-apply with `-var image_tag=<tag>` so the task definitions reference it.
 4. Run the roles task, then the seven migration tasks (README, step 2).
 5. `terraform apply` with `services_enabled = true`.
-6. `tools/aws-upload-media.mjs`; import the sample data in staff-web (README, Loading data); run the `ops` seed task again.
+6. `tools/aws-upload-media.mjs`; import the sample data in staff-web (README, Loading data); run the `ops` task with `seed-demo.mjs` for the demo accounts.
 7. Teardown: `terraform destroy`. Rollback of a bad release is a previous `image_tag`.
 
 ## Testing
@@ -124,7 +124,7 @@ Not done, with the saving: Fargate Spot for the stateless services (about 70 USD
 ## Decisions from the owner (2026-10-26)
 
 - The demo runs for 24 hours, then `terraform destroy` (about 8 USD a day).
-- No email verification, password reset or Google sign-in. Seeded test accounts only.
+- No email verification, password reset or Google sign-in. The default admin and, when loaded, the demo accounts only.
 - Map keys, delivery settings and SePay settings come from the root `.env`. The owner sets the SePay webhook URL (`POST <customer URL>/api/payments/sepay/webhook`) by hand.
 - No OpenTelemetry collector, Managed Prometheus, Grafana or embedder. Services still require `OTEL_EXPORTER_OTLP_ENDPOINT`, `PROMETHEUS_URL` and `GRAFANA_PUBLIC_URL`, so they point at unreachable names: spans and metrics are dropped and the System page shows no metrics.
 

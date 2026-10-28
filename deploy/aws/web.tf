@@ -26,9 +26,10 @@ locals {
       PUBLIC_APP_URL = "https://${local.web_hosts["customer-web"]}"
     }
     catalog-service = {
-      SEAWEEDFS_ENDPOINT         = "https://s3.us-east-1.amazonaws.com"
-      SEAWEEDFS_MEDIA_BUCKET     = aws_s3_bucket.media.bucket
-      SEAWEEDFS_PUBLIC_MEDIA_URL = "https://${aws_s3_bucket.media.bucket_regional_domain_name}"
+      AWS_ENDPOINT_URL_S3 = "https://s3.us-east-1.amazonaws.com"
+      AWS_REGION          = "us-east-1"
+      MEDIA_BUCKET        = aws_s3_bucket.media.bucket
+      PUBLIC_MEDIA_URL    = "https://${aws_s3_bucket.media.bucket_regional_domain_name}"
     }
   }
   web_service_secrets = {
@@ -319,11 +320,11 @@ resource "aws_iam_access_key" "catalog_media" {
 }
 
 resource "aws_ssm_parameter" "catalog_media" {
-  for_each = toset(["SEAWEEDFS_ACCESS_KEY", "SEAWEEDFS_SECRET_KEY"])
+  for_each = toset(["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"])
 
   name  = "/${local.environment_name}/catalog-service/${each.key}"
   type  = "SecureString"
-  value = each.key == "SEAWEEDFS_SECRET_KEY" ? aws_iam_access_key.catalog_media.secret : aws_iam_access_key.catalog_media.id
+  value = each.key == "AWS_SECRET_ACCESS_KEY" ? aws_iam_access_key.catalog_media.secret : aws_iam_access_key.catalog_media.id
 }
 
 output "web" {

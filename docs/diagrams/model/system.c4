@@ -82,8 +82,8 @@ model {
         summary "Optional self-hosted text embeddings for the product search: HuggingFace text-embeddings-inference running multilingual-e5-small on CPU. Started with the compose profile embedder. An alternative to Gemini that needs no quota."
       }
 
-      seaweedfs = objectStorage "SeaweedFS (S3)" {
-        summary "Object storage of the product images, S3 compatible."
+      mediaStorage = objectStorage "Object storage (S3)" {
+        summary "Object storage of the product images, S3 compatible: Floci locally, Amazon S3 on AWS."
       }
 
       mailpit = mail "Mailpit" {

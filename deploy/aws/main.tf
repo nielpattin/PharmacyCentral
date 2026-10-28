@@ -673,7 +673,7 @@ resource "aws_ecs_task_definition" "migration" {
   ])
 }
 
-# Runs the database roles and databases, and seeds the demo accounts (see deploy/aws/ops/Dockerfile). Its command is
+# Runs the database roles and databases, and the default or demo account seed (see deploy/aws/ops/Dockerfile). Its command is
 # given at run time with --overrides.
 resource "aws_ecs_task_definition" "ops" {
   family                   = "${local.environment_name}-ops"

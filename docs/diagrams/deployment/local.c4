@@ -64,8 +64,8 @@ deployment {
       embedderNode = workload "embedder, text-embeddings-inference" {
         instanceOf pharmacyCentral.data.embedder
       }
-      seaweedNode = workload "seaweedfs 4.48" {
-        instanceOf pharmacyCentral.data.seaweedfs
+      flociNode = workload "floci, local AWS emulator (S3, ECR)" {
+        instanceOf pharmacyCentral.data.mediaStorage
       }
       mailpitNode = workload "mailpit 1.30" {
         instanceOf pharmacyCentral.data.mailpit

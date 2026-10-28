@@ -19,13 +19,15 @@ const ids = {
 };
 
 const createTestServer = async (repository: ProcurementRepository): Promise<{ server: Server; url: string }> => {
-  // The catalog reference check reads the shared internal secret before it calls the catalog.
+  // The catalog reference check reads the shared internal secret and signs the caller for the catalog.
   vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-internal-secret");
+  vi.stubEnv("INTERNAL_IDENTITY_SECRET", "test-identity-secret");
   const app = express();
   app.use(express.json());
   // The edge forwards the verified roles; a call without them acts as Platform Admin, which passes every role check.
   app.use((request, _response, next) => {
     if (request.header("x-actor-roles") === undefined) request.headers["x-actor-roles"] = "Platform Admin";
+    request.headers["x-actor-id"] ??= ids.actor;
     next();
   });
   app.use(createProcurementRouter(repository, { catalogServiceUrl: "http://catalog.test" }));
@@ -110,6 +112,37 @@ describe("procurement API", () => {
     expect(purchaseOrderInput?.createdBy).toBe(ids.actor);
     expect(purchaseOrderInput?.lines.map((line) => line.productId)).toEqual([ids.productA, ids.productB]);
     expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("reads suppliers, sites and products from the catalog as the employee who writes", async () => {
+    const createPurchaseOrder = vi
+      .fn()
+      .mockResolvedValue({ id: "00000000-0000-4000-8000-000000000007", status: "Draft" });
+    const repository = { createPurchaseOrder } as unknown as ProcurementRepository;
+    // The catalog answers 401 to a lookup that carries no signed employee.
+    const catalog = vi.fn(async (_url: string, init?: { headers?: Record<string, string> }) => ({
+      ok: Boolean(init?.headers?.["x-internal-identity-context"]),
+    }));
+    vi.stubGlobal("fetch", catalog);
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await httpFetch(`${testServer.url}/procurement/purchase-orders`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      body: JSON.stringify({
+        supplierId: ids.supplier,
+        siteId: ids.site,
+        lines: [{ productId: ids.productA, orderedQuantity: 10 }],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(catalog.mock.calls.map(([url]) => url)).toEqual([
+      `http://catalog.test/suppliers/${ids.supplier}`,
+      `http://catalog.test/sites/${ids.site}`,
+      `http://catalog.test/products/${ids.productA}`,
+    ]);
   });
 
   it("forwards purchase-order approval and cancellation actions with the actor", async () => {

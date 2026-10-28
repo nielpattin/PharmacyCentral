@@ -134,9 +134,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 **platform/tooling/docs**
 
+- Local object storage moved from SeaweedFS to Floci (`floci/floci:latest`, port 4566), a local AWS emulator that also serves ECR. The `seaweedfs` and `seaweedfs-init` Compose services became `floci` and `floci-init`. catalog-service now reads the standard AWS variables `AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` plus `MEDIA_BUCKET` and `PUBLIC_MEDIA_URL`, instead of `SEAWEEDFS_*`; `deploy/aws` passes the same names to ECS. The image URLs in `data/import-samples/products.csv` moved from port 9000 to 4566. `tools/aws-upload-media.mjs` no longer takes `--env-file=.env` and refuses to run with an emulator endpoint set.
+- Two separate seeds replace `pnpm run dev:data`. `pnpm run seed:default` creates exactly one account, the Platform Admin, with `ADMIN_PASSWORD`, and nothing else. `pnpm run seed:demo` is the opt-in demo and reference dataset (images, sites, demo accounts, warehouses, suppliers, products with units, opening balances, synonyms, demo activity); it runs after the first and creates the sites before the accounts. `ADMIN_PASSWORD` is a new required variable, and the AWS ops task, k6 and chaos tools sign in as the admin with it. ADR 0018.
 - docs/Runbooks.md renamed to docs/runbook.md
 - Outbox publishes rows in batches, deletes old published rows, and indexes unpublished rows and line-table foreign keys.
-- Product images stored in SeaweedFS instead of MinIO.
 - CI validation split from on-demand image releases.
 - Local development runs every app on the host through Nx with a dev gateway, named portless URLs and separate ports for the web apps.
 - Documentation updated for prescriptions, procurement, cache policy, paging conventions, the System page and alert runbooks.
@@ -175,6 +176,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 **sales-service**
 
 - Cart creation and pricing hardened.
+- Creating or editing a purchase order no longer fails with 500 behind the signed gateway: inventory-service read the supplier, site and product from the catalog with only the service secret, which the catalog refuses on staff routes. It now sends the signed identity of the employee who writes.
 - A delivery estimate or a delivery order no longer answers `404 store_not_found`: the store is read from the public `GET /stores/:id` of catalog-service, not from the staff-only `/sites/:id` with a service secret.
 
 **catalog-service**
