@@ -5,7 +5,12 @@ variable "cookie_secure" {
 }
 
 variable "domain_name" {
-  description = "A domain whose DNS you control. The customer app is served at shop.<domain_name> and the staff app at staff.<domain_name>."
+  description = "The domain of the Cloudflare zone cloudflare_zone_id. The customer app is served at shop.<domain_name> and the staff app at staff.<domain_name>."
+  type        = string
+}
+
+variable "cloudflare_zone_id" {
+  description = "ID of the Cloudflare zone of domain_name. Terraform creates the certificate validation records and the two site CNAMEs there."
   type        = string
 }
 
@@ -65,8 +70,8 @@ resource "aws_s3_bucket_policy" "media" {
   })
 }
 
-# One public ALB serves both web apps on two hostnames, so staff and customer cookies never collide. The DNS lives
-# outside AWS: add the records from the certificate_validation_records and site_cnames outputs at your DNS provider.
+# One public ALB serves both web apps on two hostnames, so staff and customer cookies never collide. The DNS lives in
+# Cloudflare and is managed below, DNS only (not proxied). allow_overwrite takes over a record that already exists.
 resource "aws_acm_certificate" "web" {
   domain_name               = local.web_hosts["customer-web"]
   subject_alternative_names = [local.web_hosts["staff-web"]]
@@ -77,9 +82,34 @@ resource "aws_acm_certificate" "web" {
   }
 }
 
-# Waits until the validation records exist at the DNS provider and ACM has issued the certificate.
+resource "cloudflare_record" "certificate_validation" {
+  for_each = { for option in aws_acm_certificate.web.domain_validation_options : option.domain_name => option }
+
+  zone_id         = var.cloudflare_zone_id
+  name            = trimsuffix(each.value.resource_record_name, ".")
+  type            = each.value.resource_record_type
+  content         = trimsuffix(each.value.resource_record_value, ".")
+  ttl             = 1
+  proxied         = false
+  allow_overwrite = true
+}
+
+resource "cloudflare_record" "site" {
+  for_each = local.web_hosts
+
+  zone_id         = var.cloudflare_zone_id
+  name            = each.value
+  type            = "CNAME"
+  content         = aws_lb.web.dns_name
+  ttl             = 1
+  proxied         = false
+  allow_overwrite = true
+}
+
+# Waits until ACM has found the validation records and issued the certificate.
 resource "aws_acm_certificate_validation" "web" {
-  certificate_arn = aws_acm_certificate.web.arn
+  certificate_arn         = aws_acm_certificate.web.arn
+  validation_record_fqdns = [for record in cloudflare_record.certificate_validation : record.hostname]
 }
 
 resource "aws_security_group" "web_alb" {
@@ -303,18 +333,4 @@ output "web" {
     media_bucket   = aws_s3_bucket.media.bucket
     media_base_url = "https://${aws_s3_bucket.media.bucket_regional_domain_name}"
   }
-}
-
-output "certificate_validation_records" {
-  description = "CNAME records that prove ownership of the domain to ACM."
-  value = [for o in aws_acm_certificate.web.domain_validation_options : {
-    name  = o.resource_record_name
-    type  = o.resource_record_type
-    value = o.resource_record_value
-  }]
-}
-
-output "site_cnames" {
-  description = "CNAME records that send each host to its load balancer."
-  value       = { for app, host in local.web_hosts : host => aws_lb.web.dns_name }
 }

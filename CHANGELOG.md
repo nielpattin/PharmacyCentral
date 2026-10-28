@@ -143,6 +143,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - docs/UserGuide.md, docs/ApiGuide.md and docs/BusinessRules.md renamed to docs/user-guide.md, docs/api-guide.md and docs/business-rules.md and cleaned up: named URLs, a broken table fixed, history notes moved here, and "Giới hạn đã biết" moved to the end of BusinessRules.
 - Service and `ops` images use an Alpine runtime with only the Node binary, and `drizzle-kit` is a dev dependency, so they no longer ship it. Backend images shrink from 430-470 MB to 240-290 MB.
 - AWS staging cost: RabbitMQ runs as a Fargate task instead of Amazon MQ, one public ALB serves both web apps, RDS is `db.t4g.micro`, secrets are SSM parameters, and autoscaling and Container Insights are gone. The design lists about 505 USD a month before and about 235 after.
+- AWS staging DNS is Terraform too: the Cloudflare provider creates the ACM validation records and the `shop.` and `staff.` CNAMEs in the same apply, and a destroy removes them. It needs `cloudflare_zone_id` and `CLOUDFLARE_API_TOKEN`; the `certificate_validation_records` and `site_cnames` outputs are gone.
 
 ### Removed
 

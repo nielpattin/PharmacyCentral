@@ -38,7 +38,7 @@ Security groups: the VPC Link reaches only the internal ALB; the internal ALB ac
 
 ## Release workflow
 
-Credentials come from an IAM user profile (`AWS_PROFILE`), not a session token: the apply that creates RDS runs for about 15 minutes.
+Credentials come from an IAM user profile (`AWS_PROFILE`), not a session token: the apply that creates RDS runs for about 15 minutes. DNS is Terraform too: export `CLOUDFLARE_API_TOKEN` (a token with DNS Write on the one zone) before every plan, apply and destroy, and pass `-var cloudflare_zone_id=<zone id>` with the other variables.
 
 ```bash
 cd deploy/aws
@@ -48,7 +48,7 @@ terraform init
 terraform apply -var domain_name=<domain> -var image_tag=<tag>
 ```
 
-2. Add the DNS records from `terraform output certificate_validation_records` (ACM validation) and then `site_cnames` (`shop.` and `staff.`, both to the same ALB) at the DNS provider, DNS only. The apply waits for the certificate.
+2. The same apply creates the DNS records in Cloudflare, DNS only: the ACM validation records and the `shop.` and `staff.` CNAMEs to the web ALB. A record that already exists is taken over, and a destroy removes them. Each new ALB has a new name, so the CNAMEs follow it on every apply. The apply waits for the certificate.
 3. Push the images (`node tools/aws-push-images.mjs <tag>`), then run the one-shot tasks in the cluster (`ecs_cluster_name`, `private_subnet_ids`, `ecs_tasks_security_group_id`):
    - the `ops` task (`ops_task_definition`) creates the databases and roles (`ops/001-create-databases.sql`, `ops/roles.sh`);
    - each task in `migration_task_definitions` runs `node dist/migrate.js` and must exit 0;
@@ -74,7 +74,6 @@ A release with a new tag repeats the push, a `plan` review, the migration tasks 
 | Output | Use |
 | --- | --- |
 | `web` | `customer_url`, `staff_url`, `media_bucket`, `media_base_url` |
-| `certificate_validation_records`, `site_cnames` | DNS records to create |
 | `api_gateway_url` | API Gateway endpoint behind both web apps |
 | `ecr_repository_urls` | ECR repository per service and `ops` |
 | `ecs_cluster_name`, `private_subnet_ids`, `ecs_tasks_security_group_id` | inputs for one-shot tasks |

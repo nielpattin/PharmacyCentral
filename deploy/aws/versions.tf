@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
+    }
     random = {
       source  = "hashicorp/random"
       version = "~> 3.6"
@@ -20,3 +24,6 @@ terraform {
 provider "aws" {
   region = var.aws_region
 }
+
+# The token comes from CLOUDFLARE_API_TOKEN: DNS Write on the one zone, nothing else.
+provider "cloudflare" {}

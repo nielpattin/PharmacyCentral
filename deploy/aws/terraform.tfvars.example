@@ -1,9 +1,10 @@
 # Copy to terraform.tfvars (git-ignored) or pass with -var. Everything else comes from demo.auto.tfvars.json, which
 # tools/aws-env.mjs writes from the root .env (service settings and secrets, git-ignored).
 
-# The web apps are served at shop.<domain_name> (customer) and staff.<domain_name> (staff). Add the DNS records from the
-# certificate_validation_records and site_cnames outputs at your DNS provider.
-domain_name = "example.com"
+# The web apps are served at shop.<domain_name> (customer) and staff.<domain_name> (staff). Terraform creates their DNS
+# records in the Cloudflare zone below; export CLOUDFLARE_API_TOKEN (DNS Write on that zone) before plan and apply.
+domain_name        = "example.com"
+cloudflare_zone_id = "replace-with-zone-id"
 
 # Tag of the images pushed by tools/aws-push-images.mjs <tag>. tools/aws-env.mjs writes it too when given.
 image_tag = "replace-with-image-tag"
