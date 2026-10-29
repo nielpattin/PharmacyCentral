@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Button, DataTable, StatTile } from "@pharmacy/ui";
+import { Alert, Button, DataTable, StatTile, type DataColumn } from "@pharmacy/ui";
 import { useState } from "react";
 
 import { dataTableLabels } from "../../components/data-table-labels.ts";
+import { withActionColumn } from "../../lib/action-column.ts";
 import { translateText } from "../../i18n.ts";
 import { useCan } from "../../permissions/use-can.ts";
 import { asRows, formatDateTime, formatQuantity, readOne, text, type JsonRecord } from "../../staff-api.ts";
@@ -34,6 +35,9 @@ export const SummaryTab = (): React.JSX.Element => {
   const summary = summaryQuery.data;
   const currency = text(summary?.currency, "VND");
   const planGate = useCan("actionPlan.create");
+  const valuationLines = asRows(summary?.valuationLines);
+  const canPlanLine = (row: JsonRecord): boolean =>
+    planGate.allowed && typeof row.productId === "string" && row.priceStatus === "Missing price";
   const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
 
   return (
@@ -93,59 +97,62 @@ export const SummaryTab = (): React.JSX.Element => {
           labels={dataTableLabels()}
           interactive
           loading={summaryQuery.isPending}
-          rows={asRows(summary?.valuationLines)}
+          rows={valuationLines}
           empty={translateText("No records found")}
           exportCsv={{ filename: "inventory-valuation.csv" }}
-          columns={[
-            { key: "productName", label: translateText("Product"), truncate: 32 },
-            { key: "batchNumber", label: translateText("Batch") },
-            { key: "siteName", label: translateText("Site") },
-            {
-              key: "quantityOnHand",
-              label: translateText("On hand"),
-              align: "right",
-              render: (row) => formatQuantity(row.quantityOnHand),
-            },
-            {
-              key: "valueOnHand",
-              label: translateText("Value"),
-              align: "right",
-              render: (row) => (row.valueOnHand === null ? "-" : `${formatQuantity(row.valueOnHand)} ${currency}`),
-              text: (row) => row.valueOnHand,
-            },
-            {
-              key: "priceStatus",
-              label: translateText("Price status"),
-              render: (row) => translateText(text(row.priceStatus)),
-            },
-            {
-              key: "actions",
-              label: translateText("Actions"),
-              pinned: "right",
-              enableSorting: false,
-              render: (row) => {
-                const productId = typeof row.productId === "string" ? row.productId : undefined;
-                if (!planGate.allowed || productId === undefined || row.priceStatus !== "Missing price") return null;
-                return (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      setPlanDraft(
-                        priceWarningDraft({
-                          productId,
-                          productName: text(row.productName, productId),
-                          siteId: typeof row.siteId === "string" ? row.siteId : null,
-                        }),
-                      )
-                    }
-                  >
-                    {translateText("Create plan")}
-                  </Button>
-                );
+          columns={withActionColumn<DataColumn<JsonRecord>>(
+            [
+              { key: "productName", label: translateText("Product"), truncate: 32 },
+              { key: "batchNumber", label: translateText("Batch") },
+              { key: "siteName", label: translateText("Site") },
+              {
+                key: "quantityOnHand",
+                label: translateText("On hand"),
+                align: "right",
+                render: (row) => formatQuantity(row.quantityOnHand),
               },
-            },
-          ]}
+              {
+                key: "valueOnHand",
+                label: translateText("Value"),
+                align: "right",
+                render: (row) => (row.valueOnHand === null ? "-" : `${formatQuantity(row.valueOnHand)} ${currency}`),
+                text: (row) => row.valueOnHand,
+              },
+              {
+                key: "priceStatus",
+                label: translateText("Price status"),
+                render: (row) => translateText(text(row.priceStatus)),
+              },
+              {
+                key: "actions",
+                label: translateText("Actions"),
+                pinned: "right",
+                enableSorting: false,
+                render: (row) => {
+                  const productId = typeof row.productId === "string" ? row.productId : undefined;
+                  if (!planGate.allowed || productId === undefined || row.priceStatus !== "Missing price") return null;
+                  return (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setPlanDraft(
+                          priceWarningDraft({
+                            productId,
+                            productName: text(row.productName, productId),
+                            siteId: typeof row.siteId === "string" ? row.siteId : null,
+                          }),
+                        )
+                      }
+                    >
+                      {translateText("Create plan")}
+                    </Button>
+                  );
+                },
+              },
+            ],
+            valuationLines.some(canPlanLine),
+          )}
         />
       </section>
       {planDraft ? <CreatePlanDrawer draft={planDraft} onClose={() => setPlanDraft(undefined)} /> : null}

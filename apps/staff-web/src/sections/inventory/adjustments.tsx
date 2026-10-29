@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { GatedButton } from "../../components/gated-button.tsx";
+import { withActionColumn } from "../../lib/action-column.ts";
 import { Field, SelectField } from "../../components/forms.tsx";
 import { ProductPicker } from "../../components/product-picker.tsx";
 import { FormDrawer } from "../../components/form-drawer.tsx";
@@ -19,7 +20,7 @@ import { translateText } from "../../i18n.ts";
 import { useSession } from "../../auth.ts";
 import { can, ownerOf } from "../../permissions/staff-permissions.ts";
 import { useCan } from "../../permissions/use-can.ts";
-import { formatQuantity, text, writeJson } from "../../staff-api.ts";
+import { formatQuantity, text, writeJson, type JsonRecord } from "../../staff-api.ts";
 import { shortId } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
 import { ADJUSTMENT_STATUSES, ALL_STATUSES, statusParam } from "./status.ts";
@@ -233,6 +234,9 @@ export const AdjustmentsTab = (): React.JSX.Element => {
     setSelected(new Set());
   };
 
+  const canDecideRow = (row: JsonRecord): boolean =>
+    text(row.status, "") === "Pending" && can("inventory.adjustment.decide", session, ownerOf(row.createdBy)).allowed;
+
   const columns: Column[] = [
     {
       key: "productId",
@@ -257,7 +261,7 @@ export const AdjustmentsTab = (): React.JSX.Element => {
       pinned: "right",
       enableSorting: false,
       render: (row) => {
-        if (text(row.status, "") !== "Pending") return null;
+        if (!canDecideRow(row)) return null;
         const id = text(row.id, "");
         const owner = ownerOf(row.createdBy);
         return (
@@ -300,7 +304,7 @@ export const AdjustmentsTab = (): React.JSX.Element => {
         }
         toolbarExtra={<SavedViewsMenu pageKey="inventory:adjustments" defaults={ADJUSTMENT_DEFAULTS} />}
         rows={list.rows}
-        columns={columns}
+        columns={withActionColumn(columns, list.rows.some(canDecideRow))}
         loading={list.isLoading}
         getKey={(row) => text(row.id, "")}
         search={{

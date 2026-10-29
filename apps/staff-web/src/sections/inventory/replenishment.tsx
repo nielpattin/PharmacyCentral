@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { useConfirm } from "../../components/confirm.tsx";
 import { GatedButton } from "../../components/gated-button.tsx";
+import { withActionColumn } from "../../lib/action-column.ts";
 import { Field, SelectField } from "../../components/forms.tsx";
 import { ProductPicker } from "../../components/product-picker.tsx";
 import { FormDrawer } from "../../components/form-drawer.tsx";
@@ -287,6 +288,16 @@ export const ReplenishmentTab = (): React.JSX.Element => {
     setSelected(new Set());
   };
 
+  const hasRowAction = (row: JsonRecord): boolean => {
+    const status = text(row.status, "");
+    const owner = ownerOf(row.requestedBy);
+    if (status === "Pending") return can("replenishment.decide", session, owner).allowed;
+    if (status === "Approved") {
+      return can("replenishment.decide", session, owner).allowed || can("replenishment.cancel", session, owner).allowed;
+    }
+    return false;
+  };
+
   const columns: Column[] = [
     { key: "id", label: "Request", render: (row) => shortId(text(row.id, "")) },
     {
@@ -388,7 +399,7 @@ export const ReplenishmentTab = (): React.JSX.Element => {
         }
         toolbarExtra={<SavedViewsMenu pageKey="inventory:replenishment" defaults={REPLENISHMENT_DEFAULTS} />}
         rows={list.rows}
-        columns={columns}
+        columns={withActionColumn(columns, list.rows.some(hasRowAction))}
         loading={list.isLoading}
         getKey={(row) => text(row.id, "")}
         search={{ value: draft, onChange: setDraft, placeholder: translateText("Search by notes or batch number") }}

@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { useConfirm, usePrompt } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
+import { withActionColumn } from "../../lib/action-column.ts";
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
 import { GatedButton } from "../../components/gated-button.tsx";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
@@ -50,6 +51,12 @@ export const BalancesTab = (): React.JSX.Element => {
   const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
   const today = todayIsoDate();
 
+  const canPlanRow = (row: JsonRecord): boolean => {
+    const expiryDate = text(row.expiryDate, "").slice(0, 10);
+    const expiring = isIsoDate(expiryDate) && expiryState(expiryDate, today) !== "ok";
+    return planGate.allowed && expiring && numberValue(row.quantityOnHand) > 0;
+  };
+
   const columns: Column[] = [
     {
       key: "productId",
@@ -85,8 +92,7 @@ export const BalancesTab = (): React.JSX.Element => {
       render: (row) => {
         const expiryDate = text(row.expiryDate, "").slice(0, 10);
         const quantityOnHand = numberValue(row.quantityOnHand);
-        const expiring = isIsoDate(expiryDate) && expiryState(expiryDate, today) !== "ok";
-        if (!planGate.allowed || !expiring || quantityOnHand <= 0) return null;
+        if (!canPlanRow(row)) return null;
         return (
           <Button
             size="sm"
@@ -119,7 +125,7 @@ export const BalancesTab = (): React.JSX.Element => {
       <DataTable
         toolbarExtra={<SavedViewsMenu pageKey="inventory:balances" defaults={BALANCE_DEFAULTS} />}
         rows={balances}
-        columns={columns}
+        columns={withActionColumn(columns, balances.some(canPlanRow))}
         loading={list.isLoading}
         getKey={(row) => `${text(row.id, "")}:${text(row.storageLocationId, "")}`}
         search={{ value: draft, onChange: setDraft, placeholder: translateText("Search by batch number") }}

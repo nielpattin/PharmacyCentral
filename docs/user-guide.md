@@ -26,7 +26,7 @@ Every list in Staff Web follows the same conventions.
 
 - **Search and filters** run on the server, so a match is found however many rows exist. The search text, status filter, sort and active tab are kept in the address bar: refresh the page, press Back or share the link and you land on the same view.
 - **Load more.** A list loads one page at a time, newest first. The footer reads "Showing N rows" and offers **Load more** while more rows exist.
-- **Table tools.** Choose **Density** for compact, standard or loose rows and **Columns** to hide columns. Both choices are remembered per table on this device. The header stays in view while you scroll, and the actions column stays pinned on the right.
+- **Table tools.** Choose **Density** for compact, standard or loose rows and **Columns** to hide columns. Both choices are remembered per table on this device. The header stays in view while you scroll, and the actions column stays pinned on the right. When you may use no action on the rows shown, the actions column is not shown at all.
 - **Export CSV** saves the rows currently loaded and the visible columns as a UTF-8 file that Excel opens correctly.
 - **Bulk actions.** Where it applies (for example approving adjustments or publishing prices), tick rows. A bar shows the count and the actions. The result is one summary message, for example "3 of 4 approved", with the failures listed.
 - **Saved views.** Use the **Views** menu to save the current search and filters under a name, apply them later, rename or delete them. Views are stored on this device for your account.

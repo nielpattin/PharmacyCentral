@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { Alert, Button, RowActions, StatusCell } from "@pharmacy/ui";
 
 import { DataTable, type Column } from "../../components/data-table.tsx";
+import { withActionColumn } from "../../lib/action-column.ts";
 import { useConfirm, usePrompt } from "../../components/confirm.tsx";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
@@ -12,7 +13,7 @@ import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
 import { useCan } from "../../permissions/use-can.ts";
-import { formatDateTime, text } from "../../staff-api.ts";
+import { formatDateTime, text, type JsonRecord } from "../../staff-api.ts";
 import {
   ALL_STATUSES,
   activeStatus,
@@ -85,6 +86,11 @@ export const CounterTab = (): React.JSX.Element => {
     });
   };
 
+  const hasRowAction = (row: JsonRecord): boolean => {
+    const status = text(row.status, "");
+    return (confirmGate.allowed && canConfirmCash(status)) || (refundGate.allowed && canRefund(status));
+  };
+
   const columns: Column[] = [
     {
       key: "paymentCode",
@@ -152,7 +158,7 @@ export const CounterTab = (): React.JSX.Element => {
         toolbarExtra={<SavedViewsMenu pageKey="counter-payments" defaults={COUNTER_DEFAULTS} />}
         loading={invoices.isLoading}
         rows={rows}
-        columns={columns}
+        columns={withActionColumn(columns, rows.some(hasRowAction))}
         // Online-order invoices are filtered out per page, so an empty page can still have more behind "Load more".
         empty={
           invoices.hasMore ? "No counter payments on this page. Load more to keep looking." : "No counter payments."

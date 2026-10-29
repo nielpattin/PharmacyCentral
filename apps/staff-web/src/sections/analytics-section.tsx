@@ -5,6 +5,7 @@ import {
   Alert,
   Button,
   DataTable,
+  type DataColumn,
   Field,
   Input,
   Select,
@@ -15,6 +16,7 @@ import {
 } from "@pharmacy/ui";
 
 import { dataTableLabels } from "../components/data-table-labels.ts";
+import { withActionColumn } from "../lib/action-column.ts";
 import { RefreshButton } from "../components/forms.tsx";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { referenceLabel, referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
@@ -500,43 +502,46 @@ export const AnalyticsSection = (): React.JSX.Element => {
           rows={deadStockRows}
           getKey={(row) => `${row.siteId}:${row.productId}`}
           empty={translateText("No records found")}
-          columns={[
-            { key: "productName", label: translateText("Product"), truncate: 32 },
-            { key: "site", label: translateText("Site") },
-            {
-              key: "quantity",
-              label: translateText("Quantity"),
-              align: "right",
-              render: (row) => count(row.quantity),
-            },
-            { key: "value", label: translateText("Value"), align: "right", render: (row) => money(row.value) },
-            {
-              key: "actions",
-              label: translateText("Actions"),
-              pinned: "right",
-              enableSorting: false,
-              render: (row) =>
-                planGate.allowed && deadStockDays !== undefined ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      setPlanDraft(
-                        deadStockDraft({
-                          siteId: row.siteId,
-                          productId: row.productId,
-                          productName: row.productName,
-                          quantity: row.quantity,
-                          deadStockDays,
-                        }),
-                      )
-                    }
-                  >
-                    {translateText("Create plan")}
-                  </Button>
-                ) : null,
-            },
-          ]}
+          columns={withActionColumn<DataColumn<DeadStockRow>>(
+            [
+              { key: "productName", label: translateText("Product"), truncate: 32 },
+              { key: "site", label: translateText("Site") },
+              {
+                key: "quantity",
+                label: translateText("Quantity"),
+                align: "right",
+                render: (row) => count(row.quantity),
+              },
+              { key: "value", label: translateText("Value"), align: "right", render: (row) => money(row.value) },
+              {
+                key: "actions",
+                label: translateText("Actions"),
+                pinned: "right",
+                enableSorting: false,
+                render: (row) =>
+                  planGate.allowed && deadStockDays !== undefined ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setPlanDraft(
+                          deadStockDraft({
+                            siteId: row.siteId,
+                            productId: row.productId,
+                            productName: row.productName,
+                            quantity: row.quantity,
+                            deadStockDays,
+                          }),
+                        )
+                      }
+                    >
+                      {translateText("Create plan")}
+                    </Button>
+                  ) : null,
+              },
+            ],
+            planGate.allowed && deadStockDays !== undefined && deadStockRows.length > 0,
+          )}
         />
       </section>
       {planDraft ? <CreatePlanDrawer draft={planDraft} onClose={() => setPlanDraft(undefined)} /> : null}

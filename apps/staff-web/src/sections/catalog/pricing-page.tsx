@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
+import { withActionColumn } from "../../lib/action-column.ts";
 import { GatedButton } from "../../components/gated-button.tsx";
 import { PageActions } from "../../components/page-actions.tsx";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
@@ -168,6 +169,14 @@ export const PricingPage = (): React.JSX.Element => {
   ).length;
   const archivable = selectedRows.filter((row) => BULK.archive.eligible(text(row.status, ""))).length;
 
+  const hasRowAction = (row: JsonRecord): boolean => {
+    const status = text(row.status, "");
+    return (
+      (BULK.publish.eligible(status) && can("price.publish", session, ownerOf(row.createdBy)).allowed) ||
+      BULK.archive.eligible(status)
+    );
+  };
+
   const columns: Column[] = [
     {
       key: "product",
@@ -282,7 +291,7 @@ export const PricingPage = (): React.JSX.Element => {
           }
           toolbarExtra={<SavedViewsMenu pageKey="catalog-prices" defaults={LIST_DEFAULTS} />}
           rows={list.rows}
-          columns={columns}
+          columns={withActionColumn(columns, list.rows.some(hasRowAction))}
           loading={list.isLoading}
           empty={translateText("No prices match these filters.")}
           getKey={(row) => idOf(row)}

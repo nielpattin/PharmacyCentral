@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
+import { withActionColumn } from "../../lib/action-column.ts";
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
 import { PageActions } from "../../components/page-actions.tsx";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
@@ -16,7 +17,7 @@ import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard.ts";
 import { translateText } from "../../i18n.ts";
 import { useSession } from "../../auth.ts";
-import { can, canAtSite } from "../../permissions/staff-permissions.ts";
+import { can, canAtSite, type AccessResult } from "../../permissions/staff-permissions.ts";
 import { idOf, readRows, text, type JsonRecord } from "../../staff-api.ts";
 import { sameValues, type MasterDataConfig, type RecordValues } from "./master-data-config.ts";
 import { MasterRecordForm } from "./master-record-form.tsx";
@@ -147,6 +148,16 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
     { label: "Save", allowWhileEditing: true, when: editor !== undefined },
   );
 
+  const gatesFor = (row: JsonRecord): { editGate: AccessResult; deleteGate: AccessResult } => {
+    const siteId = siteOf(row);
+    const editGate = siteId === undefined ? can("catalog.write", session) : canAtSite("catalog.write", session, siteId);
+    return { editGate, deleteGate: isSiteRecord ? can("catalog.site.delete", session) : editGate };
+  };
+  const hasRowAction = (row: JsonRecord): boolean => {
+    const { editGate, deleteGate } = gatesFor(row);
+    return editGate.allowed || deleteGate.allowed;
+  };
+
   const columns: Column[] = [
     ...config.columns.map((column): Column => {
       const base = {
@@ -173,10 +184,7 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
       align: "right",
       width: 170,
       render: (row) => {
-        const siteId = siteOf(row);
-        const editGate =
-          siteId === undefined ? can("catalog.write", session) : canAtSite("catalog.write", session, siteId);
-        const deleteGate = isSiteRecord ? can("catalog.site.delete", session) : editGate;
+        const { editGate, deleteGate } = gatesFor(row);
         return (
           <RowActions label={translateText("Actions")}>
             {editGate.allowed ? (
@@ -218,7 +226,7 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
         <DataTable
           storageKey={`staff:master-data:${config.id}`}
           rows={list.rows}
-          columns={columns}
+          columns={withActionColumn(columns, list.rows.some(hasRowAction))}
           getKey={(row) => idOf(row)}
           loading={list.isLoading}
           search={{

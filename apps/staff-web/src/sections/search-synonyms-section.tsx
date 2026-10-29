@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { useSession } from "../auth.ts";
 import { useConfirm } from "../components/confirm.tsx";
 import { DataTable, type Column } from "../components/data-table.tsx";
+import { withActionColumn } from "../lib/action-column.ts";
 import { EntityDrawer } from "../components/entity-drawer.tsx";
 import { SubTabs } from "../components/forms.tsx";
 import { GatedButton } from "../components/gated-button.tsx";
@@ -234,6 +235,12 @@ export const SearchSynonymsSection = (): React.JSX.Element => {
     tab === "In use" ? group.status === "approved" : group.status === "pending",
   );
 
+  const hasRowAction = (group: SearchSynonymGroup): boolean =>
+    writeGate.allowed ||
+    (group.status === "pending" &&
+      approveRoleAllowed &&
+      can("synonym.approve", session, { ownerId: group.submittedBy }).allowed);
+
   const columns: Column[] = [
     {
       key: "terms",
@@ -319,7 +326,7 @@ export const SearchSynonymsSection = (): React.JSX.Element => {
       <SubTabs tabs={[...TABS]} active={tab} onChange={(next) => setValues({ tab: next }, { history: "push" })} />
       <DataTable
         rows={visible}
-        columns={columns}
+        columns={withActionColumn(columns, visible.some(hasRowAction))}
         loading={groupsQuery.isPending}
         empty={translateText(tab === "In use" ? "No groups are in use." : "No groups are waiting for review.")}
         getKey={(row) => text(row.id, "")}

@@ -45,7 +45,7 @@ import {
   type SupplierGroup,
 } from "./review.ts";
 
-const COLUMN_COUNT = 10;
+const COLUMN_COUNT = 9;
 
 type ReviewProps = {
   siteId: string;
@@ -154,7 +154,7 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
               <TableHead className="text-right">{translateText("Reorder point")}</TableHead>
               <TableHead className="text-right">{translateText("Suggested quantity")}</TableHead>
               <TableHead className="text-right">{translateText("Days of cover")}</TableHead>
-              <TableHead className="text-right">{translateText("Actions")}</TableHead>
+              {planGate.allowed ? <TableHead className="text-right">{translateText("Actions")}</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -163,6 +163,7 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
                 <SupplierRow
                   group={group}
                   suppliers={suppliers}
+                  columnCount={planGate.allowed ? COLUMN_COUNT + 1 : COLUMN_COUNT}
                   choices={choices}
                   selected={selected}
                   onSelectedChange={setSelected}
@@ -246,8 +247,8 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
                           ? "-"
                           : fillText(translateText("{count} days"), { count: formatQuantity(row.daysOfCover) })}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {planGate.allowed ? (
+                      {planGate.allowed ? (
+                        <TableCell className="text-right">
                           <Button
                             size="sm"
                             variant="outline"
@@ -268,8 +269,8 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
                           >
                             {translateText("Create plan")}
                           </Button>
-                        ) : null}
-                      </TableCell>
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   );
                 })}
@@ -287,12 +288,14 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
 const SupplierRow = ({
   group,
   suppliers,
+  columnCount,
   choices,
   selected,
   onSelectedChange,
 }: {
   group: SupplierGroup;
   suppliers: JsonRecord[];
+  columnCount: number;
   choices: ReadonlyMap<string, string>;
   selected: ReadonlySet<string>;
   onSelectedChange: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>;
@@ -305,7 +308,7 @@ const SupplierRow = ({
   const check = selectionCheckState(selectableIds, selected);
   return (
     <TableRow className="bg-surface-soft">
-      <TableCell colSpan={COLUMN_COUNT}>
+      <TableCell colSpan={columnCount}>
         <label className="flex flex-wrap items-center gap-3">
           <input
             type="checkbox"
