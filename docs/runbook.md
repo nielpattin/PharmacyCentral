@@ -180,6 +180,7 @@ pnpm run infra:down
 | Vite logs `http proxy error: /api/... ECONNREFUSED` while `gateway-dev` is healthy (Docker Desktop) | Host networking is off, so port 8080 never reaches the host. Enable it as described under Dev mode, then rerun `pnpm run infra:up` |
 | Gateway 404 on `/api/...` | Check the path against the routing map above |
 | `/api/...` returns 401 `trusted_request_required` | The path needs an identity token. Fetch `/api/auth/context` after login and send the matching service token as `x-internal-identity-context` |
+| `typesense` exits with code 139 and no log line (Docker Desktop with WSL2) | Typesense 30.2 bundles brpc, which reads `/proc/self/io` before `main()`. The WSL2 kernel of Docker Desktop has no task I/O accounting, so the file is missing and the 30.2 server segfaults (upstream [typesense/typesense#2998](https://github.com/typesense/typesense/issues/2998)). Compose pins `typesense/typesense:31.0.rc23` by digest, which starts on that kernel (it only logs `Fail to open /proc/self/io`, harmless). Pull it with `docker compose up -d --no-deps --wait typesense`, then check `docker compose ps typesense` and `curl http://localhost:8108/health` (`{"ok":true}`). The AWS task definition (`deploy/aws/data.tf`) pins the same digest, so local and AWS run one version. |
 
 ## Runtime contract
 

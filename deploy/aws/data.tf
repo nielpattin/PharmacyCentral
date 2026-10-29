@@ -369,7 +369,7 @@ resource "aws_ecs_task_definition" "typesense" {
 
   container_definitions = jsonencode([{
     name      = "typesense"
-    image     = "typesense/typesense@sha256:610f2d34b1f93d00762869da2c67736775e5798d19a2c8b91b014b8a0cc1e110"
+    image     = "typesense/typesense@sha256:1a4d13c3ba1a11b6b0308795419aac135dfc8152637463d291eb3536bd4ae415"
     essential = true
     cpu       = 256
     memory    = 512

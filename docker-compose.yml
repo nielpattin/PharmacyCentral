@@ -102,7 +102,8 @@ services:
       - "${REDIS_PORT}:6379"
 
   typesense:
-    image: typesense/typesense:30.2@sha256:610f2d34b1f93d00762869da2c67736775e5798d19a2c8b91b014b8a0cc1e110
+    # 30.2 segfaults at start (exit 139) on Docker Desktop with WSL2, whose kernel has no /proc/self/io; 31.0 starts.
+    image: typesense/typesense:31.0.rc23@sha256:1a4d13c3ba1a11b6b0308795419aac135dfc8152637463d291eb3536bd4ae415
     restart: unless-stopped
     environment:
       TYPESENSE_API_KEY: ${TYPESENSE_API_KEY}

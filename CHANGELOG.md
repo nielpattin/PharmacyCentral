@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Fixed
+
+**deploy**
+
+- The local Typesense container no longer crashes at start (exit 139) on Docker Desktop with WSL2. Compose and the AWS task definition (`deploy/aws/data.tf`) now pin `typesense/typesense:31.0.rc23` by digest instead of 30.2, whose bundled brpc segfaults when the host kernel has no `/proc/self/io` (upstream typesense/typesense#2998). See the Troubleshooting table in `docs/runbook.md`.
+
 ### Added
 
 **tools, data**

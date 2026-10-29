@@ -66,7 +66,7 @@ flowchart LR
   subgraph shared["Shared infrastructure"]
     rabbit{{"RabbitMQ 4<br/>topic exchange pharmacy.events"}}
     redis[("Redis 8")]
-    typesense[("Typesense 30.2")]
+    typesense[("Typesense 31.0")]
     s3media[("S3 media bucket<br/>Floci locally")]
     embedder["Embedder<br/>text embeddings"]
   end
@@ -207,7 +207,7 @@ Both topologies run the same Docker images and the same contracts. Details are i
 | --- | --- | --- |
 | Entry | `customer-web` and `staff-web` containers, Nginx `gateway` on `GATEWAY_PORT`. `gateway-dev` (host network) replaces it while services run through `pnpm dev`. | API Gateway HTTP API with a Lambda authorizer and a CSRF Lambda, a VPC Link, and an internal ALB |
 | Compute | One container per backend service, built from `apps/Dockerfile.service` (`apps/search-service/Dockerfile` for `search-service`). Migrations run before each service starts. | One ECS Fargate service per backend, one embedder task, and one-shot migration tasks |
-| Data | PostgreSQL (PostGIS 18), RabbitMQ 4.3, Redis 8.10, Typesense 30.2, Floci (S3 and ECR emulator), embedder, Mailpit | RDS PostgreSQL, ElastiCache Redis, Amazon MQ for RabbitMQ, a Typesense cluster or Typesense Cloud, and Secrets Manager. The first stack does not provision these data services. |
+| Data | PostgreSQL (PostGIS 18), RabbitMQ 4.3, Redis 8.10, Typesense 31.0, Floci (S3 and ECR emulator), embedder, Mailpit | RDS PostgreSQL, ElastiCache Redis, Amazon MQ for RabbitMQ, a Typesense cluster or Typesense Cloud, and Secrets Manager. The first stack does not provision these data services. |
 | Telemetry | `otel-collector` with Tempo, Prometheus, Loki, and Grafana | An ADOT collector task that forwards to Amazon Managed Service for Prometheus, AWS X-Ray, and CloudWatch Logs |
 | Status | Development and integration | Configuration only. No AWS resource has been created. |
 
