@@ -120,7 +120,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
 - `[observed]` Importing: **Importing...**; the file input and **Remove** are disabled.
 - `[observed]` Imported: the success alert, **Result by step**, then **Stored records** ("Loading imported records..."). The read-back walks every page in steps of 100 rows.
 - `[observed]` Read-back failed: danger alert. The import stays saved; nothing is rolled back.
-- `[observed]` No access: the file and preview show, and **Import now** is disabled with the reason from `can()`.
+- `[owner]` No access: the file and preview show, and **Import now** is not shown.
 - `[standard]` Upstream unavailable: a retry message, and the file stays selected so staff can retry without re-choosing it. Nothing is saved. (gap G20)
 - `[observed]` No matching stored records: "No stored records matched this file".
 

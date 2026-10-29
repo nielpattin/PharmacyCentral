@@ -45,6 +45,9 @@ export const PurchaseOrderDrawer = ({
   });
   const order = detail.data ?? summary;
   const lines = asRows(order?.lines);
+  const approveGate = order ? can("purchaseOrder.approve", session, ownerOf(order.createdBy)) : undefined;
+  const showApprove = order !== undefined && canApprovePurchaseOrder(order.status) && approveGate?.allowed === true;
+  const showCancel = order !== undefined && canCancelPurchaseOrder(order.status) && cancelGate.allowed;
   const products = useProductLookup(lines.map((line) => text(line.productId, "")));
 
   return (
@@ -113,17 +116,14 @@ export const PurchaseOrderDrawer = ({
         )
       }
       footer={
-        order ? (
+        showApprove || showCancel ? (
           <>
-            {canApprovePurchaseOrder(order.status) ? (
-              <GatedButton
-                gate={can("purchaseOrder.approve", session, ownerOf(order.createdBy))}
-                onClick={() => void actions.approve(order)}
-              >
+            {showApprove && order && approveGate ? (
+              <GatedButton gate={approveGate} onClick={() => void actions.approve(order)}>
                 {translateText("Approve")}
               </GatedButton>
             ) : null}
-            {canCancelPurchaseOrder(order.status) ? (
+            {showCancel && order ? (
               <GatedButton gate={cancelGate} variant="danger-soft" onClick={() => void actions.cancel(order)}>
                 {translateText("Cancel")}
               </GatedButton>

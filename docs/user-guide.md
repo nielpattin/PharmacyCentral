@@ -135,7 +135,7 @@ Prices are recorded per product unit in the catalog service.
 
 - Enter the **Terms** in the box, one per line or separated by commas. A group needs 2 to 20 terms, each up to 60 characters. Terms that differ only in accents or capitals count as the same term.
 - Choose **Submit for review**. The group appears under **Pending review** and does not affect shopper search until another staff member approves it.
-- **Approve** is disabled on a group you submitted or last edited, and its tooltip explains why. Approval by the submitter is refused by the service.
+- **Approve** is not shown on a group you submitted or last edited. Approval by the submitter is refused by the service.
 - **In use** lists approved groups that shopper searches already use.
 - Each row shows its version, when it was submitted, and whether you or another staff member proposed it.
 - **Edit** saves a version change and sends the group back to **Pending review**; it leaves search until someone approves the new terms.

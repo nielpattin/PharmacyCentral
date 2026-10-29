@@ -48,7 +48,7 @@ export const CreateAction = ({
 }: {
   label: string;
   onClick: () => void;
-  /** Set when the role may not create; the button is then dimmed with the reason. */
+  /** Set when the role may not create; the button is then not shown. */
   gate?: AccessResult;
   variant?: "secondary";
 }): React.JSX.Element => (

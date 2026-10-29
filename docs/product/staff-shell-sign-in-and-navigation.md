@@ -134,7 +134,7 @@ The target access for each role, per D1 to D4. Other staff specs link to this ta
 - **Signed out:** the sign-in form at a known URL. The URL is kept, so after sign-in the same page opens if the role allows it (D6). A failed sign-in shows the server's message in a danger alert.
 - **Session ended (401):** the sign-in form with "Phiên đã hết hạn. Vui lòng đăng nhập lại.".
 - **Signed in, section not allowed:** moved to the first section the role may open. No message.
-- **Signed in, action not allowed:** the control stays, dimmed, with the reason as tooltip and `aria-disabled`; a click does nothing (`GatedButton`). Reasons come from `permissions/staff-permissions.ts`.
+- **Signed in, action not allowed:** the control is not shown (`GatedButton` renders nothing, as in Odoo). The service and the edge still refuse the call. Rules live in `permissions/staff-permissions.ts`.
 
 ## Out of scope
 

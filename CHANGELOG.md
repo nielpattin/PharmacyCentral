@@ -117,6 +117,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 **staff-web**
 
+- Buttons the signed-in role may not use are hidden instead of dimmed, as in Odoo. The service and the edge still refuse the call.
 - Back-office UX overhaul with drawer forms, a grouped audit log and calmer row actions; workspace modernized and migrated to the TanStack stack.
 - Receiving, Inventory and Prescriptions tabs replaced by drawers: the old Create order, Receive goods, Create batch, Create transfer, Count line, Create and Dispense tabs are gone, and links with those `?tab=` values open the list.
 

@@ -179,7 +179,7 @@ const StocktakeDetail = ({
   const lines = Array.isArray(stocktake.lines) ? stocktake.lines.map(asRecord) : [];
   const labels = useInventoryLabels(lines.map((line) => text(line.productId, "")));
   const status = text(stocktake.status, "");
-  const canPost = status === "Pending" || status === "InProgress";
+  const canPost = (status === "Pending" || status === "InProgress") && gate.allowed;
   return (
     <EntityDrawer
       open
