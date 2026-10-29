@@ -232,7 +232,7 @@ There are two seeds. They are separate commands with separate code, and neither 
 | --- | --- | --- |
 | Command | `pnpm run seed:default` | `pnpm run seed:demo` |
 | Code | `apps/identity-service/seed.mjs` | `tools/seed-demo.mjs` and `apps/identity-service/seed-demo.mjs` |
-| Creates | Exactly one account: the Platform Admin `admin@pharmacycentral.vn`. Nothing else. | Product images, sites, demo accounts (manager, pharmacist, warehouse staff, shoppers), storage locations (warehouses), suppliers, products with their units of measure, opening balances, search synonyms and demo activity. |
+| Creates | Exactly one account: the Platform Admin `admin@pharmacycentral.vn`. Nothing else. | Product images, sites, demo accounts (manager, pharmacist, warehouse staff, shoppers), storage locations (warehouses), suppliers, products with their units of measure, opening balances, search synonyms, demo activity and 60 days of backdated sales history. |
 | Password | `ADMIN_PASSWORD` in `.env` | `DEMO_ACCOUNT_PASSWORD` in `.env` |
 | When | Always: on every start and release. It updates the admin by id, so repeating it is safe. | Opt-in, local only, after A. Every step skips what exists, so repeating it is safe. |
 | Needs | The migrated identity database | A, the running stack, and the sites imported before the accounts (the script keeps that order). |
@@ -303,6 +303,10 @@ pnpm run seed:demo      # B: the demo dataset, in another terminal
 
 Last, it creates and approves the six local search synonym groups, such as `tiêu chảy, đi ngoài, đi lỏng`. The default admin creates them, and the demo pharmacist approves them, so live search uses them from the start. Production starts with no synonym groups. Staff add them in staff-web under Search synonyms.
 
+The final step, `tools/seed-demo-history.mjs`, makes the dataset look like a shop that has traded for two months. It receives the shop's stock through five approved purchase orders (`PO-HIST-001` to `005`) and their goods receipts (`GR-HIST-001` to `005`) with a unit cost on every line, so gross profit has real figures. It then places about 200 sales over the last 60 days, backdated one by one: counter prescriptions paid in cash, and online orders paid by SePay QR or cash on delivery, pickup or delivery, with a few cancelled and refunded. The trend charts, channel split, top products, finance entries and audit log all show those days. It also leaves, on purpose: batches of six products that expire in 6, 12, 20, 27 and 45 days and one already 8 days past expiry (`GR-HIST-EXP`), six dead-stock products with no movement for 130 days, seven prescription-only medicines and one supply that have stock but no price, five products that end the history thin against their recent sales (replenishment suggestions with a shortfall), two more replenishment requests, and carts for two shoppers. No API sets the creation time of an order or a payment, so the backdating is SQL through `docker compose exec postgres psql` (needs Docker Compose and `POSTGRES_USER` in `.env`). The step runs once: if goods receipt `GR-HIST-001` exists it adds nothing. A last step, also in that file, fills the warehouse site (`SITE-WH`, the screens of the warehouse account): three goods receipts with a cost, one purchase order waiting for approval, replenishment requests in each state, two returns, a posted and an open stocktake, and adjustments in each state. Warehouse Staff creates them and Platform Admin decides, because the manager has no access to that site. It runs once, marked by goods receipt `GR-WH-001`. The search synonym step also leaves one group (`ho khan, ho không đờm, ho rát cổ`) waiting for approval. To run the history again, use `pnpm run demo:reset` (below).
+
+The automatic action plans are created by `inventory-service` when it starts and every 15 minutes, so restart it once after seeding (`docker compose restart inventory-service`) to get the plans for the expiring batches and the shortfalls without waiting.
+
 This is a development tool, kept apart from production on purpose.
 
 - It only runs from the `seed:demo` script and is not part of any image or deployment. It never creates or changes the admin: that is seed A.
@@ -310,6 +314,12 @@ This is a development tool, kept apart from production on purpose.
 - The sample files are fabricated coursework data. Production data is imported by an operator on the staff-web Data import screen with a real account, from the operator's own files.
 
 Without the script, run `pnpm run seed:default`, then upload the same files by hand at `http://127.0.0.1:5302/imports`, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv`, `products.csv`, and `opening-balances.csv`. Right after `sites.csv`, run `pnpm --dir apps/identity-service seed:demo` to create the demo accounts with their site access.
+
+### Reset the demo data (`pnpm run demo:reset`)
+
+Every date in the demo dataset is relative to the day it is seeded: the opening-balance expiry dates in `data/import-samples/opening-balances.csv` are written against 2026-10-29 and `seed:demo` moves each one by the days since, and the history, receipts and expiry countdowns count back or forward from the seed time. The data then ages with the clock (an expiry countdown drops by a day each day, the newest sale gets older), so reseed on the day you present.
+
+`pnpm run demo:reset` (`tools/demo-reset.mjs`) does that in one command, in container mode: it stops the services, drops and recreates the seven service databases, removes the Typesense volume, runs `db:migrate`, starts the services (`--no-deps`, so an unhealthy Typesense does not block them), runs `seed:default` and `seed:demo`, then restarts `inventory-service` so the automatic action plans are raised against the fresh stock, and prints how many exist. It takes about three minutes. It is destructive: it refuses `NODE_ENV=production` and any `API_BASE_URL` that is not a loopback host, and needs the stack from `pnpm run stack:up` (or at least `postgres`, `rabbitmq`, `redis`, `floci` and the gateway) to be up. `pnpm run seed:demo` alone is idempotent but never refreshes the dates of data it already created; it warns when the history is a day old. The presenter's script is [Demo walkthrough](demo-walkthrough.md).
 
 ### Product images
 

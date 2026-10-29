@@ -25,6 +25,7 @@ PostgreSQL/PostGIS stores are service-owned databases. RabbitMQ carries integrat
 - [Runbook](docs/runbook.md): operating steps, named URLs, and troubleshooting.
 - [API Guide](docs/api-guide.md): HTTP API reference.
 - [User Guide](docs/user-guide.md): customer and staff workflows.
+- [Demo walkthrough](docs/demo-walkthrough.md): a per-role script for presenting the demo dataset, and `pnpm run demo:reset` to date it today.
 - [Business rules](docs/business-rules.md): domain rules (in Vietnamese; rule IDs `BR-*` are stable).
 - [Product specs](docs/product/README.md): what each page or user-facing feature contains, for whom, and why.
 - [ADRs](docs/adr/README.md): recorded architecture decisions.
@@ -100,6 +101,9 @@ pnpm run seed:default
 ```bash
 # Fixtures live in data/. They are sample CSVs and a folder of product images. Needs the stack or `pnpm dev` running.
 pnpm run seed:demo
+
+# Before a presentation: wipes the service databases and seeds again, so every date in the dataset is relative to today.
+pnpm run demo:reset
 ```
 
 Staff users import CSV files from the Data import screen in `staff-web`, which generates a header-only CSV

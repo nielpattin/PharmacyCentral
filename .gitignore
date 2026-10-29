@@ -122,6 +122,7 @@ docs/*
 !docs/product/
 !docs/product/**
 !docs/runbook.md
+!docs/demo-walkthrough.md
 !docs/diagrams/
 !docs/diagrams/**
 docs/diagrams/png/
@@ -135,6 +136,7 @@ tsconfig.tsbuildinfo
 credentials.json
 plans/
 .omp/
+.factory/
 TODO.md
 
 # Scratch files for local experiments (load-test logs, profiles, helper scripts)

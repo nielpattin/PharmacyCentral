@@ -9,7 +9,7 @@ data/
   README.md
   import-samples/        products.csv  sites.csv  storage-locations.csv  suppliers.csv  opening-balances.csv
   product-images/
-    images/              56 images (34 JPEG + 22 PNG), one file per product, named `<SKU>.<ext>`
+    images/              54 images (34 JPEG + 20 PNG), one file per product, named `<SKU>.<ext>`
 ```
 
 `import-samples/` is the file set of the demo and reference dataset (seed B) and of the staff Data import screen, so a fresh checkout can exercise the whole import
@@ -21,10 +21,19 @@ flow with no external download. Import order matters, because rows are resolved 
 4. `opening-balances.csv`
 
 The files are internally consistent: the opening balances reference SKUs, site codes, storage location code, and a supplier
-code that the other files create. Product names, units, and images come from public pharmacy listings (Long Châu), and the
-three over-the-counter prices in `products.csv` are the listed prices. Barcodes, registration numbers, and supplier contacts
-are fabricated sample values (`@example.com`). Prescription-only products have no price: the storefront shows "Liên hệ báo
-giá", and `POST /orders` rejects them with `409 product_unpriced`. This is coursework data, not a real catalog.
+code that the other files create. `products.csv` has 54 products, one per image (36 medicines and 18 medical supplies and
+devices). Names, manufacturers, dosage forms, package descriptions, registration numbers, units, prices and indications come
+from the public Long Châu listings (nhathuoclongchau.com.vn), fetched on 2026-10-29; the photos are our own and match each
+listing. `product-source-metadata.json` keeps, per SKU, the listing URL, the listing image URL, the specifications and the
+full text sections (usage, dosage, contraindications, side effects, storage). Every product has a matching listing. Where a listing shows no online price (the
+prescription-only ones), the previous plausible counter price stays and the metadata records it as `demoPrice`. Barcodes
+and supplier contacts (`@example.com`) are not on the listings and are left empty or fabricated. Seven prescription-only
+medicines have no price on purpose: the storefront shows "Liên hệ báo giá", and `POST /orders` rejects them with
+`409 product_unpriced`. This is coursework data, not a real catalog.
+
+`pnpm run seed:demo` also runs a history step (`tools/seed-demo-history.mjs`) on top of these files: goods receipts with
+unit costs, 60 days of counter and online sales, batches near and past expiry, and dead stock. See "Seeds" in
+`docs/runbook.md`.
 
 ## Two seeds from a fresh checkout
 

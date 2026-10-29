@@ -372,7 +372,7 @@ The **Trợ lý tư vấn** button floats on every Customer Web page and keeps i
 
 ## Demo walkthrough
 
-Use the accounts above, with `pnpm run seed:default` and `pnpm run seed:demo` already run.
+For a per-role script over the full demo dataset, see [Demo walkthrough](demo-walkthrough.md); run `pnpm run demo:reset` the same day. The short path below uses the accounts above, with `pnpm run seed:default` and `pnpm run seed:demo` already run.
 
 1. **Platform Admin**: sign in to Staff Web. Open **Users** to review accounts and access, **Audit** for the activity log, and **AI integrations** for the four AI feature cards.
 2. **Platform Admin or Pharmacy Manager**: open **Sites**, **Storage locations**, **Suppliers** and **Catalog**, then **Units** and **Pricing** to see sale units and price drafts.

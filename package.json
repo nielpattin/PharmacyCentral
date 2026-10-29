@@ -16,6 +16,7 @@
     "load": "docker compose --profile loadtest run --rm k6 run --out experimental-prometheus-rw",
     "seed:default": "pnpm --dir apps/identity-service seed",
     "seed:demo": "node --experimental-transform-types --env-file=.env tools/seed-demo.mjs",
+    "demo:reset": "node --experimental-transform-types --env-file=.env tools/demo-reset.mjs",
     "prescriptions:samples": "pnpm --dir apps/sales-service prescriptions:samples",
     "urls:up": "node --env-file=.env tools/urls.mjs up",
     "urls:down": "node --env-file=.env tools/urls.mjs down",

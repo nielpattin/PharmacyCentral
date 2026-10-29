@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { datasets, csvRows } from "../apps/staff-web/src/import-datasets.ts";
 import { uploadProductImages } from "../apps/catalog-service/scripts/upload-product-images.mjs";
+import { seedHistory, seedWarehouseActivity } from "./seed-demo-history.mjs";
 
 const requireEnv = (name) => {
   const value = process.env[name];
@@ -31,6 +32,16 @@ const warehouseEmail = "warehouse@pharmacycentral.vn";
 const customerEmail = "khachhang@pharmacycentral.vn";
 const adminPassword = requireEnv("ADMIN_PASSWORD");
 const demoPassword = requireEnv("DEMO_ACCOUNT_PASSWORD");
+
+// Every date the dataset carries is relative to the day it is seeded, so a shelf that "expires in 52 days" says so
+// whenever the seed runs. The sample CSVs hold their dates against this day (the day they were written); the seed moves
+// each one by the days that have passed since.
+const SAMPLE_DATA_DAY = "2026-10-29";
+const DAY_MS = 86_400_000;
+const isoDay = (millis) => new Date(millis).toISOString().slice(0, 10);
+const inDays = (days) => isoDay(Date.now() + days * DAY_MS);
+const shiftToToday = (isoDate) =>
+  isoDate ? isoDay(Date.parse(isoDate) + (Date.parse(inDays(0)) - Date.parse(SAMPLE_DATA_DAY))) : isoDate;
 
 const cookieHeader = (cookies) => [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 
@@ -112,6 +123,8 @@ const searchSynonymGroups = [
   ["đầy hơi", "chướng bụng"],
   ["ợ chua", "ợ nóng"],
 ];
+// One more group is created and left waiting, so the approval queue of the staff Search synonyms page has a row.
+const pendingSynonymGroup = ["ho khan", "ho không đờm", "ho rát cổ"];
 // Same folding as foldSearchText in apps/catalog-service search-text.ts, so accent variants count as existing.
 const foldSearchTerm = (text) =>
   text.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ|Đ/g, "d").toLowerCase().replace(/\s+/g, " ").trim();
@@ -154,6 +167,13 @@ for (const id of order) {
   const dataset = datasets[id];
   const file = new URL(`../data/import-samples/${dataset.fileBase}.csv`, import.meta.url);
   const payload = dataset.fromCsv(csvRows(await readFile(file, "utf8")));
+  if (id === "openingBalances") {
+    for (const row of payload.balances) {
+      row.expiryDate = shiftToToday(row.expiryDate);
+      // A batch is never made after today, whatever the sample file says.
+      if (row.manufacturedDate) row.manufacturedDate = [shiftToToday(row.manufacturedDate), inDays(-30)].sort()[0];
+    }
+  }
   if (id === "openingBalances")
     await waitForSearchIndex(
       admin,
@@ -197,6 +217,10 @@ console.log("Seeding search synonyms...");
 await seedSearchSynonyms(admin);
 console.log("Seeding demo activity (transfers, adjustments, purchase orders, orders)...");
 await seedActivity();
+console.log("Seeding demo history (receipts with costs, 60 days of sales, expiring and dead stock)...");
+await seedHistory({ baseUrl, admin, signIn, requireEnv });
+console.log("Seeding warehouse activity (receiving, replenishment, returns, stocktakes, adjustments)...");
+await seedWarehouseActivity({ admin, signIn });
 console.log("Done. Every step is idempotent, so running this again is safe.");
 
 // The search index picks up new products asynchronously, and inventory-service resolves SKUs through it. Stock rows
@@ -254,6 +278,15 @@ async function seedSearchSynonyms(admin) {
     });
     created += 1;
     toApprove.push(group);
+  }
+
+  if (!groupsByKey.has(synonymKey(pendingSynonymGroup))) {
+    await admin.call("/api/products/search-synonyms", {
+      method: "POST",
+      body: { terms: pendingSynonymGroup },
+      headers: adminHeaders,
+    });
+    created += 1;
   }
 
   let approved = 0;
@@ -616,13 +649,13 @@ async function seedActivity() {
           {
             productId: products.get("THU-0002").id,
             batchNumber: "LOT-2610-101",
-            expiryDate: "2028-10-01",
+            expiryDate: inDays(730),
             quantity: 60,
           },
           {
             productId: products.get("THU-0005").id,
             batchNumber: "LOT-2610-102",
-            expiryDate: "2028-10-15",
+            expiryDate: inDays(745),
             quantity: 40,
           },
         ],
@@ -646,7 +679,7 @@ async function seedActivity() {
           {
             productId: products.get("THU-0001").id,
             batchNumber: "LOT-2610-103",
-            expiryDate: "2028-10-20",
+            expiryDate: inDays(760),
             quantity: 200,
           },
         ],
