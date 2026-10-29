@@ -172,7 +172,7 @@ export const createActionPlanRouter = (
     }
   });
 
-  // The owner moves the status of her own plan; a manager changes any field, inside her sites.
+  // The owner moves the status of her own plan; a manager reassigns it, inside her sites, and changes nothing else.
   router.patch("/inventory/action-plans/:id", async (request, response, next) => {
     if (!repository) return sendProblem(response, DATABASE_UNAVAILABLE);
     const id = idSchema.safeParse(request.params);
@@ -196,7 +196,8 @@ export const createActionPlanRouter = (
         refuseRole(response);
         return;
       }
-      if (access === "all" && refuseOutOfSiteScope(request, response, current.siteId ? [current.siteId] : [])) return;
+      if (access === "reassign" && refuseOutOfSiteScope(request, response, current.siteId ? [current.siteId] : []))
+        return;
       if (patch.ownerId !== undefined && patch.ownerId !== current.ownerId) {
         const owner = await options.employees.findActiveEmployee(patch.ownerId);
         if (!owner) return sendProblem(response, OWNER_NOT_FOUND);

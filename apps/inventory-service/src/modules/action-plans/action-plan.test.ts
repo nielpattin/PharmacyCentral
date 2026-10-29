@@ -157,10 +157,23 @@ describe("planReadScope", () => {
 describe("planPatchAccess", () => {
   const plan = { ownerId };
 
-  it("lets a manager change any field, whoever owns the plan", () => {
-    expect(planPatchAccess(manager, plan, ["ownerId", "dueDate", "title", "detail", "status"])).toBe("all");
-    expect(planPatchAccess(admin, plan, ["status"])).toBe("all");
-    expect(planPatchAccess(service, plan, ["title"])).toBe("all");
+  it("lets a manager or Platform Admin reassign the plan and name no other field", () => {
+    expect(planPatchAccess(manager, plan, ["ownerId"])).toBe("reassign");
+    expect(planPatchAccess(admin, plan, ["ownerId"])).toBe("reassign");
+    for (const fields of [["status"], ["title"], ["detail"], ["dueDate"], ["ownerId", "dueDate"]] as const) {
+      expect(planPatchAccess(manager, plan, fields)).toBe("refuse");
+      expect(planPatchAccess(admin, plan, fields)).toBe("refuse");
+    }
+  });
+
+  it("lets a service acting for itself change any field", () => {
+    expect(planPatchAccess(service, plan, ["title", "ownerId", "status"])).toBe("all");
+  });
+
+  it("lets a manager who owns the plan move its status, and still not reassign it together with the status", () => {
+    const owningManager = employee(ownerId, ["Pharmacy Manager"]);
+    expect(planPatchAccess(owningManager, plan, ["status"])).toBe("status");
+    expect(planPatchAccess(owningManager, plan, ["status", "ownerId"])).toBe("refuse");
   });
 
   it("lets the owner move the status and nothing else", () => {

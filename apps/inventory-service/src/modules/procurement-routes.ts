@@ -13,7 +13,7 @@ import { listSiteIds } from "../middleware/trusted-request.ts";
 import { allowRoles, refuseOutOfSiteScope, refuseSelfApproval } from "./access-control.ts";
 import { signCatalogIdentity } from "./catalog-identity.ts";
 import { ProcurementRepository } from "./procurement-repository.ts";
-import { replenishmentSuggestions } from "./replenishment-suggestions.ts";
+import { DEFAULT_REPLENISHMENT_PARAMS, replenishmentSuggestions } from "./replenishment-suggestions.ts";
 import { invalidCursor, sendPage } from "./keyset-page.ts";
 import { readPageRequest, readSearchText, type PageOptions } from "./page-cursor.ts";
 
@@ -40,10 +40,10 @@ const integerQuery = (fallback: number, min: number, max: number) =>
 
 const replenishmentQuerySchema = z.object({
   siteId: z.string().uuid(),
-  windowDays: integerQuery(30, 7, 180),
-  coverDays: integerQuery(14, 1, 90),
-  safetyDays: integerQuery(7, 0, 60),
-  defaultLeadTimeDays: integerQuery(7, 1, 90),
+  windowDays: integerQuery(DEFAULT_REPLENISHMENT_PARAMS.windowDays, 7, 180),
+  coverDays: integerQuery(DEFAULT_REPLENISHMENT_PARAMS.coverDays, 1, 90),
+  safetyDays: integerQuery(DEFAULT_REPLENISHMENT_PARAMS.safetyDays, 0, 60),
+  defaultLeadTimeDays: integerQuery(DEFAULT_REPLENISHMENT_PARAMS.defaultLeadTimeDays, 1, 90),
 });
 
 export type ProcurementRouterOptions = {

@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, inArray, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 
 import type { ActionPlanSourceType, ActionPlanStatus } from "../../contracts/action-plans.ts";
 import type { InventoryDatabase } from "../../shared/infrastructure/database.ts";
@@ -25,6 +25,9 @@ export type ActionPlanFilters = {
 
 /** The partial unique index that lets one open or in-progress plan exist per origin. */
 const LIVE_SOURCE_INDEX = "action_plans_live_source_unique";
+
+/** One origin as a map key. */
+export const sourceKey = (sourceType: string, sourceRef: string): string => `${sourceType}|${sourceRef}`;
 
 /** Another open or in-progress plan already exists for the same origin; `planId` is that plan. */
 export class ActionPlanConflictError extends Error {
@@ -85,6 +88,29 @@ export class ActionPlanRepository {
   public async findActionPlan(id: string): Promise<ActionPlan | undefined> {
     const [plan] = await this.database.db.select().from(actionPlans).where(eq(actionPlans.id, id)).limit(1);
     return plan;
+  }
+
+  /**
+   * The origins that must not get an automatic plan: those with a plan still open or in progress, and those whose plan
+   * was completed at or after `completedSince` (a finished plan is not recreated at once while its alert persists).
+   */
+  public async blockedSources(completedSince: Date): Promise<Set<string>> {
+    const rows = await this.database.db
+      .select({ sourceType: actionPlans.sourceType, sourceRef: actionPlans.sourceRef })
+      .from(actionPlans)
+      .where(or(sql`${actionPlans.status} <> 'done'`, gte(actionPlans.completedAt, completedSince)));
+    return new Set(rows.map((row) => sourceKey(row.sourceType, row.sourceRef)));
+  }
+
+  /** Open and in-progress plans per owner, for the owners named; an owner with none is absent from the map. */
+  public async openPlanCounts(ownerIds: readonly string[]): Promise<Map<string, number>> {
+    if (ownerIds.length === 0) return new Map();
+    const rows = await this.database.db
+      .select({ ownerId: actionPlans.ownerId, count: sql<number>`count(*)::int` })
+      .from(actionPlans)
+      .where(and(inArray(actionPlans.ownerId, [...ownerIds]), sql`${actionPlans.status} <> 'done'`))
+      .groupBy(actionPlans.ownerId);
+    return new Map(rows.map((row) => [row.ownerId, row.count]));
   }
 
   /** The open or in-progress plan for an origin, other than `exceptId`; the conflict check reads it after a violation. */

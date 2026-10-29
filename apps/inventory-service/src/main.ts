@@ -23,6 +23,10 @@ import { createInventoryDatabase } from "./shared/infrastructure/database.ts";
 import { ActionPlanRepository } from "./modules/action-plans/action-plan-repository.ts";
 import { createActionPlanRouter } from "./modules/action-plans/action-plan-routes.ts";
 import { IdentityEmployeeClient } from "./modules/action-plans/identity-employee-client.ts";
+import { ActionPlanAutoCreator } from "./modules/action-plans/action-plan-auto-creator.ts";
+import { ActionPlanAutoSweeper } from "./modules/action-plans/action-plan-auto-sweeper.ts";
+import { CatalogBasePriceClient } from "./modules/action-plans/catalog-base-prices-client.ts";
+import { DEFAULT_REPLENISHMENT_PARAMS, replenishmentSuggestions } from "./modules/replenishment-suggestions.ts";
 
 const serviceName = "inventory-service";
 const logger = createLogger({ name: serviceName });
@@ -88,6 +92,37 @@ const procurementRepository = database
     })
   : undefined;
 
+// The system creates the action plan of every alert and gives it an owner (BR-PLAN-001); nobody has to ask for one.
+const catalogBasePrices = new CatalogBasePriceClient(catalogServiceUrl);
+const actionPlanAutoSweeper =
+  database && repository && procurementRepository && actionPlanRepository
+    ? new ActionPlanAutoSweeper(
+        new ActionPlanAutoCreator(
+          {
+            stockHealth: (now) =>
+              repository.stockHealth({ from: new Date(now.getTime() - 86_400_000), to: now, asOf: now }),
+            expiringBatches: (through) => repository.expiringBatches(through),
+            replenishmentSuggestions: async (siteId, now) =>
+              replenishmentSuggestions({
+                ...(await procurementRepository.replenishmentInputs({
+                  siteId,
+                  windowStart: new Date(now.getTime() - DEFAULT_REPLENISHMENT_PARAMS.windowDays * 86_400_000),
+                  now,
+                })),
+                params: DEFAULT_REPLENISHMENT_PARAMS,
+              }),
+            listProducts: () => catalogBasePrices.listProducts(),
+          },
+          actionPlanRepository,
+          employeeDirectory,
+          createAuditRecorder(database, logger),
+          logger,
+        ),
+        logger,
+      )
+    : undefined;
+actionPlanAutoSweeper?.start();
+
 app.disable("x-powered-by");
 app.use("/inventory/imports", express.json({ limit: "25mb" }));
 app.use(express.json({ limit: "1mb" }));
@@ -114,6 +149,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 const server = createServer(app);
 server.on("close", () => {
   expiryAvailabilitySweeper?.close();
+  actionPlanAutoSweeper?.close();
   void outboxPublisher?.close();
   void database?.pool.end();
 });

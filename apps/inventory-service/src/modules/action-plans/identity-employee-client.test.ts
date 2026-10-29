@@ -86,3 +86,31 @@ describe("IdentityEmployeeClient", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("IdentityEmployeeClient.listActiveEmployeesAtSite", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("lists the employees of one site with the service secret, acting as the system", async () => {
+    vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-secret");
+    const { isActive: _isActive, ...listed } = activeEmployee;
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, { employees: [listed] }));
+    const client = new IdentityEmployeeClient(baseUrl, fetchMock);
+
+    expect(await client.listActiveEmployeesAtSite(siteId)).toEqual([listed]);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe(`${baseUrl}/internal/employees?siteId=${siteId}`);
+    const headers = new Headers(init?.headers);
+    expect(headers.get("x-actor-type")).toBe("system");
+    expect(headers.get("x-internal-service-secret")).toBe("test-secret");
+  });
+
+  it("fails closed when identity-service does not answer", async () => {
+    vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-secret");
+    const down = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(503, {}));
+    await expect(new IdentityEmployeeClient(baseUrl, down).listActiveEmployeesAtSite(siteId)).rejects.toBeInstanceOf(
+      EmployeeDirectoryUnavailableError,
+    );
+  });
+});

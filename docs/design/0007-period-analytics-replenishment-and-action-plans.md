@@ -6,7 +6,7 @@
 
 ## Summary
 
-Three staff-web features for Pharmacy Managers and Platform Admin. (1) An **Analytics** page with period KPIs (revenue, orders, average order value, gross profit, each against the previous period) filtered by site and channel, and inventory health (turnover, dead stock, stockout rate, stock value by site, expiry buckets). (2) **Replenishment suggestions** on the Procurement page: suggested order quantities per product and supplier from sales velocity, stock, minimum stock and supplier lead time, reviewed by the user and turned into one **draft** purchase order per supplier. (3) **Action plans**: a plan item (owner, due date, open / in progress / done) created from any suggestion or alert, with one list filtered by owner and status.
+Three staff-web features for Pharmacy Managers and Platform Admin. (1) An **Analytics** page with period KPIs (revenue, orders, average order value, gross profit, each against the previous period) filtered by site and channel, and inventory health (turnover, dead stock, stockout rate, stock value by site, expiry buckets). (2) **Replenishment suggestions** on the Procurement page: suggested order quantities per product and supplier from sales velocity, stock, minimum stock and supplier lead time, reviewed by the user and turned into one **draft** purchase order per supplier. (3) **Action plans**: a plan item (owner, due date, open / in progress / done) that the system creates for every suggestion or alert and assigns to an owner by rule, with one list filtered by owner and status; a manager can still create one by hand and change the owner, due date and title.
 
 Services touched: `operations-query-service` (aggregation, read only), `sales-service` and `payment-service` (one internal read each), `inventory-service` (one internal read, the suggestion routes, the action plan module and its table), `identity-service` (one read-only staff directory route), `staff-web`, and the edge policy.
 
@@ -18,7 +18,7 @@ The dashboard shows counts only ([staff dashboard spec](../product/staff-dashboa
 
 - A manager answers "how did we sell and how healthy is stock over this period, at this site, in this channel" from one page, with the previous period beside every KPI.
 - A manager gets a reviewable reorder list and creates drafts in bulk through the existing procurement flow. Nothing is submitted or approved automatically.
-- Any alert or suggestion becomes an owned, dated plan item that its owner can move to done.
+- Any alert or suggestion becomes an owned, dated plan item, created by the system with no click, that its owner can move to done.
 
 ## Non-goals
 
@@ -43,7 +43,7 @@ Browser routes (all behind the edge role rules and the service role check):
 | `POST /api/procurement/replenishment-suggestions/draft-orders` | inventory | Platform Admin, Pharmacy Manager | One Draft purchase order per supplier |
 | `GET /api/inventory/action-plans` | inventory | any employee (managers all, others own) | Plan list |
 | `POST /api/inventory/action-plans` | inventory | Platform Admin, Pharmacy Manager | Create a plan item |
-| `PATCH /api/inventory/action-plans/:id` | inventory | owner or manager | Change status, owner, due date |
+| `PATCH /api/inventory/action-plans/:id` | inventory | owner (status only) or manager (`ownerId` only) | Move the status, or reassign the owner |
 | `GET /api/auth/staff-directory` | identity | Platform Admin, Pharmacy Manager | Employee names for the owner picker |
 
 Internal routes (ops-query to owner services):
@@ -130,11 +130,24 @@ Body: `{ siteId, orders: [{ supplierId, lines: [{ productId, orderedQuantity: in
 
 `action_plans` in `inventory-service` (see Data model). `GET /api/inventory/action-plans` query: `ownerId`, `status` (`open`, `in_progress`, `done`), `sourceType`, `siteId`, `q`, `limit`, `cursor`; a keyset page newest first like the other lists. A Pharmacy Manager or Platform Admin sees every plan in their sites (plans with no site are visible to Platform Admin only); any other employee sees only plans they own. `POST` body: `{ sourceType, sourceRef, title, detail?, siteId?, productId?, ownerId, dueDate }`. `PATCH` body: any of `{ status, ownerId, dueDate, title, detail }`; the owner may change `status` only; a manager changes anything. Moving to `done` sets `completedAt`; moving back clears it. The owner must be an active employee whose sites include the plan's site (checked through identity-service); an unknown owner is 422 `owner_not_found`.
 
+#### Automatic plans (owner decision 2026-10-29)
+
+Nobody has to ask for a plan. `ActionPlanAutoCreator` in `inventory-service` runs at boot and every 15 minutes (`ActionPlanAutoSweeper`, the pattern of the expiry sweeper). It is a server loop with no route, so it cannot be triggered or skipped from a browser. One run:
+
+1. Reads the alerts from the live data: **replenishment** from the suggestion formulas with the default parameters at every site that has stock or movements; **expiry** from batches with stock on hand that expire within 30 days or have expired (`expiringBatches`); **dead stock** from stock health, stock on hand with no movement for 90 days; **price warning** from the catalog's `GET /pricing/base-prices` (a listed product with no price) joined to stock on hand, filed at the site that holds the most of it. Titles and details are the ones the manual drawer fills; the `sourceRef` keys are the same, so a manual and an automatic plan collide on the live-source index.
+2. Drops the alerts that have a live plan, or a plan completed in the last 7 days (so a finished plan is not replaced at the next run while its alert persists).
+3. For each remaining alert, lists the active employees at its site (`GET /internal/employees?siteId`, identity-service, service secret only) and picks the owner: the **Pharmacist with the fewest `open` or `in_progress` plans**, ties by name in Vietnamese alphabetical order, then id. Each plan created in the run counts toward its owner at once. A site with no Pharmacist falls back to its active **Pharmacy Manager** by the same rule. A site with neither gets no plan and a warning in the log; the next run tries again. No owner is guessed.
+4. Inserts the plan: `status open`, `due_date` = today (UTC) + 7 days, `created_by` = the nil UUID `00000000-0000-0000-0000-000000000000` (a system creator, not an account), and writes the audit entry `inventory.action-plan.created` with `automatic: true` and no actor.
+
+Idempotence rests on the partial unique index: a second or concurrent run that meets a live plan treats the conflict as done and creates nothing. A run whose source is unavailable (identity-service, catalog) fails whole and is retried at the next tick; plans already created stay.
+
+A Pharmacy Manager or Platform Admin can still create a plan by hand (the four **Tạo kế hoạch** entry points stay as an override for an alert the run skipped) and reassign the owner of any plan of their sites. A manager changes nothing else (owner decision 2026-10-29): the title, detail and due date come from the system, and only the owner moves the status. The service refuses a manager the other fields, and an owner anything but the status. A Pharmacist never creates a plan; the edge and the service refuse `POST`.
+
 `sourceType`: `replenishment`, `expiry`, `dead_stock`, `price_warning`. `sourceRef` is a stable text key of the origin (for example `replenishment:<siteId>:<productId>`), unique among open or in progress plans of the same type so the same alert does not get two live plans (409 `plan_exists`).
 
 #### `GET /api/auth/staff-directory`
 
-Read only. Platform Admin gets every active employee; a Pharmacy Manager gets the active employees who share at least one site with them. Fields: `id`, `displayName`, `roles`, `siteIds`; never email. Other callers get 403, and so does an account that must still change its password. `inventory-service` checks an owner through the service-only `GET /internal/employees/{id}` of identity-service (`IDENTITY_SERVICE_URL`), which answers an active employee or 404. A valid owner who does not hold the plan's site answers 422 `owner_not_at_site`.
+Read only. Platform Admin gets every active employee; a Pharmacy Manager gets the active employees who share at least one site with them. Fields: `id`, `displayName`, `roles`, `siteIds`; never email. Other callers get 403, and so does an account that must still change its password. `inventory-service` checks an owner through the service-only `GET /internal/employees/{id}` of identity-service (`IDENTITY_SERVICE_URL`), which answers an active employee or 404, and finds the automatic owner through the service-only `GET /internal/employees?siteId={id}`, which answers `{ employees: [{ id, displayName, roles, siteIds }] }` for the active employees at that site (never an email; the caller filters by role). A valid owner who does not hold the plan's site answers 422 `owner_not_at_site`.
 
 An employee with no assigned site (and not Platform Admin) is refused by the edge and by the service on every site-scoped list, the plan list included. The action plans page reads that as its own state and shows "Tài khoản của bạn chưa được gán cơ sở nào…" without sending the request; a 403 from the list shows the same sentence.
 
@@ -184,6 +197,7 @@ Unit tests for the pure computations (velocity, lead time, reorder quantity, tur
 - **Gross profit coverage.** Gross profit is only as complete as the costs entered. Opening balances carry no cost and old receipts stay unknown, so the page shows the share of revenue it covers. Owner decision: backfill costs for the opening stock, or require a cost on every new receipt line (today it is optional).
 - **Cost method.** The quantity-weighted mean per batch is a simple, explainable choice; FIFO or moving average per product would need a cost on the stock balance. Revisit if the owner wants stock valued at cost.
 - **Minimum stock and lead time.** There is no per-product minimum stock or supplier lead time field. This design uses the BR-REPORT-002 threshold, a safety-days parameter and the observed lead time of receipts. Owner decision: store a minimum stock per product and site, and a lead time per supplier.
+- **Automatic plan rules.** The 15-minute cadence, the 7-day due date and the 7-day cooldown after a plan is done are decisions of this change, not measured values. The fallback owner is the site's Pharmacy Manager. Owner decision: change any of them.
 - **Product to supplier.** The catalog has no preferred supplier per product; the latest goods receipt supplier is used. Owner decision: a preferred supplier per product.
 
 ## Related ADRs

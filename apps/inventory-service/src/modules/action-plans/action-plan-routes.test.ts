@@ -229,7 +229,7 @@ describe("PATCH /inventory/action-plans/:id", () => {
     expect(await reopened.json()).toMatchObject({ status: "open", completedAt: null });
   });
 
-  it("refuses the owner a due date, a title, or a status change together with any other field", async () => {
+  it("refuses the owner a due date, a title, a new owner, or a status change together with any other field", async () => {
     const { body: plan } = await createPlan({ sourceRef: `replenishment:${siteA}:${idOf(0x102)}` });
     const dueDate = await call("PATCH", `/inventory/action-plans/${plan.id}`, actors.ownerOne, { dueDate: LATER });
     expect(dueDate.status).toBe(403);
@@ -240,6 +240,10 @@ describe("PATCH /inventory/action-plans/:id", () => {
       title: "x",
     });
     expect(mixed.status).toBe(403);
+    const reassign = await call("PATCH", `/inventory/action-plans/${plan.id}`, actors.ownerOne, {
+      ownerId: actors.ownerTwo.id,
+    });
+    expect(reassign.status).toBe(403);
   });
 
   it("refuses an employee who neither owns the plan nor manages it", async () => {
@@ -252,21 +256,36 @@ describe("PATCH /inventory/action-plans/:id", () => {
     expect(warehouse.status).toBe(403);
   });
 
-  it("lets a manager change any field of a plan at her site, including the owner and the due date", async () => {
+  it("lets a manager reassign a plan at her site, and changes nothing else", async () => {
     const { body: plan } = await createPlan({ sourceRef: `replenishment:${siteA}:${idOf(0x104)}` });
     const response = await call("PATCH", `/inventory/action-plans/${plan.id}`, actors.manager, {
-      title: "Đổi tên việc",
-      detail: null,
-      dueDate: LATER,
       ownerId: actors.warehouse.id,
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      title: "Đổi tên việc",
-      detail: null,
-      dueDate: LATER,
+      title: plan.title,
+      dueDate: plan.dueDate,
+      status: "open",
       ownerId: actors.warehouse.id,
     });
+  });
+
+  it("refuses a manager and Platform Admin the status, title, detail and due date, alone or with an owner", async () => {
+    const { body: plan } = await createPlan({ sourceRef: `replenishment:${siteA}:${idOf(0x10a)}` });
+    for (const actor of [actors.manager, actors.admin]) {
+      for (const body of [
+        { status: "done" },
+        { title: "Đổi tên việc" },
+        { detail: null },
+        { dueDate: LATER },
+        { ownerId: actors.warehouse.id, dueDate: LATER },
+      ]) {
+        expect((await call("PATCH", `/inventory/action-plans/${plan.id}`, actor, body)).status).toBe(403);
+      }
+    }
+    const unchanged = await call("GET", `/inventory/action-plans`, actors.admin);
+    const rows = (await unchanged.json()) as PlanBody[];
+    expect(rows.find((row) => row.id === plan.id)).toMatchObject({ title: plan.title, status: "open" });
   });
 
   it("refuses a manager a plan at another site, and an owner change to someone not at the plan's site", async () => {
@@ -276,7 +295,7 @@ describe("PATCH /inventory/action-plans/:id", () => {
     );
     expect(elsewhere.status).toBe(201);
     const outOfScope = await call("PATCH", `/inventory/action-plans/${elsewhere.body.id}`, actors.manager, {
-      title: "x",
+      ownerId: actors.ownerTwo.id,
     });
     expect(outOfScope.status).toBe(403);
 
@@ -291,7 +310,7 @@ describe("PATCH /inventory/action-plans/:id", () => {
   it("answers 409 when reopening a done plan whose origin has a live plan now", async () => {
     const sourceRef = `dead_stock:${siteA}:${idOf(0x107)}`;
     const done = await createPlan({ sourceType: "dead_stock", sourceRef });
-    await call("PATCH", `/inventory/action-plans/${done.body.id}`, actors.manager, { status: "done" });
+    await call("PATCH", `/inventory/action-plans/${done.body.id}`, actors.ownerOne, { status: "done" });
     const live = await createPlan({ sourceType: "dead_stock", sourceRef });
     expect(live.status).toBe(201);
 

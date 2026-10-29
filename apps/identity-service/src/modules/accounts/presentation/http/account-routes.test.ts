@@ -1082,4 +1082,31 @@ describe("internal employee route", () => {
     expect(response.status).toBe(400);
     expect(findActiveEmployee).not.toHaveBeenCalled();
   });
+
+  it("lists the active employees at one site for the system actor, never an email", async () => {
+    const siteId = "00000000-0000-4000-8000-0000000000e1";
+    const listActiveEmployees = vi
+      .fn()
+      .mockResolvedValue([
+        { id: employeeId, displayName: "Dược sĩ", roles: ["Pharmacist"], siteIds: [siteId], email: "a@example.vn" },
+      ]);
+    const app = express();
+    app.use("/internal", createInternalRouter({ listActiveEmployees } as unknown as AccountService));
+    const started = await startServer(app);
+    activeServer = started.server;
+
+    const response = await fetch(`${started.url}/internal/employees?siteId=${siteId}`, { headers: systemActor });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      employees: [{ id: employeeId, displayName: "Dược sĩ", roles: ["Pharmacist"], siteIds: [siteId] }],
+    });
+    expect(listActiveEmployees).toHaveBeenCalledWith([siteId]);
+
+    const employeeCaller = await fetch(`${started.url}/internal/employees?siteId=${siteId}`, {
+      headers: { "x-actor-type": "employee" },
+    });
+    expect(employeeCaller.status).toBe(403);
+    const malformed = await fetch(`${started.url}/internal/employees?siteId=nope`, { headers: systemActor });
+    expect(malformed.status).toBe(400);
+  });
 });

@@ -40,7 +40,7 @@ export const MAX_DISPENSE_COST_ROWS = 50_000;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const addDays = (date: string, days: number): string =>
+export const addDays = (date: string, days: number): string =>
   new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 
 /** The bucket boundaries for `asOf`, on the UTC calendar day of that moment. */

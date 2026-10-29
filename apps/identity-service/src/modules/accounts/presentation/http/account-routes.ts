@@ -42,6 +42,7 @@ const adminUserSchema = z.object({
 const userAccessSchema = z.object({ roles: z.array(z.string()).max(8), siteIds: z.array(z.string().uuid()).max(500) });
 const adminUserListSchema = z.object({ status: z.enum(["active", "deactivated"]).optional() });
 const userIdSchema = z.object({ id: z.string().uuid() });
+const employeesAtSiteSchema = z.object({ siteId: z.string().uuid() });
 // A service caller resolves a page of orders at once; the cap keeps one request bounded.
 const customerBatchSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) });
 // A one-character query would return the whole customer base, so the counter has to type at least three.
@@ -701,6 +702,30 @@ export const createInternalRouter = (service: AccountService): Router => {
     }
 
     response.json(customer);
+  });
+
+  // The automatic owner of an action plan is chosen from the active employees at the plan's site. The calling service
+  // filters by role; this answers names, roles and sites, never an email.
+  router.get("/employees", async (request, response) => {
+    const parsed = employeesAtSiteSchema.safeParse(request.query);
+    if (!parsed.success) {
+      response.status(400).json({
+        title: "Invalid site id",
+        status: 400,
+        code: "invalid_request",
+        detail: "Mã cơ sở không hợp lệ.",
+      });
+      return;
+    }
+    const employees = await service.listActiveEmployees([parsed.data.siteId]);
+    response.json({
+      employees: employees.map((employee) => ({
+        id: employee.id,
+        displayName: employee.displayName,
+        roles: employee.roles,
+        siteIds: employee.siteIds,
+      })),
+    });
   });
 
   // The owner check of an action plan reads an employee's name, roles and sites. A customer or a deactivated account

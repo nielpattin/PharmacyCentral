@@ -25,6 +25,14 @@ export type ReplenishmentParams = {
   defaultLeadTimeDays: number;
 };
 
+/** The parameters the suggestions route and the automatic plans use when nobody names others (design 0007). */
+export const DEFAULT_REPLENISHMENT_PARAMS: ReplenishmentParams = {
+  windowDays: 30,
+  coverDays: 14,
+  safetyDays: 7,
+  defaultLeadTimeDays: 7,
+};
+
 /** One product's position at the site. `supplierId` is the supplier of its latest receipt, else null. */
 export type ProductStockPosition = {
   productId: string;

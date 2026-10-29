@@ -82,7 +82,7 @@ export const planChanges = (
 export const changedPlanFields = (patch: UpdateActionPlanRequest): ActionPlanPatchField[] =>
   ACTION_PLAN_PATCH_FIELDS.filter((field) => patch[field] !== undefined);
 
-/** A Platform Admin or Pharmacy Manager, or a service acting for itself: may create plans and change any field. */
+/** A Platform Admin or Pharmacy Manager, or a service acting for itself: may create plans and reassign them. */
 export const managesPlans = (actor: PlanActor): boolean =>
   actor.system || actor.roles.includes(PLATFORM_ADMIN) || actor.roles.includes(PHARMACY_MANAGER);
 
@@ -100,19 +100,24 @@ export const planReadScope = (actor: PlanActor): PlanReadScope | undefined => {
 };
 
 /**
- * What the caller may change on one plan: `all` for a manager, `status` for the owner moving their own plan's status,
- * `refuse` for everyone else and for an owner who names any other field.
+ * What the caller may change on one plan (BR-PLAN-001): `status` for the plan's owner moving their own plan, `reassign`
+ * for a Pharmacy Manager or Platform Admin naming a new owner and nothing else, `all` for a service acting for itself,
+ * `refuse` for everyone else and for any caller who names a field outside their right. The title, detail and due date
+ * are set by the system and are not edited; a manager assigns, the owner works the plan.
  */
-export type PlanPatchAccess = "all" | "status" | "refuse";
+export type PlanPatchAccess = "all" | "status" | "reassign" | "refuse";
 
 export const planPatchAccess = (
   actor: PlanActor,
   plan: Pick<PlanOwnership, "ownerId">,
   fields: readonly ActionPlanPatchField[],
 ): PlanPatchAccess => {
-  if (managesPlans(actor)) return "all";
-  if (actor.id === undefined || actor.id !== plan.ownerId) return "refuse";
-  return fields.every((field) => field === "status") ? "status" : "refuse";
+  if (actor.system) return "all";
+  if (fields.length === 0) return "refuse";
+  if (actor.id !== undefined && actor.id === plan.ownerId && fields.every((field) => field === "status"))
+    return "status";
+  if (managesPlans(actor) && fields.every((field) => field === "ownerId")) return "reassign";
+  return "refuse";
 };
 
 /**

@@ -26,6 +26,7 @@ import { transitionReplenishment, type ReplenishmentStatus } from "./replenishme
 import { transitionTransfer, type TransferStatus } from "./transfers/domain/transfer-order.ts";
 import { recordSiteAvailability, sellableBatch, today } from "./site-availability.ts";
 import { expiryWindows, MAX_DISPENSE_COST_ROWS, type DispenseCostRow, type StockHealthRow } from "./stock-health.ts";
+import type { ExpiringBatchRow } from "./action-plans/auto-plan-alerts.ts";
 import { containsPattern, everything, type PageRequest } from "./page-cursor.ts";
 import { afterCursor, dateSortValue, presentConditions, splitPage, timestampSortValue } from "./keyset-page.ts";
 
@@ -442,6 +443,28 @@ export class InventoryRepository {
       expiring60: Number(row.expiring60),
       expiring90: Number(row.expiring90),
     }));
+  }
+
+  /**
+   * The on-hand stock of every batch that expires on or before `through` (YYYY-MM-DD), expired batches included, one
+   * row per (site, batch) with the storage locations summed. A batch with nothing on hand is not an alert.
+   */
+  public async expiringBatches(through: string): Promise<ExpiringBatchRow[]> {
+    const rows = await this.database.db
+      .select({
+        siteId: inventoryBalances.siteId,
+        batchId: productBatches.id,
+        productId: productBatches.productId,
+        batchNumber: productBatches.batchNumber,
+        expiryDate: productBatches.expiryDate,
+        quantityOnHand: sql<string>`sum(${inventoryBalances.quantityOnHand})`,
+      })
+      .from(inventoryBalances)
+      .innerJoin(productBatches, eq(productBatches.id, inventoryBalances.productBatchId))
+      .where(and(sql`${inventoryBalances.quantityOnHand} > 0`, lte(productBatches.expiryDate, through)))
+      .groupBy(inventoryBalances.siteId, productBatches.id)
+      .orderBy(inventoryBalances.siteId, productBatches.id);
+    return rows.map((row) => ({ ...row, quantityOnHand: Number(row.quantityOnHand) }));
   }
 
   public async listAdjustments(
