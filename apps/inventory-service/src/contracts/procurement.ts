@@ -70,6 +70,14 @@ export const goodsReceiptLineSchema = z.object({
   manufacturedDate: z.string().date().nullable().optional(),
   manufacturer: z.string().trim().max(300).nullable().optional(),
   quantity: z.number().positive(),
+  /** Purchase cost in VND per base unit received, before VAT; omitted or null when unknown. */
+  unitCost: z
+    .number()
+    .min(0)
+    .max(1_000_000_000)
+    .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, { message: "At most 2 decimals" })
+    .nullable()
+    .optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
 });
 

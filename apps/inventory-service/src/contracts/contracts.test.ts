@@ -16,6 +16,33 @@ import {
   stockMovementCommandSchema,
 } from "./index.ts";
 
+describe("goods receipt line unit cost", () => {
+  const receipt = (unitCost?: number | null) => ({
+    receiptNumber: "GR-1",
+    supplierId: "00000000-0000-4000-8000-000000000001",
+    siteId: "00000000-0000-4000-8000-000000000002",
+    storageLocationId: "00000000-0000-4000-8000-000000000003",
+    receivedAt: "2026-10-20T00:00:00Z",
+    lines: [
+      {
+        productId: "00000000-0000-4000-8000-000000000004",
+        batchNumber: "B1",
+        expiryDate: "2027-01-01",
+        quantity: 5,
+        ...(unitCost === undefined ? {} : { unitCost }),
+      },
+    ],
+  });
+
+  it.each([[undefined], [null], [0], [1500], [1234.56]])("accepts a cost of %s", (unitCost) => {
+    expect(createGoodsReceiptRequestSchema.safeParse(receipt(unitCost)).success).toBe(true);
+  });
+
+  it.each([[-1], [10.123], [1_000_000_001], [Number.NaN]])("refuses a cost of %s", (unitCost) => {
+    expect(createGoodsReceiptRequestSchema.safeParse(receipt(unitCost)).success).toBe(false);
+  });
+});
+
 describe("inventory-service contracts", () => {
   it("accepts the anonymous actor type in internal identity context", () => {
     const anonymous = internalIdentityContextSchema.safeParse({

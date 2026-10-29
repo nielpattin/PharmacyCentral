@@ -4,6 +4,7 @@ import type { InventoryDatabase } from "../shared/infrastructure/database.ts";
 import { BusinessRuleError } from "../shared/business-rule-error.ts";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
+  goodsReceiptLines,
   idempotencyRecords,
   inventoryBalances,
   productBatches,
@@ -24,7 +25,7 @@ import { allocateFefo } from "./stock/application/fefo-allocate.ts";
 import { transitionReplenishment, type ReplenishmentStatus } from "./replenishment/domain/replenishment-request.ts";
 import { transitionTransfer, type TransferStatus } from "./transfers/domain/transfer-order.ts";
 import { recordSiteAvailability, sellableBatch, today } from "./site-availability.ts";
-import { expiryWindows, type StockHealthRow } from "./stock-health.ts";
+import { expiryWindows, MAX_DISPENSE_COST_ROWS, type DispenseCostRow, type StockHealthRow } from "./stock-health.ts";
 import { containsPattern, everything, type PageRequest } from "./page-cursor.ts";
 import { afterCursor, dateSortValue, presentConditions, splitPage, timestampSortValue } from "./keyset-page.ts";
 
@@ -292,6 +293,59 @@ export class InventoryRepository {
       quantityIn: Number(row.quantityIn),
       quantityOut: Number(row.quantityOut),
       latestOccurredAt: new Date(row.latestOccurredAt).toISOString(),
+    }));
+  }
+
+  /**
+   * What the goods handed over for sales cost, per sale (design 0007, gross profit). One row per order or prescription
+   * with a `Dispense` entry at or after `since`. The unit cost of a batch is the mean of the costs recorded on its
+   * receipt lines, weighted by the quantity received; a batch with no recorded cost is uncosted, so its quantity counts
+   * in `quantity` but not in `costedQuantity`, and adds nothing to `cost`. At most `maxRows` rows are answered; one more
+   * than that is read so the caller can tell the answer is cut.
+   */
+  public async dispenseCosts(input: { since: Date; maxRows?: number | undefined }): Promise<DispenseCostRow[]> {
+    const maxRows = input.maxRows ?? MAX_DISPENSE_COST_ROWS;
+    const dispensed = sql`${stockLedgerEntries.movementType} = 'Dispense'
+      and ${stockLedgerEntries.occurredAt} >= ${input.since.toISOString()}::timestamptz
+      and ${stockLedgerEntries.referenceType} in ('Order', 'Prescription')
+      and ${stockLedgerEntries.referenceId} is not null`;
+    const { rows } = await this.database.db.execute<{
+      reference_type: "Order" | "Prescription";
+      reference_id: string;
+      quantity: string;
+      costed_quantity: string;
+      cost: string;
+    }>(sql`
+      with batch_costs as (
+        select ${productBatches.id} as batch_id,
+          sum(${goodsReceiptLines.unitCost} * ${goodsReceiptLines.quantity}) / sum(${goodsReceiptLines.quantity}) as unit_cost
+        from ${productBatches}
+        inner join ${goodsReceiptLines}
+          on ${goodsReceiptLines.productId} = ${productBatches.productId}
+          and ${goodsReceiptLines.batchNumber} = ${productBatches.batchNumber}
+        where ${goodsReceiptLines.unitCost} is not null
+          and ${goodsReceiptLines.quantity} > 0
+          and ${productBatches.id} in (select ${stockLedgerEntries.productBatchId} from ${stockLedgerEntries} where ${dispensed})
+        group by ${productBatches.id}
+      )
+      select ${stockLedgerEntries.referenceType} as reference_type,
+        ${stockLedgerEntries.referenceId} as reference_id,
+        sum(-${stockLedgerEntries.quantityDelta}) as quantity,
+        coalesce(sum(-${stockLedgerEntries.quantityDelta}) filter (where batch_costs.unit_cost is not null), 0) as costed_quantity,
+        coalesce(sum(-${stockLedgerEntries.quantityDelta} * batch_costs.unit_cost), 0) as cost
+      from ${stockLedgerEntries}
+      left join batch_costs on batch_costs.batch_id = ${stockLedgerEntries.productBatchId}
+      where ${dispensed}
+      group by ${stockLedgerEntries.referenceType}, ${stockLedgerEntries.referenceId}
+      order by ${stockLedgerEntries.referenceId}
+      limit ${maxRows + 1}
+    `);
+    return rows.map((row) => ({
+      referenceType: row.reference_type,
+      referenceId: row.reference_id,
+      quantity: Number(row.quantity),
+      costedQuantity: Number(row.costed_quantity),
+      cost: Math.round(Number(row.cost) * 100) / 100,
     }));
   }
 

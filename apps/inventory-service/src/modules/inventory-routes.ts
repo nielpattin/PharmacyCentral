@@ -21,7 +21,7 @@ import {
 import { InventoryRepository, StockDispenseError } from "./inventory-repository.ts";
 import { invalidCursor, sendPage } from "./keyset-page.ts";
 import { readCommaList, readPageRequest, readSearchText, type PageOptions } from "./page-cursor.ts";
-import { DEAD_STOCK_DAYS } from "./stock-health.ts";
+import { DEAD_STOCK_DAYS, MAX_DISPENSE_COST_ROWS } from "./stock-health.ts";
 import { InsufficientStockError } from "./stock/application/fefo-allocate.ts";
 
 const idParam = z.object({ id: z.string().uuid() });
@@ -111,6 +111,9 @@ const stockHealthPeriodSchema = z
   })
   .refine((period) => Date.parse(period.from) < Date.parse(period.to));
 
+/** The dispense-cost window: the instant the first sale of interest was handed over. */
+const dispenseCostWindowSchema = z.object({ since: z.string().datetime({ offset: true }) });
+
 /** Status lists answer 100 rows by default, newest first, and at most 500 per page. */
 const statusListPage: PageOptions = { kind: "timestamp", defaultLimit: 100, maxLimit: 500 };
 /** The ledger answers 500 rows by default, as it always has. */
@@ -120,7 +123,10 @@ const expiryPage: PageOptions = { kind: "date", defaultLimit: 100, maxLimit: 500
 /** Returns answer every row, newest first, unless a `limit` or `cursor` asks for a page. */
 const returnPage: PageOptions = { kind: "timestamp", defaultLimit: 100, maxLimit: 500, allWithoutLimit: true };
 
-export const createInventoryRouter = (repository: InventoryRepository | undefined): Router => {
+export const createInventoryRouter = (
+  repository: InventoryRepository | undefined,
+  dispenseCostRowLimit = MAX_DISPENSE_COST_ROWS,
+): Router => {
   const router = Router();
   router.get("/inventory/balances", async (request, response, next) => {
     if (!repository) return unavailable(response);
@@ -760,6 +766,27 @@ export const createInventoryRouter = (repository: InventoryRepository | undefine
         deadStockDays: DEAD_STOCK_DAYS,
         rows,
       });
+    } catch (error) {
+      return next(error);
+    }
+  });
+  // What the goods of each sale cost, read by operations-query for gross profit; no browser reaches it.
+  router.get("/internal/analytics/dispense-costs", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    if (request.header("x-actor-type") !== "system")
+      return response.status(403).json({ title: "System actor required", status: 403, code: "forbidden" });
+    const window = dispenseCostWindowSchema.safeParse(request.query);
+    if (!window.success) return invalid(response);
+    const since = new Date(window.data.since);
+    try {
+      const rows = await repository.dispenseCosts({ since, maxRows: dispenseCostRowLimit });
+      if (rows.length > dispenseCostRowLimit)
+        return response.status(422).json({
+          title: "The period has too many sales to read",
+          status: 422,
+          code: "analytics_range_too_large",
+        });
+      return response.json({ since: since.toISOString(), rows });
     } catch (error) {
       return next(error);
     }

@@ -6,6 +6,8 @@ import {
   buildDashboardAnalytics,
   daysOfInventoryOf,
   DEAD_STOCK_ITEM_LIMIT,
+  grossProfitOf,
+  indexDispenseCosts,
   inventoryHealthOf,
   isDeadStock,
   joinSales,
@@ -16,6 +18,7 @@ import {
   turnoverOf,
   type AnalyticsInput,
   type BasePrice,
+  type DispenseCost,
   type PaidInvoice,
   type SalesDocument,
   type SiteName,
@@ -101,6 +104,7 @@ const salesInput = (overrides: Partial<AnalyticsInput> = {}): AnalyticsInput => 
     invoiceOf(8, "prescription", 40_000),
     invoiceOf(9, "order", 70_000),
   ],
+  dispenseCosts: [],
   stockRows: [],
   basePrices: PRICES,
   sites: SITES,
@@ -193,12 +197,13 @@ describe("sales KPIs", () => {
     expect(answer.kpis.averageOrderValue).toStrictEqual({ current: null, previous: 40_000 });
   });
 
-  it("never answers gross profit, because no purchase cost is kept", () => {
+  it("answers no gross profit, with its reason, while no sale has a recorded cost", () => {
     expect(buildDashboardAnalytics(salesInput()).kpis.grossProfit).toStrictEqual({
       current: null,
       previous: null,
       available: false,
       reason: "no_cost_data",
+      coverage: { current: 0, previous: 0 },
     });
   });
 
@@ -385,5 +390,102 @@ describe("analytics query", () => {
     expect(query({ siteId: "not-a-uuid" }).success).toBe(false);
     expect(query({ channel: "web" }).success).toBe(false);
     expect(query({ from: "2026-10-08", to: "2026-10-15" }).success).toBe(false);
+  });
+});
+
+const cost = (
+  referenceType: "Order" | "Prescription",
+  n: number,
+  quantity: number,
+  costedQuantity: number,
+  amount: number,
+): DispenseCost => ({ referenceType, referenceId: uuidOf(n), quantity, costedQuantity, cost: amount });
+
+/**
+ * Over the fixture of `salesInput`: sale 1 and prescription 2 are fully costed, sale 3 is costed for half of its goods,
+ * sale 4 has no dispense row, sale 5 dispensed nothing; in the previous period sale 7 is costed and prescription 8 is not.
+ */
+const COSTS: DispenseCost[] = [
+  cost("Order", 1, 10, 10, 40_000),
+  cost("Prescription", 2, 5, 5, 20_000),
+  cost("Order", 3, 4, 2, 5_000),
+  cost("Order", 5, 0, 0, 0),
+  cost("Order", 7, 3, 3, 30_000),
+  cost("Prescription", 8, 2, 0, 0),
+];
+
+describe("gross profit", () => {
+  it("is the revenue less the cost of the sales whose goods are all costed, beside the previous period", () => {
+    const { grossProfit } = buildDashboardAnalytics(salesInput({ dispenseCosts: COSTS })).kpis;
+    expect(grossProfit).toStrictEqual({
+      current: 90_000,
+      previous: 50_000,
+      available: true,
+      reason: null,
+      coverage: { current: 150_000 / 390_000, previous: 80_000 / 120_000 },
+    });
+  });
+
+  it("leaves out the revenue of a sale that is only partly costed instead of guessing the rest", () => {
+    const answer = buildDashboardAnalytics(salesInput({ dispenseCosts: COSTS, siteId: SITE_B, channel: "online" }));
+    // Only sale 3 is at site B in this period and it is half costed: no gross profit, never a figure from half the goods.
+    expect(answer.kpis.revenue.current).toBe(200_000);
+    expect(answer.kpis.grossProfit.current).toBeNull();
+    expect(answer.kpis.grossProfit.reason).toBe("no_cost_data");
+    expect(answer.kpis.grossProfit.coverage.current).toBe(0);
+  });
+
+  it("does not count a sale with no goods read, or one that dispensed nothing", () => {
+    const sales = joinSales(salesInput().documents, salesInput().invoices);
+    const costs = indexDispenseCosts([cost("Order", 4, 0, 0, 0), cost("Order", 5, 0, 0, 0)]);
+    const profit = grossProfitOf(sales, costs, PERIOD, { siteId: null, scope: undefined }, "all");
+    expect(profit.current).toBeNull();
+  });
+
+  it("matches a cost row to the right kind of document: an order id is not a prescription id", () => {
+    const sales = joinSales(salesInput().documents, salesInput().invoices);
+    const wrongKind = indexDispenseCosts([cost("Prescription", 1, 10, 10, 40_000)]);
+    expect(grossProfitOf(sales, wrongKind, PERIOD, { siteId: null, scope: undefined }, "online").current).toBeNull();
+  });
+
+  it("follows the channel and site filters of the revenue", () => {
+    const counter = buildDashboardAnalytics(salesInput({ dispenseCosts: COSTS, channel: "counter" })).kpis;
+    expect(counter.revenue.current).toBe(50_000);
+    expect(counter.grossProfit.current).toBe(30_000);
+    expect(counter.grossProfit.coverage.current).toBe(1);
+    // The previous counter sale is at site B and has no cost.
+    expect(counter.grossProfit.previous).toBeNull();
+
+    const scoped = buildDashboardAnalytics(salesInput({ dispenseCosts: COSTS, scope: [SITE_B] }));
+    expect(scoped.kpis.grossProfit.current).toBeNull();
+  });
+
+  it("is a true zero, with no coverage, for a period with no sale", () => {
+    const answer = buildDashboardAnalytics(salesInput({ dispenseCosts: COSTS, siteId: SITE_B, channel: "counter" }));
+    expect(answer.kpis.grossProfit.current).toBe(0);
+    expect(answer.kpis.grossProfit.available).toBe(true);
+    expect(answer.kpis.grossProfit.coverage.current).toBeNull();
+  });
+
+  it("tolerates the rounding of decimal quantities summed across batches", () => {
+    const sales = joinSales(salesInput().documents, salesInput().invoices);
+    const costs = indexDispenseCosts([cost("Order", 1, 0.3, 0.1 + 0.2, 1_000)]);
+    const profit = grossProfitOf(sales, costs, PERIOD, { siteId: null, scope: undefined }, "online");
+    expect(profit.current).toBe(99_000);
+  });
+
+  it("never counts the revenue of an invoice that is not paid", () => {
+    const withoutInvoice = buildDashboardAnalytics(
+      salesInput({ dispenseCosts: COSTS, invoices: [invoiceOf(2, "prescription", 50_000)] }),
+    );
+    // Order 1 has no paid invoice, so it is no sale even though its goods were costed.
+    expect(withoutInvoice.kpis.grossProfit.current).toBe(30_000);
+  });
+
+  it("rounds to whole dong", () => {
+    const answer = buildDashboardAnalytics(
+      salesInput({ dispenseCosts: [cost("Order", 1, 3, 3, 33_333.33)], channel: "online", siteId: SITE_A }),
+    );
+    expect(answer.kpis.grossProfit.current).toBe(66_667);
   });
 });

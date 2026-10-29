@@ -23,6 +23,7 @@ import { useCan } from "../permissions/use-can.ts";
 import { formatDateTime, readOne, text } from "../staff-api.ts";
 import { CreatePlanDrawer } from "./action-plans/create-plan-drawer.tsx";
 import { deadStockDraft, type ActionPlanDraft } from "./action-plans/drafts.ts";
+import { fillText } from "./procurement/bulk-summary.ts";
 import { labelOrShortId } from "./inventory/format.ts";
 import type {
   AnalyticsChannel,
@@ -33,7 +34,14 @@ import type {
   FigurePair,
   SalesChannel,
 } from "./analytics/contract.ts";
-import { formatCount, formatMoney, formatPercentChange, formatRate, percentChange } from "./analytics/figures.ts";
+import {
+  formatCount,
+  formatMoney,
+  formatPercentChange,
+  formatRate,
+  partialCoveragePercent,
+  percentChange,
+} from "./analytics/figures.ts";
 import {
   firstDayOf,
   formatDayLabel,
@@ -95,12 +103,16 @@ const KpiTile = ({
   format,
   locale,
   note,
+  footnote,
 }: {
   label: string;
   pair: FigurePair | undefined;
   format: (value: unknown) => string;
   locale: string;
+  /** Replaces the comparison, for a figure that has none to show. */
   note?: string | undefined;
+  /** Added under the comparison. */
+  footnote?: string | undefined;
 }): React.JSX.Element => (
   <StatTile
     label={translateText(label)}
@@ -116,6 +128,7 @@ const KpiTile = ({
           <span>
             {translateText("Change")}: {formatPercentChange(percentChange(pair?.current, pair?.previous), locale)}
           </span>
+          {footnote ? <span className="text-muted">{footnote}</span> : null}
         </span>
       )
     }
@@ -157,6 +170,7 @@ export const AnalyticsSection = (): React.JSX.Element => {
   const count = (value: unknown): string => formatCount(value, locale);
   const inventory = data?.inventory;
   const grossProfit = data?.kpis?.grossProfit;
+  const grossProfitCoverage = grossProfit?.available ? partialCoveragePercent(grossProfit.coverage?.current) : null;
   const planGate = useCan("actionPlan.create");
   const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
   const deadStockDays = inventory?.deadStock?.deadStockDays;
@@ -301,9 +315,18 @@ export const AnalyticsSection = (): React.JSX.Element => {
                 locale={locale}
                 {...(grossProfit && grossProfit.available === false
                   ? {
-                      note: translateText("No purchase cost is recorded, so gross profit cannot be calculated."),
+                      note: translateText(
+                        "No purchase cost is recorded for the sales of this period. Enter the unit cost on the goods receipt.",
+                      ),
                     }
                   : {})}
+                {...(grossProfitCoverage === null
+                  ? {}
+                  : {
+                      footnote: fillText(translateText("Based on {percent}% of revenue that has a recorded cost."), {
+                        percent: grossProfitCoverage,
+                      }),
+                    })}
               />
             </>
           )}

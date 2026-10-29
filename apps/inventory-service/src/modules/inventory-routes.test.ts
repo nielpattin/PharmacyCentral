@@ -24,7 +24,10 @@ const ids = {
   replenishment: "00000000-0000-4000-8000-000000000015",
 };
 
-const createTestServer = async (repository: InventoryRepository): Promise<{ server: Server; url: string }> => {
+const createTestServer = async (
+  repository: InventoryRepository,
+  dispenseCostRowLimit?: number,
+): Promise<{ server: Server; url: string }> => {
   const app = express();
   app.use(express.json());
   // The edge forwards the verified roles; a test call without them acts as Platform Admin, which passes every role
@@ -33,7 +36,7 @@ const createTestServer = async (repository: InventoryRepository): Promise<{ serv
     if (request.header("x-actor-roles") === undefined) request.headers["x-actor-roles"] = "Platform Admin";
     next();
   });
-  app.use(createInventoryRouter(repository));
+  app.use(createInventoryRouter(repository, dispenseCostRowLimit));
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
     response.status(500).json({ error: String(error) }),
   );
@@ -153,6 +156,73 @@ describe("inventory stock health route", () => {
     });
 
     expect(stockHealth.mock.calls[0]?.[0]?.siteIds).toBeUndefined();
+  });
+});
+
+describe("inventory dispense costs route", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) await closeServer(server);
+    server = undefined;
+  });
+
+  const since = "since=2026-10-01T00:00:00Z";
+  const cost = { referenceType: "Order", referenceId: ids.transfer, quantity: 4, costedQuantity: 4, cost: 700 };
+
+  it("refuses every caller that is not the system actor", async () => {
+    const dispenseCosts = vi.fn().mockResolvedValue([]);
+    const testServer = await createTestServer({ dispenseCosts } as unknown as InventoryRepository);
+    server = testServer.server;
+
+    const anonymous = await fetch(`${testServer.url}/internal/analytics/dispense-costs?${since}`);
+    const employee = await fetch(`${testServer.url}/internal/analytics/dispense-costs?${since}`, {
+      headers: { "x-actor-type": "employee", "x-actor-roles": "Platform Admin" },
+    });
+
+    expect(anonymous.status).toBe(403);
+    expect(employee.status).toBe(403);
+    expect(dispenseCosts).not.toHaveBeenCalled();
+  });
+
+  it("refuses a missing or date-only instant with 400", async () => {
+    const dispenseCosts = vi.fn().mockResolvedValue([]);
+    const testServer = await createTestServer({ dispenseCosts } as unknown as InventoryRepository);
+    server = testServer.server;
+    const headers = { "x-actor-type": "system" };
+
+    expect((await fetch(`${testServer.url}/internal/analytics/dispense-costs`, { headers })).status).toBe(400);
+    expect(
+      (await fetch(`${testServer.url}/internal/analytics/dispense-costs?since=2026-10-01`, { headers })).status,
+    ).toBe(400);
+    expect(dispenseCosts).not.toHaveBeenCalled();
+  });
+
+  it("answers the instant and the rows", async () => {
+    const dispenseCosts = vi.fn().mockResolvedValue([cost]);
+    const testServer = await createTestServer({ dispenseCosts } as unknown as InventoryRepository);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/internal/analytics/dispense-costs?${since}`, {
+      headers: { "x-actor-type": "system" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ since: "2026-10-01T00:00:00.000Z", rows: [cost] });
+    expect(dispenseCosts.mock.calls[0]?.[0]?.since).toEqual(new Date("2026-10-01T00:00:00Z"));
+  });
+
+  it("answers 422 analytics_range_too_large when the read returns more than the cap", async () => {
+    const dispenseCosts = vi.fn().mockResolvedValue([cost, { ...cost, referenceId: ids.adjustment }]);
+    const testServer = await createTestServer({ dispenseCosts } as unknown as InventoryRepository, 1);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/internal/analytics/dispense-costs?${since}`, {
+      headers: { "x-actor-type": "system" },
+    });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ code: "analytics_range_too_large" });
   });
 });
 

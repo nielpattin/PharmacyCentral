@@ -26,6 +26,18 @@ export type StockHealthRow = {
   expiring90: number;
 };
 
+/** What the goods handed over for one sale cost, as the internal read answers it. Quantities are base units, cost is VND. */
+export type DispenseCostRow = {
+  referenceType: "Order" | "Prescription";
+  referenceId: string;
+  quantity: number;
+  costedQuantity: number;
+  cost: number;
+};
+
+/** The most sales one dispense-cost read answers; a longer window is refused rather than cut. */
+export const MAX_DISPENSE_COST_ROWS = 50_000;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const addDays = (date: string, days: number): string =>

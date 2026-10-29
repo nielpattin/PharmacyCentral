@@ -88,7 +88,7 @@ model {
   pharmacyCentral.services.operationsService -> pharmacyCentral.services.catalogService "Storage locations, the site list of the reader scope" {
     technology "HTTP"
   }
-  pharmacyCentral.services.operationsService -> pharmacyCentral.services.inventoryService "Balances, transfers, stocktakes, receipts, the stock health of the period analytics" {
+  pharmacyCentral.services.operationsService -> pharmacyCentral.services.inventoryService "Balances, transfers, stocktakes, receipts, the stock health and the dispense costs of the period analytics" {
     technology "HTTP"
   }
   pharmacyCentral.services.operationsService -> pharmacyCentral.services.salesService "Prescriptions and sales documents of the period analytics, with the scope as x-actor-site-ids" {

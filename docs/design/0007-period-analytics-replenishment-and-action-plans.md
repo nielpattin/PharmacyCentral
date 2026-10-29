@@ -23,9 +23,9 @@ The dashboard shows counts only ([staff dashboard spec](../product/staff-dashboa
 ## Non-goals
 
 - No new write path for analytics. Analytics routes only read.
-- No purchase cost, no supplier lead time field, no per-product minimum stock field (see Open questions: gross profit, minimum stock, lead time). Nothing is guessed to fill them.
+- No supplier lead time field and no per-product minimum stock field (see Open questions: minimum stock, lead time). Nothing is guessed to fill them. The purchase cost is recorded on goods receipt lines (see "Purchase cost and gross profit"); a sale whose goods have no recorded cost has no gross profit.
 - No auto-submit, auto-approve or auto-receive of a purchase order.
-- No integration events and no change to existing events. No cross-service table change.
+- No integration events and no change to existing events. No cross-service table change. The only change to an existing table is one nullable column on `goods_receipt_lines`.
 - No charts library. Figures use `StatTile` and tables.
 
 ## Proposed design
@@ -53,6 +53,7 @@ Internal routes (ops-query to owner services):
 | `GET /internal/analytics/sales-documents?from&to` | sales | `{ documents: [{ id, kind: "order" \| "prescription", siteId, createdAt }] }` created in `[from, to)`. `kind: "order"` is an online order (`siteId` = `selectedStoreId`), `"prescription"` is a counter sale. Site-scoped by header. |
 | `GET /internal/analytics/paid-invoices?since` | payment | `{ invoices: [{ orderId \| null, prescriptionId \| null, amount, createdAt }] }` for invoices with status `Paid` created at or after `since`. Hard cap 50 000 rows; more answers 422 `analytics_range_too_large`. |
 | `GET /internal/analytics/stock-health?from&to` | inventory | `{ from, to, asOf, deadStockDays: 90, rows: [{ siteId, productId, onHand, reserved, dispensed, netChange, lastMovementAt, expired, expiring30, expiring60, expiring90 }] }`, one row per (site, product) that has a balance row or a ledger entry; quantities are base units. Site-scoped by header. |
+| `GET /internal/analytics/dispense-costs?since` | inventory | `{ since, rows: [{ referenceType: "Order" \| "Prescription", referenceId, quantity, costedQuantity, cost }] }`: for each sale with a `Dispense` ledger entry at or after `since`, the base units handed over, the part taken from batches whose receipts recorded a cost, and the cost of that part in VND. Not site-scoped (the document that it joins to is). More than 50 000 rows answers 422 `analytics_range_too_large`. |
 
 #### `GET /api/dashboard/analytics`
 
@@ -69,7 +70,10 @@ The previous period is the same length ending at `from`. Answer:
     revenue: { current, previous },
     orderCount: { current, previous },
     averageOrderValue: { current: number | null, previous: number | null },
-    grossProfit: { current: null, previous: null, available: false, reason: "no_cost_data" }
+    grossProfit: {
+      current: number | null, previous: number | null, available: boolean, reason: "no_cost_data" | null,
+      coverage: { current: number | null, previous: number | null }   // share (0 to 1) of revenue that has a cost
+    }
   },
   channels: [{ channel: "counter" | "online", revenue, orderCount }],   // current period, site filter applied, channel filter ignored
   inventory: {
@@ -84,6 +88,12 @@ The previous period is the same length ending at `from`. Answer:
 
 A figure that cannot be answered is `null`, never 0 (reporting spec decision 4).
 
+#### Purchase cost and gross profit
+
+Gross profit needs what the goods cost. `goods_receipt_lines.unit_cost numeric(18,2) NULL` (migration `0014_receipt_line_unit_cost`, with `CHECK (unit_cost IS NULL OR unit_cost >= 0)`) holds the purchase cost in VND per base unit received, before VAT. `POST /api/procurement/goods-receipts` accepts an optional `unitCost` per line (number from 0, at most 2 decimals, at most 1 000 000 000); every receipt answer returns it as `unitCost: number | null`. No backfill: lines that exist stay `NULL`, which means unknown and is never read as 0.
+
+The unit cost of a batch is the mean of `unit_cost` over the goods receipt lines with the same product and batch number and a non-null cost, weighted by line quantity, so a batch received twice at two costs is priced by its mix and a line without cost never drags the mean down. A `Dispense` ledger entry whose batch has no such line is uncosted. Batches created by an opening balance import have no receipt line, so their sales are uncosted until a receipt names a cost. The staff-web receipt form has an optional "Giá nhập (₫/đơn vị)" field per line, validated client side (no negatives, at most 2 decimals, a comma is refused) and again by the contract and the database.
+
 Definitions (also BR-REPORT-008 to 011):
 
 - **Sale:** an online order or a counter prescription that has a `Paid` payment invoice. Revenue is the sum of those invoice amounts; a refunded invoice is not `Paid`, so it is not revenue. A sale belongs to the period of its document's `createdAt` (order or prescription), in the site of the document. Order count is the number of sales; average order value is revenue / order count, `null` when the count is 0.
@@ -93,6 +103,7 @@ Definitions (also BR-REPORT-008 to 011):
 - **Stockout rate:** among the (site, product) pairs that have a balance row or a ledger entry, the share whose available quantity (on hand minus reserved) is 0 or less now. Point in time: the system keeps no daily stock snapshots, so this is not a rate over the period.
 - **Stock value:** on hand times today's published base-unit selling price (`GET /pricing/base-prices`), the same valuation as the Finance summary. A product with no published price adds nothing and is counted in `missingPriceCount`.
 - **Expiry buckets:** on-hand quantity of batches that expire already (`expired`), in 0 to 30 days (`within30`), 31 to 60 (`within60`) and 61 to 90 days (`within90`) from today.
+- **Gross profit:** revenue less cost of goods, over the sales whose goods are all costed. A sale is *costed* when its dispense row exists, `quantity > 0` and `costedQuantity = quantity`. A partly costed or uncosted sale adds neither its revenue nor a guessed cost. `coverage` is the revenue of costed sales over the revenue of all sales of the period. With sales but none costed, gross profit is `null` (`reason: "no_cost_data"`); with no sale at all it is a true 0 and `coverage` is `null` (BR-REPORT-009).
 - **Channel** filters the sales KPIs only. Stock belongs to a site, not to a channel, so inventory health ignores it, and the page says so.
 
 #### `GET /api/procurement/replenishment-suggestions`
@@ -123,7 +134,9 @@ Body: `{ siteId, orders: [{ supplierId, lines: [{ productId, orderedQuantity: in
 
 #### `GET /api/auth/staff-directory`
 
-Read only. Platform Admin gets every active employee; a Pharmacy Manager gets the active employees who share at least one site with them. Fields: `id`, `displayName`, `roles`, `siteIds`; never email. Other callers get 403.
+Read only. Platform Admin gets every active employee; a Pharmacy Manager gets the active employees who share at least one site with them. Fields: `id`, `displayName`, `roles`, `siteIds`; never email. Other callers get 403, and so does an account that must still change its password. `inventory-service` checks an owner through the service-only `GET /internal/employees/{id}` of identity-service (`IDENTITY_SERVICE_URL`), which answers an active employee or 404. A valid owner who does not hold the plan's site answers 422 `owner_not_at_site`.
+
+An employee with no assigned site (and not Platform Admin) is refused by the edge and by the service on every site-scoped list, the plan list included. The action plans page reads that as its own state and shows "Tài khoản của bạn chưa được gán cơ sở nào…" without sending the request; a 403 from the list shows the same sentence.
 
 ### Data model
 
@@ -131,7 +144,7 @@ Read only. Platform Admin gets every active employee; a Pharmacy Manager gets th
 
 `action_plans(id uuid pk, source_type varchar(30), source_ref varchar(200), title varchar(300), detail text, site_id uuid null, product_id uuid null, owner_id uuid, due_date date, status varchar(20) default 'open', created_by uuid, created_at, updated_at, completed_at null)`; indexes `(created_at desc, id desc)`, `(owner_id, status)`, and a partial unique index on `(source_type, source_ref)` where `status <> 'done'`.
 
-No other table changes.
+One nullable column is added to `goods_receipt_lines` (see "Purchase cost and gross profit"). No other table changes.
 
 ### Events
 
@@ -158,9 +171,9 @@ The new routes inherit the services' request tracing and metrics. No new metric.
 
 ## Rollout and migration
 
-1. Deploy `inventory-service` (migration `0013`), `sales-service`, `payment-service`, `identity-service`; the new routes are additive.
-2. Deploy `operations-query-service` (it calls the three internal reads), then the edge policy, then `staff-web`.
-3. Run `pnpm run db:migrate`. Rollback: drop `action_plans`; no other data changes.
+1. Deploy `inventory-service` (migrations `0013` and `0014`), `sales-service`, `payment-service`, `identity-service`; the new routes are additive.
+2. Deploy `operations-query-service` (it calls the four internal reads: sales documents, paid invoices, dispense costs and stock health), then the edge policy, then `staff-web`.
+3. Run `pnpm run db:migrate`. Rollback: drop `action_plans` and the column `goods_receipt_lines.unit_cost`; no other data changes.
 
 ## Testing
 
@@ -168,7 +181,8 @@ Unit tests for the pure computations (velocity, lead time, reorder quantity, tur
 
 ## Open questions
 
-- **Gross profit.** The catalog and the stock keep no purchase cost, so gross profit cannot be computed without guessing. The Analytics page shows "—" with the reason. Owner decision: add a purchase cost to goods receipt lines and batches (a write-path change), or import a cost per product.
+- **Gross profit coverage.** Gross profit is only as complete as the costs entered. Opening balances carry no cost and old receipts stay unknown, so the page shows the share of revenue it covers. Owner decision: backfill costs for the opening stock, or require a cost on every new receipt line (today it is optional).
+- **Cost method.** The quantity-weighted mean per batch is a simple, explainable choice; FIFO or moving average per product would need a cost on the stock balance. Revisit if the owner wants stock valued at cost.
 - **Minimum stock and lead time.** There is no per-product minimum stock or supplier lead time field. This design uses the BR-REPORT-002 threshold, a safety-days parameter and the observed lead time of receipts. Owner decision: store a minimum stock per product and site, and a lead time per supplier.
 - **Product to supplier.** The catalog has no preferred supplier per product; the latest goods receipt supplier is used. Owner decision: a preferred supplier per product.
 

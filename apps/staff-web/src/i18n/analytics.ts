@@ -29,8 +29,9 @@ export const analyticsLiterals: Record<string, string> = {
   Orders: "Số đơn",
   "Average order value": "Giá trị đơn trung bình",
   "Gross profit": "Lợi nhuận gộp",
-  "No purchase cost is recorded, so gross profit cannot be calculated.":
-    "Chưa ghi nhận giá vốn mua hàng, nên chưa tính được lợi nhuận gộp.",
+  "No purchase cost is recorded for the sales of this period. Enter the unit cost on the goods receipt.":
+    "Chưa có giá nhập cho các đơn trong kỳ. Hãy nhập giá nhập ở phiếu nhập kho.",
+  "Based on {percent}% of revenue that has a recorded cost.": "Tính trên {percent}% doanh thu có giá nhập.",
   "Revenue by channel": "Doanh thu theo kênh",
   "The channel filter does not apply to this table: both channels show for the chosen site and period.":
     "Bảng này không theo bộ lọc kênh: luôn hiển thị cả hai kênh theo cơ sở và kỳ đã chọn.",

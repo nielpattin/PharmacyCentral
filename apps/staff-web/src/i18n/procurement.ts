@@ -10,6 +10,13 @@ export const procurementLiterals: Record<string, string> = {
   "Receive goods": "Nhận hàng",
   "Purchase order created.": "Đã tạo đơn đặt hàng.",
   "Goods receipt created.": "Đã tạo phiếu nhập hàng.",
+  "Unit cost (VND per unit)": "Giá nhập (₫/đơn vị)",
+  "Unit cost": "Giá nhập",
+  "Optional. Cost of one unit before VAT; leave blank when unknown.":
+    "Không bắt buộc. Giá một đơn vị trước VAT; để trống nếu chưa biết.",
+  "The unit cost cannot be negative.": "Giá nhập không được âm.",
+  "The unit cost must be a number with at most 2 decimals.": "Giá nhập phải là số có tối đa 2 chữ số thập phân.",
+  "The unit cost is too large.": "Giá nhập quá lớn.",
   "Purchase order": "Đơn đặt hàng",
   "Purchase order number": "Số đơn đặt hàng",
   "Purchase order (optional)": "Đơn đặt hàng (không bắt buộc)",

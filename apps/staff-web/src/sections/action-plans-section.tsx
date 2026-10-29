@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 
 import { useSession } from "../auth.ts";
 import { dataTableLabels } from "../components/data-table-labels.ts";
+import { EmptyState } from "../components/forms.tsx";
 import { SavedViewsMenu } from "../components/saved-views-menu.tsx";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { usePagedList } from "../hooks/usePagedList.ts";
@@ -35,6 +36,7 @@ import {
 import { EditPlanDrawer } from "./action-plans/edit-plan-drawer.tsx";
 import { ownerNameOf, ownerOptionsFor, canReadStaffDirectory } from "./action-plans/owners.ts";
 import { ACTION_PLAN_LIST_DEFAULTS, actionPlanListParams, visiblePlans } from "./action-plans/list-query.ts";
+import { hasNoAssignedSite, isSiteAccessRefusal } from "./action-plans/no-site.ts";
 import { planWriteProblem } from "./action-plans/problems.ts";
 import { useStaffDirectory } from "./action-plans/queries.ts";
 import { isOverdue, STATUS_LABELS, STATUS_TONES, SOURCE_LABELS, todayIsoDate } from "./action-plans/plan-state.ts";
@@ -42,8 +44,26 @@ import { isOverdue, STATUS_LABELS, STATUS_TONES, SOURCE_LABELS, todayIsoDate } f
 /** A conflict the list is showing: the write was refused because a live plan for the same item exists. */
 type Conflict = { message: string; planId: string };
 
-/** The action plans list: every plan the viewer may see, filtered by owner, status and search. */
+/**
+ * The action plans page. An employee with no assigned site cannot read the site-scoped list, so they get a sentence that
+ * says why instead of a blank page; the list is not even requested.
+ */
 export const ActionPlansSection = (): React.JSX.Element => {
+  const session = useSession();
+  if (hasNoAssignedSite(session)) return <NoSiteNotice />;
+  return <ActionPlansList />;
+};
+
+const NoSiteNotice = (): React.JSX.Element => (
+  <div className="grid gap-3">
+    <EmptyState>
+      Your account has no assigned site, so there are no action plans to show. Ask an administrator to assign a site.
+    </EmptyState>
+  </div>
+);
+
+/** The action plans list: every plan the viewer may see, filtered by owner, status and search. */
+const ActionPlansList = (): React.JSX.Element => {
   const session = useSession();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -192,7 +212,10 @@ export const ActionPlansSection = (): React.JSX.Element => {
           "Turn a suggestion or an alert into a plan with one owner, a due date and a status. Every plan appears in this list.",
         )}
       </p>
-      {plans.error ? <Alert variant="danger">{translateText(plans.error.message)}</Alert> : null}
+      {plans.error && isSiteAccessRefusal(plans.error) ? <NoSiteNotice /> : null}
+      {plans.error && !isSiteAccessRefusal(plans.error) ? (
+        <Alert variant="danger">{translateText(plans.error.message)}</Alert>
+      ) : null}
       {malformedCount > 0 ? <Alert variant="danger">{translateText("Unexpected action plan response.")}</Alert> : null}
       {directory.error ? <Alert variant="danger">{translateText("Unable to load the staff directory.")}</Alert> : null}
       {conflict ? (

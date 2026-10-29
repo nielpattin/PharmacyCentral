@@ -343,6 +343,7 @@ export class ProcurementRepository {
       manufacturedDate?: string | null | undefined;
       manufacturer?: string | null | undefined;
       quantity: number;
+      unitCost?: number | null | undefined;
       notes?: string | null | undefined;
     }>;
   }) {
@@ -386,6 +387,7 @@ export class ProcurementRepository {
           manufacturedDate: line.manufacturedDate ?? null,
           manufacturer: line.manufacturer ?? null,
           quantity: line.quantity,
+          unitCost: line.unitCost === undefined || line.unitCost === null ? null : line.unitCost.toFixed(2),
           notes: line.notes ?? null,
         })),
       );
@@ -429,11 +431,17 @@ export class ProcurementRepository {
         });
     return {
       ...receipt,
-      lines: await this.database.db
-        .select()
-        .from(goodsReceiptLines)
-        .where(eq(goodsReceiptLines.goodsReceiptId, receipt.id)),
+      lines: await this.receiptLines(receipt.id),
     };
+  }
+
+  /** The lines of a receipt; the cost is a number of dong per unit, or null when it was not recorded. */
+  private async receiptLines(goodsReceiptId: string) {
+    const lines = await this.database.db
+      .select()
+      .from(goodsReceiptLines)
+      .where(eq(goodsReceiptLines.goodsReceiptId, goodsReceiptId));
+    return lines.map((line) => ({ ...line, unitCost: line.unitCost === null ? null : Number(line.unitCost) }));
   }
 
   public async listReceipts(filters: ReceiptFilters = {}, page: PageRequest = everything) {
@@ -457,10 +465,7 @@ export class ProcurementRepository {
     const rows = await Promise.all(
       items.map(async ({ receipt }) => ({
         ...receipt,
-        lines: await this.database.db
-          .select()
-          .from(goodsReceiptLines)
-          .where(eq(goodsReceiptLines.goodsReceiptId, receipt.id)),
+        lines: await this.receiptLines(receipt.id),
       })),
     );
     return { rows, nextCursor };
@@ -480,7 +485,7 @@ export class ProcurementRepository {
     if (!receipt) return undefined;
     return {
       ...receipt,
-      lines: await this.database.db.select().from(goodsReceiptLines).where(eq(goodsReceiptLines.goodsReceiptId, id)),
+      lines: await this.receiptLines(id),
     };
   }
 }

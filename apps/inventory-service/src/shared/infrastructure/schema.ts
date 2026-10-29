@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -341,17 +342,25 @@ export const goodsReceipts = pgTable(
   ],
 );
 
-export const goodsReceiptLines = pgTable("goods_receipt_lines", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  goodsReceiptId: uuid("goods_receipt_id").notNull(),
-  productId: uuid("product_id").notNull(),
-  batchNumber: varchar("batch_number", { length: 100 }).notNull(),
-  expiryDate: date("expiry_date").notNull(),
-  manufacturedDate: date("manufactured_date"),
-  manufacturer: varchar("manufacturer", { length: 300 }),
-  quantity: integer("quantity").notNull(),
-  notes: text("notes"),
-});
+export const goodsReceiptLines = pgTable(
+  "goods_receipt_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    goodsReceiptId: uuid("goods_receipt_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    batchNumber: varchar("batch_number", { length: 100 }).notNull(),
+    expiryDate: date("expiry_date").notNull(),
+    manufacturedDate: date("manufactured_date"),
+    manufacturer: varchar("manufacturer", { length: 300 }),
+    quantity: integer("quantity").notNull(),
+    /** Purchase cost in VND per base unit received, before VAT. NULL means unknown, never zero. */
+    unitCost: numeric("unit_cost", { precision: 18, scale: 2 }),
+    notes: text("notes"),
+  },
+  (table) => [
+    check("goods_receipt_lines_unit_cost_nonnegative", sql`${table.unitCost} is null or ${table.unitCost} >= 0`),
+  ],
+);
 
 /**
  * A follow-up item for a suggestion or an alert (design 0007). The owner is an employee in identity-service, checked at

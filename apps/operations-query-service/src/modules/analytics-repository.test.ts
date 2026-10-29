@@ -23,6 +23,11 @@ const defaultAnswers: Record<string, () => Response> = {
     json({
       invoices: [{ orderId: ORDER, prescriptionId: null, amount: 100_000, createdAt: "2026-10-09T10:05:00.000Z" }],
     }),
+  "inventory.test/internal/analytics/dispense-costs": () =>
+    json({
+      since: "2026-09-24T00:00:00.000Z",
+      rows: [{ referenceType: "Order", referenceId: ORDER, quantity: 4, costedQuantity: 4, cost: 30_000 }],
+    }),
   "inventory.test/internal/analytics/stock-health": () =>
     json({ from: QUERY.from, to: QUERY.to, asOf: NOW, deadStockDays: 90, rows: [] }),
   "catalog.test/pricing/base-prices": () => json([]),
@@ -63,6 +68,13 @@ describe("OperationsRepository.dashboardAnalytics", () => {
     const answer = await repository.dashboardAnalytics(QUERY, () => "signed-for-catalog", [SITE], NOW);
     expect(answer.kpis.revenue).toStrictEqual({ current: 100_000, previous: 0 });
     expect(answer.kpis.orderCount.current).toBe(1);
+    expect(answer.kpis.grossProfit).toMatchObject({ current: 70_000, available: true, reason: null });
+
+    const costs = requestTo("inventory.test", "/internal/analytics/dispense-costs");
+    // The cost read starts with the previous period, like the sales it is joined to, and is not site-bound.
+    expect(costs?.url.searchParams.get("since")).toBe("2026-10-01T00:00:00.000Z");
+    expect(costs?.headers.get("x-actor-site-ids")).toBeNull();
+    expect(costs?.headers.get("x-internal-service-secret")).toBe("test-internal-secret");
 
     const sales = requestTo("sales.test", "/internal/analytics/sales-documents");
     expect(sales?.url.searchParams.get("from")).toBe("2026-10-01T00:00:00.000Z");
@@ -91,6 +103,13 @@ describe("OperationsRepository.dashboardAnalytics", () => {
 
   it("keeps the owner's code when payment-service refuses the period as too large", async () => {
     answers["payment.test/internal/analytics/paid-invoices"] = () =>
+      json({ title: "Too large", status: 422, code: "analytics_range_too_large" }, 422);
+    const failed = repository.dashboardAnalytics(QUERY, () => "identity", undefined, NOW);
+    await expect(failed).rejects.toMatchObject({ status: 422, code: "analytics_range_too_large" });
+  });
+
+  it("throws when the dispense costs cannot be read, rather than showing a gross profit without them", async () => {
+    answers["inventory.test/internal/analytics/dispense-costs"] = () =>
       json({ title: "Too large", status: 422, code: "analytics_range_too_large" }, 422);
     const failed = repository.dashboardAnalytics(QUERY, () => "identity", undefined, NOW);
     await expect(failed).rejects.toMatchObject({ status: 422, code: "analytics_range_too_large" });

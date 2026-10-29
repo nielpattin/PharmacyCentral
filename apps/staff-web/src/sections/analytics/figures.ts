@@ -39,3 +39,12 @@ export const formatPercentChange = (change: number | null, locale: string): stri
   isAnswered(change)
     ? `${new Intl.NumberFormat(locale, { signDisplay: "exceptZero", maximumFractionDigits: 1 }).format(change)}%`
     : UNANSWERED;
+
+/**
+ * The whole percent of revenue that gross profit covers, or null when it covers all of it or the coverage is unknown.
+ * Rounded down, so a coverage just under 100% never reads as complete.
+ */
+export const partialCoveragePercent = (coverage: Figure | undefined): number | null => {
+  if (!isAnswered(coverage) || coverage >= 1) return null;
+  return Math.floor(Math.max(coverage, 0) * 100);
+};

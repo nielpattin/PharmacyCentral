@@ -103,7 +103,7 @@ Reporting does not show stock-risk summaries; low-stock and expiring batch count
 **Analytics** ("Phân tích", Platform Admin and Pharmacy Manager) shows how a chosen period went:
 
 1. Choose the period (7, 30 or 90 days, this month, or two dates), a site and a channel (all, counter or online).
-2. Read the tiles: revenue, number of orders and average order value, each beside the previous period of the same length with the change in percent. Gross profit shows "—" because the system records no purchase cost.
+2. Read the tiles: revenue, number of orders and average order value, each beside the previous period of the same length with the change in percent. Gross profit is the revenue less the purchase cost of the goods, counted only for sales whose goods all come from batches with a cost recorded on a goods receipt; the tile says what share of revenue it covers. It shows "—" when no sale of the period has a recorded cost.
 3. Read the inventory health block: stock turnover, days of inventory, stockout rate (the state right now), dead stock (no movement for 90 days), stock value by site and the expiry buckets (already expired, within 30, 31 to 60 and 61 to 90 days). The channel does not change the inventory figures.
 
 A figure that could not be read shows "—", never 0. A sale counts once its invoice is paid; a refunded invoice is not revenue.
@@ -187,7 +187,7 @@ Imports are repeatable: matching codes, SKUs and batch numbers update existing r
 2. Choose the owner (an employee who works at the same site) and the due date, then save. The same alert cannot have two open plans.
 3. The owner opens **Kế hoạch hành động**, sees only their own plans, and moves each between Mở, Đang thực hiện and Hoàn thành. A manager also sees every plan of their sites, filters by owner and status, and can change the owner, the due date and the title.
 
-An open plan past its due date is marked overdue.
+An open plan past its due date is marked overdue. An employee with no assigned site sees a message saying so instead of the list; an administrator assigns the site in Users.
 
 ### Receiving (goods receipts)
 
@@ -195,7 +195,7 @@ An open plan past its due date is marked overdue.
 
 1. Choose **Receive goods** (or press **N**). A side drawer opens with the receipt form.
 2. Select the supplier, site, storage location, and receipt number. Optionally link an approved purchase order.
-3. Enter each line's product, batch, expiry date and received quantity, then submit.
+3. Enter each line's product, batch, expiry date and received quantity. Add the **Giá nhập** (unit cost in VND, before VAT) when you know it: it is what Analytics uses for gross profit. Leave it blank when unknown; it is never read as 0. Then submit.
 4. New batches await quality review before they can be used for sales.
 
 ## Quality

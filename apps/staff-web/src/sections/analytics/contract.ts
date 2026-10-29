@@ -32,7 +32,14 @@ export type AnalyticsResponse = {
     revenue: FigurePair;
     orderCount: FigurePair;
     averageOrderValue: FigurePair;
-    grossProfit: { current: Figure; previous: Figure; available: boolean; reason?: string | null };
+    grossProfit: {
+      current: Figure;
+      previous: Figure;
+      available: boolean;
+      reason?: string | null;
+      /** The share (0 to 1) of the period's revenue that belongs to sales whose goods all have a recorded cost. */
+      coverage?: { current: Figure; previous: Figure };
+    };
   };
   channels: Array<{ channel: SalesChannel; revenue: Figure; orderCount: Figure }>;
   inventory: {

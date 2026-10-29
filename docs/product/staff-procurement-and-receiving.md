@@ -118,7 +118,7 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
 
 1. Header button **Nhận hàng** (key **N**), gated by `goodsReceipt.create`.
 2. Search by receipt number, saved views, CSV export. Columns: Receipt number, Status, Site, Supplier, Received.
-3. Detail drawer: supplier, site, received time, notes, and lines (product, batch, expiry, manufactured date, manufacturer, quantity, notes). History tab (US5, gap G18).
+3. Detail drawer: supplier, site, received time, notes, and lines (product, batch, expiry, manufactured date, manufacturer, quantity, unit cost, notes). History tab (US5, gap G18).
 4. Receive drawer: receipt number, supplier, site, storage location, optional purchase order picker (search by number, shows status), receipt date (US3, gap G16), notes, and lines. Today the drawer sends the browser's clock at submit, and the user cannot change it.
 
 **Status labels.** Both statuses are staff-only; neither is shown to customers.
@@ -202,3 +202,12 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
 | G15 | Numbers are unique and a duplicate answers 409 in Vietnamese (Decision 13). | Unique indexes exist (`purchase_orders_number_unique`, `goods_receipts_number_unique`), but the duplicate reaches the handler as an unmapped error, so it answers 500. The generated number uses three random digits per second, so it can collide. | `schema.ts`; `procurement-routes.ts`; `procurement-repository.ts` (`createPurchaseOrder`). |
 | G16 | The receiver enters the receipt date within the window (Decision 12). | The drawer sends `new Date().toISOString()` from the browser. The API accepts any datetime with an offset. | `apps/staff-web/src/sections/procurement/receive-goods-drawer.tsx`; `contracts/procurement.ts` (`receivedAt`). |
 | G18 | A History tab on each purchase order and receipt, from an entity-scoped history (Decision 16, US5). | Neither drawer has a History tab. `EntityDrawer` supports one. `SalesAuditHistory` reads `/api/audit/logs`, which is Platform Admin only, so it cannot be reused here. No entity history route exists for procurement. | `apps/staff-web/src/sections/procurement/purchase-order-drawer.tsx`; `goods-receipt-drawer.tsx`; `apps/staff-web/src/components/entity-drawer.tsx`; `apps/staff-web/src/sections/sales/shared.tsx`; `policy.mjs` (`platformAdminPaths`). |
+
+### US7. As a Warehouse Staff member, I record the purchase cost of received goods, so that Analytics can show real gross profit
+
+- Source: `[owner]` 2026-10-29; rule `[standard]` (BR-PROC-009, BR-REPORT-009, [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md)).
+- Accepted when:
+  - Each receipt line has an optional field **Giá nhập (₫/đơn vị)**: the cost of one unit received, before VAT. The hint says to leave it blank when unknown.
+  - A blank field is stored as no cost, never 0. A negative value, a value with more than 2 decimals, a comma and a value above 1 000 000 000 are refused with a message naming the line, before anything is sent; the server and the database refuse them too.
+  - The receipt detail shows the cost per line, and "—" for a line that has none.
+  - Test: receive a batch with a cost, sell some of it, and Analytics shows a gross profit for that sale; receive another batch without a cost, sell from it, and that sale adds nothing to gross profit.

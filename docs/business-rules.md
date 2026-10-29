@@ -258,6 +258,10 @@ Với một site, tốc độ bán ngày là tổng số lượng có `Dispense`
 
 Pharmacy Manager hoặc Platform Admin chọn các dòng gợi ý, sửa số lượng (số nguyên dương) và tạo mỗi nhà cung cấp một đơn mua ở `Draft` tại site đã chọn, trong một transaction: hoặc tạo hết hoặc không tạo gì. Việc kiểm tra nhà cung cấp, site và sản phẩm như BR-PROC-002. Hệ thống không tự duyệt hay gửi đơn; duyệt vẫn theo BR-PROC-005 và BR-AUTH-009.
 
+### BR-PROC-009. Giá nhập trên dòng phiếu nhập kho là tùy chọn và không bao giờ bị đoán
+
+Mỗi dòng phiếu nhập có thể ghi giá nhập: số tiền VND cho một đơn vị cơ sở nhận về, trước VAT, từ 0 đến 1.000.000.000, tối đa 2 chữ số thập phân. Để trống nghĩa là chưa biết và được lưu là không có giá, không phải 0. Giá không sửa được sau khi tạo phiếu và không được suy ra từ giá bán. Các dòng đã có trước khi có cột này giữ trạng thái chưa biết.
+
 ### BR-PLAN-001. Kế hoạch hành động có chủ sở hữu, hạn và trạng thái
 
 Một kế hoạch tạo từ gợi ý hoặc cảnh báo (`replenishment`, `expiry`, `dead_stock`, `price_warning`) có chủ sở hữu, hạn (ngày, không ở quá khứ khi tạo) và trạng thái `open`, `in_progress` hoặc `done`. Chỉ Pharmacy Manager và Platform Admin tạo kế hoạch; chủ sở hữu phải là nhân viên đang hoạt động làm việc tại site của kế hoạch (Platform Admin làm chủ sở hữu được ở mọi site). Mỗi cảnh báo (`sourceType` và `sourceRef`) chỉ có một kế hoạch `open` hoặc `in_progress` cùng lúc. Kế hoạch không tự thực hiện hành động nào trên cảnh báo.
@@ -761,9 +765,9 @@ Gồm Draft, Pending và PartiallyDispensed.
 
 Một giao dịch bán là đơn hàng online hoặc đơn thuốc tại quầy có hóa đơn ở trạng thái `Paid`. Doanh thu là tổng số tiền các hóa đơn đó; hóa đơn đã hoàn tiền (`Refunded`) không còn là doanh thu. Giao dịch thuộc kỳ theo `createdAt` của đơn hoặc đơn thuốc và thuộc site của chính chứng từ đó (đơn online: cửa hàng đã chọn). Số đơn là số giao dịch bán; giá trị đơn trung bình là doanh thu chia số đơn và để trống khi số đơn là 0. Kỳ trước là kỳ cùng độ dài, kết thúc tại đầu kỳ đang xem; kỳ dài tối đa 366 ngày. Bộ lọc kênh (`counter`, `online`) chỉ áp dụng cho các chỉ số bán hàng.
 
-### BR-REPORT-009. Lợi nhuận gộp chỉ tính khi có giá vốn
+### BR-REPORT-009. Lợi nhuận gộp chỉ tính trên các giao dịch bán có đủ giá nhập
 
-Hệ thống chưa lưu giá vốn nhập hàng nên lợi nhuận gộp hiển thị "—" kèm lý do `no_cost_data`; không ước lượng theo tỷ lệ (BR-FIN-002, BR-FIN-003).
+Lợi nhuận gộp của kỳ là doanh thu trừ giá vốn hàng bán, chỉ tính trên các giao dịch bán mà toàn bộ hàng xuất (`Dispense` trong sổ kho, theo đơn hoặc đơn thuốc) lấy từ các lô đã có giá nhập ghi trên dòng phiếu nhập kho. Giá nhập của một lô là trung bình có trọng số theo số lượng của các dòng phiếu nhập cùng sản phẩm và số lô có ghi giá. Giao dịch bán mới có giá nhập một phần, hoặc không có, không được cộng doanh thu hay giá vốn đoán vào lợi nhuận gộp (BR-FIN-002, BR-FIN-003). Trang hiển thị tỷ lệ doanh thu có giá nhập (`coverage`). Kỳ có giao dịch bán nhưng không giao dịch nào đủ giá nhập thì lợi nhuận gộp là "—" (lý do `no_cost_data`), không phải 0; kỳ không có giao dịch bán nào thì lợi nhuận gộp là 0 thật. Lô nhập từ số dư đầu kỳ không có dòng phiếu nhập nên chưa có giá nhập.
 
 ### BR-REPORT-010. Chỉ số sức khỏe tồn kho
 

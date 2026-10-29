@@ -10,6 +10,7 @@ import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { referenceOptions, useStaffReferences } from "../../hooks/useStaffReferences.ts";
 import { translateText } from "../../i18n.ts";
 import { text } from "../../staff-api.ts";
+import { firstUnitCostError, parseUnitCost } from "./unit-cost.ts";
 import { PURCHASE_ORDERS_KEY } from "./purchase-order-actions.ts";
 import { PurchaseOrderPicker } from "./purchase-order-picker.tsx";
 import { GOODS_RECEIPTS_KEY } from "./query-keys.ts";
@@ -21,6 +22,7 @@ const goodsReceiptLineSchema = z.object({
   manufacturedDate: z.string(),
   manufacturer: z.string(),
   quantity: z.string(),
+  unitCost: z.string(),
   notes: z.string(),
 });
 
@@ -38,6 +40,18 @@ type GoodsReceiptValues = z.infer<typeof goodsReceiptDraftSchema> & {
   lines: z.infer<typeof goodsReceiptLineSchema>[];
 };
 type GoodsReceiptLineValues = GoodsReceiptValues["lines"][number];
+
+/** The cost to send for a line: the number typed, or nothing when the field is blank (the cost is then unknown). */
+const unitCostOf = (input: string): number | undefined => {
+  const parsed = parseUnitCost(input);
+  return parsed.ok && parsed.value !== null ? parsed.value : undefined;
+};
+
+/** The hint under the cost field: the reason the typed cost cannot be sent, else what the field is for. */
+const unitCostHint = (input: string): string => {
+  const parsed = parseUnitCost(input);
+  return parsed.ok ? "Optional. Cost of one unit before VAT; leave blank when unknown." : parsed.message;
+};
 
 /** Receive goods into stock against one site and storage location, in a side drawer. Mount it only while it should be open. */
 export const ReceiveGoodsDrawer = ({ onClose }: { onClose: () => void }): React.JSX.Element => {
@@ -59,11 +73,14 @@ export const ReceiveGoodsDrawer = ({ onClose }: { onClose: () => void }): React.
           manufacturedDate: "",
           manufacturer: "",
           quantity: "1",
+          unitCost: "",
           notes: "",
         },
       ],
     } satisfies GoodsReceiptValues,
     onSubmit: async ({ value }) => {
+      // The message is already shown under the field of the line, so nothing is sent and nothing is added on top of the form.
+      if (firstUnitCostError(value.lines.map((line) => line.unitCost))) return;
       const saved = await run({
         path: "/api/procurement/goods-receipts",
         body: {
@@ -81,6 +98,7 @@ export const ReceiveGoodsDrawer = ({ onClose }: { onClose: () => void }): React.
             manufacturedDate: line.manufacturedDate || undefined,
             manufacturer: line.manufacturer || undefined,
             quantity: Number(line.quantity),
+            unitCost: unitCostOf(line.unitCost),
             notes: line.notes || undefined,
           })),
         },
@@ -199,6 +217,13 @@ export const ReceiveGoodsDrawer = ({ onClose }: { onClose: () => void }): React.
             required
           />
           <Field
+            label="Unit cost (VND per unit)"
+            type="number"
+            value={line.unitCost}
+            onChange={(value) => patchLine(index, { unitCost: value })}
+            hint={unitCostHint(line.unitCost)}
+          />
+          <Field
             label="Expiry date"
             type="date"
             value={line.expiryDate}
@@ -230,6 +255,7 @@ export const ReceiveGoodsDrawer = ({ onClose }: { onClose: () => void }): React.
               manufacturedDate: "",
               manufacturer: "",
               quantity: "1",
+              unitCost: "",
               notes: "",
             },
           ])

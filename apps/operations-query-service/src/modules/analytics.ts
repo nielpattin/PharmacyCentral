@@ -61,6 +61,22 @@ export const stockHealthAnswerSchema = z.object({
   ),
 });
 
+/**
+ * `GET /internal/analytics/dispense-costs` of inventory-service: what the goods of each sale cost. `costedQuantity` is the
+ * part of `quantity` taken from batches whose receipts recorded a cost; `cost` covers that part only.
+ */
+export const dispenseCostsAnswerSchema = z.object({
+  rows: z.array(
+    z.object({
+      referenceType: z.enum(["Order", "Prescription"]),
+      referenceId: uuid,
+      quantity: z.number().nonnegative(),
+      costedQuantity: z.number().nonnegative(),
+      cost: z.number().nonnegative(),
+    }),
+  ),
+});
+
 /** `GET /pricing/base-prices` of catalog-service: one row per active product, `unitPrice` null when none qualifies. */
 export const basePricesAnswerSchema = z.array(
   z.object({ productId: uuid, productName: z.string(), unitPrice: z.number().nullable() }),
@@ -71,6 +87,7 @@ export const sitesAnswerSchema = z.array(z.object({ id: uuid, name: z.string() }
 
 export type SalesDocument = z.output<typeof salesDocumentsAnswerSchema>["documents"][number];
 export type PaidInvoice = z.output<typeof paidInvoicesAnswerSchema>["invoices"][number];
+export type DispenseCost = z.output<typeof dispenseCostsAnswerSchema>["rows"][number];
 export type StockHealthRow = z.output<typeof stockHealthAnswerSchema>["rows"][number];
 export type BasePrice = z.output<typeof basePricesAnswerSchema>[number];
 export type SiteName = z.output<typeof sitesAnswerSchema>[number];
@@ -174,6 +191,64 @@ export const totalSales = (
     totals.orderCount += 1;
   }
   return totals;
+};
+
+/** Quantities from different batches are summed as decimals, so equality is judged to a millionth of a unit. */
+const QUANTITY_TOLERANCE = 1e-6;
+
+export type GrossProfit = {
+  /** Revenue less the cost of goods of the sales whose cost is fully known; null when no sale in the period is. */
+  current: number | null;
+  /** Share of the period's revenue that belongs to those sales, 0 to 1; null when the period has no revenue. */
+  coverage: number | null;
+};
+
+/**
+ * A sale is costed when its goods are known and every unit taken from the shelf came from a batch with a recorded cost.
+ * A sale that is partly costed or not at all adds neither its revenue nor a guessed cost: gross profit never covers it.
+ */
+export const costedSaleCost = (sale: Sale, costs: ReadonlyMap<string, DispenseCost>): number | null => {
+  const row = costs.get(`${sale.channel === "online" ? "Order" : "Prescription"}:${sale.documentId}`);
+  if (row === undefined || row.quantity <= 0) return null;
+  return Math.abs(row.quantity - row.costedQuantity) <= QUANTITY_TOLERANCE ? row.cost : null;
+};
+
+export const indexDispenseCosts = (rows: DispenseCost[]): Map<string, DispenseCost> =>
+  new Map(rows.map((row) => [`${row.referenceType}:${row.referenceId}`, row]));
+
+/**
+ * Gross profit of the sales bucketed by document `createdAt` in `period`, under the site and channel filters of
+ * `totalSales`. A period with no sale has a true gross profit of 0 and no coverage; a period with sales but none costed
+ * has none (null), which the page shows as "-" and never as 0.
+ */
+export const grossProfitOf = (
+  sales: Sale[],
+  costs: ReadonlyMap<string, DispenseCost>,
+  period: Period,
+  filter: SiteFilter,
+  channel: AnalyticsChannel,
+): GrossProfit => {
+  let revenue = 0;
+  let costedRevenue = 0;
+  let costedCost = 0;
+  let costedCount = 0;
+  let saleCount = 0;
+  for (const sale of sales) {
+    const createdAt = sale.createdAt.getTime();
+    if (createdAt < period.from.getTime() || createdAt >= period.to.getTime()) continue;
+    if (!siteVisible(sale.siteId, filter)) continue;
+    if (channel !== "all" && channel !== sale.channel) continue;
+    saleCount += 1;
+    revenue += sale.revenue;
+    const cost = costedSaleCost(sale, costs);
+    if (cost === null) continue;
+    costedCount += 1;
+    costedRevenue += sale.revenue;
+    costedCost += cost;
+  }
+  if (saleCount === 0) return { current: 0, coverage: null };
+  const coverage = revenue > 0 ? costedRevenue / revenue : null;
+  return { current: costedCount === 0 ? null : Math.round(costedRevenue - costedCost), coverage };
 };
 
 /** Revenue per sale, whole dong; null when there is no sale to average. */
@@ -355,6 +430,7 @@ export type AnalyticsInput = {
   channel: AnalyticsChannel;
   documents: SalesDocument[];
   invoices: PaidInvoice[];
+  dispenseCosts: DispenseCost[];
   stockRows: StockHealthRow[];
   basePrices: BasePrice[];
   sites: SiteName[];
@@ -363,7 +439,8 @@ export type AnalyticsInput = {
 /**
  * The answer of `GET /dashboard/analytics`. The channel filter applies to the sales KPIs only; `channels` lists both
  * channels for the current period under the site filter, and inventory health ignores the channel because stock belongs
- * to a site. Gross profit is never computed: the catalog and the stock keep no purchase cost.
+ * to a site. Gross profit covers the sales whose goods all have a purchase cost recorded on a goods receipt; see
+ * `grossProfitOf`.
  */
 export const buildDashboardAnalytics = (input: AnalyticsInput): DashboardAnalytics => {
   const filter: SiteFilter = { siteId: input.siteId, scope: input.scope };
@@ -371,6 +448,9 @@ export const buildDashboardAnalytics = (input: AnalyticsInput): DashboardAnalyti
   const sales = joinSales(input.documents, input.invoices);
   const current = totalSales(sales, input.period, filter, input.channel);
   const prior = totalSales(sales, previous, filter, input.channel);
+  const costs = indexDispenseCosts(input.dispenseCosts);
+  const profit = grossProfitOf(sales, costs, input.period, filter, input.channel);
+  const priorProfit = grossProfitOf(sales, costs, previous, filter, input.channel);
   const stockRows = input.stockRows.filter((row) => siteVisible(row.siteId, filter));
   const periodDays = (input.period.to.getTime() - input.period.from.getTime()) / DAY_MS;
   return {
@@ -384,7 +464,13 @@ export const buildDashboardAnalytics = (input: AnalyticsInput): DashboardAnalyti
       revenue: { current: current.revenue, previous: prior.revenue },
       orderCount: { current: current.orderCount, previous: prior.orderCount },
       averageOrderValue: { current: averageOrderValue(current), previous: averageOrderValue(prior) },
-      grossProfit: { current: null, previous: null, available: false as const, reason: "no_cost_data" as const },
+      grossProfit: {
+        current: profit.current,
+        previous: priorProfit.current,
+        available: profit.current !== null,
+        reason: profit.current === null ? ("no_cost_data" as const) : null,
+        coverage: { current: profit.coverage, previous: priorProfit.coverage },
+      },
     },
     channels: (["counter", "online"] as const).map((channel) => {
       const totals = totalSales(sales, input.period, filter, channel);
@@ -410,7 +496,13 @@ export type DashboardAnalytics = {
     revenue: { current: number; previous: number };
     orderCount: { current: number; previous: number };
     averageOrderValue: { current: number | null; previous: number | null };
-    grossProfit: { current: null; previous: null; available: false; reason: "no_cost_data" };
+    grossProfit: {
+      current: number | null;
+      previous: number | null;
+      available: boolean;
+      reason: "no_cost_data" | null;
+      coverage: { current: number | null; previous: number | null };
+    };
   };
   channels: Array<{ channel: SaleChannel; revenue: number; orderCount: number }>;
   inventory: InventoryHealth;

@@ -7,6 +7,8 @@ import { productLabel, useProductLookup } from "../../hooks/useProductLookup.ts"
 import { useStaffReferences } from "../../hooks/useStaffReferences.ts";
 import { translateText } from "../../i18n.ts";
 import { asRows, formatDate, formatDateTime, formatQuantity, readOne, text, type JsonRecord } from "../../staff-api.ts";
+import { formatAmount } from "../sales/rules.ts";
+import { moneyLocale } from "../sales/shared.tsx";
 import { referenceName, shortId } from "./labels.ts";
 import { GOODS_RECEIPTS_KEY } from "./query-keys.ts";
 
@@ -93,6 +95,15 @@ export const GoodsReceiptDrawer = ({
                   label: translateText("Quantity"),
                   align: "right",
                   render: (row) => formatQuantity(row.quantity),
+                },
+                {
+                  key: "unitCost",
+                  label: translateText("Unit cost"),
+                  align: "right",
+                  render: (row) =>
+                    row.unitCost === null || row.unitCost === undefined
+                      ? "—"
+                      : formatAmount(row.unitCost, "VND", moneyLocale()),
                 },
                 { key: "notes", label: translateText("Notes"), truncate: 32 },
               ]}

@@ -51,7 +51,7 @@ One list ([API guide](../api-guide.md)), a create drawer shared by the four entr
 
 ## States
 
-- **Loading:** skeleton. **Empty:** "Chưa có kế hoạch". **Error:** the red alert with the server's reason.
+- **No assigned site:** an employee who is not Platform Admin and has no site sees "Tài khoản của bạn chưa được gán cơ sở nào nên chưa có kế hoạch để hiển thị. Hãy nhờ quản trị viên gán cơ sở." and the list is not requested; a 403 from the list shows the same sentence. **Loading:** skeleton. **Empty:** "Chưa có kế hoạch". **Error:** the red alert with the server's reason.
 
 ## Out of scope
 
@@ -69,7 +69,7 @@ One list ([API guide](../api-guide.md)), a create drawer shared by the four entr
 | 1 | Which service owns plans? | `[standard]` `inventory-service`. | It owns replenishment, expiry and quality; `operations-query-service` reads only (ADR 0003). |
 | 2 | Who may be an owner? | `[standard]` An active employee at the plan's site. | A plan nobody can see is not a plan. |
 | 3 | One live plan per alert | `[standard]` Unique on type and reference while not done. | Two owners for one alert hide who acts. |
-| 4 | Employees with no site | `[observed]` An employee with no assigned site cannot open the list: the site-scoped prefix refuses them at the edge. | Same rule as every site-scoped list. |
+| 4 | Employees with no site | `[observed]` The site-scoped prefix refuses them at the edge, so the page shows the no-site message instead of a list or a bare 403. | Same rule as every site-scoped list; the message says why. |
 
 ## Gaps against the code (2026-10-28)
 

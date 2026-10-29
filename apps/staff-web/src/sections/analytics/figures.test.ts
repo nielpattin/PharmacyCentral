@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCount, formatMoney, formatPercentChange, formatRate, percentChange, UNANSWERED } from "./figures.ts";
+import {
+  formatCount,
+  formatMoney,
+  formatPercentChange,
+  formatRate,
+  partialCoveragePercent,
+  percentChange,
+  UNANSWERED,
+} from "./figures.ts";
 
 describe("percentChange", () => {
   it("is the change over the previous figure, signed", () => {
@@ -69,5 +77,22 @@ describe("formatPercentChange", () => {
   it("signs a rise and a fall", () => {
     expect(formatPercentChange(12.34, "en-US")).toBe("+12.3%");
     expect(formatPercentChange(-5, "en-US")).toBe("-5%");
+  });
+});
+
+describe("partialCoveragePercent", () => {
+  it("is the whole percent of revenue covered when part of it has no cost", () => {
+    expect(partialCoveragePercent(0.5)).toBe(50);
+    expect(partialCoveragePercent(0)).toBe(0);
+  });
+
+  it("rounds down, so a coverage just under 100% never reads as complete", () => {
+    expect(partialCoveragePercent(0.999)).toBe(99);
+  });
+
+  it("has nothing to say when all revenue is covered or the coverage is unknown", () => {
+    expect(partialCoveragePercent(1)).toBeNull();
+    expect(partialCoveragePercent(null)).toBeNull();
+    expect(partialCoveragePercent(undefined)).toBeNull();
   });
 });

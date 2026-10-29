@@ -1,6 +1,8 @@
 // Action plans: a plan with one owner, a due date and a status, made from a suggestion or an alert. Shared words (Status,
 // Site, Product, Actions, Save, Cancel, Edit, Dead stock, Load more, ...) live in their own areas and are reused.
 export const actionPlansLiterals: Record<string, string> = {
+  "Your account has no assigned site, so there are no action plans to show. Ask an administrator to assign a site.":
+    "Tài khoản của bạn chưa được gán cơ sở nào nên chưa có kế hoạch để hiển thị. Hãy nhờ quản trị viên gán cơ sở.",
   "Action plans": "Kế hoạch hành động",
   "Turn a suggestion or an alert into a plan with one owner, a due date and a status. Every plan appears in this list.":
     "Biến một gợi ý hoặc cảnh báo thành kế hoạch có một người phụ trách, hạn xử lý và trạng thái. Mọi kế hoạch đều hiện trong danh sách này.",

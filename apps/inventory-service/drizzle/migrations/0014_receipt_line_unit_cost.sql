@@ -1,0 +1,2 @@
+ALTER TABLE "goods_receipt_lines" ADD COLUMN "unit_cost" numeric(18, 2);--> statement-breakpoint
+ALTER TABLE "goods_receipt_lines" ADD CONSTRAINT "goods_receipt_lines_unit_cost_nonnegative" CHECK ("goods_receipt_lines"."unit_cost" is null or "goods_receipt_lines"."unit_cost" >= 0);
