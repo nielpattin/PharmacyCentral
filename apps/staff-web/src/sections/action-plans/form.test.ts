@@ -1,16 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { ActionPlan } from "./contract.ts";
 import type { ActionPlanDraft } from "./drafts.ts";
-import {
-  createFormValues,
-  createPlanBody,
-  planFormValues,
-  planPatchBody,
-  samePlanForm,
-  validatePlanForm,
-  type PlanFormValues,
-} from "./form.ts";
+import { createFormValues, createPlanBody, samePlanForm, validatePlanForm, type PlanFormValues } from "./form.ts";
 
 const TODAY = "2026-10-28";
 
@@ -19,23 +10,6 @@ const valid: PlanFormValues = {
   detail: "",
   ownerId: "user-2",
   dueDate: "2026-10-30",
-};
-
-const plan: ActionPlan = {
-  id: "plan-1",
-  sourceType: "replenishment",
-  sourceRef: "replenishment:site-1:prod-2",
-  title: "Bổ sung Gạc",
-  detail: "Đề xuất đặt 3 đơn vị.",
-  siteId: "site-1",
-  productId: "prod-2",
-  ownerId: "user-2",
-  dueDate: "2026-10-30",
-  status: "open",
-  createdBy: "manager-1",
-  createdAt: "2026-10-27T08:00:00Z",
-  updatedAt: "2026-10-27T08:00:00Z",
-  completedAt: null,
 };
 
 const draft: ActionPlanDraft = {
@@ -72,16 +46,6 @@ describe("validatePlanForm", () => {
 
   it("refuses a due date in the past for a new plan", () => {
     expect(validatePlanForm({ ...valid, dueDate: "2026-10-27" }, TODAY)).toEqual(["due_past"]);
-  });
-
-  it("accepts an overdue due date the plan already has, so a title edit is not blocked", () => {
-    expect(validatePlanForm({ ...valid, dueDate: "2026-10-20" }, TODAY, { dueDate: "2026-10-20" })).toEqual([]);
-  });
-
-  it("refuses a new past due date even on an edit", () => {
-    expect(validatePlanForm({ ...valid, dueDate: "2026-10-21" }, TODAY, { dueDate: "2026-10-20" })).toEqual([
-      "due_past",
-    ]);
   });
 });
 
@@ -122,27 +86,6 @@ describe("createPlanBody", () => {
     expect(body.siteId).toBeUndefined();
     expect(body.productId).toBeUndefined();
     expect(body.detail).toBe("ghi chú");
-  });
-});
-
-describe("planPatchBody", () => {
-  it("sends nothing when the form matches the plan", () => {
-    expect(planPatchBody(plan, planFormValues(plan))).toEqual({});
-  });
-
-  it("sends only the changed fields", () => {
-    expect(planPatchBody(plan, { ...planFormValues(plan), ownerId: "user-5", dueDate: "2026-11-02" })).toEqual({
-      ownerId: "user-5",
-      dueDate: "2026-11-02",
-    });
-  });
-
-  it("sends an emptied detail as null, which clears it", () => {
-    expect(planPatchBody(plan, { ...planFormValues(plan), detail: "  " })).toEqual({ detail: null });
-  });
-
-  it("sends a plan's missing detail unchanged when the form leaves it blank", () => {
-    expect(planPatchBody({ ...plan, detail: null }, { ...planFormValues(plan), detail: "" })).toEqual({});
   });
 });
 

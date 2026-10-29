@@ -21,7 +21,8 @@ import { usePagedList } from "../hooks/usePagedList.ts";
 import { useSearchDraft } from "../hooks/useSearchDraft.ts";
 import { useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { translateText } from "../i18n.ts";
-import { canChangeActionPlanStatus, canEditActionPlan } from "../permissions/staff-permissions.ts";
+import { withActionColumn } from "../lib/action-column.ts";
+import { canChangeActionPlanStatus, canReassignActionPlan } from "../permissions/staff-permissions.ts";
 import { formatDate, formatDateTime, writeJson, type JsonRecord } from "../staff-api.ts";
 import { referenceName } from "./procurement/labels.ts";
 import {
@@ -33,7 +34,8 @@ import {
   parseActionPlan,
   type ActionPlan,
 } from "./action-plans/contract.ts";
-import { EditPlanDrawer } from "./action-plans/edit-plan-drawer.tsx";
+import { PlanDetailDrawer } from "./action-plans/plan-detail-drawer.tsx";
+import { ReassignPlanDrawer } from "./action-plans/reassign-plan-drawer.tsx";
 import { ownerNameOf, ownerOptionsFor, canReadStaffDirectory } from "./action-plans/owners.ts";
 import { ACTION_PLAN_LIST_DEFAULTS, actionPlanListParams, visiblePlans } from "./action-plans/list-query.ts";
 import { hasNoAssignedSite, isSiteAccessRefusal } from "./action-plans/no-site.ts";
@@ -74,6 +76,7 @@ const ActionPlansList = (): React.JSX.Element => {
   const employees = useMemo(() => directory.data ?? [], [directory.data]);
   const [search, setSearch] = useSearchDraft(list.values.q, (q) => list.setValues({ q }));
   const [editingId, setEditingId] = useState<string>();
+  const [viewingId, setViewingId] = useState<string>();
   const [conflict, setConflict] = useState<Conflict>();
   const plans = usePagedList({
     key: ACTION_PLANS_KEY,
@@ -89,6 +92,7 @@ const ActionPlansList = (): React.JSX.Element => {
   const focusId = list.values.plan;
   const shown = visiblePlans(rows, focusId);
   const editing = rows.find((plan) => plan.id === editingId);
+  const viewing = rows.find((plan) => plan.id === viewingId);
   const today = todayIsoDate();
   const ownerOptions = ownerOptionsFor(employees, undefined);
 
@@ -113,11 +117,22 @@ const ActionPlansList = (): React.JSX.Element => {
     list.setValues({ plan: planId, status: "all", owner: "all", q: "" }, { history: "push" });
   };
 
+  const hasRowAction = (row: ActionPlan): boolean =>
+    canChangeActionPlanStatus(session, row).allowed || canReassignActionPlan(session, row).allowed;
+
   const columns: Array<DataColumn<ActionPlan>> = [
     {
       key: "title",
       label: translateText("Title"),
-      render: (row) => <span className="font-medium text-ink">{row.title}</span>,
+      render: (row) => (
+        <button
+          type="button"
+          className="text-left font-medium text-ink hover:underline focus-visible:underline"
+          onClick={() => setViewingId(row.id)}
+        >
+          {row.title}
+        </button>
+      ),
       text: (row) => row.title,
       truncate: 40,
     },
@@ -174,29 +189,29 @@ const ActionPlansList = (): React.JSX.Element => {
       pinned: "right",
       enableSorting: false,
       render: (row) => {
-        const statusAccess = canChangeActionPlanStatus(session, row);
         return (
           <RowActions label={translateText("Actions")}>
-            <Select
-              aria-label={translateText("Change status")}
-              className="w-auto min-w-36"
-              value={row.status}
-              disabled={!statusAccess.allowed || writePlan.isPending}
-              title={statusAccess.allowed ? undefined : statusAccess.reason}
-              onChange={(event) => {
-                const next = event.target.value;
-                if (isActionPlanStatus(next)) writePlan.mutate({ id: row.id, body: { status: next } });
-              }}
-            >
-              {ACTION_PLAN_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {translateText(STATUS_LABELS[status])}
-                </option>
-              ))}
-            </Select>
-            {canEditActionPlan(session, row).allowed ? (
+            {canChangeActionPlanStatus(session, row).allowed ? (
+              <Select
+                aria-label={translateText("Change status")}
+                className="w-auto min-w-36"
+                value={row.status}
+                disabled={writePlan.isPending}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  if (isActionPlanStatus(next)) writePlan.mutate({ id: row.id, body: { status: next } });
+                }}
+              >
+                {ACTION_PLAN_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {translateText(STATUS_LABELS[status])}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
+            {canReassignActionPlan(session, row).allowed ? (
               <Button size="sm" variant="ghost" onClick={() => setEditingId(row.id)}>
-                {translateText("Edit")}
+                {translateText("Reassign")}
               </Button>
             ) : null}
           </RowActions>
@@ -209,7 +224,7 @@ const ActionPlansList = (): React.JSX.Element => {
     <div className="grid gap-3">
       <p className="text-sm text-muted">
         {translateText(
-          "Turn a suggestion or an alert into a plan with one owner, a due date and a status. Every plan appears in this list.",
+          "The system creates a plan for every alert and gives it to a Pharmacist of the site. A manager only reassigns it; the owner works the status. Every plan appears in this list.",
         )}
       </p>
       {plans.error && isSiteAccessRefusal(plans.error) ? <NoSiteNotice /> : null}
@@ -287,7 +302,7 @@ const ActionPlansList = (): React.JSX.Element => {
         storageKey="staff:action-plans"
         labels={dataTableLabels()}
         rows={shown}
-        columns={columns}
+        columns={withActionColumn(columns, shown.some(hasRowAction))}
         getKey={(row) => row.id}
         loading={plans.isLoading}
         empty={translateText("No records found")}
@@ -295,7 +310,25 @@ const ActionPlansList = (): React.JSX.Element => {
         paging={{ hasMore: plans.hasMore, loadingMore: plans.isLoadingMore, onLoadMore: plans.loadMore }}
         exportCsv={{ filename: "action-plans.csv" }}
       />
-      {editing ? <EditPlanDrawer plan={editing} onClose={() => setEditingId(undefined)} /> : null}
+      {viewing ? (
+        <PlanDetailDrawer
+          plan={viewing}
+          siteLabel={viewing.siteId === null ? "-" : referenceName(references.sites, viewing.siteId, ["code", "name"])}
+          ownerLabel={ownerNameOf(viewing.ownerId, employees, session)}
+          roles={session.roles ?? []}
+          today={today}
+          onReassign={
+            canReassignActionPlan(session, viewing).allowed
+              ? () => {
+                  setViewingId(undefined);
+                  setEditingId(viewing.id);
+                }
+              : undefined
+          }
+          onClose={() => setViewingId(undefined)}
+        />
+      ) : null}
+      {editing ? <ReassignPlanDrawer plan={editing} onClose={() => setEditingId(undefined)} /> : null}
     </div>
   );
 };

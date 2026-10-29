@@ -1,5 +1,4 @@
 import type { JsonRecord } from "../../staff-api.ts";
-import type { ActionPlan } from "./contract.ts";
 import { DETAIL_MAX_LENGTH, TITLE_MAX_LENGTH, type ActionPlanDraft } from "./drafts.ts";
 import { defaultDueDate, isIsoDate } from "./plan-state.ts";
 
@@ -23,21 +22,16 @@ export const PLAN_FORM_MESSAGES: Record<PlanFormIssue, string> = {
 };
 
 /**
- * The problems with the form, empty when it may be sent. A due date already in the past is accepted when `original`
- * keeps it, so an edit of an overdue plan's title does not ask for a new date.
+ * The problems with the form, empty when it may be sent.
  */
-export const validatePlanForm = (
-  values: PlanFormValues,
-  today: string,
-  original?: Pick<ActionPlan, "dueDate">,
-): PlanFormIssue[] => {
+export const validatePlanForm = (values: PlanFormValues, today: string): PlanFormIssue[] => {
   const issues: PlanFormIssue[] = [];
   const titleLength = values.title.trim().length;
   if (titleLength === 0 || titleLength > TITLE_MAX_LENGTH) issues.push("title_length");
   if (values.detail.trim().length > DETAIL_MAX_LENGTH) issues.push("detail_length");
   if (values.ownerId === "") issues.push("owner_required");
   if (!isIsoDate(values.dueDate)) issues.push("due_required");
-  else if (values.dueDate < today && values.dueDate !== original?.dueDate) issues.push("due_past");
+  else if (values.dueDate < today) issues.push("due_past");
   return issues;
 };
 
@@ -47,13 +41,6 @@ export const createFormValues = (draft: ActionPlanDraft, today: string): PlanFor
   detail: draft.detail ?? "",
   ownerId: "",
   dueDate: defaultDueDate(today),
-});
-
-export const planFormValues = (plan: ActionPlan): PlanFormValues => ({
-  title: plan.title,
-  detail: plan.detail ?? "",
-  ownerId: plan.ownerId,
-  dueDate: plan.dueDate,
 });
 
 export const samePlanForm = (left: PlanFormValues, right: PlanFormValues): boolean =>
@@ -73,18 +60,3 @@ export const createPlanBody = (draft: ActionPlanDraft, values: PlanFormValues): 
   ownerId: values.ownerId,
   dueDate: values.dueDate,
 });
-
-/**
- * The PATCH body: only the fields that differ from the plan. An empty detail is sent as `null`, which clears it. An
- * unchanged form gives an empty object, so nothing is sent.
- */
-export const planPatchBody = (plan: ActionPlan, values: PlanFormValues): JsonRecord => {
-  const patch: JsonRecord = {};
-  const title = values.title.trim();
-  const detail = values.detail.trim() || null;
-  if (title !== plan.title) patch.title = title;
-  if (detail !== (plan.detail ?? null)) patch.detail = detail;
-  if (values.ownerId !== plan.ownerId) patch.ownerId = values.ownerId;
-  if (values.dueDate !== plan.dueDate) patch.dueDate = values.dueDate;
-  return patch;
-};

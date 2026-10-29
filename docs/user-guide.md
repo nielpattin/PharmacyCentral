@@ -183,8 +183,8 @@ Imports are repeatable: matching codes, SKUs and batch numbers update existing r
 
 **Kế hoạch hành động** (all staff roles) lists the plans that follow up an alert.
 
-1. A Pharmacy Manager or Platform Admin chooses **Tạo kế hoạch** on a reorder suggestion, a dead stock row in Analytics, an expired or soon expiring batch in Inventory, or a missing price in Finance.
-2. Choose the owner (an employee who works at the same site) and the due date, then save. The same alert cannot have two open plans.
+1. The system creates a plan for every alert (a reorder suggestion, an expired or soon expiring batch, dead stock, a missing price) and gives it to the Pharmacist of the site with the fewest open plans, or to the site's Pharmacy Manager when it has no Pharmacist. The due date is 7 days later.
+2. A Pharmacy Manager or Platform Admin can choose **Giao lại** on a plan to give it to another employee of the site. Choose a plan's title to read its description, what to do and where to do it. A manager changes only the owner; only the plan's owner moves its status. They can still choose **Tạo kế hoạch** on a suggestion or alert row for an alert the system skipped. The same alert cannot have two open plans.
 3. The owner opens **Kế hoạch hành động**, sees only their own plans, and moves each between Mở, Đang thực hiện and Hoàn thành. A manager also sees every plan of their sites, filters by owner and status, and can change the owner, the due date and the title.
 
 An open plan past its due date is marked overdue. An employee with no assigned site sees a message saying so instead of the list; an administrator assigns the site in Users.

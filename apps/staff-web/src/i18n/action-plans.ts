@@ -1,11 +1,11 @@
-// Action plans: a plan with one owner, a due date and a status, made from a suggestion or an alert. Shared words (Status,
+// Action plans: a plan with one owner, a due date and a status, made by the system for an alert (or by a manager). Shared words (Status,
 // Site, Product, Actions, Save, Cancel, Edit, Dead stock, Load more, ...) live in their own areas and are reused.
 export const actionPlansLiterals: Record<string, string> = {
   "Your account has no assigned site, so there are no action plans to show. Ask an administrator to assign a site.":
     "Tài khoản của bạn chưa được gán cơ sở nào nên chưa có kế hoạch để hiển thị. Hãy nhờ quản trị viên gán cơ sở.",
   "Action plans": "Kế hoạch hành động",
-  "Turn a suggestion or an alert into a plan with one owner, a due date and a status. Every plan appears in this list.":
-    "Biến một gợi ý hoặc cảnh báo thành kế hoạch có một người phụ trách, hạn xử lý và trạng thái. Mọi kế hoạch đều hiện trong danh sách này.",
+  "The system creates a plan for every alert and gives it to a Pharmacist of the site. A manager only reassigns it; the owner works the status. Every plan appears in this list.":
+    "Hệ thống tự tạo kế hoạch cho mỗi cảnh báo và giao cho một dược sĩ của cơ sở. Quản lý chỉ giao lại người phụ trách; người phụ trách tự đổi trạng thái. Mọi kế hoạch đều hiện trong danh sách này.",
   Owner: "Chủ sở hữu",
   "All owners": "Tất cả chủ sở hữu",
   Open: "Mở",
@@ -20,7 +20,17 @@ export const actionPlansLiterals: Record<string, string> = {
   Overdue: "Quá hạn",
   "Search by title": "Tìm theo tiêu đề",
   "Create plan": "Tạo kế hoạch",
-  "Edit action plan": "Sửa kế hoạch hành động",
+  "Reassign action plan": "Giao lại kế hoạch hành động",
+  Reassign: "Giao lại",
+  "Next step": "Việc cần làm",
+  "Go to": "Đi tới",
+  "Check the stock and request more of this product.": "Kiểm tra tồn kho và yêu cầu bổ sung thêm sản phẩm này.",
+  "Deal with this batch before it expires: sell it first, move it to another site or have it written off.":
+    "Xử lý lô này trước khi hết hạn: bán trước, chuyển sang cơ sở khác hoặc làm thủ tục loại bỏ.",
+  "This stock has not moved for a long time: review it, then move it, discount it or return it to the supplier.":
+    "Hàng này lâu không có giao dịch: xem lại, rồi chuyển, giảm giá hoặc trả nhà cung cấp.",
+  "This product has stock but no published price. Only a Pharmacy Manager can set the price.":
+    "Sản phẩm có tồn nhưng chưa có giá bán công bố. Chỉ Quản lý nhà thuốc đặt được giá.",
   "Create action plan": "Tạo kế hoạch hành động",
   "Today or later.": "Hôm nay hoặc sau đó.",
   "Choose an owner.": "Chọn người phụ trách.",
@@ -43,9 +53,7 @@ export const actionPlansLiterals: Record<string, string> = {
     "Kế hoạch này chưa nằm trong các dòng đã tải. Tải thêm để tìm.",
   "No plan with this id is in the list.": "Không tìm thấy kế hoạch này trong danh sách.",
   "Only a Pharmacy Manager can create action plans.": "Chỉ Quản lý nhà thuốc mới tạo được kế hoạch hành động.",
-  "Only a Pharmacy Manager can change an action plan's owner, due date, title or detail.":
-    "Chỉ Quản lý nhà thuốc mới đổi được người phụ trách, hạn xử lý, tiêu đề hoặc mô tả của kế hoạch.",
-  "Only the plan's owner or a Pharmacy Manager can change its status.":
-    "Chỉ người phụ trách kế hoạch hoặc Quản lý nhà thuốc mới đổi được trạng thái.",
+  "Only a Pharmacy Manager can reassign an action plan.": "Chỉ Quản lý nhà thuốc mới giao lại được kế hoạch hành động.",
+  "Only the plan's owner can change its status.": "Chỉ người phụ trách kế hoạch mới đổi được trạng thái.",
   You: "Bạn",
 };

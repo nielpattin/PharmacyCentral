@@ -188,10 +188,7 @@ export const staffActions = {
     reason: "Only Warehouse Staff or the person who requested it can cancel a replenishment request.",
   },
   "actionPlan.create": { roles: manager, reason: "Only a Pharmacy Manager can create action plans." },
-  "actionPlan.edit": {
-    roles: manager,
-    reason: "Only a Pharmacy Manager can change an action plan's owner, due date, title or detail.",
-  },
+  "actionPlan.reassign": { roles: manager, reason: "Only a Pharmacy Manager can reassign an action plan." },
   "catalog.write": { roles: manager, reason: "Only a Pharmacy Manager can change the catalog and master data." },
   "catalog.site.create": { roles: platformAdmin, reason: "Only a Platform Admin can create or delete a site." },
   "catalog.site.delete": { roles: platformAdmin, reason: "Only a Platform Admin can create or delete a site." },
@@ -263,21 +260,17 @@ export const tabGate = (action: StaffAction | undefined, session: PermissionSess
 /** The plan fields a permission rule reads: who owns the plan and which site it belongs to. */
 export type ActionPlanAccessTarget = { ownerId: string; siteId: string | null };
 
-const ACTION_PLAN_STATUS_REASON = "Only the plan's owner or a Pharmacy Manager can change its status.";
+const ACTION_PLAN_STATUS_REASON = "Only the plan's owner can change its status.";
 
 /**
- * Owner, due date, title and detail of an action plan: a Pharmacy Manager (or Platform Admin) inside the plan's site.
- * A plan with no site is Platform Admin's alone, as the server's site scope says.
+ * Giving a plan to another owner: a Pharmacy Manager (or Platform Admin) inside the plan's site. It is all a manager
+ * changes on a plan (BR-PLAN-001). A plan with no site is Platform Admin's alone, as the server's site scope says.
  */
-export const canEditActionPlan = (session: PermissionSession, plan: ActionPlanAccessTarget): AccessResult =>
-  canAtSite("actionPlan.edit", session, plan.siteId ?? undefined);
+export const canReassignActionPlan = (session: PermissionSession, plan: ActionPlanAccessTarget): AccessResult =>
+  canAtSite("actionPlan.reassign", session, plan.siteId ?? undefined);
 
-/**
- * Status of an action plan: its owner may move it through open, in progress and done; anyone else needs the rights
- * of `canEditActionPlan`.
- */
-export const canChangeActionPlanStatus = (session: PermissionSession, plan: ActionPlanAccessTarget): AccessResult => {
-  if (session.userId !== undefined && plan.ownerId === session.userId) return { allowed: true };
-  const editing = canEditActionPlan(session, plan);
-  return editing.allowed ? editing : denied(ACTION_PLAN_STATUS_REASON);
-};
+/** Status of an action plan: its owner alone moves it through open, in progress and done. */
+export const canChangeActionPlanStatus = (session: PermissionSession, plan: ActionPlanAccessTarget): AccessResult =>
+  session.userId !== undefined && plan.ownerId === session.userId
+    ? { allowed: true }
+    : denied(ACTION_PLAN_STATUS_REASON);
