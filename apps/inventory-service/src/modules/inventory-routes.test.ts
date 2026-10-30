@@ -16,6 +16,7 @@ const ids = {
   batchB: "00000000-0000-4000-8000-000000000005",
   sourceSite: "00000000-0000-4000-8000-000000000006",
   destinationSite: "00000000-0000-4000-8000-000000000007",
+  thirdSite: "00000000-0000-4000-8000-000000000016",
   sourceLocation: "00000000-0000-4000-8000-000000000008",
   destinationLocation: "00000000-0000-4000-8000-000000000009",
   stocktake: "00000000-0000-4000-8000-000000000010",
@@ -224,6 +225,119 @@ describe("inventory dispense costs route", () => {
 
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({ code: "analytics_range_too_large" });
+  });
+});
+
+describe("inventory transfer suggestions route", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) await closeServer(server);
+    server = undefined;
+  });
+
+  const positions = [
+    {
+      productId: ids.productA,
+      siteId: ids.sourceSite,
+      available: 300,
+      dispensedQuantity: 150,
+      earliestExpiry: "2099-12-31",
+    },
+    {
+      productId: ids.productA,
+      siteId: ids.destinationSite,
+      available: 10,
+      dispensedQuantity: 60,
+      earliestExpiry: null,
+    },
+    {
+      productId: ids.productA,
+      siteId: ids.thirdSite,
+      available: 10,
+      dispensedQuantity: 60,
+      earliestExpiry: null,
+    },
+  ];
+
+  it("refuses a role that may not read transfers", async () => {
+    const transferPositions = vi.fn().mockResolvedValue(positions);
+    const testServer = await createTestServer({ transferPositions } as unknown as InventoryRepository);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/inventory/transfer-suggestions`, {
+      headers: { "x-actor-roles": "Pharmacist" },
+    });
+
+    expect(response.status).toBe(403);
+    expect(transferPositions).not.toHaveBeenCalled();
+  });
+
+  it("refuses a window outside the 7 to 180 days the route accepts", async () => {
+    const transferPositions = vi.fn().mockResolvedValue(positions);
+    const testServer = await createTestServer({ transferPositions } as unknown as InventoryRepository);
+    server = testServer.server;
+
+    const tooShort = await fetch(`${testServer.url}/inventory/transfer-suggestions?windowDays=3`);
+    const notANumber = await fetch(`${testServer.url}/inventory/transfer-suggestions?windowDays=abc`);
+
+    expect(tooShort.status).toBe(400);
+    expect(notANumber.status).toBe(400);
+    expect(transferPositions).not.toHaveBeenCalled();
+  });
+
+  it("answers the suggestions for the sites in scope, with the formulas it applied", async () => {
+    const transferPositions = vi.fn().mockResolvedValue(positions);
+    const testServer = await createTestServer({ transferPositions } as unknown as InventoryRepository);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/inventory/transfer-suggestions?windowDays=30`, {
+      headers: { "x-actor-site-ids": `${ids.sourceSite},${ids.destinationSite},${ids.thirdSite}` },
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      generatedAt: string;
+      windowDays: number;
+      params: Record<string, number>;
+      suggestions: Array<Record<string, unknown>>;
+    };
+    expect(body).toMatchObject({
+      windowDays: 30,
+      params: { keepCoverDays: 45, triggerCoverDays: 14, targetCoverDays: 30 },
+    });
+    expect(new Date(body.generatedAt).toISOString()).toBe(body.generatedAt);
+    expect(body.suggestions).toHaveLength(2);
+    expect(body.suggestions[0]).toMatchObject({
+      productId: ids.productA,
+      sourceSiteId: ids.sourceSite,
+      quantity: 50,
+      sourceAvailable: 300,
+      sourceDaysOfCover: 60,
+      destinationAvailable: 10,
+      destinationDaysOfCover: 5,
+      destinationDailyVelocity: 2,
+      cappedByExpiry: false,
+    });
+    const [input] = transferPositions.mock.calls[0] ?? [];
+    expect(input.siteIds).toEqual([ids.sourceSite, ids.destinationSite, ids.thirdSite]);
+    expect(Math.round((Date.now() - input.windowStart.getTime()) / (24 * 60 * 60 * 1000))).toBe(30);
+    expect(input.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("filters the answer to one destination site", async () => {
+    const transferPositions = vi.fn().mockResolvedValue(positions);
+    const testServer = await createTestServer({ transferPositions } as unknown as InventoryRepository);
+    server = testServer.server;
+
+    const response = await fetch(
+      `${testServer.url}/inventory/transfer-suggestions?destinationSiteId=${ids.destinationSite}`,
+    );
+    const body = (await response.json()) as { suggestions: Array<Record<string, unknown>> };
+
+    expect(body.suggestions).toHaveLength(1);
+    expect(body.suggestions[0]?.destinationSiteId).toBe(ids.destinationSite);
+    expect(transferPositions.mock.calls[0]?.[0]?.siteIds).toBeUndefined();
   });
 });
 

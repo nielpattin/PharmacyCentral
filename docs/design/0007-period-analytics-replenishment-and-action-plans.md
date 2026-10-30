@@ -18,6 +18,7 @@ The dashboard shows counts only ([staff dashboard spec](../product/staff-dashboa
 
 - A manager answers "how did we sell and how healthy is stock over this period, at this site, in this channel" from one page, with the previous period beside every KPI.
 - A manager gets a reviewable reorder list and creates drafts in bulk through the existing procurement flow. Nothing is submitted or approved automatically.
+- Warehouse Staff see where one site holds more cover than it needs and another is running out, so stock moves between sites before a purchase order is raised.
 - Any alert or suggestion becomes an owned, dated plan item, created by the system with no click, that its owner can move to done.
 
 ## Non-goals
@@ -137,6 +138,20 @@ Answer: `{ siteId, params, generatedAt, suggestions: [{ productId, supplierId, d
 #### `POST /api/procurement/replenishment-suggestions/draft-orders`
 
 Body: `{ siteId, orders: [{ supplierId, lines: [{ productId, orderedQuantity: integer ≥ 1 }], notes? }] }`; one entry per supplier (a repeated supplier is 400). The route reuses the purchase order creation of the procurement flow (`ProcurementRepository.createPurchaseOrder`, the same catalog reference checks), in one transaction, so every order is created or none. The orders are `Draft`; the existing approve and cancel actions (approver is never the creator) are untouched. Answer 201 `{ purchaseOrders: [...] }`. The audit trail records the creation as it does for the existing route.
+
+#### `GET /api/inventory/transfer-suggestions`
+
+A read, available to a Pharmacy Manager and Warehouse Staff (Platform Admin reads it); both ends of every row must be in the caller's scope. Query: `windowDays` (default 30, 7 to 180) and an optional `destinationSiteId`. Nothing is written and no draft exists implicitly: a row opens the existing create-transfer form prefilled, and the existing approval flow still applies.
+
+Per product and site, from the sellable shelf only (`quality_status = 'Released'`, `expiry_date >= today`, `quantity_on_hand > 0`) and the `Dispense` ledger of the window:
+
+- `available` = on hand − reserved; `velocity` = dispensed / `windowDays`; `cover` = `available / velocity`, `null` when nothing sold.
+- A **source** has `surplus` = `available − velocity × 45` (all of `available` when it did not sell in the window).
+- A **destination** has sales in the window and `cover < 14`; `need` = `velocity × 30 − available`.
+- `quantity` = floor of `min(surplus, need, destinationVelocity × daysToExpiry)`, where `daysToExpiry` counts to the earliest expiry of the source's sellable batches. Stock expiring today is never moved. Whole base units only; a quantity below 1 is not a suggestion.
+- Destinations are served most urgent cover first; one source may serve several destinations until its surplus runs out.
+
+Answer: `{ generatedAt, windowDays, params: { keepCoverDays: 45, triggerCoverDays: 14, targetCoverDays: 30 }, suggestions: [{ productId, sourceSiteId, destinationSiteId, quantity, sourceAvailable, sourceDaysOfCover, destinationAvailable, destinationDaysOfCover, destinationDailyVelocity, earliestExpiry, daysToExpiry, cappedByExpiry }] }`. The page resolves product and site names from the catalog, as the other inventory screens do.
 
 #### Action plans
 

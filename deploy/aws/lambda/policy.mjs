@@ -70,6 +70,7 @@ export const siteScopedListPrefixes = [
   "/api/inventory/batches",
   "/api/inventory/movements",
   "/api/inventory/transfers",
+  "/api/inventory/transfer-suggestions",
   "/api/inventory/stocktakes",
   "/api/inventory/returns",
   "/api/inventory/replenishment",
@@ -250,6 +251,12 @@ export const employeeRoleRules = [
   // Pharmacy Manager cancels. Stocktakes: Warehouse Staff count; a Pharmacy Manager posts, never the counter.
   // Returns and removals: Warehouse Staff create; a Pharmacy Manager approves or rejects.
   { methods: "READ", path: "/api/inventory/transfers", match: "prefix", roles: [PHARMACY_MANAGER, WAREHOUSE_STAFF] },
+  {
+    methods: "READ",
+    path: "/api/inventory/transfer-suggestions",
+    match: "exact",
+    roles: [PHARMACY_MANAGER, WAREHOUSE_STAFF],
+  },
   { methods: ["POST"], path: "/api/inventory/transfers/*/approve", match: "exact", roles: [PHARMACY_MANAGER] },
   {
     methods: ["POST"],

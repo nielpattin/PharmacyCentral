@@ -27,6 +27,7 @@ import { transitionTransfer, type TransferStatus } from "./transfers/domain/tran
 import { recordSiteAvailability, sellableBatch, today } from "./site-availability.ts";
 import { expiryWindows, MAX_DISPENSE_COST_ROWS, type DispenseCostRow, type StockHealthRow } from "./stock-health.ts";
 import type { ExpiringBatchRow } from "./action-plans/auto-plan-alerts.ts";
+import type { TransferPosition } from "./transfer-suggestions.ts";
 import { containsPattern, everything, type PageRequest } from "./page-cursor.ts";
 import { afterCursor, dateSortValue, presentConditions, splitPage, timestampSortValue } from "./keyset-page.ts";
 
@@ -442,6 +443,74 @@ export class InventoryRepository {
       expiring30: Number(row.expiring30),
       expiring60: Number(row.expiring60),
       expiring90: Number(row.expiring90),
+    }));
+  }
+
+  /**
+   * The sellable stock and the dispensed quantity of every product at every site in scope (design 0007, transfer
+   * suggestions). Only released, unexpired batches count, so a rejected or expired shelf is never offered to another
+   * site; reserved stock is subtracted by the caller. A site that sold in the window but has no sellable stock left
+   * still gets a row, with zero stock and no expiry.
+   */
+  public async transferPositions(input: {
+    siteIds?: string[] | undefined;
+    windowStart: Date;
+    today: string;
+  }): Promise<TransferPosition[]> {
+    const balanceScope = input.siteIds ? inArray(inventoryBalances.siteId, input.siteIds) : sql`true`;
+    const ledgerScope = input.siteIds ? inArray(stockLedgerEntries.siteId, input.siteIds) : sql`true`;
+    const { rows } = await this.database.db.execute<{
+      product_id: string;
+      site_id: string;
+      available: string;
+      dispensed: string;
+      earliest_expiry: string | null;
+    }>(sql`
+      with sellable as (
+        select ${productBatches.productId} as product_id,
+          ${inventoryBalances.siteId} as site_id,
+          coalesce(sum(${inventoryBalances.quantityOnHand}), 0) as on_hand,
+          coalesce(sum(${inventoryBalances.quantityReserved}), 0) as reserved,
+          min(${productBatches.expiryDate})::text as earliest_expiry
+        from ${inventoryBalances}
+        inner join ${productBatches} on ${productBatches.id} = ${inventoryBalances.productBatchId}
+        where ${productBatches.qualityStatus} = 'Released'
+          and ${productBatches.expiryDate} >= ${input.today}::date
+          and ${inventoryBalances.quantityOnHand} > 0
+          and ${balanceScope}
+        group by ${productBatches.productId}, ${inventoryBalances.siteId}
+      ),
+      dispensed as (
+        select ${stockLedgerEntries.productId} as product_id,
+          ${stockLedgerEntries.siteId} as site_id,
+          coalesce(-sum(${stockLedgerEntries.quantityDelta}), 0) as dispensed
+        from ${stockLedgerEntries}
+        where ${stockLedgerEntries.movementType} = 'Dispense'
+          and ${stockLedgerEntries.occurredAt} >= ${input.windowStart.toISOString()}::timestamptz
+          and ${ledgerScope}
+        group by ${stockLedgerEntries.productId}, ${stockLedgerEntries.siteId}
+      )
+      select keys.product_id, keys.site_id,
+        coalesce(sellable.on_hand, 0) - coalesce(sellable.reserved, 0) as available,
+        coalesce(dispensed.dispensed, 0) as dispensed,
+        sellable.earliest_expiry
+      from (
+        select product_id, site_id from sellable
+        union
+        select product_id, site_id from dispensed
+      ) as keys
+      left join sellable
+        on sellable.product_id = keys.product_id and sellable.site_id = keys.site_id
+      left join dispensed
+        on dispensed.product_id = keys.product_id and dispensed.site_id = keys.site_id
+      order by keys.site_id, keys.product_id
+    `);
+    return rows.map((row) => ({
+      productId: row.product_id,
+      siteId: row.site_id,
+      available: Number(row.available),
+      dispensedQuantity: Number(row.dispensed),
+      earliestExpiry: row.earliest_expiry,
     }));
   }
 

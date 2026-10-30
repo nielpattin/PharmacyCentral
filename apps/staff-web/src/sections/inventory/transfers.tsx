@@ -22,13 +22,17 @@ import { formatDateTime, formatQuantity, numberValue, readOne, text, type JsonRe
 import { asRecord } from "./format.ts";
 import { useInventoryLabels } from "./labels.ts";
 import { ALL_STATUSES, statusParam, statusTone, TRANSFER_STATUSES } from "./status.ts";
-import { CreateTransferDrawer } from "./create-transfer.tsx";
+import { CreateTransferDrawer, type TransferPrefill } from "./create-transfer.tsx";
+import { TransferSuggestions } from "./transfer-suggestions/suggestions.tsx";
 import { Fact, FactList, ListError, PAGE_SIZE, StatusFilter, statusBadge, useConfirmedAction } from "./shared.tsx";
 import { CreateAction, LineCard } from "../../components/form-parts.tsx";
 
 const TRANSFER_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
 
 type TransferView = { id: string; mode?: "ship" | "receive" };
+
+/** The create drawer is open either empty or filled from a transfer suggestion. */
+type CreateTransferState = { initial?: TransferPrefill | undefined };
 
 export const TransfersTab = (): React.JSX.Element => {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -38,8 +42,11 @@ export const TransfersTab = (): React.JSX.Element => {
   const createGate = useCan("inventory.transfer.create");
   const session = useSession();
   const gateFor = (action: StaffAction, row: JsonRecord) => can(action, session, ownerOf(row.createdBy));
-  const [creating, setCreating] = useState(false);
-  useHotkey("n", () => setCreating(true), { label: "Create new", when: createGate.allowed && !creating });
+  const [creating, setCreating] = useState<CreateTransferState>();
+  useHotkey("n", () => setCreating({}), {
+    label: "Create new",
+    when: createGate.allowed && creating === undefined,
+  });
   const list = usePagedList({
     key: ["staff-inventory", "transfers"],
     path: "/api/inventory/transfers",
@@ -147,7 +154,8 @@ export const TransfersTab = (): React.JSX.Element => {
 
   return (
     <div ref={rootRef} className="grid gap-3">
-      <CreateAction label="Create transfer" gate={createGate} onClick={() => setCreating(true)} />
+      <CreateAction label="Create transfer" gate={createGate} onClick={() => setCreating({})} />
+      <TransferSuggestions onCreate={(initial) => setCreating({ initial })} />
       <ListError error={list.error} />
       <DataTable
         toolbarStart={
@@ -167,7 +175,7 @@ export const TransfersTab = (): React.JSX.Element => {
         storageKey="staff:inventory:transfers"
         exportCsv={{ filename: "inventory-transfers.csv" }}
       />
-      {creating ? <CreateTransferDrawer onClose={() => setCreating(false)} /> : null}
+      {creating ? <CreateTransferDrawer onClose={() => setCreating(undefined)} initial={creating.initial} /> : null}
       {view ? (
         <TransferDrawer key={`${view.id}:${view.mode ?? "view"}`} view={view} onClose={() => setView(undefined)} />
       ) : null}

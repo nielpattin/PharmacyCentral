@@ -23,6 +23,13 @@ import { invalidCursor, sendPage } from "./keyset-page.ts";
 import { readCommaList, readPageRequest, readSearchText, type PageOptions } from "./page-cursor.ts";
 import { DEAD_STOCK_DAYS, MAX_DISPENSE_COST_ROWS } from "./stock-health.ts";
 import { InsufficientStockError } from "./stock/application/fefo-allocate.ts";
+import {
+  TRANSFER_KEEP_COVER_DAYS,
+  TRANSFER_TARGET_COVER_DAYS,
+  TRANSFER_TRIGGER_COVER_DAYS,
+  TRANSFER_WINDOW_DAYS,
+  transferSuggestions,
+} from "./transfer-suggestions.ts";
 
 const idParam = z.object({ id: z.string().uuid() });
 const batchSchema = z.object({
@@ -77,6 +84,10 @@ const transferSchema = z.object({
   destinationSiteId: z.string().uuid(),
   lines: z.array(transferLineSchema).min(1),
 });
+const transferSuggestionQuerySchema = z.object({
+  destinationSiteId: z.string().uuid().optional(),
+  windowDays: z.coerce.number().int().min(7).max(180).default(TRANSFER_WINDOW_DAYS),
+});
 const stocktakeSchema = z.object({
   siteId: z.string().uuid(),
   storageLocationId: z.string().uuid(),
@@ -99,6 +110,7 @@ const returnSchema = z.object({
   lines: z.array(returnLineSchema).min(1),
 });
 const countSchema = z.object({ countedQuantity: z.number().nonnegative() });
+const DAY_MS = 24 * 60 * 60 * 1000;
 const periodSchema = z.object({
   from: z.string().datetime({ offset: true }).optional(),
   to: z.string().datetime({ offset: true }).optional(),
@@ -537,6 +549,40 @@ export const createInventoryRouter = (
       );
       if (!transfer) return response.status(404).json({ title: "Transfer not found", status: 404 });
       return response.json(transfer);
+    } catch (error) {
+      return next(error);
+    }
+  });
+  // Transfer suggestions are computed from the sellable shelf and the sales ledger at request time; nothing is stored.
+  router.get("/inventory/transfer-suggestions", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager", "Warehouse Staff"])) return;
+    const parsed = transferSuggestionQuerySchema.safeParse(request.query);
+    if (!parsed.success) return invalid(response);
+    const { destinationSiteId, windowDays } = parsed.data;
+    if (destinationSiteId !== undefined && refuseOutOfSiteScope(request, response, [destinationSiteId])) return;
+    try {
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10);
+      const positions = await repository.transferPositions({
+        siteIds: listSiteIds(request),
+        windowStart: new Date(now.getTime() - windowDays * DAY_MS),
+        today,
+      });
+      const suggestions = transferSuggestions({ positions, windowDays, today });
+      return response.json({
+        generatedAt: now.toISOString(),
+        windowDays,
+        params: {
+          keepCoverDays: TRANSFER_KEEP_COVER_DAYS,
+          triggerCoverDays: TRANSFER_TRIGGER_COVER_DAYS,
+          targetCoverDays: TRANSFER_TARGET_COVER_DAYS,
+        },
+        suggestions:
+          destinationSiteId === undefined
+            ? suggestions
+            : suggestions.filter((suggestion) => suggestion.destinationSiteId === destinationSiteId),
+      });
     } catch (error) {
       return next(error);
     }

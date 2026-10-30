@@ -168,4 +168,16 @@ export const inventoryLiterals: Record<string, string> = {
   "The batch quality status changes to Released.": "Trạng thái chất lượng lô sẽ chuyển sang Đã đạt.",
   "The transfer moves on to the next step.": "Điều chuyển sẽ chuyển sang bước tiếp theo.",
   "The transfer will not go ahead.": "Điều chuyển sẽ không được tiến hành.",
+
+  // Transfer suggestions: the rule the rows follow, and the table's own labels.
+  "Suggested transfers": "Điều chuyển đề xuất",
+  "A source site keeps {keep} days of cover, a destination under {trigger} days is filled to {target} days, and stock that cannot sell before it expires is not moved.":
+    "Cơ sở nguồn giữ lại {keep} ngày đủ hàng, cơ sở đích dưới {trigger} ngày được bổ sung lên {target} ngày, và hàng không kịp bán trước khi hết hạn thì không được chuyển.",
+  "From site": "Từ cơ sở",
+  "To site": "Đến cơ sở",
+  "From cover": "Số ngày đủ hàng nguồn",
+  "To cover": "Số ngày đủ hàng đích",
+  "No sales": "Không có bán ra",
+  "No transfers are suggested right now.": "Hiện chưa có điều chuyển nào được đề xuất.",
+  "Unexpected transfer suggestions response.": "Phản hồi đề xuất điều chuyển không đúng định dạng.",
 };

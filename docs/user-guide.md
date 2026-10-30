@@ -232,7 +232,7 @@ Only released batches that have not passed their expiry date count as sellable. 
 | Stock | Balances | Quantity on hand and reserved per product batch, with expiry dates |
 | Stock | Batches | Product batches and their quality status. **Create batch** opens a drawer (product, supplier, batch number, manufactured and expiry dates, manufacturer, quality notes). **Release** and **Reject** show only for the verdict a batch does not already have |
 | Stock | Movements | Stock movement ledger, and **Record stock movement** |
-| Supply | Transfers | Transfer orders between sites and storage locations; **Create transfer** opens a drawer |
+| Supply | Transfers | Suggested transfers above the list, and transfer orders between sites and storage locations; **Create transfer** opens a drawer |
 | Supply | Replenishment | Replenishment requests with Approve, Reject, Fulfill and Cancel |
 | Supply | Returns | Returns and removals with reasons: Return to supplier, Damaged stock, Expired stock, Inventory removal |
 | Control | Adjustments | **Submit stock adjustment**; a Pharmacy Manager approves or rejects pending adjustments |
@@ -240,7 +240,7 @@ Only released batches that have not passed their expiry date count as sellable. 
 
 Press **N** on a list to open its create drawer.
 
-**Transfers** workflow: Warehouse Staff create a transfer with its lines; a Pharmacy Manager other than its creator approves it (`PendingApproval` to `Approved`); Warehouse Staff ship it (`InTransit`) and receive it at the destination. A Pharmacy Manager or Warehouse Staff can cancel a pending or approved transfer.
+**Transfers** workflow: Warehouse Staff create a transfer with its lines; a Pharmacy Manager other than its creator approves it (`PendingApproval` to `Approved`); Warehouse Staff ship it (`InTransit`) and receive it at the destination. A Pharmacy Manager or Warehouse Staff can cancel a pending or approved transfer. The list opens with **Suggested transfers**: a site with more than 45 days of cover offers stock to a site under 14 days, which is filled to 30 days, and stock that cannot sell before it expires is not moved. **Create transfer** on a suggestion opens the same drawer with the product, both sites and the quantity filled in; batch and locations stay a choice.
 
 **Replenishment** workflow: a pharmacist or pharmacy manager creates a request; warehouse staff approve or reject it, then fulfill it or cancel it.
 

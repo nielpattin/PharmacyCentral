@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**inventory-service, staff-web, deploy, docs**
+
+- Transfers now opens with **suggested transfers**: `GET /api/inventory/transfer-suggestions` reads released, unexpired stock and the 30-day sales ledger, pairs a site with more than 45 days of cover with a site under 14 days, fills the destination to 30 days, and never moves stock the destination cannot sell before it expires. The list is read-only; a row opens the existing create-transfer form prefilled with the product, both sites and the quantity, and approval is unchanged. Warehouse Staff and Pharmacy Manager read it within their sites (Platform Admin reads), at the edge and in the service. Spec: `docs/product/staff-inventory-operations.md` (US8), BR-TRF-012, design 0007.
+
 **staff-web, operations-query-service, payment-service, catalog-service, docs**
 
 - Analytics now breaks the period's revenue down by site, top product and product group, with the prescription/OTC split beside them. `GET /api/dashboard/analytics` answers a `breakdown` (`bySite`, `topProducts`, `byCategory`, `byPrescription` and `goodsRevenue`); `GET /internal/analytics/paid-invoices` carries the lines of every invoice, and the new service-only `GET /internal/analytics/products` answers every product's current category and prescription flag, including products no longer active. The site rows include the delivery fee and add up to the revenue tile; the product tables count goods only and their shares are of goods revenue. Spec: `docs/product/staff-analytics.md` (US4), BR-REPORT-012 to 014.

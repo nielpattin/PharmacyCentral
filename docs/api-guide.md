@@ -174,6 +174,7 @@ A consultation whose site cannot be verified answers `503 catalog_unavailable`, 
 - `POST /api/inventory/transfers`
 - `GET /api/inventory/transfers/{id}`
 - `POST /api/inventory/transfers/{id}/approve`, `ship`, `receive`, or `cancel`
+- `GET /api/inventory/transfer-suggestions`
 - `GET /api/inventory/stocktakes`
 - `GET /api/inventory/stocktakes/count`
 - `POST /api/inventory/stocktakes`
@@ -224,6 +225,7 @@ Action plans (BR-PLAN-001, BR-PLAN-002) live in `inventory-service`. The system 
 - `POST /api/procurement/goods-receipts` takes, on each line, an optional `unitCost` (VND per base unit received before VAT, from 0, at most 2 decimals, at most 1 000 000 000; omitted or `null` when unknown). Every receipt answer returns it as `unitCost: number | null` (BR-PROC-009).
 - `GET /api/procurement/replenishment-suggestions` (Pharmacy Manager and Platform Admin read it) takes `siteId` (required), `windowDays` (default 30, 7 to 180), `coverDays` (14, 1 to 90), `safetyDays` (7, 0 to 60) and `defaultLeadTimeDays` (7, 1 to 90). It answers `{ siteId, params, generatedAt, suggestions: [{ productId, supplierId (null when unknown), dailyVelocity, dispensedQuantity, onHand, reserved, available, inboundQuantity, minimumStock, leadTimeDays, leadTimeSource (`history` or `default`), sampleCount, reorderPoint, targetStock, suggestedQuantity, daysOfCover }] }` (BR-PROC-007).
 - `POST /api/procurement/replenishment-suggestions/draft-orders` (Pharmacy Manager only) takes `{ siteId, orders: [{ supplierId, lines: [{ productId, orderedQuantity }], notes? }] }`, one entry per supplier, whole-number quantities. It creates one `Draft` purchase order per entry in a single transaction and answers `201 { purchaseOrders }`; any failed reference creates nothing (BR-PROC-008).
+- `GET /api/inventory/transfer-suggestions` (Pharmacy Manager, Warehouse Staff, and Platform Admin read it) takes `windowDays` (default 30, 7 to 180) and an optional `destinationSiteId`, both inside the caller's site scope, and answers `{ generatedAt, windowDays, params: { keepCoverDays, triggerCoverDays, targetCoverDays }, suggestions: [{ productId, sourceSiteId, destinationSiteId, quantity, sourceAvailable, sourceDaysOfCover, destinationAvailable, destinationDaysOfCover, destinationDailyVelocity, earliestExpiry, daysToExpiry, cappedByExpiry }] }` (BR-TRF-012). Only released, unexpired stock counts, with reserved stock subtracted; a source keeps 45 days of cover, a destination under 14 days is filled to 30, and the quantity is capped at what the destination can sell before the source stock expires. `sourceDaysOfCover` is `null` when the source did not sell in the window. Nothing is written: the page opens the create-transfer form prefilled.
 
 Procurement routes check that the supplier, site, products, and storage location exist in `catalog-service` before a receipt is written.
 

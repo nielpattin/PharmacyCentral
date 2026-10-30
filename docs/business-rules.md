@@ -86,7 +86,7 @@ Authorizer dùng `employeeRolesForRequest` và `isEmployeeRoleAllowed` trong `de
 | Các thao tác khác trên `/api/inventory/replenishment` (duyệt, từ chối, thực hiện) | Warehouse Staff |
 | `POST /api/inventory/batches/*/quality` | Pharmacist, Pharmacy Manager |
 | Ghi `/api/inventory/batches`, `/api/inventory/movements`, `/api/inventory/transfers` (tạo, xuất, nhận), `/api/inventory/stocktakes` (tạo, đếm), `/api/inventory/stocktake-lines`, `/api/inventory/returns`, `/api/inventory/adjustments` (tạo) | Warehouse Staff |
-| `GET /api/inventory/movements`, `/api/inventory/adjustments`, `/api/inventory/transfers`, `/api/inventory/stocktakes`, `/api/inventory/returns` | Pharmacy Manager, Warehouse Staff |
+| `GET /api/inventory/movements`, `/api/inventory/adjustments`, `/api/inventory/transfers`, `/api/inventory/transfer-suggestions`, `/api/inventory/stocktakes`, `/api/inventory/returns` | Pharmacy Manager, Warehouse Staff |
 | `POST /api/inventory/adjustments/*/*` (duyệt, từ chối), `POST /api/inventory/transfers/*/approve`, `POST /api/inventory/stocktakes/*/post` | Pharmacy Manager |
 | `POST /api/inventory/transfers/*/cancel` | Pharmacy Manager, Warehouse Staff |
 | `PATCH /api/inventory/action-plans/*` | Platform Admin, Pharmacist, Pharmacy Manager, Warehouse Staff; dịch vụ chỉ cho Platform Admin và Pharmacy Manager đổi chủ sở hữu (BR-PLAN-002) |
@@ -613,6 +613,17 @@ Hành động khác bị từ chối ("Invalid transfer transition").
 - Duyệt: kiểm tra một trong hai site.
 - Xuất kho và hủy: kiểm tra site nguồn. Nhận hàng: kiểm tra site đích.
 - Xuất kho và nhận hàng là việc của Warehouse Staff. Hủy là việc của Warehouse Staff hoặc Pharmacy Manager.
+
+### BR-TRF-012. Gợi ý điều chuyển giữa các site
+
+`GET /api/inventory/transfer-suggestions` chỉ đọc, không ghi. Nó trả về những lần chuyển hàng mà chuỗi nên làm, tính từ tồn bán được và lượng xuất kho:
+
+- Chỉ xét batch `Released`, chưa hết hạn và có `quantity_on_hand > 0`. `available = on hand - reserved`.
+- `velocity = lượng xuất kho trong cửa sổ / số ngày cửa sổ` (mặc định 30 ngày, nhận 7 đến 180), `cover = available / velocity`; `cover` là null khi site không bán trong cửa sổ.
+- Site nguồn có `surplus = available - velocity × 45` (bằng toàn bộ available khi không bán). Site đích có `cover < 14` và có bán trong cửa sổ; `need = velocity × 30 - available`.
+- Lượng đề xuất là `min(surplus, need, velocity đích × số ngày còn lại đến hạn sớm nhất của lô nguồn)`, làm tròn xuống đơn vị nguyên. Hàng hết hạn hôm nay không được chuyển.
+- Site đích cấp thiết nhất được phục vụ trước; một site nguồn có thể chia hàng cho nhiều site đích cho đến khi hết surplus.
+- Cả hai đầu phải nằm trong phạm vi site của người gọi (BR-AUTH-004). Kết quả không tự tạo phiếu; người dùng mở form tạo điều chuyển với sản phẩm, hai site và số lượng đã điền, rồi chọn batch và location. Duyệt vẫn theo BR-TRF-005.
 
 ## 13. Quy tắc trả hàng và loại khỏi tồn kho
 

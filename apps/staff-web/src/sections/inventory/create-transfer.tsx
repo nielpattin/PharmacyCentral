@@ -20,12 +20,20 @@ type TransferLine = {
   notes: string;
 };
 
-const transferLineInitial = (): TransferLine => ({
-  productId: "",
+/** The product, both sites and the quantity a transfer suggestion fills into a new transfer. */
+export type TransferPrefill = {
+  productId: string;
+  sourceSiteId: string;
+  destinationSiteId: string;
+  quantity: number;
+};
+
+const transferLineInitial = (prefill?: TransferPrefill | undefined): TransferLine => ({
+  productId: prefill?.productId ?? "",
   productBatchId: "",
   sourceStorageLocationId: "",
   destinationStorageLocationId: "",
-  quantity: "1",
+  quantity: prefill === undefined ? "1" : String(prefill.quantity),
   notes: "",
 });
 
@@ -38,12 +46,26 @@ const transferDraftSchema = z.object({
   destinationSiteId: z.string(),
 });
 
-/** Create a stock transfer in a side drawer. Mount it only while it should be open. */
-export const CreateTransferDrawer = ({ onClose }: { onClose: () => void }): React.JSX.Element => {
+/**
+ * Create a stock transfer in a side drawer. Mount it only while it should be open. `initial` fills the first line and
+ * both sites from a transfer suggestion; the transfer number stays empty either way.
+ */
+export const CreateTransferDrawer = ({
+  onClose,
+  initial,
+}: {
+  onClose: () => void;
+  initial?: TransferPrefill | undefined;
+}): React.JSX.Element => {
   const run = useStaffAction();
   const labels = useInventoryLabels();
   const form = useForm({
-    defaultValues: { ...transferInitial, lines: [transferLineInitial()] },
+    defaultValues: {
+      ...transferInitial,
+      sourceSiteId: initial?.sourceSiteId ?? "",
+      destinationSiteId: initial?.destinationSiteId ?? "",
+      lines: [transferLineInitial(initial)],
+    },
     onSubmit: async ({ value }) => {
       const ok = await run({
         path: "/api/inventory/transfers",

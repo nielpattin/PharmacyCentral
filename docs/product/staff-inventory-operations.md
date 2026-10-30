@@ -100,6 +100,17 @@ Tags: `[observed]` a code or doc fact checked on 2026-10-26; `[standard]` a deci
   - Transfer, replenishment, stocktake, adjustment and return detail each have a **Lịch sử** tab listing that record's events: action, actor, time. (gap G21)
   - The tab reads only that record's history, so anyone who can open the record sees it and nobody else does. The full Audit page stays Platform Admin only (BR-AUDIT-004).
 
+### US8. As Warehouse Staff, I see which stock another site is short of and where the chain holds a surplus, so that I move stock that already exists instead of ordering more
+
+- Source: `[standard]` Rebalancing stock across a chain. `[observed]` BR-TRF-001 to BR-TRF-012, BR-INV-007.
+- Accepted when:
+  - The Transfers page opens with a **Điều chuyển gợi ý** section above the transfer list: product, source site, destination site, the cover of each side, the suggested quantity and a **Tạo điều chuyển** action. It reads `GET /api/inventory/transfer-suggestions` and writes nothing.
+  - Only sellable stock counts: released, unexpired batches, with reserved stock subtracted. A source keeps 45 days of its own cover; a site under 14 days of cover receives stock up to 30 days. Stock that the destination cannot sell before it expires is never suggested, and stock expiring today is not moved.
+  - A row appears only when both sites are in the caller's scope. Platform Admin and Pharmacy Manager read the list; only Warehouse Staff get the row action, and the action column is absent when they may not create.
+  - **Tạo điều chuyển** opens the existing create form filled with the product, both sites and the suggested quantity. The batch and the two storage locations stay a choice, and the transfer is still `Chờ duyệt` until a Pharmacy Manager approves it (US2).
+  - With nothing to move, the table says so in its empty state; a failed read shows the error, never an empty list.
+  - The section states the rule it applied (45 days kept, 14 days trigger, 30 days target, expiry cap), so a reader can explain a missing row.
+
 ## Contents and behavior
 
 `[observed]` for the current layout. The target differences are in the gap table.
@@ -109,7 +120,7 @@ Tags: `[observed]` a code or doc fact checked on 2026-10-26; `[standard]` a deci
 | Balances (`/inventory`) | Search by batch number; CSV export | None | None | Read only |
 | Batches (`/inventory`) | Batch list; quality verdicts belong to [staff-quality.md](staff-quality.md) | **Tạo lô** (Warehouse Staff) | Quality only | None here |
 | Movements (`/inventory`) | Ledger, read only | None in the target (G19) | None | None |
-| Transfers (`/transfers`) | Transfer number; status filter (PendingApproval, Approved, InTransit, Received, Cancelled) | **Tạo điều chuyển** | Chờ duyệt → Đã duyệt → Đang vận chuyển → Đã nhận; Hủy before ship | Ship: down at source. Receive: up at destination |
+| Transfers (`/transfers`) | Suggested transfers above the list; transfer number; status filter (PendingApproval, Approved, InTransit, Received, Cancelled) | **Tạo điều chuyển** (also from a suggestion, prefilled) | Chờ duyệt → Đã duyệt → Đang vận chuyển → Đã nhận; Hủy before ship | Ship: down at source. Receive: up at destination |
 | Replenishment (`/replenishment`) | Notes or batch number; status filter (Pending, Approved, Fulfilled, Rejected, Cancelled) | **Yêu cầu bổ sung hàng** | Chờ xử lý → Đã duyệt → Đã thực hiện; Từ chối; Hủy | Fulfil: move from reserve location to request location |
 | Stocktake (`/stocktake`) | Notes or batch number; status filter (Pending, InProgress, Completed, Cancelled) | **Tạo phiên kiểm kê**; **Ghi nhận số đếm kiểm kê** | Chờ xử lý → Đang kiểm → Hoàn tất; Hủy khi còn mở | Post: up or down by each variance |
 | Adjustments (`/adjustments`) | Reason, notes or batch number; status filter (Pending, Approved, Rejected) | **Gửi điều chỉnh tồn kho** | Chờ xử lý → Đã duyệt or Từ chối | Approve: ± quantity |
@@ -165,7 +176,7 @@ Tags: `[observed]` a code or doc fact checked on 2026-10-26; `[standard]` a deci
 
 ## Rules and designs
 
-- Business rules: [BR-AUTH-002, 004, 005, 006](../business-rules.md), [BR-INV-003, 004, 006, 007, 009, 010](../business-rules.md), [BR-TRF-001 to 011](../business-rules.md), [BR-REP-001 to 006](../business-rules.md), [BR-STK-001 to 007](../business-rules.md), [BR-ADJ-001 to 008](../business-rules.md), [BR-RET-001 to 005](../business-rules.md), [BR-QUALITY-003, 004](../business-rules.md), [BR-AUDIT-001 to 004](../business-rules.md), and the known gaps [BR-GAP-002, 003, 004, 005](../business-rules.md).
+- Business rules: [BR-AUTH-002, 004, 005, 006](../business-rules.md), [BR-INV-003, 004, 006, 007, 009, 010](../business-rules.md), [BR-TRF-001 to 012](../business-rules.md), [BR-REP-001 to 006](../business-rules.md), [BR-STK-001 to 007](../business-rules.md), [BR-ADJ-001 to 008](../business-rules.md), [BR-RET-001 to 005](../business-rules.md), [BR-QUALITY-003, 004](../business-rules.md), [BR-AUDIT-001 to 004](../business-rules.md), and the known gaps [BR-GAP-002, 003, 004, 005](../business-rules.md).
 - [ADR 0004](../adr/0004-server-authoritative-pricing-stock-and-fees.md): stock is the server's; the screens only preview.
 - [User guide, Inventory operations](../user-guide.md#inventory-operations) and [Roles and workspaces](../user-guide.md#roles-and-workspaces) describe the screens and must match the target once the gaps close. The [API guide](../api-guide.md) lists the inventory endpoints and the dashboard counts that filter on transfer status.
 - Standards: ISO/IEC 27001 (segregation of duties), WCAG 2.2 AA. FEFO is common practice for picking.
@@ -194,6 +205,7 @@ Tags: `[observed]` a code or doc fact checked on 2026-10-26; `[standard]` a deci
 | 18 | What do exports and balances show? | Export covers every filtered row. Balances show Available and Quality. `[standard]` | Staff need the full set and the reason a batch cannot move. |
 | 19 | Where is a record's history? | A **Lịch sử** tab on each record, reading that record's events only, visible to anyone who can open the record. `[standard]` | Entity history gives the answer without the admin-only Audit page (BR-AUDIT-004). |
 | 20 | May a staff member create a transfer if assigned to one site only? | No. The creator must be assigned to both sites. `[standard]` | BR-TRF-011. |
+| 21 | Does a suggestion create a transfer? | No. The list is read-only and only opens the create form prefilled with the product, sites and quantity; batch and locations stay a choice, and approval is unchanged. `[standard]` | A draft nobody asked for clutters the approval queue, and the batch and locations are a warehouse decision. |
 
 ## Gaps against the code (2026-10-26)
 

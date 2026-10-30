@@ -241,6 +241,12 @@ const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["POST"], path: "/inventory/adjustments/*/*", exact: true, roles: ["Pharmacy Manager"] },
   { methods: ["WRITE"], path: "/inventory/adjustments", roles: ["Warehouse Staff"] },
   { methods: ["READ"], path: "/inventory/transfers", roles: ["Pharmacy Manager", "Warehouse Staff"] },
+  {
+    methods: ["READ"],
+    path: "/inventory/transfer-suggestions",
+    exact: true,
+    roles: ["Pharmacy Manager", "Warehouse Staff"],
+  },
   { methods: ["POST"], path: "/inventory/transfers/*/approve", exact: true, roles: ["Pharmacy Manager"] },
   {
     methods: ["POST"],
