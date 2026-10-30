@@ -21,6 +21,37 @@ export type DeadStockItem = {
   value: Figure;
 };
 
+export type SalesSiteRow = {
+  siteId: string | null;
+  siteName: string | null;
+  revenue: Figure;
+  orderCount: Figure;
+  averageOrderValue: Figure;
+};
+
+export type ProductRevenueRow = {
+  productId: string;
+  productName: string;
+  revenue: Figure;
+  /** The share (0 to 1) of goods revenue; null when the period sold no goods. */
+  share: Figure;
+};
+
+export type CategoryRevenueRow = {
+  /** The catalog category, or null for a product with none. */
+  category: string | null;
+  revenue: Figure;
+  share: Figure;
+};
+
+export type PrescriptionGroup = "prescription" | "otc" | "unknown";
+
+export type PrescriptionRevenueRow = {
+  group: PrescriptionGroup;
+  revenue: Figure;
+  share: Figure;
+};
+
 export type AnalyticsResponse = {
   currency: string;
   generatedAt: string;
@@ -42,6 +73,13 @@ export type AnalyticsResponse = {
     };
   };
   channels: Array<{ channel: SalesChannel; revenue: Figure; orderCount: Figure }>;
+  breakdown: {
+    goodsRevenue: Figure;
+    bySite: SalesSiteRow[];
+    topProducts: ProductRevenueRow[];
+    byCategory: CategoryRevenueRow[];
+    byPrescription: PrescriptionRevenueRow[];
+  };
   inventory: {
     turnover: Figure;
     daysOfInventory: Figure;

@@ -35,6 +35,26 @@ export const analyticsLiterals: Record<string, string> = {
   "Revenue by channel": "Doanh thu theo kênh",
   "The channel filter does not apply to this table: both channels show for the chosen site and period.":
     "Bảng này không theo bộ lọc kênh: luôn hiển thị cả hai kênh theo cơ sở và kỳ đã chọn.",
+  "Revenue by site": "Doanh thu theo cơ sở",
+  "Unknown site": "Không rõ cơ sở",
+  "Site revenue includes the delivery fee, so the rows add up to the revenue tile.":
+    "Doanh thu theo cơ sở gồm cả phí giao hàng, nên tổng các dòng bằng ô doanh thu.",
+  "Top products": "Sản phẩm bán chạy",
+  Share: "Tỷ trọng",
+  "Goods revenue": "Doanh thu hàng hóa",
+  "Goods only: the delivery fee is not attributed to a product, so each share is of goods revenue.":
+    "Chỉ tính hàng hóa: phí giao hàng không gán cho sản phẩm nào, nên tỷ trọng tính trên doanh thu hàng hóa.",
+  "Revenue by product group": "Doanh thu theo nhóm hàng",
+  Uncategorized: "Chưa phân nhóm",
+  "Grouped by the category the catalog holds today, so a changed category also moves past sales.":
+    "Nhóm theo danh mục hiện tại của catalog, nên khi đổi danh mục thì số liệu quá khứ cũng đổi theo.",
+  "Prescription and over the counter": "Thuốc kê đơn và không kê đơn",
+  "Product type": "Loại sản phẩm",
+  "Prescription medicine": "Thuốc kê đơn",
+  "Over the counter medicine": "Thuốc không kê đơn",
+  "Unknown product type": "Chưa xác định loại",
+  "Counts goods revenue by the prescription flag the catalog holds today.":
+    "Tính doanh thu hàng hóa theo cờ kê đơn hiện tại của catalog.",
   "Inventory health": "Tình trạng tồn kho",
   "The channel does not change inventory figures. Turnover and days of inventory cover the chosen period; stockout rate, dead stock and expiry are the current state.":
     "Kênh bán không làm thay đổi số liệu tồn kho. Vòng quay và số ngày tồn tính theo kỳ đã chọn; tỷ lệ hết hàng, hàng tồn lâu và hạn dùng là tình trạng hiện tại.",

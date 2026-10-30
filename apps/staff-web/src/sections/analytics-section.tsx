@@ -31,11 +31,16 @@ import { labelOrShortId } from "./inventory/format.ts";
 import type {
   AnalyticsChannel,
   AnalyticsResponse,
+  CategoryRevenueRow,
   DeadStockItem,
   ExpiryBucket,
   Figure,
   FigurePair,
+  PrescriptionGroup,
+  PrescriptionRevenueRow,
+  ProductRevenueRow,
   SalesChannel,
+  SalesSiteRow,
 } from "./analytics/contract.ts";
 import {
   formatCount,
@@ -82,6 +87,11 @@ const RANGE_MESSAGES: Record<PeriodRangeError, string> = {
 
 const SALES_CHANNELS: readonly SalesChannel[] = ["counter", "online"];
 const SALES_CHANNEL_LABELS: Record<SalesChannel, string> = { counter: "Counter", online: "Online" };
+const PRESCRIPTION_LABELS: Record<PrescriptionGroup, string> = {
+  prescription: "Prescription medicine",
+  otc: "Over the counter medicine",
+  unknown: "Unknown product type",
+};
 
 type ExpiryKey = keyof AnalyticsResponse["inventory"]["expiry"];
 const EXPIRY_GROUPS: ReadonlyArray<{ key: ExpiryKey; label: string }> = [
@@ -202,6 +212,11 @@ export const AnalyticsSection = (): React.JSX.Element => {
     ...item,
     site: labelOrShortId(referenceLabel(references.sites, item.siteId, ["code", "name"]), item.siteId),
   }));
+  const siteRevenueRows: SalesSiteRow[] = data?.breakdown?.bySite ?? [];
+  const topProductRows: ProductRevenueRow[] = data?.breakdown?.topProducts ?? [];
+  const categoryRevenueRows: CategoryRevenueRow[] = data?.breakdown?.byCategory ?? [];
+  const prescriptionRevenueRows: PrescriptionRevenueRow[] = data?.breakdown?.byPrescription ?? [];
+  const goodsRevenue = data?.breakdown?.goodsRevenue;
 
   const currentDays =
     rangeError === undefined ? `${formatDayLabel(range.fromDay, locale)} – ${formatDayLabel(range.toDay, locale)}` : "";
@@ -365,6 +380,134 @@ export const AnalyticsSection = (): React.JSX.Element => {
           {translateText(
             "The channel filter does not apply to this table: both channels show for the chosen site and period.",
           )}
+        </p>
+      </section>
+
+      <section className="grid gap-2">
+        <Heading>Revenue by site</Heading>
+        <DataTable<SalesSiteRow>
+          storageKey="staff:analytics:revenue-by-site"
+          labels={dataTableLabels()}
+          loading={loading}
+          rows={siteRevenueRows}
+          getKey={(row) => row.siteId ?? "unknown"}
+          empty={translateText("No records found")}
+          columns={[
+            {
+              key: "siteName",
+              label: translateText("Site"),
+              render: (row) => (row.siteName === null ? translateText("Unknown site") : text(row.siteName)),
+            },
+            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
+            {
+              key: "orderCount",
+              label: translateText("Orders"),
+              align: "right",
+              render: (row) => count(row.orderCount),
+            },
+            {
+              key: "averageOrderValue",
+              label: translateText("Average order value"),
+              align: "right",
+              render: (row) => money(row.averageOrderValue),
+            },
+          ]}
+        />
+        <p className="text-xs text-muted">
+          {translateText("Site revenue includes the delivery fee, so the rows add up to the revenue tile.")}
+        </p>
+      </section>
+
+      <section className="grid gap-2">
+        <Heading>Top products</Heading>
+        <DataTable<ProductRevenueRow>
+          storageKey="staff:analytics:top-products"
+          labels={dataTableLabels()}
+          loading={loading}
+          rows={topProductRows}
+          getKey={(row) => row.productId}
+          empty={translateText("No records found")}
+          columns={[
+            {
+              key: "productName",
+              label: translateText("Product"),
+              truncate: 32,
+              render: (row) => text(row.productName),
+            },
+            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
+            {
+              key: "share",
+              label: translateText("Share"),
+              align: "right",
+              render: (row) => formatRate(row.share, locale),
+            },
+          ]}
+        />
+        <p className="text-xs text-muted">
+          {translateText("Goods revenue")}: {money(goodsRevenue)} ·{" "}
+          {translateText(
+            "Goods only: the delivery fee is not attributed to a product, so each share is of goods revenue.",
+          )}
+        </p>
+      </section>
+
+      <section className="grid gap-2">
+        <Heading>Revenue by product group</Heading>
+        <DataTable<CategoryRevenueRow>
+          storageKey="staff:analytics:product-groups"
+          labels={dataTableLabels()}
+          loading={loading}
+          rows={categoryRevenueRows}
+          getKey={(row) => row.category ?? "uncategorized"}
+          empty={translateText("No records found")}
+          columns={[
+            {
+              key: "category",
+              label: translateText("Category"),
+              render: (row) => (row.category === null ? translateText("Uncategorized") : text(row.category)),
+            },
+            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
+            {
+              key: "share",
+              label: translateText("Share"),
+              align: "right",
+              render: (row) => formatRate(row.share, locale),
+            },
+          ]}
+        />
+        <p className="text-xs text-muted">
+          {translateText(
+            "Grouped by the category the catalog holds today, so a changed category also moves past sales.",
+          )}
+        </p>
+      </section>
+
+      <section className="grid gap-2">
+        <Heading>Prescription and over the counter</Heading>
+        <DataTable<PrescriptionRevenueRow>
+          storageKey="staff:analytics:prescription-split"
+          labels={dataTableLabels()}
+          loading={loading}
+          rows={prescriptionRevenueRows}
+          getKey={(row) => row.group}
+          empty={translateText("No records found")}
+          columns={[
+            {
+              key: "group",
+              label: translateText("Product type"),
+              render: (row) => translateText(PRESCRIPTION_LABELS[row.group]),
+            },
+            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
+            {
+              key: "share",
+              label: translateText("Share"),
+              align: "right",
+              render: (row) => formatRate(row.share, locale),
+            },
+          ]}
+        />
+        <p className="text-xs text-muted">
+          {translateText("Counts goods revenue by the prescription flag the catalog holds today.")}
         </p>
       </section>
 
