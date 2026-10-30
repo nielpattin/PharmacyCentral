@@ -66,12 +66,21 @@ export const paidInvoicesQuerySchema = z.object({
   since: z.string().datetime({ offset: true }),
 });
 
+/** A line of a `Paid` invoice: a product at its sold quantity and price, or a charge such as the delivery fee. */
+export const paidInvoiceLineAnalyticsSchema = z.object({
+  productId: z.string().uuid().nullable(),
+  description: z.string(),
+  quantity: z.number().nonnegative(),
+  unitPrice: z.number().nonnegative(),
+});
+
 /** One `Paid` invoice as the period analytics reads it: exactly one of the two references is set. */
 export const paidInvoiceAnalyticsSchema = z.object({
   orderId: z.string().uuid().nullable(),
   prescriptionId: z.string().uuid().nullable(),
   amount: z.number().nonnegative(),
   createdAt: z.string().datetime({ offset: true }),
+  lines: z.array(paidInvoiceLineAnalyticsSchema),
 });
 
 export const paidInvoicesAnalyticsResponseSchema = z.object({

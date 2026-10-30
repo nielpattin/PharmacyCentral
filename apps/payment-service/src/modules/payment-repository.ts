@@ -174,17 +174,63 @@ export class PaymentRepository {
    * read; the caller asks for one row past its cap so that it can tell a range over the cap from one exactly at it.
    */
   public async listPaidInvoicesSince(since: Date, limit: number) {
-    return this.database.db
+    const paidSince = and(eq(paymentInvoices.status, "Paid"), gte(paymentInvoices.createdAt, since));
+    const invoices = await this.database.db
       .select({
+        id: paymentInvoices.id,
         orderId: paymentInvoices.orderId,
         prescriptionId: paymentInvoices.prescriptionId,
         amount: paymentInvoices.amount,
         createdAt: paymentInvoices.createdAt,
       })
       .from(paymentInvoices)
-      .where(and(eq(paymentInvoices.status, "Paid"), gte(paymentInvoices.createdAt, since)))
+      .where(paidSince)
       .orderBy(asc(paymentInvoices.createdAt), asc(paymentInvoices.id))
       .limit(limit);
+    if (invoices.length === 0) return [];
+    // The lines belong to the same capped invoice set; the subquery keeps the id list out of the statement's parameters.
+    const lines = await this.database.db
+      .select({
+        invoiceId: paymentInvoiceLines.paymentInvoiceId,
+        productId: paymentInvoiceLines.productId,
+        description: paymentInvoiceLines.description,
+        quantity: paymentInvoiceLines.quantity,
+        unitPrice: paymentInvoiceLines.unitPrice,
+      })
+      .from(paymentInvoiceLines)
+      .where(
+        inArray(
+          paymentInvoiceLines.paymentInvoiceId,
+          this.database.db
+            .select({ id: paymentInvoices.id })
+            .from(paymentInvoices)
+            .where(paidSince)
+            .orderBy(asc(paymentInvoices.createdAt), asc(paymentInvoices.id))
+            .limit(limit),
+        ),
+      )
+      .orderBy(asc(paymentInvoiceLines.id));
+    const linesByInvoice = new Map<
+      string,
+      Array<{ productId: string | null; description: string; quantity: number; unitPrice: number }>
+    >();
+    for (const line of lines) {
+      const invoiceLines = linesByInvoice.get(line.invoiceId) ?? [];
+      invoiceLines.push({
+        productId: line.productId,
+        description: line.description,
+        quantity: Number(line.quantity),
+        unitPrice: Number(line.unitPrice),
+      });
+      linesByInvoice.set(line.invoiceId, invoiceLines);
+    }
+    return invoices.map((invoice) => ({
+      orderId: invoice.orderId,
+      prescriptionId: invoice.prescriptionId,
+      amount: invoice.amount,
+      createdAt: invoice.createdAt,
+      lines: linesByInvoice.get(invoice.id) ?? [],
+    }));
   }
 
   public async markCashPaid(id: string, actorId?: string) {

@@ -17,6 +17,8 @@ const orderTwo = uuid(0xd2);
 const orderThree = uuid(0xd3);
 const orderFour = uuid(0xd4);
 const prescriptionOne = uuid(0xe1);
+const productOne = uuid(0xf1);
+const productTwo = uuid(0xf2);
 
 const since = new Date("2026-10-01T00:00:00.000Z");
 
@@ -93,15 +95,44 @@ describe("PaymentRepository paid invoices since", () => {
         createdAt: sql`${fixture.at}::timestamptz`,
       });
     }
+    await db.insert(schema.paymentInvoiceLines).values([
+      {
+        paymentInvoiceId: uuid(1),
+        productId: productOne,
+        productUnitId: null,
+        description: "Paracetamol",
+        quantity: "2",
+        unitPrice: "20000.00",
+        currency: "VND",
+      },
+      {
+        paymentInvoiceId: uuid(1),
+        productId: null,
+        productUnitId: null,
+        description: "Phí giao hàng",
+        quantity: "1",
+        unitPrice: "5000.00",
+        currency: "VND",
+      },
+      {
+        paymentInvoiceId: uuid(2),
+        productId: productTwo,
+        productUnitId: null,
+        description: "Amoxicillin",
+        quantity: "3",
+        unitPrice: "40000.00",
+        currency: "VND",
+      },
+    ]);
   });
 
   afterAll(async () => {
     await client.close();
   });
 
-  it("answers only the Paid invoices created at or after since, oldest first, with their references and amount", async () => {
+  it("answers only the Paid invoices created at or after since, oldest first, with their lines", async () => {
     const rows = await repository.listPaidInvoicesSince(since, 100);
-    expect(rows).toStrictEqual([
+    expect(rows.map(({ lines: _lines, ...row }) => row)).toStrictEqual([
       { orderId: orderOne, prescriptionId: null, amount: "45000.00", createdAt: new Date("2026-10-01T00:00:00.000Z") },
       {
         orderId: null,
@@ -111,6 +142,18 @@ describe("PaymentRepository paid invoices since", () => {
       },
       { orderId: orderFour, prescriptionId: null, amount: "55000.00", createdAt: new Date("2026-10-20T08:00:00.000Z") },
     ]);
+    // Line ids are random, so the order inside an invoice is not the insertion order; the set is what matters.
+    expect(rows[0]?.lines).toHaveLength(2);
+    expect(rows[0]?.lines).toEqual(
+      expect.arrayContaining([
+        { productId: productOne, description: "Paracetamol", quantity: 2, unitPrice: 20000 },
+        { productId: null, description: "Phí giao hàng", quantity: 1, unitPrice: 5000 },
+      ]),
+    );
+    expect(rows[1]?.lines).toStrictEqual([
+      { productId: productTwo, description: "Amoxicillin", quantity: 3, unitPrice: 40000 },
+    ]);
+    expect(rows[2]?.lines).toStrictEqual([]);
   });
 
   it("reads at most the given number of rows, so the caller can detect a range over its cap", async () => {

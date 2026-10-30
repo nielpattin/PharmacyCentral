@@ -31,6 +31,8 @@ export type PaymentRouterOptions = {
 
 /** The most paid invoices one analytics read answers. A range with more is refused with 422, never cut short. */
 export const PAID_INVOICES_ANALYTICS_CAP = 50_000;
+/** The most invoice lines the period analytics read answers in one go. */
+export const PAID_INVOICE_LINES_ANALYTICS_CAP = 100_000;
 
 export const createPaymentRouter = (
   repository: PaymentRepository | undefined,
@@ -269,12 +271,19 @@ export const createPaymentRouter = (
           status: 422,
           code: "analytics_range_too_large",
         });
+      if (rows.reduce((total, row) => total + row.lines.length, 0) > PAID_INVOICE_LINES_ANALYTICS_CAP)
+        return response.status(422).json({
+          title: "Analytics range is too large",
+          status: 422,
+          code: "analytics_range_too_large",
+        });
       return response.json({
         invoices: rows.map((row) => ({
           orderId: row.orderId,
           prescriptionId: row.prescriptionId,
           amount: Number(row.amount),
           createdAt: row.createdAt.toISOString(),
+          lines: row.lines,
         })),
       });
     } catch (error) {

@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InternalIdentityContext } from "../contracts/common.ts";
 import { paidInvoicesAnalyticsResponseSchema } from "../contracts/payment.ts";
 import { createTrustedRequestMiddleware, signInternalIdentityContext } from "../middleware/trusted-request.ts";
-import { PAID_INVOICES_ANALYTICS_CAP, createPaymentRouter } from "./payment-routes.ts";
+import {
+  PAID_INVOICE_LINES_ANALYTICS_CAP,
+  PAID_INVOICES_ANALYTICS_CAP,
+  createPaymentRouter,
+} from "./payment-routes.ts";
 import type { PaymentRepository } from "./payment-repository.ts";
 
 const identitySecret = "test-identity-secret-1234567890123456";
@@ -19,6 +23,7 @@ type StoredInvoice = {
   prescriptionId: string | null;
   amount: string;
   createdAt: Date;
+  lines: Array<{ productId: string | null; description: string; quantity: number; unitPrice: number }>;
 };
 
 const identityHeader = (overrides: Partial<InternalIdentityContext>): string =>
@@ -47,8 +52,35 @@ describe("GET /internal/analytics/paid-invoices", () => {
 
   beforeEach(async () => {
     stored = [
-      { orderId, prescriptionId: null, amount: "45000.00", createdAt: new Date("2026-10-01T00:00:00.000Z") },
-      { orderId: null, prescriptionId, amount: "120000.50", createdAt: new Date("2026-10-15T12:00:00.000Z") },
+      {
+        orderId,
+        prescriptionId: null,
+        amount: "45000.00",
+        createdAt: new Date("2026-10-01T00:00:00.000Z"),
+        lines: [
+          {
+            productId: "00000000-0000-4000-8000-0000000000f1",
+            description: "Paracetamol",
+            quantity: 2,
+            unitPrice: 20000,
+          },
+        ],
+      },
+      {
+        orderId: null,
+        prescriptionId,
+        amount: "120000.50",
+        createdAt: new Date("2026-10-15T12:00:00.000Z"),
+        lines: [
+          {
+            productId: "00000000-0000-4000-8000-0000000000f2",
+            description: "Amoxicillin",
+            quantity: 3,
+            unitPrice: 40000,
+          },
+          { productId: null, description: "Phí giao hàng", quantity: 1, unitPrice: 500 },
+        ],
+      },
     ];
     listPaidInvoicesSince.mockReset();
     // Honours the limit the way the SQL does: at most that many of the stored rows.
@@ -85,8 +117,35 @@ describe("GET /internal/analytics/paid-invoices", () => {
     expect(response.status).toBe(200);
     const body = paidInvoicesAnalyticsResponseSchema.parse(await response.json());
     expect(body.invoices).toStrictEqual([
-      { orderId, prescriptionId: null, amount: 45000, createdAt: "2026-10-01T00:00:00.000Z" },
-      { orderId: null, prescriptionId, amount: 120000.5, createdAt: "2026-10-15T12:00:00.000Z" },
+      {
+        orderId,
+        prescriptionId: null,
+        amount: 45000,
+        createdAt: "2026-10-01T00:00:00.000Z",
+        lines: [
+          {
+            productId: "00000000-0000-4000-8000-0000000000f1",
+            description: "Paracetamol",
+            quantity: 2,
+            unitPrice: 20000,
+          },
+        ],
+      },
+      {
+        orderId: null,
+        prescriptionId,
+        amount: 120000.5,
+        createdAt: "2026-10-15T12:00:00.000Z",
+        lines: [
+          {
+            productId: "00000000-0000-4000-8000-0000000000f2",
+            description: "Amoxicillin",
+            quantity: 3,
+            unitPrice: 40000,
+          },
+          { productId: null, description: "Phí giao hàng", quantity: 1, unitPrice: 500 },
+        ],
+      },
     ]);
     expect(listPaidInvoicesSince).toHaveBeenCalledWith(new Date(since), PAID_INVOICES_ANALYTICS_CAP + 1);
   });
@@ -107,6 +166,26 @@ describe("GET /internal/analytics/paid-invoices", () => {
   it("answers 422 analytics_range_too_large for one invoice over the cap, never a cut-short list", async () => {
     const row = stored[0] as StoredInvoice;
     stored = Array.from({ length: PAID_INVOICES_ANALYTICS_CAP + 1 }, () => row);
+
+    const response = await fetch(`${url}/internal/analytics/paid-invoices?since=${since}`, {
+      headers: { "x-internal-service-secret": serviceSecret },
+    });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ status: 422, code: "analytics_range_too_large" });
+  });
+
+  it("answers 422 analytics_range_too_large for more invoice lines than the cap, never a cut-short list", async () => {
+    const line = (stored[0] as StoredInvoice).lines[0] as StoredInvoice["lines"][number];
+    stored = [
+      {
+        orderId,
+        prescriptionId: null,
+        amount: "45000.00",
+        createdAt: new Date("2026-10-01T00:00:00.000Z"),
+        lines: Array.from({ length: PAID_INVOICE_LINES_ANALYTICS_CAP + 1 }, () => line),
+      },
+    ];
 
     const response = await fetch(`${url}/internal/analytics/paid-invoices?since=${since}`, {
       headers: { "x-internal-service-secret": serviceSecret },
