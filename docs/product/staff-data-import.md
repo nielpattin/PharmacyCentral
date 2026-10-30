@@ -15,10 +15,10 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
 
 ## Users and entry points
 
-- `[standard]` Platform Admin: all five pages. Pharmacy Manager: the four catalog pages (Products and prices, Sites, Storage locations, Suppliers). Warehouse Staff: **Stock** only. Pharmacist and customers: no import page. Gates are in [Rules and designs](#rules-and-designs).
+- `[standard]` Pharmacy Manager: the four catalog pages (Products and prices, Sites, Storage locations, Suppliers). Warehouse Staff: **Stock** only. Pharmacist and customers: no import page. Platform Admin: none of the five pages, and every import write is refused (BR-AUTH-010). Gates are in [Rules and designs](#rules-and-designs).
 - `[observed]` Entry: the **Data import** group in the staff-web sidebar (`apps/staff-web/src/App.tsx`), one item per dataset.
 - `[standard]` Signed-in staff only. A customer has no staff role (BR-AUTH-006). A session that ends mid-page follows D6: a visible notice, then sign-in, then return to the page.
-- `[standard]` Every row must name sites the actor is assigned to (BR-AUTH-004); Platform Admin is exempt.
+- `[standard]` Every row must name sites the actor is assigned to (BR-AUTH-004).
 
 ## User stories and acceptance criteria
 
@@ -59,7 +59,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
 
 - Source: `[observed]` 2026-10-26; targets `[standard]`.
 - Accepted when:
-  - Only Platform Admin and Warehouse Staff see **Stock** and may import it.
+  - Only Warehouse Staff see **Stock** and may import it; Platform Admin has no import page.
   - The template `opening-balances.csv` has the 11 columns of `datasets.openingBalances.columns`.
   - `quantityOnHand` is a whole number greater than 0 in the base unit. Zero, decimals and negatives refuse the row. (gap G13)
   - `expiryDate` is after today (Asia/Ho_Chi_Minh). An expired batch is refused (BR-QUALITY-004). (gap G13)
@@ -146,7 +146,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
 
 | # | Question | Decision | Why |
 | --- | --- | --- | --- |
-| 1 | Is Pharmacist meant to import stock? Why is Stock open to Warehouse Staff and not the other four pages? | Pharmacist has no import page. Stock is for Platform Admin and Warehouse Staff. Pharmacy Manager imports the four catalog pages only. [standard] | D2: Pharmacist works at the counter and reads stock; stock is warehouse work, and BR-AUTH-002 already puts inventory writes under Warehouse Staff. Owner may change who writes stock. |
+| 1 | Is Pharmacist meant to import stock? Why is Stock open to Warehouse Staff and not the other four pages? | Pharmacist has no import page. Stock is for Warehouse Staff. Pharmacy Manager imports the four catalog pages only. Platform Admin imports nothing (BR-AUTH-010). [standard] | D2: Pharmacist works at the counter and reads stock; stock is warehouse work, and BR-AUTH-002 already puts inventory writes under Warehouse Staff. Owner may change who writes stock. |
 | 2 | Why a separate screen per dataset rather than one wizard? | Keep one page per dataset. [standard] | Each dataset has its own key, template and place in the order sites, locations, suppliers, products, stock. One wizard would hide that order. |
 | 3 | Is a server validate-only call wanted? | Yes. The same endpoint with `dryRun: true` runs every check and writes nothing. **Import now** validates, then confirms, then commits in one transaction. [standard] | D11: preview, then commit. The browser cannot test uniqueness, references or site scope. Gap G4. |
 | 4 | Should conflicts carry row numbers in an `errors` array? | Yes. Every refusal, 400 or 409, carries `errors` with a `path` such as `products.3.sku`, and the page shows the row. [standard] | D11. A 409 that names no row sends staff searching the file. Gaps G5, G12. |
@@ -160,7 +160,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
 | 12 | Should a duplicate key within one file be refused? | Yes. The whole file is refused and both row numbers are named. [standard] | Last-write-wins hides a typo in a supplier file. Gap G12. |
 | 13 | What are the rules for stock quantity, expiry and an existing batch? | Quantity: a whole number greater than 0 in the base unit. Expiry: after today (Asia/Ho_Chi_Minh). One expiry and one quality status per batch; a differing row is refused. [standard] | D12; BR-QUALITY-004 (expired stock is never sold); BR-INV-001 (no zero movement). Gap G13. |
 | 14 | What quality does opening stock get, and when is opening allowed? | A blank quality is `PendingQc`; stock is sellable only after release under the batch-quality rule (D2). A location with any stock movement takes no opening rows. The owner may change the default. [standard] | BR-RECV-008 makes new batches wait for QC. BR-INV-012 is extended from the batch to the location, so "opening" means before first use. Gap G14. |
-| 15 | Who may import rows at which sites? | Every row must name a site the actor is assigned to. Platform Admin is exempt. [standard] | D3 and BR-AUTH-004. Gap G15. |
+| 15 | Who may import rows at which sites? | Every row must name a site the actor is assigned to. [standard] | D3 and BR-AUTH-004. Gap G15. |
 | 16 | What encoding is accepted? | UTF-8 only; a byte-order mark is accepted. Any other file is refused with a Vietnamese message that says to save as "CSV UTF-8". [standard] | Excel in Vietnamese locales often saves Windows-1258. Silent decoding corrupts diacritics in names. Gap G16. |
 | 17 | What is the file size limit? | 25 MB, refused in the browser before upload. [standard] | The server limit, checked before the upload. Gap G17. |
 | 18 | What does a failure of another service look like? | 503 with `code: "upstream_unavailable"`, a Vietnamese message saying nothing was saved, and a retry. [standard] | A 409 says the file is wrong; an outage is not the file's fault. Gap G20. |

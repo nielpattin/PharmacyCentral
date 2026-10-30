@@ -12,7 +12,7 @@ model {
   branchManager -> pharmacyCentral.web.staffWeb "Approve replenishment and purchase orders, read the dashboards of the site" {
     technology "HTTPS"
   }
-  platformAdmin -> pharmacyCentral.web.staffWeb "Configure the AI integrations, manage the accounts and the site access" {
+  platformAdmin -> pharmacyCentral.web.staffWeb "Read every staff screen, configure the AI integrations, manage the accounts and the site access" {
     technology "HTTPS"
   }
 

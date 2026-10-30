@@ -96,7 +96,7 @@ Two seeds, kept separate. Demo credentials are documented in `docs/runbook.md` a
 pnpm run seed:default
 ```
 
-**B. Demo and reference dataset** (opt-in, development only). Run it after A. It loads the product images, sites, demo accounts (manager, pharmacist, warehouse staff, shoppers), warehouses, suppliers, products with their units, opening balances and search synonyms:
+**B. Demo and reference dataset** (opt-in, development only). Run it after A. It loads the product images, sites, demo accounts (two managers, pharmacist, warehouse staff, shoppers), warehouses, suppliers, products with their units, opening balances and search synonyms:
 
 ```bash
 # Fixtures live in data/. They are sample CSVs and a folder of product images. Needs the stack or `pnpm dev` running.

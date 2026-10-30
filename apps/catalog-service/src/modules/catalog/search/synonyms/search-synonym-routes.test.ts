@@ -141,7 +141,7 @@ describe("catalog search synonym routes", () => {
     return groupRefSchema.parse(created.json);
   };
 
-  const EDITORS: Actor[] = ["admin", "manager", "pharmacist"];
+  const EDITORS: Actor[] = ["manager", "pharmacist"];
   const REFUSED: Actor[] = ["warehouse", "customer"];
   const TERMS = ["tiêu chảy", "đi ngoài"];
 
@@ -176,7 +176,7 @@ describe("catalog search synonym routes", () => {
       for (const editor of EDITORS) {
         expect((await call("GET", BASE, editor)).status).toBe(200);
         const created = await createGroup(editor, TERMS);
-        // Platform Admin edits but never approves, so a Pharmacist or Pharmacy Manager reviews every edit.
+        // The editor never approves their own edit, so the other role reviews it.
         const reviewer = editor === "pharmacist" ? "manager" : "pharmacist";
         const edited = await call("PUT", `${BASE}/${created.id}`, editor, { terms: TERMS, version: 1 });
         expect(edited.status).toBe(200);
@@ -188,13 +188,20 @@ describe("catalog search synonym routes", () => {
       }
     });
 
-    it("refuses Platform Admin an approval with 403 role_forbidden, and leaves the group pending", async () => {
-      const created = await createGroup("admin", TERMS);
+    it("lets Platform Admin read the groups and refuses it every change with 403 role_forbidden", async () => {
+      const created = await createGroup("manager", TERMS);
 
-      const result = await call("POST", `${BASE}/${created.id}/approve`, "admin", { version: 1 });
-
-      expect(result.status).toBe(403);
-      expect(result.json).toMatchObject({ code: "role_forbidden", status: 403 });
+      expect((await call("GET", BASE, "admin")).status).toBe(200);
+      const attempts = [
+        call("POST", BASE, "admin", { terms: TERMS }),
+        call("PUT", `${BASE}/${created.id}`, "admin", { terms: TERMS, version: 1 }),
+        call("POST", `${BASE}/${created.id}/approve`, "admin", { version: 1 }),
+        call("DELETE", `${BASE}/${created.id}`, "admin"),
+      ];
+      for (const result of await Promise.all(attempts)) {
+        expect(result.status).toBe(403);
+        expect(result.json).toMatchObject({ code: "role_forbidden", status: 403 });
+      }
       const listed = (await call("GET", BASE, "manager")).json as { items: Array<{ id: string; status: string }> };
       expect(listed.items.find((group) => group.id === created.id)?.status).toBe("pending");
     });

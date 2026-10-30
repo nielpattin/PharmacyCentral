@@ -48,7 +48,7 @@ While an account must change its password, the edge refuses every route except t
 
 An id that is not an employee account answers `404 employee_not_found`. Every change is audited with the administrator as actor.
 
-- `GET /api/customers/lookup?q=` searches customer accounts for the counter's prescription linking. Only a `Pharmacist` or `Platform Admin` session may call it. It returns at most five customer accounts, and a shopper gets `403`.
+- `GET /api/customers/lookup?q=` searches customer accounts for the counter's prescription linking. It is a Pharmacist's route; Platform Admin reads it like every staff route (BR-AUTH-010). Any other staff role gets `403`, and so does a shopper.
 
 `GET /internal/customers/{id}` and `POST /internal/customers/batch` (`{ "ids" }`, up to 200, answers `{ "customers" }`) are served by `identity-service` for service-to-service lookups only. They require the system actor, and no gateway routes them. sales-service calls the batch route to add customer names and phones to staff order lists.
 
@@ -58,9 +58,9 @@ Problem bodies carry a `code`. A role refusal by the edge is a bare `403` with n
 
 | Code | Status | Meaning |
 | --- | --- | --- |
-| `role_forbidden` | 403 | The caller's roles do not allow the action, or Platform Admin meets one of its exclusions (BR-AUTH-010). |
+| `role_forbidden` | 403 | The caller's roles do not allow the action, or the caller is Platform Admin and the write is not one its allow-list names: users, roles and site access, audit, AI integrations, the System page, creating or deleting a site, and reassigning an action plan (BR-AUTH-010). |
 | `site_access_denied` | 403 | The record belongs to a site outside the caller's sites. |
-| `self_approval_forbidden` | 403 | The approver created, counted or submitted the record. Applies to Platform Admin too (BR-AUTH-009). |
+| `self_approval_forbidden` | 403 | The approver created, counted or submitted the record. Applies to every role (BR-AUTH-009). |
 | `password_change_required` | 403 | The account must change its password before it does anything else. |
 | `self_change_forbidden` | 403 | An administrator acted on their own account. |
 | `employee_required` | 403 | A customer account signed in at staff sign-in. |
@@ -186,7 +186,7 @@ A consultation whose site cannot be verified answers `503 catalog_unavailable`, 
 - `POST /api/inventory/replenishment/{id}/approve`, `reject`, `cancel`, or `fulfill`
 - `POST /api/inventory/imports/opening-balances`
 
-Role gates on these routes are the rules in [business-rules.md](business-rules.md#4-quy-t%E1%BA%AFc-role-v%C3%A0-ph%C3%A2n-quy%E1%BB%81n) (BR-AUTH-002). Platform Admin passes every role rule except the counter exclusions and synonym approval (BR-AUTH-010). By group: Warehouse Staff propose adjustments and Pharmacy Manager approves or rejects them; Warehouse Staff create, ship and receive transfers, a Pharmacy Manager approves one, and either may cancel; Warehouse Staff create and count stocktakes, and a Pharmacy Manager posts one; a Pharmacist or Pharmacy Manager requests replenishment and Warehouse Staff approve, reject or fulfil it; Warehouse Staff create returns and a Pharmacy Manager approves or rejects them. Approval never goes to the record's creator, counter or requester (`403 self_approval_forbidden`).
+Role gates on these routes are the rules in [business-rules.md](business-rules.md#4-quy-t%E1%BA%AFc-role-v%C3%A0-ph%C3%A2n-quy%E1%BB%81n) (BR-AUTH-002). Platform Admin reads every one of them and writes none: a write on these routes answers `403 role_forbidden` (BR-AUTH-010). By group: Warehouse Staff propose adjustments and Pharmacy Manager approves or rejects them; Warehouse Staff create, ship and receive transfers, a Pharmacy Manager approves one, and either may cancel; Warehouse Staff create and count stocktakes, and a Pharmacy Manager posts one; a Pharmacist or Pharmacy Manager requests replenishment and Warehouse Staff approve, reject or fulfil it; Warehouse Staff create returns and a Pharmacy Manager approves or rejects them. Approval never goes to the record's creator, counter or requester (`403 self_approval_forbidden`).
 
 Inventory lists page by cursor where they take `limit` and `cursor`. The next page's cursor travels in the `X-Next-Cursor` header, present only while another page follows. A malformed cursor answers `400 invalid_cursor`. An out-of-range `limit` is clamped to its range; a non-numeric one takes the default.
 
@@ -209,7 +209,7 @@ Prescription creation reserves FEFO stock through `inventory-service`. A reserva
 
 Action plans (BR-PLAN-001, BR-PLAN-002) live in `inventory-service`. The system creates the plan of every alert and assigns its owner (the active Pharmacist at the plan's site with the fewest `open` or `in_progress` plans, ties by name; the site's active Pharmacy Manager when the site has no Pharmacist; due 7 days after creation): a sweep at boot and every 15 minutes, with no route to call it, so a browser cannot trigger or skip it. It skips an alert that already has a live plan or a plan done in the last 7 days. The routes below read plans, let a manager create one by hand, and let the plan's owner move its status (`status` only) or a manager reassign it (`ownerId` only); any other field in a `PATCH`, or a manager sending `status`, is `403`. `GET /api/inventory/action-plans` takes `ownerId`, `status` (`open`, `in_progress`, `done`), `sourceType` (`replenishment`, `expiry`, `dead_stock`, `price_warning`), `siteId`, `q`, `limit` (default 100, at most 500) and `cursor`, and answers a plain array, newest first, with `X-Next-Cursor`. A Pharmacy Manager or Platform Admin reads the plans of their sites; any other employee reads only plans they own. `POST /api/inventory/action-plans` (Pharmacy Manager, Platform Admin; a Pharmacist is refused) takes `{ sourceType, sourceRef, title, detail?, siteId?, productId?, ownerId, dueDate }` and answers `201` with the plan; an owner who is not an active employee answers `422 owner_not_found`, one who does not hold the site `422 owner_not_at_site`, a due date in the past `400`, and a second live plan for the same `sourceType` and `sourceRef` `409 plan_exists` with `planId`. `PATCH /api/inventory/action-plans/{id}` takes any of `status`, `ownerId`, `dueDate`, `title`, `detail`: a manager changes every field, the plan's owner `status` only (`403` otherwise). A plan is `{ id, sourceType, sourceRef, title, detail, siteId, productId, ownerId, dueDate, status, createdBy, createdAt, updatedAt, completedAt }`.
 
-`POST /api/inventory/imports/opening-balances` takes `{ "schemaVersion", "balances" }` (at least one row, up to 25 MB) and is the import behind the staff-web Data import screen. The committed sample CSVs are in `data/import-samples/`.
+`POST /api/inventory/imports/opening-balances` (Warehouse Staff only) takes `{ "schemaVersion", "balances" }` (at least one row, up to 25 MB) and is the import behind the staff-web Data import screen. The committed sample CSVs are in `data/import-samples/`.
 
 ## Procurement
 
@@ -221,8 +221,8 @@ Action plans (BR-PLAN-001, BR-PLAN-002) live in `inventory-service`. The system 
 - `GET /api/procurement/goods-receipts/count`
 - `POST /api/procurement/goods-receipts`
 - `POST /api/procurement/goods-receipts` takes, on each line, an optional `unitCost` (VND per base unit received before VAT, from 0, at most 2 decimals, at most 1 000 000 000; omitted or `null` when unknown). Every receipt answer returns it as `unitCost: number | null` (BR-PROC-009).
-- `GET /api/procurement/replenishment-suggestions`- `GET /api/procurement/replenishment-suggestions` (Pharmacy Manager, Platform Admin) takes `siteId` (required), `windowDays` (default 30, 7 to 180), `coverDays` (14, 1 to 90), `safetyDays` (7, 0 to 60) and `defaultLeadTimeDays` (7, 1 to 90). It answers `{ siteId, params, generatedAt, suggestions: [{ productId, supplierId (null when unknown), dailyVelocity, dispensedQuantity, onHand, reserved, available, inboundQuantity, minimumStock, leadTimeDays, leadTimeSource (`history` or `default`), sampleCount, reorderPoint, targetStock, suggestedQuantity, daysOfCover }] }` (BR-PROC-007).
-- `POST /api/procurement/replenishment-suggestions/draft-orders` takes `{ siteId, orders: [{ supplierId, lines: [{ productId, orderedQuantity }], notes? }] }`, one entry per supplier, whole-number quantities. It creates one `Draft` purchase order per entry in a single transaction and answers `201 { purchaseOrders }`; any failed reference creates nothing (BR-PROC-008).
+- `GET /api/procurement/replenishment-suggestions` (Pharmacy Manager and Platform Admin read it) takes `siteId` (required), `windowDays` (default 30, 7 to 180), `coverDays` (14, 1 to 90), `safetyDays` (7, 0 to 60) and `defaultLeadTimeDays` (7, 1 to 90). It answers `{ siteId, params, generatedAt, suggestions: [{ productId, supplierId (null when unknown), dailyVelocity, dispensedQuantity, onHand, reserved, available, inboundQuantity, minimumStock, leadTimeDays, leadTimeSource (`history` or `default`), sampleCount, reorderPoint, targetStock, suggestedQuantity, daysOfCover }] }` (BR-PROC-007).
+- `POST /api/procurement/replenishment-suggestions/draft-orders` (Pharmacy Manager only) takes `{ siteId, orders: [{ supplierId, lines: [{ productId, orderedQuantity }], notes? }] }`, one entry per supplier, whole-number quantities. It creates one `Draft` purchase order per entry in a single transaction and answers `201 { purchaseOrders }`; any failed reference creates nothing (BR-PROC-008).
 
 Procurement routes check that the supplier, site, products, and storage location exist in `catalog-service` before a receipt is written.
 
@@ -230,7 +230,7 @@ Procurement routes check that the supplier, site, products, and storage location
 
 ## Catalog administration
 
-Public reads need no session: `/api/products` (except `search-synonyms` and the AI credential paths), `/api/stores`, `/api/availability`, `/api/pricing/active`, and `GET /api/pricing/prices?status=Published`. Every other read under `/sites`, `/storage-locations`, `/suppliers` and `/pricing` needs a signed-in employee. Writes are staff actions: a Pharmacy Manager writes them, and Platform Admin alone creates and deletes sites (any other caller gets `403`). A single-site employee sees only the storage locations of their own site. An update that would move a storage location to another site answers `400 location_site_fixed`; deleting a site or product that is still referenced answers `409 in_use`.
+Public reads need no session: `/api/products` (except `search-synonyms` and the AI credential paths), `/api/stores`, `/api/availability`, `/api/pricing/active`, and `GET /api/pricing/prices?status=Published`. Every other read under `/sites`, `/storage-locations`, `/suppliers` and `/pricing` needs a signed-in employee. Writes are staff actions: a Pharmacy Manager writes them, and Platform Admin alone creates and deletes sites (any other caller gets `403`; Platform Admin editing an existing site, or any other write on these routes, also gets `403 role_forbidden`). A single-site employee sees only the storage locations of their own site. An update that would move a storage location to another site answers `400 location_site_fixed`; deleting a site or product that is still referenced answers `409 in_use`.
 
 - `GET|POST /api/sites`, `GET|PUT|DELETE /api/sites/{id}`
 - `GET|POST /api/storage-locations`, `GET|PUT|DELETE /api/storage-locations/{id}`
@@ -263,7 +263,7 @@ Staff maintain groups of search synonyms, such as a symptom and the words shoppe
 
 A group carries `id`, `terms`, `version`, `submittedBy`, `submittedAt`, and `status`. An approved group also carries `approvedBy` and `approvedAt`. The version starts at 1 and rises by one on every edit and approval.
 
-Pharmacist and Pharmacy Manager may use these routes, and Platform Admin may too, except to approve a group (`403 role_forbidden`). Any other signed-in account gets `403`, and a request with no identity gets `401`.
+A Pharmacist or Pharmacy Manager proposes, edits, approves and deletes a group; Platform Admin only reads the list, and a write from it answers `403 role_forbidden`. Any other signed-in account gets `403`, and a request with no identity gets `401`.
 
 Review works as a four-eyes process. A creator or editor submits the group, and the group waits in `pending`. Only approved groups reach live search. An edit to an approved group returns it to `pending`, so it leaves live search until someone else approves it. The approver must differ from the last person who submitted the group, or the answer is `403 self_approval_forbidden`. Deleting a group takes effect at once, without review.
 
@@ -282,7 +282,7 @@ After an approval, an edit of an approved group, or a delete of an approved grou
 - `GET /api/payments/{id}/invoice`
 - `POST /api/payments/{id}/cash-paid` (Pharmacist only)
 - `POST /api/payments/{id}/confirm-counter` (Pharmacist only)
-- `POST /api/payments/{id}/refund` takes `{ "reason" }` (1 to 500 characters). A counter invoice is refunded by a Pharmacist only; an online-order invoice by a Pharmacy Manager or Platform Admin. The wrong role answers `403 role_forbidden`.
+- `POST /api/payments/{id}/refund` takes `{ "reason" }` (1 to 500 characters). A counter invoice is refunded by a Pharmacist only; an online-order invoice by a Pharmacy Manager only. The wrong role answers `403 role_forbidden`.
 - `GET /api/payments/{id}/reconciliation`
 - `POST /api/payments/sepay/webhook`
 
@@ -355,7 +355,7 @@ Both metric reads answer `400 invalid_request` for an unknown service or an unsu
 
 `operations-query-service` also serves `GET /api/operations/dashboard`, `GET /api/operations/audit`, and `GET /api/operations/finance`, which answer the same data as the dashboard, audit, and finance routes above.
 
-Dashboard routes are for Pharmacy Manager and Warehouse Staff, finance and reports for Pharmacy Manager, and audit for Platform Admin (BR-AUTH-002). These endpoints read only `operations-query-service` projections. Projection lag is observable and does not change write-model truth.
+Dashboard routes are for Pharmacy Manager and Warehouse Staff, finance and reports for Pharmacy Manager, and audit for Platform Admin; Platform Admin reads all of them too (BR-AUTH-002). These endpoints read only `operations-query-service` projections. Projection lag is observable and does not change write-model truth.
 
 `GET /api/audit/logs` and `GET /api/reports` answer one keyset page each. Both list newest first: audit events by `(occurredAt, eventId)`, reports by `(occurredAt, id)`. Each takes `limit` (default 100, clamped to 500) and `cursor`, and the body is the plain array of that page. When another row follows, `X-Next-Cursor` carries the cursor; send it back as `cursor` with the same other parameters. The last page has no header. A malformed or tampered cursor answers `400` with `code: "invalid_cursor"`.
 

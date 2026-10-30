@@ -857,7 +857,7 @@ export class DrizzleStoreRepository {
       throw new BusinessRuleError("Only Draft prices can be published");
     if (action === "archive" && current[0].status === "Archived")
       throw new BusinessRuleError("Archived prices cannot be archived again");
-    // Separation of duties: the person who created the draft never publishes it, Platform Admin included.
+    // Separation of duties: the person who created the draft never publishes it.
     if (action === "publish" && isSelfApproval(actorId, current[0].createdBy))
       throw new RefusalError(REFUSALS.priceSelfApproval);
     if (action === "publish") {

@@ -19,7 +19,7 @@ Signed-in staff only. Sign-in and the sidebar are in the [shell spec](staff-shel
 | Section | Route | Who may open it (target) | Code today |
 | --- | --- | --- | --- |
 | Dashboard | `/` | Platform Admin, Pharmacy Manager, Warehouse Staff | Same in `sectionRoles` (`permissions/section-access.ts`); the edge and the API admit the same roles. |
-| Counter overview | `/pharmacist-overview` | Pharmacist acts; Pharmacy Manager and Platform Admin read only | Pharmacist and Platform Admin (`sectionRoles`); Pharmacy Manager has no entry (G25). The attention block is not rendered (G14). |
+| Counter overview | `/pharmacist-overview` | Pharmacist acts; Pharmacy Manager reads only; no entry for the other roles | Pharmacist only (`sectionRoles`); Pharmacy Manager has no entry (G25). Platform Admin has no entry either, as BR-AUTH-010 requires. The attention block is not rendered (G14). |
 | Reporting | `/reporting` | Platform Admin and Pharmacy Manager (all types); Warehouse Staff (`inventory` types) | Platform Admin and Pharmacy Manager (`sectionRoles`, `REPORT_ROLES`). Warehouse Staff are refused (G18). |
 
 - `[observed]` A Pharmacist has no Dashboard or Reporting entry. A direct URL to a section the role may not open falls back to the first visible section (`activeSection`, `App.tsx`). A Pharmacist lands on Counter overview after sign-in; managers and Warehouse Staff land on Dashboard. The sidebar label is "Pharmacist overview" (`App.tsx`), shown in Vietnamese as "Tổng quan quầy" (`i18n/shell.ts`).
@@ -70,14 +70,14 @@ Signed-in staff only. Sign-in and the sidebar are in the [shell spec](staff-shel
   - It has no approve, fulfil or cancel control. A Pharmacist raises requests on Replenishment. A Pharmacy Manager sees the same block, read only.
 - Rules: [BR-RX-000](../business-rules.md), BR-AUTH-004.
 
-### US6. As a Pharmacist, I confirm cash and refund counter payments; a Pharmacy Manager and Platform Admin read the list only
+### US6. As a Pharmacist, I confirm cash and refund counter payments; a Pharmacy Manager reads the list only
 
 - Source: `[observed]` the tab and its filters; `[standard]` the action split.
 - Accepted when:
   - `/pharmacist-overview` opens the tab "Giao dịch tại quầy" by default; the tab and the search are in the URL.
   - The list shows counter invoices only; online-order invoices are left out on every page. The search "Tìm theo số hóa đơn" filters by invoice number.
-  - "Confirm cash" and "Refund" appear only for a Pharmacist and only in states that allow them (`canConfirmCash`, `canRefund`). Platform Admin sees no action buttons.
-  - A Pharmacy Manager or Platform Admin sees "Chỉ xem: xuất thuốc, thanh toán và trả lời tư vấn cần vai trò Dược sĩ." above the tabs, on every tab (gap G25 for Pharmacy Manager).
+  - "Confirm cash" and "Refund" appear only for a Pharmacist and only in states that allow them (`canConfirmCash`, `canRefund`).
+  - A Pharmacy Manager sees "Chỉ xem: xuất thuốc, thanh toán và trả lời tư vấn cần vai trò Dược sĩ." above the tabs, on every tab (gap G25). Platform Admin does not open this page (BR-AUTH-010).
 - Rules: [BR-RX-000](../business-rules.md), BR-AUTH-004.
 
 ### US7. As a Pharmacy Manager, Platform Admin or Warehouse Staff member, I review operational event rows by type for my sites
@@ -161,14 +161,14 @@ Rows 1 to 11 answer the questions of the earlier draft. Rows 12 to 21 settle beh
 | 11 | Should the data-integrity rule be in business-rules.md? | `[standard]` Yes. Add it to section 17 with an id to be assigned: admin screens show real data, and a failed or unanswered figure is shown as failed. | A rule kept in team notes cannot be cited or tested. |
 | 12 | (new) Low-stock definition | `[standard]` A batch balance with 0 < available ≤ 10. Nothing available is out of stock, not low stock. Owner may change: the threshold 10 is stock policy. | Balances stay at zero after every dispense and would inflate the tile. Out of stock shows as "Hết hàng" on the storefront. |
 | 13 | (new) Expiring-batch definition | `[standard]` Batches holding on-hand stock that expire on or before today + 30 days, including stock already expired. Owner may change: the 30-day window is stock policy. | Expired stock is not sellable (inventory `site-availability.ts`) and needs action, so it is counted. |
-| 14 | (new) Recent activity by role; data time | `[standard]` Warehouse Staff see inventory and procurement actions. Platform Admin and Pharmacy Manager see all actions at their sites. The card shows "Dữ liệu tới HH:mm". | Least privilege. A lag value shows whether the activity is current, not only a status word. |
+| 14 | (new) Recent activity by role; data time | `[standard]` Warehouse Staff see inventory and procurement actions. Platform Admin sees every action at every site; a Pharmacy Manager sees all actions at their sites. The card shows "Dữ liệu tới HH:mm". | Least privilege. A lag value shows whether the activity is current, not only a status word. |
 | 15 | (new) Refresh | `[standard]` Refresh every 60 seconds while visible; "Làm mới" beside "Cập nhật lúc HH:mm". | Ops dashboards refresh on a timer and let the user force it (common practice). |
-| 16 | (new) Who confirms cash and refunds at the counter? | `[standard]` Pharmacist only. Platform Admin and Pharmacy Manager read the list. Owner may change: who may take cash is a policy choice. | Segregation of duties: the person who runs the platform does not handle the cash drawer. |
+| 16 | (new) Who confirms cash and refunds at the counter? | `[standard]` Pharmacist only. A Pharmacy Manager reads the list; Platform Admin does not open the Counter overview (BR-AUTH-010). Owner may change: who may take cash is a policy choice. | Segregation of duties: the person who runs the platform does not handle the cash drawer. |
 | 17 | (new) Site scope of reports | `[standard]` Each report row carries the site of its event. Site-scoped employees see their sites' rows; rows with no site are for Platform Admin only. | Site scope (BR-AUTH-004) applies to every figure, reports included. |
 | 18 | (new) Product count | `[standard]` Active products only, the same filter as the product list. | Products are deactivated, not deleted; the count matches what staff and customers see. |
 | 19 | (new) Which roles may call the APIs? | `[standard]` The dashboard and report APIs admit only the roles their screens admit, enforced at the edge. | Hiding a menu is not a control (least privilege). |
 | 20 | (new) Name of the page | `[standard]` "Counter overview" (Vietnamese "Tổng quan quầy") everywhere. The route `/pharmacist-overview` stays, so bookmarks keep working. | Pharmacy Managers read this page too, so "Pharmacist" is the wrong name. |
-| 21 | (new) Report families for Warehouse Staff | `[standard]` `inventory.*` rows only. Platform Admin and Pharmacy Manager read every family at their sites. | Warehouse Staff have no sales or payment duty (least privilege). |
+| 21 | (new) Report families for Warehouse Staff | `[standard]` `inventory.*` rows only. Platform Admin reads every family at every site; a Pharmacy Manager at their sites. | Warehouse Staff have no sales or payment duty (least privilege). |
 
 ## Gaps against the code (2026-10-26)
 
@@ -193,4 +193,4 @@ Rows 1 to 11 answer the questions of the earlier draft. Rows 12 to 21 settle beh
 | G22 | The data-integrity rule is in business-rules.md section 17 (decision 11). | Section 17 has no rule that admin screens show real data or that a failed figure is shown as failed. | `docs/business-rules.md` section 17 |
 | G23 | The API guide states that the dashboard figures are the target contract, with HTTP reads marked as a deviation (decision 7). | `docs/api-guide.md`, "Query projections", says these endpoints "read only `operations-query-service` projections" with no deviation note. `docs/architecture.md` already calls the HTTP reads a deviation. | `docs/api-guide.md` (query projections) |
 | G24 | Figures come from operations-query's own projections (ADR 0003; design 0001). | `loadLiveOperations` and `loadCounts` call the catalog, inventory and sales services over HTTP. | `apps/operations-query-service/src/modules/operations-repository.ts` |
-| G25 | Pharmacy Manager reads the Counter overview (role table; US6). | `sectionRoles.pharmacistOverview` lists Platform Admin and Pharmacist only, so Pharmacy Manager is refused the page. The shell role table gives Pharmacy Manager "—" for Pharmacist overview, which conflicts with this row. | `apps/staff-web/src/permissions/section-access.ts`; [shell spec](staff-shell-sign-in-and-navigation.md) role table. |
+| G25 | Pharmacy Manager reads the Counter overview (US6). | `sectionRoles.pharmacistOverview` lists Pharmacist only, so Pharmacy Manager is refused the page. The shell role table gives Pharmacy Manager "—" for Pharmacist overview, which conflicts with this row. Platform Admin is refused the page too, as BR-AUTH-010 requires. | `apps/staff-web/src/permissions/section-access.ts`; [shell spec](staff-shell-sign-in-and-navigation.md) role table. |

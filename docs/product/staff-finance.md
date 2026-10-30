@@ -11,7 +11,7 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 
 - `[standard]` Finance is where a manager reads the money the pharmacy took, reverses a sale when it must be undone, with a reason on record, and sees the value of the stock on hand. It does not post to an accounting ledger ([BR-FIN-001](../business-rules.md)).
 - `[observed]` Invoices and their actions come from payment-service. Summary and report rows come from operations-query-service.
-- `[standard]` Cash is taken and confirmed at the counter or at handover, not here (Decisions 6 and 21). Finance is the read-and-refund view of the Pharmacy Manager and the Platform Admin.
+- `[standard]` Cash is taken and confirmed at the counter or at handover, not here (Decisions 6 and 21). Finance is the read-and-refund view of the Pharmacy Manager; the Platform Admin reads it and takes no action (BR-AUTH-010).
 
 ## Users and entry points
 
@@ -22,7 +22,7 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 | Tab | Shown to | Reads | Acts |
 | --- | --- | --- | --- |
 | Summary | Platform Admin, Pharmacy Manager | Headline figures, inventory activity, inventory valuation | Export of the valuation table |
-| Invoices | Platform Admin, Pharmacy Manager | Invoice list and invoice detail | Refund a `Paid` invoice (Pharmacy Manager, Platform Admin) |
+| Invoices | Platform Admin, Pharmacy Manager | Invoice list and invoice detail | Refund a `Paid` invoice (Pharmacy Manager only) |
 | Reports | Platform Admin, Pharmacy Manager (Warehouse Staff: gap G10) | Report rows | None |
 
 - `[standard]` A Pharmacist has no Finance entry. Counter invoices, cash and counter refunds are in Prescriptions, Counter transactions ([staff-prescriptions-and-counter.md](staff-prescriptions-and-counter.md)).
@@ -39,11 +39,11 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
   - The Customer column shows the short id, not a name (Decision 14).
 - Rules: [BR-PAY-009](../business-rules.md), [BR-AUTH-004](../business-rules.md).
 
-### US2. As a Pharmacy Manager or Platform Admin, I refund a paid invoice with a reason, so that the sale is reversed in full and the reason is on record
+### US2. As a Pharmacy Manager, I refund a paid online-order invoice with a reason, so that the sale is reversed in full and the reason is on record
 
 - Source: `[standard]` Decisions 6, 7 and 13.
 - Accepted when:
-  - A `Paid` row shows **Hoàn tiền** to the Pharmacy Manager and the Platform Admin (gap G1). A Pharmacist sees no refund control on this section.
+  - A `Paid` row shows **Hoàn tiền** to a Pharmacy Manager, never to a Platform Admin (gap G1). A Pharmacist sees no refund control on this section.
   - The dialog "Hoàn tiền thanh toán" has an empty, required field "Lý do hoàn tiền" with an "n/500" counter. **Hoàn tiền** stays disabled while the reason is empty or longer than 500 characters (gap G4).
   - A confirmed refund calls `POST /api/payments/{id}/refund` with `{ "reason" }`. The toast "Đã hoàn tiền." shows, and the invoice list and summary refresh.
   - A refused refund shows the server's Vietnamese message and keeps the dialog open with the reason typed.
@@ -121,7 +121,7 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 ## Rules and designs
 
 - Business rules: [BR-PAY-002](../business-rules.md) (cash confirmation is a Pharmacist action), [BR-PAY-003](../business-rules.md) (refund: reason, whole invoice), [BR-PAY-004](../business-rules.md) (VND), [BR-PAY-007](../business-rules.md) (reconciliation states), [BR-PAY-009](../business-rules.md) (invoice read), [BR-PAY-010](../business-rules.md) (outbox events), [BR-ORD-010](../business-rules.md) (refund of unshipped orders), [BR-AUTH-002](../business-rules.md) and [BR-AUTH-004](../business-rules.md) (role matrix, site scope), [BR-AUDIT-004](../business-rules.md) (full audit log is Platform Admin only), [BR-FIN-001](../business-rules.md) to [BR-FIN-003](../business-rules.md).
-- Role gates: `apps/staff-web/src/permissions/staff-permissions.ts` (`payment.confirmCash`, `payment.refund`, `payment.invoices.view`, `finance.summary.view`) and `deploy/aws/lambda/policy.mjs` (`employeeRoleRules`, `platformAdminExcludedRoutes`, `siteScopedListPrefixes`).
+- Role gates: `apps/staff-web/src/permissions/staff-permissions.ts` (`payment.confirmCash`, `payment.refund`, `payment.invoices.view`, `finance.summary.view`) and `deploy/aws/lambda/policy.mjs` (`employeeRoleRules`, `siteScopedListPrefixes`).
 - [ADR 0003](../adr/0003-transactional-outbox-and-integration-events.md): payment events leave through the outbox; report rows are a projection of those events.
 - [ADR 0004](../adr/0004-server-authoritative-pricing-stock-and-fees.md): prices and stock are the server's; valuation uses the catalog's published price.
 - [User guide, Finance](../user-guide.md#finance) and [API guide](../api-guide.md) (Payments; Finance and reports).
@@ -135,11 +135,11 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 | 3 | SePay: should staff see the payment code and webhook status? | Yes, per invoice: payment code, transfer content for a `Pending` QR invoice, and provider transactions (reference, amount, time, outcome). Raw webhook bodies and signatures are never shown. The QR image stays at the counter. `[standard]` | Finance has to match money to invoices. Signatures and raw bodies are security data. Common practice. |
 | 4 | The refund reason has no shown limit. | The field shows "n/500". Empty or over 500 blocks submit. The server limit (1 to 500) stays. `[standard]` | BR-PAY-003 range. Counter and payment rule: the limit is shown in the form. |
 | 5 | Pharmacist access: the Pharmacist cannot open Finance, yet cash and refunds are Pharmacist actions. | The Pharmacist has no Finance section. Counter cash and counter refunds stay in Counter transactions. `[standard]` | Whoever takes the cash does not review the totals (segregation of duties). Owner may change (role policy). |
-| 6 | Who confirms cash and refunds? The user guide says Platform Admin too. | Cash: Pharmacist only, in Counter transactions. Refund: Pharmacy Manager and Platform Admin here, for any `Paid` invoice; a Pharmacist refunds counter invoices in Counter transactions. Platform Admin does not confirm cash. `[standard]` | Role definition; segregation of duties. Owner may change (refund policy). |
+| 6 | Who confirms cash and refunds? The user guide says Platform Admin too. | Cash: Pharmacist only, in Counter transactions. Refund: Pharmacy Manager here, for an online-order `Paid` invoice; a Pharmacist refunds counter invoices in Counter transactions. Platform Admin reads Finance and neither confirms cash nor refunds (BR-AUTH-010). `[standard]` | Role definition; segregation of duties. Owner may change (refund policy). |
 | 7 | The refund reason is pre-filled "Điều chỉnh vận hành" (counter: "Customer request"). | Start empty and required. No default. `[standard]` | A default is submitted without thought and weakens the reason on record. |
 | 8 | The user guide says "Choose **Run report**"; the field filters as you type. | Live filter, no button. Correct the user guide step and delete the unused string. `[standard]` | A server-paged list filtered by one field needs no second action. |
 | 9 | Are the unused `finance.*` strings in `i18n.ts` stale or used by another screen? | Stale. Delete them. `[standard]` | Nothing outside `i18n.ts` uses them. |
-| 10 | Is it intended that Platform Admin reads `/api/finance/summary` and the Summary tab? | Yes. `[standard]` | Role definition: Platform Admin holds all data. |
+| 10 | Is it intended that Platform Admin reads `/api/finance/summary` and the Summary tab? | Yes, read only. `[standard]` | BR-AUTH-010: Platform Admin reads every staff screen and writes nothing here. |
 | 11 | Does the invoice export cover all pages? | Every row of the current filter. The export loads the rest first and writes nothing if a load fails. Valuation exports all its rows. `[standard]` | A partial payment export misstates the totals. Fail visibly. |
 | 12 | Signed-out and session-expired states. | Handled by the shell, not this section. The shell ends the session visibly and returns the user afterwards. `[standard]` | The session rule applies to every page. |
 | 13 | Refund of an order already handed over. | Allowed with a reason. The refund puts no stock back. Returned goods go through Inventory returns. `[standard]` | BR-ORD-010 covers only unshipped orders. Medicine handed over cannot go back on the shelf `[inference]`. |
@@ -156,8 +156,8 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 
 | ID | The spec requires | The code does today | Where |
 | --- | --- | --- | --- |
-| G1 | Pharmacy Manager and Platform Admin refund a `Paid` invoice (Decision 6). | The edge and the **Refund** button admit Pharmacy Manager and Platform Admin on every `Paid` row. `refundRefusal` refuses both for a counter invoice (no order): 403, Pharmacist only, so **Refund** on a counter row fails. BR-PAY-003 still says Pharmacist. | `apps/payment-service/src/modules/payment-access.ts` (`refundRefusal`); `invoices-tab.tsx`; `docs/business-rules.md` BR-PAY-003 |
-| G2 | No cash confirmation on Finance; Platform Admin does not confirm cash (Decision 6). | **Confirm cash** stays in `invoices-tab.tsx`, behind `payment.confirmCash` (Pharmacist only, Platform Admin excluded). The edge admits `confirm-counter` to Pharmacist only and refuses Platform Admin. No role that opens Finance passes the gate, so no row shows the button, but the code remains. The [user guide](../user-guide.md) still says Pharmacists and Platform Admins confirm cash on Invoices. | `invoices-tab.tsx`; `deploy/aws/lambda/policy.mjs` (`employeeRoleRules`, `platformAdminExcludedRoutes`); `docs/user-guide.md` Finance and Counter transactions |
+| G1 | A Pharmacy Manager refunds an online-order `Paid` invoice here (Decision 6). | The edge admits Pharmacist and Pharmacy Manager on the refund route, and `refundRefusal` admits only Pharmacy Manager for an online-order invoice, only Pharmacist for a counter invoice, so a Platform Admin is refused both. The **Refund** button shows to a Pharmacy Manager on every `Paid` row, so **Refund** on a counter row fails with "Chỉ Dược sĩ được hoàn tiền hóa đơn tại quầy." | `apps/payment-service/src/modules/payment-access.ts` (`refundRefusal`); `invoices-tab.tsx`; `docs/business-rules.md` BR-PAY-003 |
+| G2 | No cash confirmation on Finance; Platform Admin does not confirm cash (Decision 6). | **Confirm cash** stays in `invoices-tab.tsx`, behind `payment.confirmCash` (Pharmacist only). The edge admits `confirm-counter` to Pharmacist only. No role that opens Finance passes the gate, so no row shows the button, but the code remains. | `invoices-tab.tsx`; `deploy/aws/lambda/policy.mjs` (`employeeRoleRules`) |
 | G3 | Online cash on delivery is confirmed by a Pharmacist at handover (Decision 21). | No staff control does it. Finance is closed to the Pharmacist. Counter transactions leaves out order invoices (`isCounterInvoice`). The online orders screen is view-only and shows only the payment status. | `apps/staff-web/src/sections/orders-section.tsx`; `sections/sales/rules.ts`; `sections/prescriptions/counter-tab.tsx` |
 | G4 | Empty required refund reason with an "n/500" counter, no default (Decisions 4 and 7). | Pre-filled "Điều chỉnh vận hành" and label "Lý do hoàn tiền:"; no counter. The server enforces 1 to 500. The counter tab pre-fills "Customer request" (its spec owns that row). | `invoices-tab.tsx` (`refund`); `counter-tab.tsx` (`refund`); `payment-routes.ts` (refund schema) |
 | G5 | Invoice detail panel with reconciliation and provider transactions in the page (Decisions 2 and 3). | **Đối soát** opens `/api/payments/{id}/reconciliation` as raw JSON in a new tab. The record holds only expected amount, received amount and state. No detail view exists. | `invoices-tab.tsx`; `payment-routes.ts` (reconciliation route); `payment-repository.ts` (`reconciliationRecords`) |

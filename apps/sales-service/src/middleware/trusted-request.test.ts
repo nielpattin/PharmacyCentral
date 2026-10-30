@@ -290,6 +290,26 @@ describe("sales trusted request middleware", () => {
     expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
   });
 
+  it("lets Platform Admin read the order register and refuses it every order or counter write", async () => {
+    const { server, url } = await startServer(createApp());
+    activeServer = server;
+
+    const admin = signInternalIdentityContext(
+      createTestContext({ roles: ["Platform Admin"], siteIds: [] }),
+      identitySecret,
+    );
+    const headers = { "x-internal-identity-context": admin, "content-type": "application/json" };
+    const transition = await fetch(`${url}/orders/33333333-3333-4333-8333-333333333333/transition`, {
+      method: "POST",
+      headers,
+      body: "{}",
+    });
+    expect(transition.status).toBe(403);
+    expect(await transition.json()).toMatchObject({ code: "role_forbidden" });
+    const read = await fetch(`${url}/orders`, { headers });
+    expect(read.status).not.toBe(403);
+  });
+
   it("refuses Platform Admin a counter write, which only a Pharmacist may make", async () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;

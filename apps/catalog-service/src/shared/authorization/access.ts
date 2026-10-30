@@ -50,7 +50,7 @@ export const SITE_ACCESS_DENIED: Refusal = {
 
 /**
  * Verifies the signed identity context on this request and requires an employee. With `rule`, the employee must also
- * hold one of its roles. The verified actor is kept for the handler, so a route never trusts a client-sent header.
+ * hold one of its roles (Platform Admin on a read). The verified actor is kept for the handler, so a route never trusts a client-sent header.
  */
 export const requireEmployee =
   (identity: IdentityOptions, rule?: RoleRule): RequestHandler =>
@@ -63,7 +63,8 @@ export const requireEmployee =
     );
     if (!context) return refuse(response, SIGN_IN_REQUIRED);
     if (context.actorType !== "employee" || !context.actorId) return refuse(response, EMPLOYEE_REQUIRED);
-    if (rule && !holdsRole(context.roles, rule)) return refuse(response, ROLE_FORBIDDEN);
+    const isRead = request.method === "GET" || request.method === "HEAD";
+    if (rule && !holdsRole(context.roles, rule, isRead)) return refuse(response, ROLE_FORBIDDEN);
     const actor: StaffActor = { actorId: context.actorId, roles: context.roles, siteIds: context.siteIds };
     response.locals[STAFF_ACTOR] = actor;
     next();

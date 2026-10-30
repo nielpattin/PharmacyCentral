@@ -121,7 +121,9 @@ export const customerPaymentRequests = [
 // "WRITE" (every other method), or one or more method names. `match` is "exact" (the same segments), "prefix" (the
 // path or anything below it) or "child" (one segment below). A `*` segment matches any one non-empty segment, so
 // "/api/inventory/batches/*/quality" names one batch's quality route. The first matching rule decides, so a specific
-// rule is listed before the general one that covers it. Platform Admin passes every rule except `platformAdminExcludedRoutes`.
+// rule is listed before the general one that covers it. Platform Admin reads everything, but writes only where a rule
+// names it: users, roles and site access, audit, AI credentials, the System page, creating and deleting sites, and
+// reassigning an action plan. Every other write belongs to a Pharmacist, Pharmacy Manager or Warehouse Staff.
 export const employeeRoleRules = [
   // Platform Admin only.
   ...platformAdminPaths.map((path) => ({ methods: "*", path, match: "prefix", roles: [PLATFORM_ADMIN] })),
@@ -130,7 +132,7 @@ export const employeeRoleRules = [
   { methods: "*", path: "/api/finance", match: "prefix", roles: [PHARMACY_MANAGER] },
   { methods: "*", path: "/api/operations/finance", match: "prefix", roles: [PHARMACY_MANAGER] },
   { methods: "*", path: "/api/reports", match: "prefix", roles: [PHARMACY_MANAGER] },
-  // Period analytics (design 0007): a Pharmacy Manager reads it; Platform Admin passes every rule.
+  // Period analytics (design 0007): a Pharmacy Manager reads it; Platform Admin reads every route.
   { methods: "*", path: "/api/dashboard/analytics", match: "prefix", roles: [PHARMACY_MANAGER] },
   { methods: "*", path: "/api/dashboard", match: "prefix", roles: [PHARMACY_MANAGER, WAREHOUSE_STAFF] },
   { methods: "*", path: "/api/operations/dashboard", match: "prefix", roles: [PHARMACY_MANAGER, WAREHOUSE_STAFF] },
@@ -139,8 +141,7 @@ export const employeeRoleRules = [
   { methods: ["POST"], path: "/api/sites", match: "exact", roles: [PLATFORM_ADMIN] },
   { methods: ["DELETE"], path: "/api/sites/*", match: "exact", roles: [PLATFORM_ADMIN] },
 
-  // Search synonyms: a Pharmacist or Pharmacy Manager proposes and approves. Platform Admin proposes, edits and deletes,
-  // and is refused the approve route by `platformAdminExcludedRoutes`.
+  // Search synonyms: a Pharmacist or Pharmacy Manager proposes, edits, approves and deletes; Platform Admin reads.
   { methods: "*", path: "/api/products/search-synonyms", match: "prefix", roles: [PHARMACIST, PHARMACY_MANAGER] },
 
   // Online orders: staff read the orders at their sites and move them. A shopper's own list, detail, creation and
@@ -149,20 +150,20 @@ export const employeeRoleRules = [
   { methods: "*", path: "/api/orders/*/transition", match: "exact", roles: [PHARMACIST, PHARMACY_MANAGER] },
 
   // Counter: the Pharmacist dispenses, takes payment and answers consultations. A Pharmacy Manager supervises and may
-  // read the same records, never change them. Platform Admin is refused every counter write by the exclusions.
+  // read the same records, never change them. Platform Admin reads them too.
   { methods: "READ", path: "/api/prescriptions", match: "prefix", roles: [PHARMACIST, PHARMACY_MANAGER] },
   { methods: "WRITE", path: "/api/prescriptions", match: "prefix", roles: [PHARMACIST] },
   { methods: "READ", path: "/api/counter-transactions", match: "prefix", roles: [PHARMACIST, PHARMACY_MANAGER] },
   { methods: "WRITE", path: "/api/counter-transactions", match: "prefix", roles: [PHARMACIST] },
 
-  // Payments. A refund is the one counter write a Pharmacy Manager and Platform Admin may also make: payment-service
-  // decides by invoice kind (counter invoice: Pharmacist; online order: Pharmacy Manager or Platform Admin).
+  // Payments. A refund is the one counter write a Pharmacy Manager may also make: payment-service decides by invoice
+  // kind (counter invoice: Pharmacist; online order: Pharmacy Manager).
   { methods: ["POST"], path: "/api/payments/*/refund", match: "exact", roles: [PHARMACIST, PHARMACY_MANAGER] },
   { methods: "READ", path: "/api/payments", match: "prefix", roles: [PHARMACIST, PHARMACY_MANAGER] },
   { methods: "WRITE", path: "/api/payments", match: "prefix", roles: [PHARMACIST] },
 
   // Replenishment suggestions and the draft orders made from them (design 0007): a Pharmacy Manager reads and drafts;
-  // Platform Admin passes. These rules come before the procurement rules so that no other rule can answer for them.
+  // Platform Admin reads. These rules come before the procurement rules so that no other rule can answer for them.
   {
     methods: "READ",
     path: "/api/procurement/replenishment-suggestions",
@@ -211,8 +212,9 @@ export const employeeRoleRules = [
     roles: [PHARMACIST, PHARMACY_MANAGER, WAREHOUSE_STAFF],
   },
   { methods: "WRITE", path: "/api/inventory/replenishment", match: "prefix", roles: [WAREHOUSE_STAFF] },
-  // Action plans (design 0007): a Pharmacy Manager creates one; the owner, a manager or Warehouse Staff reads and moves
-  // it. The owning service decides which plans a caller sees and whether an owner may change more than the status.
+  // Action plans (design 0007): plans are created automatically; the owner, a manager or Warehouse Staff reads and moves
+  // one. Platform Admin and a Pharmacy Manager may reassign it, never move its status. The owning service decides which
+  // plans a caller sees and which fields a caller may change.
   {
     methods: "READ",
     path: "/api/inventory/action-plans",
@@ -224,7 +226,7 @@ export const employeeRoleRules = [
     methods: ["PATCH"],
     path: "/api/inventory/action-plans/*",
     match: "exact",
-    roles: [PHARMACIST, PHARMACY_MANAGER, WAREHOUSE_STAFF],
+    roles: [PLATFORM_ADMIN, PHARMACIST, PHARMACY_MANAGER, WAREHOUSE_STAFF],
   },
   {
     methods: "READ",
@@ -421,24 +423,22 @@ export const employeeRolesForRequest = (path, method = "GET") => {
   return rule?.roles;
 };
 
-/** True when Platform Admin is refused this request outright, whatever role rule the request carries. */
-export const isPlatformAdminExcluded = (path, method = "GET") => {
-  const norm = normalizeApiPath(path);
-  const upperMethod = method.toUpperCase();
-  if (isCustomerOnlyRequest(norm, upperMethod)) return false;
-  return platformAdminExcludedRoutes.some(
-    (route) => methodMatches(route.method, upperMethod) && pathMatchesPattern(norm, route.path, route.match),
-  );
-};
+const isReadMethod = (method) => ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 
 /**
- * Whether an employee with `roles` may make the request. Platform Admin passes every role rule, except the routes in
- * `platformAdminExcludedRoutes` when `path` and `method` are given. Without `path`, the exclusions are not checked.
+ * Whether an employee with `roles` may make the request. A role the rule names passes. Otherwise a request with no role
+ * rule passes for any employee, and a rule that does not name the employee's role refuses it. Platform Admin keeps the
+ * console read-only: it reads every staff route, but writes only on a rule that names it, or on a path no staff route
+ * covers (sign-out, password change, the shopper surface). A staff route with no role rule refuses its write too.
+ * Without `path`, that last check is skipped.
  */
 export const isEmployeeRoleAllowed = (roles = [], requiredRoles, path, method = "GET") => {
-  if (roles.includes(PLATFORM_ADMIN)) return path === undefined || !isPlatformAdminExcluded(path, method);
-  if (!requiredRoles || requiredRoles.length === 0) return true;
-  return requiredRoles.some((role) => roles.includes(role));
+  const hasRule = Array.isArray(requiredRoles) && requiredRoles.length > 0;
+  if (hasRule && requiredRoles.some((role) => roles.includes(role))) return true;
+  if (!roles.includes(PLATFORM_ADMIN)) return !hasRule;
+  if (isReadMethod(method)) return true;
+  if (hasRule) return false;
+  return path === undefined || !isEmployeeRoute(path, method);
 };
 
 export const selectTargetService = (path) => {

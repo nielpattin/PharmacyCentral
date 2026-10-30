@@ -236,7 +236,10 @@ describe("catalog API", () => {
 
     const response = await fetch(`${testServer.url}/pricing/prices`, {
       method: "POST",
-      headers: { ...JSON_HEADERS, ...actors.admin.headers },
+      headers: {
+        ...JSON_HEADERS,
+        ...signedHeaders("employee", "66666666-6666-4666-8666-666666666666", ["Pharmacy Manager"], [ids.site]),
+      },
       body: JSON.stringify({
         productId: ids.product,
         productUnitId: ids.unit,

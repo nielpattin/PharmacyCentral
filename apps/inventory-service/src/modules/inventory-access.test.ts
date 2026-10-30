@@ -65,7 +65,7 @@ describe("purchase orders and goods receipts", () => {
     server = undefined;
   });
 
-  it("refuses approval of a purchase order by its creator, Platform Admin included", async () => {
+  it("refuses approval of a purchase order by its creator", async () => {
     const transition = vi.fn();
     const repository = {
       getPurchaseOrder: vi.fn().mockResolvedValue({ id: ids.transfer, siteId: ids.siteA, createdBy: ids.actor }),
@@ -76,7 +76,7 @@ describe("purchase orders and goods receipts", () => {
 
     const response = await fetch(`${testServer.url}/procurement/purchase-orders/${ids.transfer}/action`, {
       method: "POST",
-      headers: staff("Platform Admin"),
+      headers: staff("Pharmacy Manager"),
       body: JSON.stringify({ action: "approve" }),
     });
 
@@ -204,7 +204,7 @@ describe("inventory role, site and separation-of-duties rules", () => {
       expect(transitionTransfer.mock.calls[0]?.slice(0, 3)).toEqual([ids.transfer, "approve", ids.actor]);
     });
 
-    it("refuses an approval by the transfer's creator, Platform Admin included", async () => {
+    it("refuses an approval by the transfer's creator", async () => {
       const transitionTransfer = vi.fn();
       const repository = {
         getTransfer: vi.fn().mockResolvedValue({ ...transferFromAtoB, createdBy: ids.actor }),
@@ -215,7 +215,7 @@ describe("inventory role, site and separation-of-duties rules", () => {
 
       const response = await fetch(`${testServer.url}/inventory/transfers/${ids.transfer}/approve`, {
         method: "POST",
-        headers: staff("Platform Admin"),
+        headers: staff("Pharmacy Manager"),
         body: "{}",
       });
 
@@ -518,7 +518,7 @@ describe("inventory role, site and separation-of-duties rules", () => {
       expect(transitionReplenishment).not.toHaveBeenCalled();
     });
 
-    it("refuses an approval by the requester, Platform Admin included", async () => {
+    it("refuses an approval by the requester", async () => {
       const transitionReplenishment = vi.fn();
       const repository = {
         getReplenishment: vi.fn().mockResolvedValue({
@@ -533,7 +533,7 @@ describe("inventory role, site and separation-of-duties rules", () => {
 
       const response = await fetch(`${testServer.url}/inventory/replenishment/${ids.replenishment}/approve`, {
         method: "POST",
-        headers: staff("Platform Admin"),
+        headers: staff("Warehouse Staff"),
         body: "{}",
       });
 

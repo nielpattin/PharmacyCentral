@@ -14,7 +14,7 @@ Tags: `[owner]` a recorded owner decision; `[observed]` read from the code; `[st
 
 ## Users and entry points
 
-Platform Admin and Pharmacy Manager (`sectionRoles.analytics`; the edge and the service refuse other roles). A site-scoped manager sees their sites only. Pharmacist and Warehouse Staff have no entry.
+Platform Admin (read only) and Pharmacy Manager (`sectionRoles.analytics`; the edge and the service refuse other roles). A site-scoped manager sees their sites only; Platform Admin sees every site. The page has no write, so Platform Admin loses nothing. Pharmacist and Warehouse Staff have no entry.
 
 ## User stories and acceptance criteria
 

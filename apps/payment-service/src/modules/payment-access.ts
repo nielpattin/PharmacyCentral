@@ -1,9 +1,9 @@
 import type { Request } from "express";
 
 /**
- * Who may take and reverse money, restated here for the local stack (see `deploy/aws/lambda/policy.mjs`,
- * `platformAdminExcludedRoutes`). The edge admits the roles; this module decides what the edge cannot see, the kind
- * of invoice, and it refuses Platform Admin where the exclusion applies.
+ * Who may take and reverse money, restated here for the local stack (see `deploy/aws/lambda/policy.mjs`). The edge
+ * admits the roles; this module decides what the edge cannot see, the kind of invoice. Platform Admin reads the money
+ * records and moves none.
  */
 
 export type AccessRefusal = {
@@ -47,7 +47,7 @@ const roleForbidden = (detail: string): AccessRefusal => ({
   detail,
 });
 
-/** A counter invoice for a prescription is created by a Pharmacist; Platform Admin and Pharmacy Manager are refused. */
+/** A counter invoice for a prescription is created by a Pharmacist; every other role is refused. */
 export const counterInvoiceRefusal = (roles: readonly string[]): AccessRefusal | undefined =>
   roles.includes("Pharmacist") ? undefined : roleForbidden("Chỉ Dược sĩ được lập hóa đơn cho đơn thuốc tại quầy.");
 
@@ -73,24 +73,20 @@ export const siteScopeRefusal = (
  * Platform Admin role does not satisfy it, only an explicit Pharmacist role does.
  */
 export const cashConfirmationRefusal = (roles: readonly string[]): AccessRefusal | undefined =>
-  roles.includes("Pharmacist")
-    ? undefined
-    : roleForbidden("Chỉ Dược sĩ được xác nhận tiền mặt. Quản trị nền tảng không xác nhận tiền mặt.");
+  roles.includes("Pharmacist") ? undefined : roleForbidden("Chỉ Dược sĩ được xác nhận tiền mặt.");
 
 /**
- * Refund depends on the invoice kind. An invoice of an online order is refunded by a Pharmacy Manager or Platform
- * Admin. A counter invoice (no order) is refunded by a Pharmacist only, Platform Admin excluded.
+ * Refund depends on the invoice kind. An invoice of an online order is refunded by a Pharmacy Manager. A counter
+ * invoice (no order) is refunded by a Pharmacist. Platform Admin refunds neither.
  */
 export const refundRefusal = (
   invoice: { orderId: string | null },
   roles: readonly string[],
 ): AccessRefusal | undefined => {
   if (invoice.orderId) {
-    return roles.includes("Pharmacy Manager") || roles.includes("Platform Admin")
+    return roles.includes("Pharmacy Manager")
       ? undefined
-      : roleForbidden("Chỉ Quản lý dược hoặc Quản trị nền tảng được hoàn tiền đơn hàng online.");
+      : roleForbidden("Chỉ Quản lý dược được hoàn tiền đơn hàng online.");
   }
-  return roles.includes("Pharmacist")
-    ? undefined
-    : roleForbidden("Chỉ Dược sĩ được hoàn tiền hóa đơn tại quầy. Quản trị nền tảng không hoàn tiền hóa đơn tại quầy.");
+  return roles.includes("Pharmacist") ? undefined : roleForbidden("Chỉ Dược sĩ được hoàn tiền hóa đơn tại quầy.");
 };

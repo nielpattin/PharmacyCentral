@@ -215,7 +215,7 @@ export const createAuthorizerHandler = (options = {}) => {
       }
       if (identity?.actorType === "employee") {
         const roles = Array.isArray(identity.roles) ? identity.roles : [];
-        // Every staff request is checked, because Platform Admin's exclusions apply even to a route that names no role.
+        // Every staff request is checked, because Platform Admin writes only where a rule names it, even on a route that names no role.
         if (!isEmployeeRoleAllowed(roles, requiredRoles, normPath, method)) {
           return deny();
         }

@@ -5,7 +5,7 @@ export type OwnerOption = { value: string; label: string };
 
 /** The Pharmacy Manager and Platform Admin read the directory; the other roles never see it. */
 export const canReadStaffDirectory = (session: { roles?: readonly string[] | undefined }): boolean =>
-  hasStaffRole(session.roles ?? [], ["Pharmacy Manager"]);
+  hasStaffRole(session.roles ?? [], ["Pharmacy Manager", "Platform Admin"]);
 
 /**
  * The owners a plan at `siteId` may name: an employee who works at that site, and a Platform Admin, who passes the

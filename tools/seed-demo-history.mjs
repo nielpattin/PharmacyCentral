@@ -138,6 +138,9 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
   const between = (low, high) => low + Math.floor(random() * (high - low + 1));
 
   const manager = await signIn({ email: "manager@pharmacycentral.vn" });
+  // A second manager raises the purchase orders, because nobody approves an order they made.
+  const buyer = await signIn({ email: "manager2@pharmacycentral.vn" });
+  const warehouse = await signIn({ email: "warehouse@pharmacycentral.vn" });
   const pharmacist = await signIn({ email: "pharmacist@pharmacycentral.vn" });
   const sessions = new Map();
   for (const [email] of shoppers) sessions.set(email, await signIn({ email }));
@@ -290,7 +293,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
     const number = String(sequence).padStart(3, "0");
     const orderedAt = now - (74 - sequence * 2) * DAY;
     const receivedAt = orderedAt + between(3, 6) * DAY;
-    const order = await inventory(admin, "/api/procurement/purchase-orders", {
+    const order = await inventory(buyer, "/api/procurement/purchase-orders", {
       method: "POST",
       body: {
         purchaseOrderNumber: `PO-HIST-${number}`,
@@ -304,7 +307,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
       method: "POST",
       body: { action: "approve" },
     });
-    const receipt = await inventory(admin, "/api/procurement/goods-receipts", {
+    const receipt = await inventory(warehouse, "/api/procurement/goods-receipts", {
       method: "POST",
       body: {
         receiptNumber: `GR-HIST-${number}`,
@@ -328,7 +331,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
     receipts.push({ id: receipt.id, at: receivedAt });
   }
   // Batches that expire soon, or already have, received with a cost like the rest.
-  const expiringReceipt = await inventory(admin, "/api/procurement/goods-receipts", {
+  const expiringReceipt = await inventory(warehouse, "/api/procurement/goods-receipts", {
     method: "POST",
     body: {
       receiptNumber: "GR-HIST-EXP",
@@ -739,8 +742,8 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
 
 // What the warehouse account sees at its own site (SITE-WH): goods receipts, replenishment requests, returns, an open
 // and a posted stocktake, and adjustments. The shop-side steps above never touch SITE-WH, so without this the
-// warehouse screens would be empty. Warehouse Staff creates, and Platform Admin decides, because the manager has no
-// access to the warehouse site and nobody approves their own record. Runs once: goods receipt GR-WH-001 marks it.
+// warehouse screens would be empty. Warehouse Staff creates, and the Pharmacy Manager decides, because nobody approves
+// their own record. Runs once: goods receipt GR-WH-001 marks it.
 export async function seedWarehouseActivity({ admin, signIn }) {
   const warehouse = await signIn({ email: "warehouse@pharmacycentral.vn" });
   const contextCache = new Map();
@@ -749,6 +752,8 @@ export async function seedWarehouseActivity({ admin, signIn }) {
     const cached = contextCache.get(key);
     if (!cached || Date.now() - cached.at > 20_000) {
       const { contexts } = await session.call("/api/auth/context");
+  const manager = await signIn({ email: "manager@pharmacycentral.vn" });
+  const buyer = await signIn({ email: "manager2@pharmacycentral.vn" });
       contextCache.set(key, { at: Date.now(), value: contexts[audience] });
     }
     return session.call(path, {
@@ -795,7 +800,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
 
   // Receiving: three goods receipts and one purchase order waiting for approval.
   const purchaseOrder = async (number, lines) => {
-    const created = await inventory(admin, "/api/procurement/purchase-orders", {
+    const created = await inventory(buyer, "/api/procurement/purchase-orders", {
       method: "POST",
       body: {
         purchaseOrderNumber: number,
@@ -827,11 +832,11 @@ export async function seedWarehouseActivity({ admin, signIn }) {
         })),
       },
     });
-  // Replenishment of the warehouse site: one waiting, one approved, one rejected. Platform Admin raises them and
+  // Replenishment of the warehouse site: one waiting, one approved, one rejected. The manager raises them and
   // Warehouse Staff decides.
   const replenish = async (notes, sku, requestedQuantity, action) => {
     const row = stock(sku);
-    const created = await inventory(admin, "/api/inventory/replenishment", {
+    const created = await inventory(manager, "/api/inventory/replenishment", {
       method: "POST",
       body: {
         siteId: warehouseSite.id,
@@ -903,7 +908,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
         body: { countedQuantity: counted },
       });
     }
-    await inventory(admin, `/api/inventory/stocktakes/${created.id}/post`, { method: "POST", body: {} });
+    await inventory(manager, `/api/inventory/stocktakes/${created.id}/post`, { method: "POST", body: {} });
   };
   await stocktake("Kiểm kê định kỳ kho A", ["THU-0031", "THU-0032"], true);
   await stocktake("Kiểm kê đột xuất kệ vật tư", ["THU-0010"], false);
@@ -924,13 +929,13 @@ export async function seedWarehouseActivity({ admin, signIn }) {
       },
     });
     if (decision)
-      await inventory(admin, `/api/inventory/adjustments/${created.id}/${decision}`, { method: "POST", body: {} });
+      await inventory(manager, `/api/inventory/adjustments/${created.id}/${decision}`, { method: "POST", body: {} });
   };
   await adjust("Hàng hỏng do ẩm khi lưu kho", "THU-0032", "Negative", 8, undefined);
   await adjust("Kiểm đếm thấy thừa", "THU-0010", "Positive", 12, "approve");
   await adjust("Ghi nhầm số lượng", "THU-0033", "Negative", 5, "reject");
-  // Last, because goods receipt GR-WH-001 is the marker that this step has run. The manager has no access to the warehouse site and nobody approves their own order, so these goods are received
-  // without an order, and the one order raised for the site waits for approval.
+  // Last, because goods receipt GR-WH-001 is the marker that this step has run. These goods are received without an
+  // order, and the one order raised for the site waits for approval.
   await receive("GR-WH-001", undefined, [
     ["THU-0001", 300, "LOT-WH-0001", 250],
     ["THU-0004", 200, "LOT-WH-0004", 420],
@@ -942,12 +947,12 @@ export async function seedWarehouseActivity({ admin, signIn }) {
     ["THU-0027", 300],
   ]);
 
-  // The received batches wait for quality review. Platform Admin releases all but the last, which stays pending.
+  // The received batches wait for quality review. The manager releases all but the last, which stays pending.
   const fresh = await inventory(admin, "/api/inventory/balances?limit=500");
   for (const { batch } of fresh) {
     if (!batch.batchNumber.startsWith("LOT-WH-") || batch.qualityStatus !== "PendingQc") continue;
     if (batch.batchNumber === "LOT-WH-0019") continue;
-    await inventory(admin, `/api/inventory/batches/${batch.id}/quality`, {
+    await inventory(manager, `/api/inventory/batches/${batch.id}/quality`, {
       method: "POST",
       body: { decision: "release", notes: "Đạt kiểm tra nhập kho" },
     });

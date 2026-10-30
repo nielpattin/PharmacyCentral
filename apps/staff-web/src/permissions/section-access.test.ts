@@ -68,9 +68,17 @@ describe("sidebar sections by role", () => {
     }
   });
 
-  it("opens every section for Platform Admin", () => {
+  it("opens every section for Platform Admin except the work screens the three working roles own", () => {
+    const closed: readonly Section[] = [
+      "pharmacistOverview",
+      "importProducts",
+      "importSites",
+      "importLocations",
+      "importSuppliers",
+      "importStock",
+    ];
     for (const section of allSections) {
-      expect(canAccessSection(section, ["Platform Admin"]), section).toBe(true);
+      expect(canAccessSection(section, ["Platform Admin"]), section).toBe(!closed.includes(section));
     }
   });
 

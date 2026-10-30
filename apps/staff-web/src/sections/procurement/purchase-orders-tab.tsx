@@ -215,7 +215,7 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
             placeholder: translateText("Search by purchase order number"),
           }}
           paging={{ hasMore: orders.hasMore, loadingMore: orders.isLoadingMore, onLoadMore: orders.loadMore }}
-          selection={{ keys: selected, onChange: setSelected }}
+          selection={approveGate.allowed ? { keys: selected, onChange: setSelected } : undefined}
           bulkActions={
             <GatedButton gate={approveGate} size="sm" disabled={bulkBusy} onClick={() => void approveSelected()}>
               {translateText("Approve selected")}

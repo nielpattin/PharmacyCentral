@@ -61,7 +61,7 @@ Tài khoản khách (`customer`) không có role nhân viên.
 
 ### BR-AUTH-002. Ma trận role theo đường dẫn nằm ở chính sách biên
 
-Authorizer dùng `employeeRolesForRequest` trong `deploy/aws/lambda/policy.mjs`. Platform Admin đi qua mọi quy tắc, trừ `platformAdminExcludedRoutes` (BR-AUTH-010).
+Authorizer dùng `employeeRolesForRequest` và `isEmployeeRoleAllowed` trong `deploy/aws/lambda/policy.mjs`. Platform Admin đọc được mọi đường dẫn nhân viên (GET, HEAD, OPTIONS) và chỉ ghi ở đường dẫn có quy tắc nêu tên Platform Admin (BR-AUTH-010).
 
 | Đường dẫn | Role yêu cầu |
 | --- | --- |
@@ -70,7 +70,7 @@ Authorizer dùng `employeeRolesForRequest` trong `deploy/aws/lambda/policy.mjs`.
 | `/api/finance`, `/api/operations/finance`, `/api/reports` | Pharmacy Manager |
 | `/api/dashboard`, `/api/operations/dashboard` | Pharmacy Manager, Warehouse Staff |
 | `POST /api/sites`, `DELETE /api/sites/*` | Platform Admin |
-| `/api/products/search-synonyms` | Pharmacist, Pharmacy Manager (Platform Admin theo BR-AUTH-010) |
+| `/api/products/search-synonyms` | Pharmacist, Pharmacy Manager (Platform Admin chỉ đọc) |
 | `GET /api/orders`, `POST /api/orders/*/transition` | Pharmacist, Pharmacy Manager |
 | `GET /api/prescriptions`, `GET /api/counter-transactions`, `GET /api/payments` | Pharmacist, Pharmacy Manager |
 | Ghi `/api/prescriptions`, `/api/counter-transactions`, `/api/payments` (trừ hoàn tiền, webhook và đường dẫn khách) | Pharmacist |
@@ -78,7 +78,7 @@ Authorizer dùng `employeeRolesForRequest` trong `deploy/aws/lambda/policy.mjs`.
 | `GET /api/procurement/purchase-orders` | Pharmacy Manager, Warehouse Staff |
 | Ghi `/api/procurement/purchase-orders` | Pharmacy Manager |
 | `/api/procurement/goods-receipts` | Warehouse Staff |
-| Ghi `/api/sites`, `/api/storage-locations`, `/api/suppliers`, `/api/products`, `/api/pricing/prices` | Pharmacy Manager (tạo và xóa site: Platform Admin) |
+| Ghi `/api/sites`, `/api/storage-locations`, `/api/suppliers`, `/api/products`, `/api/pricing/prices` (kể cả nhập dữ liệu) | Pharmacy Manager (tạo và xóa site: Platform Admin) |
 | `/api/inventory/imports/opening-balances` | Warehouse Staff |
 | `GET /api/inventory/replenishment`, `GET /api/inventory/batches` | Pharmacist, Pharmacy Manager, Warehouse Staff |
 | `POST /api/inventory/replenishment` | Pharmacist, Pharmacy Manager |
@@ -89,15 +89,16 @@ Authorizer dùng `employeeRolesForRequest` trong `deploy/aws/lambda/policy.mjs`.
 | `GET /api/inventory/movements`, `/api/inventory/adjustments`, `/api/inventory/transfers`, `/api/inventory/stocktakes`, `/api/inventory/returns` | Pharmacy Manager, Warehouse Staff |
 | `POST /api/inventory/adjustments/*/*` (duyệt, từ chối), `POST /api/inventory/transfers/*/approve`, `POST /api/inventory/stocktakes/*/post` | Pharmacy Manager |
 | `POST /api/inventory/transfers/*/cancel` | Pharmacy Manager, Warehouse Staff |
+| `PATCH /api/inventory/action-plans/*` | Platform Admin, Pharmacist, Pharmacy Manager, Warehouse Staff; dịch vụ chỉ cho Platform Admin và Pharmacy Manager đổi chủ sở hữu (BR-PLAN-002) |
 | Các đường dẫn nhân viên còn lại (đọc sản phẩm, site, kho, nhà cung cấp, giá đã xuất bản, `GET /api/inventory/balances`) | Mọi nhân viên đã đăng nhập; phạm vi site theo BR-AUTH-004 |
 
 Quyết định kiểm định nằm ở `/api/inventory/batches/{id}/quality`. Bảng này được chép lại trong `src/middleware/trusted-request.ts` của từng service (ADR 0017).
 
 `staff-web` ẩn menu theo role, nhưng đó chỉ là hiển thị. Chặn thật nằm ở chính sách biên và backend.
 
-### BR-AUTH-003. Platform Admin được xem và thao tác mọi site
+### BR-AUTH-003. Platform Admin xem mọi site
 
-Trong `trusted-request`, Platform Admin không bị giới hạn theo site.
+Trong `trusted-request`, Platform Admin không bị giới hạn theo site. Vì Platform Admin chỉ đọc và quản trị (BR-AUTH-010), quyền này không cho phép ghi dữ liệu vận hành ở bất kỳ site nào.
 
 ### BR-AUTH-004. Nhân viên khác Platform Admin bị giới hạn theo site được gán
 
@@ -124,7 +125,7 @@ Request không có ngữ cảnh tin cậy (và không phải route health/public
 
 ### BR-AUTH-009. Người tạo không tự duyệt bản ghi của mình
 
-Áp dụng cho mọi role, kể cả Platform Admin. Người duyệt trùng người tạo (hoặc người đã đếm một dòng kiểm kê, hoặc người gửi nhóm từ đồng nghĩa) nhận 403 `self_approval_forbidden`:
+Áp dụng cho mọi role. Người duyệt trùng người tạo (hoặc người đã đếm một dòng kiểm kê, hoặc người gửi nhóm từ đồng nghĩa) nhận 403 `self_approval_forbidden`:
 
 - Duyệt hoặc từ chối đơn mua, điều chỉnh, điều chuyển và yêu cầu bổ sung; quyết định kiểm định batch; post phiên kiểm kê.
 - Publish giá của bản nháp do chính người đó tạo (`catalog-service`, BR-PRICE-005).
@@ -132,16 +133,16 @@ Request không có ngữ cảnh tin cậy (và không phải route health/public
 
 Người tạo vẫn được hủy điều chuyển và yêu cầu bổ sung của chính mình. Bản ghi không có người tạo (tạo trước khi có cột người tạo) không bị chặn.
 
-### BR-AUTH-010. Platform Admin bị từ chối thao tác quầy và duyệt từ đồng nghĩa
+### BR-AUTH-010. Platform Admin chỉ đọc dữ liệu vận hành và chỉ ghi phần quản trị
 
-Platform Admin đi qua mọi quy tắc role và phạm vi site (BR-AUTH-003), trừ các thao tác sau, bị từ chối với 403 `role_forbidden`:
+Platform Admin không làm thay Pharmacist, Pharmacy Manager hay Warehouse Staff. Ở biên và ở từng service, Platform Admin:
 
 - Tạo hoặc hủy đơn thuốc, cấp phát, trả lời tư vấn.
 - Ghi `/api/counter-transactions` và tạo hóa đơn cho đơn thuốc (`POST /api/payments/prescriptions/*`).
 - Xác nhận tiền mặt và xác nhận tại quầy (`cash-paid`, `confirm-counter`), và hoàn tiền hóa đơn tại quầy (BR-PAY-003).
 - Duyệt nhóm từ đồng nghĩa (`POST /api/products/search-synonyms/*/approve`).
 
-Platform Admin vẫn chịu BR-AUTH-009 khi duyệt bản ghi của chính mình.
+Quy tắc nằm ở `isEmployeeRoleAllowed` (biên) và `roleRefusal` (mỗi service), và được chép giữ nguyên giữa hai nơi (ADR 0017, ADR 0019). Tài khoản vừa có Platform Admin vừa có role khác vẫn dùng được quyền của role khác.
 
 ### BR-AUTH-011. Đăng nhập nhân viên chỉ dành cho tài khoản nhân viên
 
@@ -244,7 +245,7 @@ Mỗi dòng có `orderedQuantity > 0`.
 
 `approve` bị từ chối nếu đơn không ở `Draft` ("Only Draft purchase orders can be approved").
 
-Người duyệt là Pharmacy Manager hoặc Platform Admin, và không phải người tạo đơn (BR-AUTH-009).
+Người duyệt là Pharmacy Manager, và không phải người tạo đơn (BR-AUTH-009).
 
 ### BR-PROC-006. Đơn Received hoặc Cancelled không được hủy
 
@@ -256,7 +257,7 @@ Với một site, tốc độ bán ngày là tổng số lượng có `Dispense`
 
 ### BR-PROC-008. Tạo đơn nháp hàng loạt từ gợi ý chỉ tạo Draft
 
-Pharmacy Manager hoặc Platform Admin chọn các dòng gợi ý, sửa số lượng (số nguyên dương) và tạo mỗi nhà cung cấp một đơn mua ở `Draft` tại site đã chọn, trong một transaction: hoặc tạo hết hoặc không tạo gì. Việc kiểm tra nhà cung cấp, site và sản phẩm như BR-PROC-002. Hệ thống không tự duyệt hay gửi đơn; duyệt vẫn theo BR-PROC-005 và BR-AUTH-009.
+Pharmacy Manager chọn các dòng gợi ý, sửa số lượng (số nguyên dương) và tạo mỗi nhà cung cấp một đơn mua ở `Draft` tại site đã chọn, trong một transaction: hoặc tạo hết hoặc không tạo gì. Việc kiểm tra nhà cung cấp, site và sản phẩm như BR-PROC-002. Hệ thống không tự duyệt hay gửi đơn; duyệt vẫn theo BR-PROC-005 và BR-AUTH-009.
 
 ### BR-PROC-009. Giá nhập trên dòng phiếu nhập kho là tùy chọn và không bao giờ bị đoán
 
@@ -311,7 +312,7 @@ Cột `quality_status` của `product_batches` có mặc định `PendingQc`. Ba
 
 ### BR-QUALITY-002. Quyết định kiểm định chỉ là Release hoặc Reject
 
-`POST /inventory/batches/:id/quality` nhận `release` hoặc `reject`, đặt batch thành `Released` hoặc `Rejected`, ghi ghi chú, người kiểm định (từ `X-Actor-Id`) và thời điểm. Quyết định là việc của Pharmacist hoặc Pharmacy Manager (và Platform Admin); Warehouse Staff chỉ đọc. Mỗi thay đổi kiểm định làm mới availability của mọi site có tồn của batch.
+`POST /inventory/batches/:id/quality` nhận `release` hoặc `reject`, đặt batch thành `Released` hoặc `Rejected`, ghi ghi chú, người kiểm định (từ `X-Actor-Id`) và thời điểm. Quyết định là việc của Pharmacist hoặc Pharmacy Manager; Warehouse Staff và Platform Admin chỉ đọc. Mỗi thay đổi kiểm định làm mới availability của mọi site có tồn của batch.
 
 ### BR-QUALITY-003. Chỉ batch Released mới được giữ, cấp phát hoặc tính là còn hàng
 
@@ -387,7 +388,7 @@ Dòng nhập bị từ chối 409 `import_conflict` nếu location đã có tồ
 
 ### BR-RX-000. Workspace quầy dành cho Pharmacist
 
-Tạo và cấp phát đơn thuốc, hủy đơn thuốc, thanh toán tại quầy và trả lời tư vấn cần role Pharmacist. Pharmacy Manager chỉ đọc; Platform Admin không thao tác được (BR-AUTH-002, BR-AUTH-010).
+Tạo và cấp phát đơn thuốc, hủy đơn thuốc, thanh toán tại quầy và trả lời tư vấn cần role Pharmacist. Pharmacy Manager và Platform Admin chỉ đọc (BR-AUTH-002, BR-AUTH-010).
 
 ### BR-RX-000A. Quầy tìm thuốc theo SKU hoặc barcode
 
@@ -518,7 +519,7 @@ Thanh toán tại quầy bằng tiền mặt hoặc chuyển khoản đã nhận
 
 ### BR-PAY-003. Hoàn tiền yêu cầu lý do và hoàn toàn bộ hóa đơn
 
-`POST /payments/:id/refund` cần `reason` (1–500 ký tự). Chỉ hóa đơn `Paid` được hoàn ("Only paid invoices can be refunded"). Số tiền hoàn bằng số tiền hóa đơn; trạng thái thành `Refunded` và phát `payment.invoice.refunded.v1`. Quyền theo loại hóa đơn: hóa đơn tại quầy (có đơn thuốc) chỉ Pharmacist; hóa đơn đơn online chỉ Pharmacy Manager hoặc Platform Admin. Sai quyền: 403 `role_forbidden`.
+`POST /payments/:id/refund` cần `reason` (1–500 ký tự). Chỉ hóa đơn `Paid` được hoàn ("Only paid invoices can be refunded"). Số tiền hoàn bằng số tiền hóa đơn; trạng thái thành `Refunded` và phát `payment.invoice.refunded.v1`. Quyền theo loại hóa đơn: hóa đơn tại quầy (có đơn thuốc) chỉ Pharmacist; hóa đơn đơn online chỉ Pharmacy Manager. Sai quyền: 403 `role_forbidden`.
 
 ### BR-PAY-004. Hóa đơn chỉ dùng VND
 
@@ -578,7 +579,7 @@ Mỗi dòng yêu cầu `productId`, `productBatchId`, `sourceStorageLocationId`,
 
 `approve`: `PendingApproval` -> `Approved`.
 
-Duyệt là việc của Pharmacy Manager hoặc Platform Admin, trong phạm vi một trong hai site, và không phải người tạo (BR-AUTH-009).
+Duyệt là việc của Pharmacy Manager, trong phạm vi một trong hai site, và không phải người tạo (BR-AUTH-009).
 
 ### BR-TRF-006. Chỉ Approved mới được xuất kho
 
@@ -632,7 +633,7 @@ Movement trả hàng bị chặn nếu tồn sau biến động âm hoặc thấ
 
 ### BR-RET-005. Trả hàng là nghiệp vụ kho
 
-`POST /inventory/returns` thuộc Warehouse Staff và Platform Admin. Pharmacist không dùng endpoint này.
+`POST /inventory/returns` thuộc Warehouse Staff. Pharmacist không dùng endpoint này.
 
 ## 14. Quy tắc kiểm kê
 
@@ -664,7 +665,7 @@ Variance = CountedQuantity - SystemQuantity
 
 ### BR-STK-007. Post phiên kiểm kê tạo điều chỉnh cho các dòng có chênh lệch
 
-Khi post phiên (Pharmacy Manager hoặc Platform Admin, không phải người đã đếm dòng nào của phiên, BR-AUTH-009):
+Khi post phiên (Pharmacy Manager, không phải người đã đếm dòng nào của phiên, BR-AUTH-009):
 
 - Dòng có `Variance != 0` tạo một điều chỉnh tồn `Approved`, loại `Positive` (dương) hoặc `Negative` (âm), `quantity = |Variance|`.
 - Mỗi điều chỉnh ghi movement `StocktakeAdjustment` với `quantityDelta = Variance` và cập nhật tồn.
@@ -689,7 +690,7 @@ Khi duyệt, batch phải thuộc sản phẩm của điều chỉnh, nếu khô
 
 Duyệt hoặc từ chối khi không ở `Pending` bị từ chối ("Adjustment is already ...").
 
-Người duyệt là Pharmacy Manager hoặc Platform Admin, không phải người đề xuất (BR-AUTH-009). Người đề xuất điều chỉnh là Warehouse Staff.
+Người duyệt là Pharmacy Manager, không phải người đề xuất (BR-AUTH-009). Người đề xuất điều chỉnh là Warehouse Staff.
 
 ### BR-ADJ-007. Duyệt điều chỉnh ghi movement StockAdjustment
 
@@ -733,7 +734,7 @@ Khi thực hiện, batch phải thuộc sản phẩm của dòng ("Replenishment
 
 ### BR-REP-006. Duyệt và từ chối là việc của kho
 
-Pharmacist hoặc Pharmacy Manager tạo yêu cầu. Warehouse Staff duyệt, từ chối và thực hiện yêu cầu; Platform Admin cũng làm được. Người yêu cầu không tự duyệt (BR-AUTH-009). Người yêu cầu hoặc Warehouse Staff được hủy (BR-AUTH-002).
+Pharmacist hoặc Pharmacy Manager tạo yêu cầu. Warehouse Staff duyệt, từ chối và thực hiện yêu cầu. Người yêu cầu không tự duyệt (BR-AUTH-009). Người yêu cầu hoặc Warehouse Staff được hủy (BR-AUTH-002).
 
 ## 17. Quy tắc báo cáo, tài chính và audit
 
@@ -936,7 +937,7 @@ Tên sản phẩm và `unitPriceSnapshot` lấy từ catalog tại thời điể
 | Pending | Confirmed, Cancelled |
 | Confirmed | Preparing, Cancelled |
 | Preparing | Ready, Cancelled |
-| Ready | Delivering, Completed |
+| Ready | Delivering, Completed, Cancelled |
 | Delivering | Completed |
 | Completed, Cancelled | (không có) |
 
@@ -966,7 +967,7 @@ Chuyển sang `Delivering` hoặc `Completed` gọi inventory tiêu thụ reserv
 
 ### BR-ORD-010. Hoàn tiền hủy đơn chưa giao
 
-Khi nhận `payment.invoice.refunded.v1`, đơn chuyển `paymentStatus = Refunded` và được hủy, giải phóng giữ hàng (`cancelRefunded`). Hoàn tiền cho đơn đã bị hủy trước khi khách trả tiền không được tự động xử lý; service ghi log lỗi để nhân viên xử lý thủ công.
+Khi nhận `payment.invoice.refunded.v1`, đơn chuyển `paymentStatus = Refunded`; đơn đang `Pending`, `Confirmed`, `Preparing` hoặc `Ready` được hủy và giải phóng giữ hàng (`cancelRefunded`). Đơn đã `Delivering` hoặc `Completed` chỉ đổi trạng thái thanh toán. Hoàn tiền cho đơn đã bị hủy trước khi khách trả tiền không được tự động xử lý; service ghi log lỗi để nhân viên xử lý thủ công.
 
 ### BR-ORD-011. Sản phẩm kê đơn không vào giỏ và không đặt online
 
@@ -1161,9 +1162,9 @@ Sau khi lưu hoặc xóa, cache cấu hình (60 giây) được xóa để lần
 
 ### BR-SYN-001. Nhóm từ đồng nghĩa có 2–20 cụm từ, mỗi cụm 1–60 ký tự
 
-### BR-SYN-002. Chỉ Platform Admin, Pharmacy Manager và Pharmacist được biên tập
+### BR-SYN-002. Chỉ Pharmacy Manager và Pharmacist được biên tập
 
-Tạo, sửa, xóa và gửi duyệt nhóm từ đồng nghĩa (`/api/products/search-synonyms`) là việc của Pharmacist, Pharmacy Manager và Platform Admin. Platform Admin không duyệt được (BR-SYN-004, BR-AUTH-010). Nhân viên khác và khách nhận 403.
+Tạo, sửa, xóa và gửi duyệt nhóm từ đồng nghĩa (`/api/products/search-synonyms`) là việc của Pharmacist và Pharmacy Manager. Platform Admin chỉ đọc danh sách (BR-AUTH-010). Nhân viên khác và khách nhận 403.
 
 ### BR-SYN-003. Nhóm mới hoặc đã sửa ở trạng thái pending
 
@@ -1172,7 +1173,7 @@ Tạo, sửa, xóa và gửi duyệt nhóm từ đồng nghĩa (`/api/products/s
 
 ### BR-SYN-004. Không tự duyệt nhóm mình gửi
 
-Duyệt bị từ chối 403 `self_approval_forbidden` nếu người duyệt là người gửi gần nhất (người tạo hoặc người sửa sau cùng). Chỉ Pharmacist hoặc Pharmacy Manager duyệt; Platform Admin bị từ chối (BR-AUTH-010). Duyệt nhóm đã approved bị từ chối `already_approved`.
+Duyệt bị từ chối 403 `self_approval_forbidden` nếu người duyệt là người gửi gần nhất (người tạo hoặc người sửa sau cùng). Chỉ Pharmacist hoặc Pharmacy Manager duyệt (BR-AUTH-010). Duyệt nhóm đã approved bị từ chối `already_approved`.
 
 ### BR-SYN-005. Sửa hoặc duyệt phải gửi đúng phiên bản
 

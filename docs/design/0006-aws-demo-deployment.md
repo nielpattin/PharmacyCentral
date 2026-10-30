@@ -18,7 +18,7 @@
 
 ## Goals
 
-- `terraform apply` from a clean account produces a working stack: sign in as the admin, import the sample data, place an order, see it in staff-web.
+- `terraform apply` from a clean account produces a working stack: sign in as the admin and create the sites, sign in as a Pharmacy Manager to import the master data, place an order, see it in staff-web.
 - A monthly cost of about 235 USD with services running, about 136 USD with `services_enabled = false` between demos (see Cost).
 - Everything is in `deploy/aws` and reproducible; no console clicks except the first admin sign-in.
 
@@ -68,7 +68,7 @@ One public ALB with a host rule per app, each rule in front of one Fargate task 
 
 ### Data and first admin
 
-The demo seed (`pnpm run seed:demo`) refuses non-loopback `API_BASE_URL`, so the demo loads AWS another way. An `ops` one-shot task (the `postgres` client, `roles.sh` and the identity seeds in one image) creates the database roles and runs the default seed (A: the one admin, `ADMIN_PASSWORD`). After the sample sites are imported, the same task runs `seed-demo.mjs` (B, accounts only, `DEMO_ACCOUNT_PASSWORD`) so staff get site access. The CSVs from `data/import-samples/` are imported through the API as the default admin. `tools/aws-upload-media.mjs` uploads the images to the media bucket under the same content-hash keys the CSV expects.
+The demo seed (`pnpm run seed:demo`) refuses non-loopback `API_BASE_URL`, so the demo loads AWS another way. An `ops` one-shot task (the `postgres` client, `roles.sh` and the identity seeds in one image) creates the database roles and runs the default seed (A: the one admin, `ADMIN_PASSWORD`). The sample sites come first, created through the API (Platform Admin creates them one at a time, or a Pharmacy Manager imports `sites.csv`); then the same task runs `seed-demo.mjs` (B, accounts only, `DEMO_ACCOUNT_PASSWORD`) so staff get site access. The other CSVs from `data/import-samples/` are imported through the API by the role that owns each: a Pharmacy Manager for the storage locations, the suppliers and the products, Warehouse Staff for the opening balances. `tools/aws-upload-media.mjs` uploads the images to the media bucket under the same content-hash keys the CSV expects.
 
 ### Security
 
@@ -112,7 +112,7 @@ Not done, with the saving: Fargate Spot for the stateless services (about 70 USD
 3. `tools/aws-push-images.mjs <tag>`, then re-apply with `-var image_tag=<tag>` so the task definitions reference it.
 4. Run the roles task, then the seven migration tasks (README, step 2).
 5. `terraform apply` with `services_enabled = true`.
-6. `tools/aws-upload-media.mjs`; import the sample data in staff-web (README, Loading data); run the `ops` task with `seed-demo.mjs` for the demo accounts.
+6. `tools/aws-upload-media.mjs`; create the sites in staff-web as Platform Admin, run the `ops` task with `seed-demo.mjs` for the demo accounts, then import the sample data as the role that owns it: a Pharmacy Manager for the master data and Warehouse Staff for the opening balances (README, Loading data).
 7. Teardown: `terraform destroy`. Rollback of a bad release is a previous `image_tag`.
 
 ## Testing

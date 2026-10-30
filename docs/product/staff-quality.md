@@ -13,8 +13,8 @@ A received batch is unverified stock until quality review says otherwise. This p
 
 ## Users and entry points
 
-- **Who decides (target):** Pharmacist, Pharmacy Manager and Platform Admin, each only for batches at sites they can access (US4). `[standard]` Owner may change the role split.
-- **Who reads (target):** Warehouse Staff, Pharmacist and Pharmacy Manager see the batches at their sites. Warehouse Staff cannot decide. `[standard]`
+- **Who decides (target):** Pharmacist and Pharmacy Manager, each only for batches at sites they can access (US4). Platform Admin never decides (BR-AUTH-010). `[standard]` Owner may change the role split.
+- **Who reads (target):** Warehouse Staff, Pharmacist and Pharmacy Manager see the batches at their sites; Platform Admin reads every batch. Warehouse Staff and Platform Admin cannot decide. `[standard]`
 - **Entry:** sidebar **Quality** or `/quality`, or Inventory > Batches. Sign-in is required. `[observed]`
 - **Related:** batches are created by **Create batch** on Inventory > Batches, and by goods receipt. See [staff-inventory-operations](staff-inventory-operations.md) and [staff-procurement-and-receiving](staff-procurement-and-receiving.md).
 
@@ -55,8 +55,8 @@ A received batch is unverified stock until quality review says otherwise. This p
 
 - Source: `[standard]` (site scope, BR-AUTH-004).
 - Accepted when:
-  - A verdict on a batch that has no balance at any of my sites is refused with 403 `site_access_denied`. Platform Admin is not limited. (Gap G2)
-  - A batch with no balance at any site can be decided only by Pharmacy Manager and Platform Admin. `[standard]`
+  - A verdict on a batch that has no balance at any of my sites is refused with 403 `site_access_denied`. Platform Admin is not site-limited, and decides nothing at all (US7). (Gap G2)
+  - A batch with no balance at any site can be decided only by a Pharmacy Manager. `[standard]`
   - A verdict applies to the batch at every site, because the lot is one fact. The availability of each holding site is re-answered. `[observed]`
 
 ### US5. As a Pharmacist or Pharmacy Manager, I see expiry risk in the queue, so that I act before stock expires on the shelf.
@@ -80,7 +80,7 @@ A received batch is unverified stock until quality review says otherwise. This p
 - Source: `[standard]` (role split, BR-AUTH-002).
 - Accepted when:
   - A `POST /api/inventory/batches/:id/quality` from a Warehouse Staff identity is refused with 403.
-  - A `POST` from a Pharmacist, Pharmacy Manager or Platform Admin identity at an accessible site is accepted.
+  - A `POST` from a Pharmacist or Pharmacy Manager identity at an accessible site is accepted; a `POST` from a Platform Admin identity is refused with 403.
 
 ### US8. Every batch waits for review before it is used.
 
@@ -140,11 +140,11 @@ Answers to the former open questions (Q1 to Q8) and to the questions this rewrit
 | Q6 | Denied user: how is a refused Release or Reject shown? | `[owner]` 2026-10-29: hidden, as in Odoo. `GatedButton` renders nothing; the service and the edge still refuse the call. Replaces the earlier dimmed control with a tooltip. | A control the user can never use is noise. Roles are not a secret: the sidebar already hides what a role cannot open. |
 | Q7 | Should recall and an expiry list or warning be on this page? | `[standard]` Expiry: yes (US5). Recall: no separate flow. A recall is a Reject whose notes say "thu hồi", which stops sale at once (Q1, Q2). The trace is the batch's movement history, filtered by batch. Telling customers is a manual act of a Pharmacist, outside the system. Owner may change the recall process. | Recall begins with stopping the lot and tracing where it went. The ledger already records each movement against the batch, so a separate recall register is not needed at this scale. |
 | Q8 | An expired Released batch still reads "Đã đạt". Is that intended? | `[standard]` No. The stored verdict stays `Released`, and a derived label "Hết hạn" is shown from the expiry date. The batch is not sellable (BR-QUALITY-004). | The verdict (quality) and the expiry date (age) are two facts. Overwriting one with the other loses the QC record. |
-| N1 | Who decides, and who reads? | `[standard]` Decide: Pharmacist, Pharmacy Manager, Platform Admin, at accessible sites. Read: Warehouse Staff too. Warehouse Staff never decides. Owner may change. | Pharmacists and managers own clinical and quality release. Receiving staff are read-only here, so the person who received stock does not clear it. |
+| N1 | Who decides, and who reads? | `[standard]` Decide: Pharmacist and Pharmacy Manager, at accessible sites. Read: Warehouse Staff at their sites and Platform Admin everywhere. Warehouse Staff and Platform Admin never decide (BR-AUTH-010). Owner may change. | Pharmacists and managers own clinical and quality release. Receiving staff are read-only here, so the person who received stock does not clear it. |
 | N2 | Can the person who received the stock review it? | `[standard]` No. The creator of the batch or of its goods receipt cannot release or reject it (maker-checker). | Segregation of duties: nobody approves their own record. |
 | N3 | Is a reason required for a reject? | `[standard]` Yes, a non-blank reason, at most 1000 characters. Release notes are optional. | A rejection is the record that supplier claims, recalls and audits rely on. |
 | N4 | Can a batch already past its expiry be released? | `[standard]` No, refused with 409. A reject is still allowed. | Releasing an expired lot has no use and is most likely a mistake. |
-| N5 | Who may decide a batch that is at several sites? | `[standard]` A user with access to at least one holding site may decide it. The verdict applies to every site. A batch with no stock anywhere is decided only by Pharmacy Manager and Platform Admin. | Staff act only at their sites, and one lot has one verdict. |
+| N5 | Who may decide a batch that is at several sites? | `[standard]` A user with access to at least one holding site may decide it. The verdict applies to every site. A batch with no stock anywhere is decided only by a Pharmacy Manager. | Staff act only at their sites, and one lot has one verdict. |
 | N6 | Is the verdict history kept? | `[standard]` Yes, append-only: actor, time, decision, notes. Shown in the drawer and in Audit. The batch row keeps the latest verdict for the list. | Entity history is shown to whoever can see the record, and audit is append-only. A re-review must not erase the first verdict. |
 | N7 | How do imports and opening balances set the verdict? | `[standard]` They create `PendingQc` batches. An import cannot set `Released`; a Released batch comes only from this page. Owner may change, if opening stock is to bypass review. | BR-RECV-008. Stock is sellable only after a verdict. |
 | N8 | Which "today" decides expiry? | `[standard]` The date in Asia/Ho_Chi_Minh, for the sellable check, the sweep, the release refusal and the label. | A UTC date keeps a batch sellable until 07:00 Vietnam time the day after its expiry. |
@@ -156,7 +156,7 @@ Answers to the former open questions (Q1 to Q8) and to the questions this rewrit
 
 | ID | The spec requires | The code does today | Where |
 | --- | --- | --- | --- |
-| G2 | Method-level server policy: GET batches for Warehouse Staff, Pharmacist and Pharmacy Manager at their sites; the verdict `POST` for Pharmacist, Pharmacy Manager and Platform Admin; a site check on the verdict (US4, US7). | The edge rules and the verdict route match the method split, and the list narrows to the actor's sites. Still open: the verdict needs every holding site in the actor's scope (`refuseOutOfSiteScope` uses `every`), where N5 needs one; and a batch with no balance is refused to every site-scoped user, Pharmacy Manager included, where US4 lets a Pharmacy Manager decide it. | `apps/inventory-service/src/modules/access-control.ts` (`refuseOutOfSiteScope`); `apps/inventory-service/src/modules/inventory-routes.ts` (`/inventory/batches/:id/quality`). |
+| G2 | Method-level server policy: GET batches for Warehouse Staff, Pharmacist and Pharmacy Manager at their sites; the verdict `POST` for Pharmacist and Pharmacy Manager, refused to Platform Admin; a site check on the verdict (US4, US7). | The edge rules and the verdict route match the method split, and the list narrows to the actor's sites. Still open: the verdict needs every holding site in the actor's scope (`refuseOutOfSiteScope` uses `every`), where N5 needs one; and a batch with no balance is refused to every site-scoped user, Pharmacy Manager included, where US4 lets a Pharmacy Manager decide it. | `apps/inventory-service/src/modules/access-control.ts` (`refuseOutOfSiteScope`); `apps/inventory-service/src/modules/inventory-routes.ts` (`/inventory/batches/:id/quality`). |
 | G3 | The creator of a batch or of its goods receipt cannot review it (N2). | The batch's creator is refused, but with 403 `self_approval_forbidden` and the English title "Approver must not be the creator" (`refuseSelfApproval`), not the 409 and Vietnamese text US1 names. `created_by` is set by Create batch, by import, and by the goods receipt that creates the batch (to the receipt's recorder). Still open: a receipt that adds stock to an existing batch does not record its recorder, so that person can release the batch. `docs/business-rules.md` BR-QUALITY-002 has no self-review rule. | `apps/inventory-service/src/modules/access-control.ts` (`refuseSelfApproval`); `apps/inventory-service/src/modules/inventory-routes.ts` (verdict route); `apps/inventory-service/src/main.ts` (receipt handler, `createBatch`); `docs/business-rules.md` BR-QUALITY-002. |
 | G4 | A release of a batch past its expiry is refused with 409 (N4). | `reviewBatch` checks neither expiry nor the current status. The domain check `reviewBatchQuality` is not called (BR-GAP-001). | `apps/inventory-service/src/modules/inventory-repository.ts` (`reviewBatch`); `apps/inventory-service/src/modules/quality/domain/batch-quality.ts`. |
 | G5 | A reject needs a non-blank reason of at most 1000 characters (N3). | The route accepts `notes` as optional and nullable, up to 1000 characters (`qualitySchema`). The dialog accepts a blank entry and sends `notes: null`. Wrong side: BR-QUALITY-002 says notes are optional; the target makes the reason required on reject. | `apps/inventory-service/src/modules/inventory-routes.ts` (`qualitySchema`); `apps/staff-web/src/sections/inventory/balances-batches.tsx` (`quality`); `docs/business-rules.md` BR-QUALITY-002. |

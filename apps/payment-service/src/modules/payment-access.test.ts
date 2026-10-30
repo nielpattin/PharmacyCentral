@@ -113,11 +113,11 @@ describe("payment write roles at the route", () => {
       expect(writes).toStrictEqual(["refund"]);
     });
 
-    it("refunds an online-order invoice for Platform Admin", async () => {
+    it("refuses an online-order invoice for Platform Admin before any write", async () => {
       kind = "online";
       const response = await post(`/payments/${invoiceId}/refund`, "Platform Admin", reason);
-      expect(response.status).toBe(200);
-      expect(writes).toStrictEqual(["refund"]);
+      expect(response.status).toBe(403);
+      expect(writes).toStrictEqual([]);
     });
 
     it("refuses an online-order invoice for a Pharmacist before any write", async () => {

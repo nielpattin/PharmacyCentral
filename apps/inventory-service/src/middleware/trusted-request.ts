@@ -209,7 +209,7 @@ type RoleRule = Route & { roles: readonly string[] };
 const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/procurement/purchase-orders", roles: ["Pharmacy Manager", "Warehouse Staff"] },
   { methods: ["WRITE"], path: "/procurement/purchase-orders", roles: ["Pharmacy Manager"] },
-  // Replenishment suggestions and their draft orders (design 0007): a Pharmacy Manager; Platform Admin passes.
+  // Replenishment suggestions and their draft orders (design 0007): a Pharmacy Manager; Platform Admin reads.
   { methods: ["*"], path: "/procurement/replenishment-suggestions", roles: ["Pharmacy Manager"] },
   { methods: ["*"], path: "/procurement/goods-receipts", roles: ["Warehouse Staff"] },
   { methods: ["*"], path: "/inventory/imports/opening-balances", exact: true, roles: ["Warehouse Staff"] },
@@ -222,15 +222,15 @@ const ROLE_RULES: readonly RoleRule[] = [
     roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
   },
   { methods: ["WRITE"], path: "/inventory/replenishment", roles: ["Warehouse Staff"] },
-  // Action plans (design 0007): a Pharmacy Manager creates; the owner, a manager, or Warehouse Staff reads or moves
-  // it. Which plans a caller sees, and whether the owner may change anything but the status, is checked by the route.
+  // Action plans (design 0007): the owner, a manager, or Warehouse Staff reads or moves a plan; Platform Admin and a
+  // manager may reassign it. Which plans a caller sees, and which fields a caller may change, is checked by the route.
   { methods: ["READ"], path: "/inventory/action-plans", roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"] },
   { methods: ["POST"], path: "/inventory/action-plans", exact: true, roles: ["Pharmacy Manager"] },
   {
     methods: ["PATCH"],
     path: "/inventory/action-plans/*",
     exact: true,
-    roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
+    roles: ["Platform Admin", "Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
   },
   { methods: ["READ"], path: "/inventory/batches", roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"] },
   { methods: ["POST"], path: "/inventory/batches/*/quality", exact: true, roles: ["Pharmacist", "Pharmacy Manager"] },
@@ -258,8 +258,6 @@ const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["WRITE"], path: "/inventory/returns", roles: ["Warehouse Staff"] },
 ];
 
-const PLATFORM_ADMIN_EXCLUDED: readonly Route[] = [];
-
 const ROLE_FORBIDDEN_DETAIL = "Vai trò của tài khoản này không được thực hiện thao tác này.";
 
 const routeMatches = (route: Route, path: string, method: string): boolean => {
@@ -276,15 +274,17 @@ const routeMatches = (route: Route, path: string, method: string): boolean => {
   );
 };
 
+/**
+ * A role the rule names passes. A route with no rule, or a rule that names no role, admits any employee. Platform Admin
+ * is read-only: it reads every route, and writes only where a rule names it.
+ */
 const roleRefusal = (path: string, method: string, roles: readonly string[]): string | undefined => {
-  if (roles.includes("Platform Admin")) {
-    return PLATFORM_ADMIN_EXCLUDED.some((route) => routeMatches(route, path, method))
-      ? ROLE_FORBIDDEN_DETAIL
-      : undefined;
-  }
   const rule = ROLE_RULES.find((candidate) => routeMatches(candidate, path, method));
   if (rule === undefined || rule.roles.length === 0) return undefined;
-  return rule.roles.some((role) => roles.includes(role)) ? undefined : ROLE_FORBIDDEN_DETAIL;
+  if (rule.roles.some((role) => roles.includes(role))) return undefined;
+  const upper = method.toUpperCase();
+  const isRead = upper === "GET" || upper === "HEAD";
+  return roles.includes("Platform Admin") && isRead ? undefined : ROLE_FORBIDDEN_DETAIL;
 };
 
 /**
@@ -566,8 +566,8 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       return;
     }
 
-    // The roles a verified employee holds are checked here as the edge checks them: Platform Admin passes every rule
-    // except the excluded routes, and any other employee needs one of the roles the rule names.
+    // The roles a verified employee holds are checked here as the edge checks them: Platform Admin reads every
+    // route and writes only where a rule names it, and any other employee needs one of the roles the rule names.
     if (verifiedContext && verifiedContext.actorType === "employee") {
       const detail = roleRefusal(request.path, request.method, verifiedContext.roles);
       if (detail !== undefined) {

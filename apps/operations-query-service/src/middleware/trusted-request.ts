@@ -211,8 +211,6 @@ const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/dashboard", roles: ["Pharmacy Manager", "Warehouse Staff"] },
 ];
 
-const PLATFORM_ADMIN_EXCLUDED: readonly Route[] = [];
-
 const ROLE_FORBIDDEN_DETAIL = "Vai trò của tài khoản này không được thực hiện thao tác này.";
 
 const routeMatches = (route: Route, path: string, method: string): boolean => {
@@ -229,15 +227,17 @@ const routeMatches = (route: Route, path: string, method: string): boolean => {
   );
 };
 
+/**
+ * A role the rule names passes. A route with no rule, or a rule that names no role, admits any employee. Platform Admin
+ * is read-only: it reads every route, and writes only where a rule names it.
+ */
 const roleRefusal = (path: string, method: string, roles: readonly string[]): string | undefined => {
-  if (roles.includes("Platform Admin")) {
-    return PLATFORM_ADMIN_EXCLUDED.some((route) => routeMatches(route, path, method))
-      ? ROLE_FORBIDDEN_DETAIL
-      : undefined;
-  }
   const rule = ROLE_RULES.find((candidate) => routeMatches(candidate, path, method));
   if (rule === undefined || rule.roles.length === 0) return undefined;
-  return rule.roles.some((role) => roles.includes(role)) ? undefined : ROLE_FORBIDDEN_DETAIL;
+  if (rule.roles.some((role) => roles.includes(role))) return undefined;
+  const upper = method.toUpperCase();
+  const isRead = upper === "GET" || upper === "HEAD";
+  return roles.includes("Platform Admin") && isRead ? undefined : ROLE_FORBIDDEN_DETAIL;
 };
 
 /**

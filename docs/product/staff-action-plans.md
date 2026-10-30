@@ -16,7 +16,7 @@ Tags: `[owner]` a recorded owner decision; `[observed]` read from the code; `[st
 
 - The system creates the plans. Platform Admin and Pharmacy Manager can also create one by hand, and see every plan of their sites. A manager only reassigns the owner: the title, detail and due date come from the system and the status belongs to the owner. `[owner]` 2026-10-29
 - Pharmacist and Warehouse Staff see only the plans they own and may move those between open, in progress and done. A Pharmacist never creates a plan, and the system gives plans to Pharmacists first.
-- Manual override, kept on all four entry points because each is the only way to make a plan the system skipped (a plan done in the last 7 days, a site with no Pharmacist or Manager) or to choose the owner at creation. **Tạo kế hoạch** prefills a plan from: a reorder suggestion row (Procurement), a dead stock row (Analytics), an expired or soon expiring batch with stock (Inventory, Balances), a valuation line with a missing price (Finance summary). Only Platform Admin and Pharmacy Manager see that action.
+- Manual override, kept on all four entry points because each is the only way to make a plan the system skipped (a plan done in the last 7 days, a site with no Pharmacist or Manager) or to choose the owner at creation. **Tạo kế hoạch** prefills a plan from: a reorder suggestion row (Procurement), a dead stock row (Analytics), an expired or soon expiring batch with stock (Inventory, Balances), a valuation line with a missing price (Finance summary). Only a Pharmacy Manager sees that action; Platform Admin does not.
 
 ## User stories and acceptance criteria
 
@@ -54,7 +54,7 @@ Tags: `[owner]` a recorded owner decision; `[observed]` read from the code; `[st
   - Choosing a plan's title opens a read-only drawer for every role that sees the plan: the full title, the description the system wrote (**Mô tả**), the **Việc cần làm** for its source, site, owner, due date with the overdue mark, and the status. A **Đi tới** button opens the page where the work happens (Bổ sung hàng, Tồn kho, or Giá bán), shown only when the viewer's role may open that page. A manager also gets **Giao lại** there. `[owner]` 2026-10-29
   - The list shows title, source, site, owner, due date, status and last update, newest first, with filters by owner and by status and a search box; the filters are in the URL.
   - An open or in progress plan past its due date is marked overdue.
-  - A manager sees plans of their sites; Pharmacist and Warehouse Staff see their own plans only, and have no owner filter.
+  - A manager sees plans of their sites; Platform Admin sees every plan; Pharmacist and Warehouse Staff see their own plans only, and have no owner filter.
 
 ## Contents and behavior
 

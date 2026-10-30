@@ -14,7 +14,7 @@ Tags: `[observed]` a code or doc fact read on 2026-10-26. `[standard]` a decisio
 
 ## Users and entry points
 
-- `[observed]` Platform Admin only. The sidebar item **System** (`Hệ thống`) sits in the Governance group; `sectionRoles.system` is `["Platform Admin"]` in `App.tsx`. Another user who opens `/system` is redirected to the first section they can see.
+- `[observed]` Platform Admin only. The sidebar item **System** (`Hệ thống`) sits in the Governance group; `sectionRoles.system` is `["Platform Admin"]` in `apps/staff-web/src/permissions/section-access.ts`. Another user who opens `/system` is redirected to the first section they can see.
 - `[observed]` Three checks: the edge policy (`/api/system` is in `platformAdminPaths`, `deploy/aws/lambda/policy.mjs`); the service (`requirePlatformAdmin`: a verified identity context with `actorType` `employee` and role `Platform Admin`, else 401 `trusted_request_required` or 403 `platform_admin_required`; `/health/*` stays open); and the menu.
 - `[standard]` The page is not site-scoped. Platform Admin sees all data ([BR-AUTH-003](../business-rules.md)). It has no approval or write action (Decision 19).
 

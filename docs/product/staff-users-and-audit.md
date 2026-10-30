@@ -14,7 +14,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 
 ## Users and entry points
 
-- Platform Admin only (D2). `sectionRoles.users` and `sectionRoles.audit` are `["Platform Admin"]` in `apps/staff-web/src/App.tsx`. The server enforces the same rule: `/api/admin` and `/api/audit` are in `platformAdminPaths` (`deploy/aws/lambda/policy.mjs`), and the identity admin router answers `401 unauthenticated` without a session and `403 forbidden` to any other role ([BR-AUTH-002](../business-rules.md), [BR-USER-001](../business-rules.md), [BR-AUDIT-004](../business-rules.md)). `[observed]`
+- Platform Admin only (D2). `sectionRoles.users` and `sectionRoles.audit` are `["Platform Admin"]` in `apps/staff-web/src/permissions/section-access.ts`. The server enforces the same rule: `/api/admin` and `/api/audit` are in `platformAdminPaths` (`deploy/aws/lambda/policy.mjs`), and the identity admin router answers `401 unauthenticated` without a session and `403 forbidden` to any other role ([BR-AUTH-002](../business-rules.md), [BR-USER-001](../business-rules.md), [BR-AUDIT-004](../business-rules.md)). `[observed]`
 - Entry points: the sidebar items **Users** and **Audit**, the URLs `/users` and `/audit`. Keys: `n` opens **Tạo người dùng** on Users; `/` focuses search on Audit. `[observed]`
 - Customer accounts are not managed here; customers sign up on the shop site ([user guide](../user-guide.md#users-and-access)). `[observed]`
 - Staff sign in with email and password only. Google accounts are customers and never get staff access (D9). `[standard]`

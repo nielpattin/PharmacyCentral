@@ -9,9 +9,15 @@ if (process.argv.includes("--dry-run")) {
   process.exit(0);
 }
 
+// The managers and the warehouse account do the work Platform Admin used to do, so they reach every site that holds
+// stock or master data: the managers all four, the warehouse account the three that hold stock.
+const allSites = ["SITE-HQ", "SITE-WH", "SITE-HUB", "SITE-RTL"];
+const stockSites = ["SITE-WH", "SITE-HUB", "SITE-RTL"];
+
 /**
  * One account per staff role, each holding only that role, so signing in as one shows exactly what the role may do.
- * Site access names `catalog_service` site codes from `data/import-samples/sites.csv`.
+ * A second Pharmacy Manager exists for separation of duties. Site access names `catalog_service` site codes from
+ * `data/import-samples/sites.csv`.
  */
 const demoAccounts = [
   {
@@ -28,7 +34,7 @@ const demoAccounts = [
     email: "manager@pharmacycentral.vn",
     displayName: "Lê Minh Châu",
     roles: ["Pharmacy Manager"],
-    siteCodes: ["SITE-RTL"],
+    siteCodes: allSites,
   },
   {
     id: "00000000-0000-4000-8000-000000000004",
@@ -44,7 +50,16 @@ const demoAccounts = [
     email: "warehouse@pharmacycentral.vn",
     displayName: "Võ Văn Hùng",
     roles: ["Warehouse Staff"],
-    siteCodes: ["SITE-WH"],
+    siteCodes: stockSites,
+  },
+  // A second manager: nobody approves their own purchase order or price, so the first manager approves this one's.
+  {
+    id: "00000000-0000-4000-8000-000000000012",
+    actorType: "employee",
+    email: "manager2@pharmacycentral.vn",
+    displayName: "Hoàng Quốc Bảo",
+    roles: ["Pharmacy Manager"],
+    siteCodes: allSites,
   },
   // More shoppers, so the order lists and the pharmacist queue show different people rather than one account.
   {

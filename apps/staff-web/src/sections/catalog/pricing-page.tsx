@@ -68,6 +68,8 @@ export const PricingPage = (): React.JSX.Element => {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const session = useSession();
+  // Prices are written by the Pharmacy Manager; Platform Admin and the other roles only read them.
+  const canWrite = can("catalog.write", session).allowed;
   const confirm = useConfirm();
   const run = useStaffAction();
   const queryClient = useQueryClient();
@@ -89,7 +91,7 @@ export const PricingPage = (): React.JSX.Element => {
     },
     { label: "Focus search" },
   );
-  useHotkey("n", () => setDrawerOpen(true), { label: "Create new", when: !drawerOpen });
+  useHotkey("n", () => setDrawerOpen(true), { label: "Create new", when: canWrite && !drawerOpen });
 
   const productFor = (row: JsonRecord): { label: string; unit: string } => {
     const productId = text(row.productId, "");
@@ -167,13 +169,13 @@ export const PricingPage = (): React.JSX.Element => {
     (row) =>
       BULK.publish.eligible(text(row.status, "")) && can("price.publish", session, ownerOf(row.createdBy)).allowed,
   ).length;
-  const archivable = selectedRows.filter((row) => BULK.archive.eligible(text(row.status, ""))).length;
+  const archivable = selectedRows.filter((row) => canWrite && BULK.archive.eligible(text(row.status, ""))).length;
 
   const hasRowAction = (row: JsonRecord): boolean => {
     const status = text(row.status, "");
     return (
       (BULK.publish.eligible(status) && can("price.publish", session, ownerOf(row.createdBy)).allowed) ||
-      BULK.archive.eligible(status)
+      (canWrite && BULK.archive.eligible(status))
     );
   };
 
@@ -241,7 +243,7 @@ export const PricingPage = (): React.JSX.Element => {
                 {translateText("Publish")}
               </GatedButton>
             ) : null}
-            {BULK.archive.eligible(status) ? (
+            {canWrite && BULK.archive.eligible(status) ? (
               <Button variant="outline" size="sm" onClick={() => void transitionOne(row, "archive")}>
                 {translateText("Archive")}
               </Button>
@@ -255,9 +257,11 @@ export const PricingPage = (): React.JSX.Element => {
   return (
     <>
       <PageActions>
-        <Button size="sm" onClick={() => setDrawerOpen(true)}>
-          {translateText("Create price draft")}
-        </Button>
+        {canWrite ? (
+          <Button size="sm" onClick={() => setDrawerOpen(true)}>
+            {translateText("Create price draft")}
+          </Button>
+        ) : null}
       </PageActions>
       {list.error ? (
         <Alert variant="danger" className="mb-3">
@@ -296,7 +300,7 @@ export const PricingPage = (): React.JSX.Element => {
           empty={translateText("No prices match these filters.")}
           getKey={(row) => idOf(row)}
           storageKey="staff:catalog:prices"
-          selection={{ keys: selected, onChange: setSelected }}
+          selection={canWrite ? { keys: selected, onChange: setSelected } : undefined}
           bulkActions={
             <>
               <Button size="sm" disabled={busy || publishable === 0} onClick={() => void runBulk("publish")}>

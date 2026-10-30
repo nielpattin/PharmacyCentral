@@ -16,6 +16,6 @@ model {
   }
 
   platformAdmin = actor "Platform admin" {
-    summary "Runs the platform: the AI integrations, the employee accounts and the site access."
+    summary "Runs the platform: the AI integrations, the employee accounts, the site access, the audit log and the sites. Reads every staff screen, and changes nothing the working roles own."
   }
 }

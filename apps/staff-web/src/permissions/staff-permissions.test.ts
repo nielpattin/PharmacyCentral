@@ -17,7 +17,7 @@ const PM = "Pharmacy Manager";
 const PHARMACIST = "Pharmacist";
 const WAREHOUSE = "Warehouse Staff";
 
-// Who the role contract admits for each action, without Platform Admin (handled below). Written from the inventory and
+// Who the role contract admits for each action, without Platform Admin (listed separately below). Written from the inventory and
 // shell specs and deploy/aws/lambda/policy.mjs, not read back from the map, so a wrong map entry fails here.
 const admitted: Record<StaffAction, readonly StaffRole[]> = {
   "prescription.create": [PHARMACIST],
@@ -75,17 +75,26 @@ const admitted: Record<StaffAction, readonly StaffRole[]> = {
   "ai.credential.write": [],
 };
 
-// Actions Platform Admin is refused by name, not by role: counter work, cash, customer lookup and synonym approval.
-const platformAdminExcluded: readonly StaffAction[] = [
-  "prescription.create",
-  "prescription.dispense",
-  "prescription.cancel",
-  "prescription.createInvoice",
-  "consultation.answer",
-  "payment.confirmCash",
-  "payment.refund.counter",
-  "customer.lookup",
-  "synonym.approve",
+// What Platform Admin may do: read the operational screens, and write only users, site create and delete, AI
+// credentials and the owner of an action plan. Everything else belongs to the three working roles.
+const platformAdminActions: readonly StaffAction[] = [
+  "payment.invoices.view",
+  "finance.summary.view",
+  "replenishment.suggestions.view",
+  "goodsReceipt.view",
+  "inventory.balances.view",
+  "inventory.batches.view",
+  "inventory.movements.view",
+  "inventory.adjustments.view",
+  "inventory.transfers.view",
+  "inventory.stocktake.view",
+  "inventory.returns.view",
+  "replenishment.view",
+  "actionPlan.reassign",
+  "catalog.site.create",
+  "catalog.site.delete",
+  "governance.user.write",
+  "ai.credential.write",
 ];
 
 const sessionWith = (...roles: string[]) => ({ roles, userId: "user-1" });
@@ -101,10 +110,13 @@ describe("staff permission map", () => {
     }
   });
 
-  it.each(Object.keys(staffActions) as StaffAction[])("lets Platform Admin through %s unless excluded", (action) => {
-    const result = can(action, sessionWith(PA));
-    expect(result.allowed, action).toBe(!platformAdminExcluded.includes(action));
-  });
+  it.each(Object.keys(staffActions) as StaffAction[])(
+    "admits Platform Admin to %s only when it reads or administers",
+    (action) => {
+      const result = can(action, sessionWith(PA));
+      expect(result.allowed, action).toBe(platformAdminActions.includes(action));
+    },
+  );
 
   it("refuses every action to a session with no roles", () => {
     for (const action of Object.keys(staffActions) as StaffAction[]) {
@@ -143,11 +155,8 @@ describe("separation of duties", () => {
     expect(can(action, { roles: [role], userId: "user-1" }, ownedBy("user-2"))).toEqual({ allowed: true });
   });
 
-  it("refuses a Platform Admin who decides an adjustment they proposed", () => {
-    expect(can("inventory.adjustment.decide", sessionWith(PA), ownedBy("user-1"))).toEqual({
-      allowed: false,
-      reason: "Bạn không thể tự duyệt thay đổi của mình.",
-    });
+  it("refuses a Platform Admin the decision on an adjustment, which a Pharmacy Manager makes", () => {
+    expect(can("inventory.adjustment.decide", sessionWith(PA), ownedBy("user-2")).allowed).toBe(false);
   });
 
   it("refuses a Pharmacy Manager who approves their own search synonym group", () => {
@@ -237,7 +246,7 @@ describe("site scope", () => {
   });
 
   it("gives Platform Admin every site, with no assignment", () => {
-    expect(canAtSite("catalog.write", { roles: [PA], userId: "user-1" }, "site-z")).toEqual({ allowed: true });
+    expect(canAtSite("actionPlan.reassign", { roles: [PA], userId: "user-1" }, "site-z")).toEqual({ allowed: true });
   });
 
   it("reports the role before the site when the role is refused", () => {

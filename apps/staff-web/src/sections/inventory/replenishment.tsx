@@ -404,7 +404,7 @@ export const ReplenishmentTab = (): React.JSX.Element => {
         getKey={(row) => text(row.id, "")}
         search={{ value: draft, onChange: setDraft, placeholder: translateText("Search by notes or batch number") }}
         paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
-        selection={{ keys: selected, onChange: setSelected }}
+        selection={decideGate.allowed ? { keys: selected, onChange: setSelected } : undefined}
         bulkActions={
           <>
             <GatedButton gate={decideGate} size="sm" onClick={() => void bulkTransition("approve")}>

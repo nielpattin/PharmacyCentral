@@ -30,10 +30,11 @@ const createTestServer = async (
 ): Promise<{ server: Server; url: string }> => {
   const app = express();
   app.use(express.json());
-  // The edge forwards the verified roles; a test call without them acts as Platform Admin, which passes every role
+  // The edge forwards the verified roles; a test call without them acts as every staff role at once, which passes every role
   // check. Role and site cases send their own headers.
   app.use((request, _response, next) => {
-    if (request.header("x-actor-roles") === undefined) request.headers["x-actor-roles"] = "Platform Admin";
+    if (request.header("x-actor-roles") === undefined)
+      request.headers["x-actor-roles"] = "Pharmacist,Pharmacy Manager,Warehouse Staff";
     next();
   });
   app.use(createInventoryRouter(repository, dispenseCostRowLimit));

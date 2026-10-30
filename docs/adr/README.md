@@ -68,3 +68,4 @@ outlive the feature becomes an ADR. The design document links to the ADRs it rel
 | [0016](0016-prescription-only-products-are-not-sold-online.md) | Prescription-only products are not put in the cart or sold online | Accepted | 2026-10-26 |
 | [0017](0017-roles-checked-at-the-edge-and-in-each-service.md) | Roles are checked at the edge and in every service | Accepted | 2026-10-26 |
 | [0018](0018-default-seed-and-demo-seed-are-separate.md) | The default seed and the demo seed are separate | Accepted | 2026-10-28 |
+| [0019](0019-platform-admin-reads-and-administers.md) | Platform Admin reads and administers, and works nothing else | Accepted | 2026-10-30 |

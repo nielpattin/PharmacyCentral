@@ -64,7 +64,7 @@ export const createSearchSynonymRouter = (options: SearchSynonymRouteOptions): R
   const router = Router();
   const identity = { identitySecret: options.identitySecret, audience: options.audience };
   // The trusted middleware lets GET /products through without identity, so every route checks the signed context and
-  // its role here. Platform Admin proposes, edits and deletes but may not approve (see ROLE_RULES).
+  // its role here. Platform Admin reads the groups and changes none (see ROLE_RULES).
   const editor = requireEmployee(identity, ROLE_RULES.searchSynonymEditor);
   const approver = requireEmployee(identity, ROLE_RULES.searchSynonymApprover);
 

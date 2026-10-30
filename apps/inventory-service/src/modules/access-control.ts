@@ -23,13 +23,15 @@ export const refuseRole = (response: Response): false => {
 };
 
 /**
- * Sends 403 unless the actor holds one of `roles` and returns false. Platform Admin passes every role check; a system
- * actor (another service acting for itself) passes too. Routes call this before they read the record they act on.
+ * Sends 403 unless the actor holds one of `roles` and returns false. Platform Admin passes the checks of a read and
+ * of nothing else; a system actor (another service acting for itself) passes too. Routes call this before they read
+ * the record they act on.
  */
 export const allowRoles = (request: Request, response: Response, roles: readonly string[]): boolean => {
   if (request.header("x-actor-type") === "system") return true;
   const held = actorRoles(request);
-  if (held.includes(PLATFORM_ADMIN) || roles.some((role) => held.includes(role))) return true;
+  const isRead = request.method === "GET" || request.method === "HEAD";
+  if ((isRead && held.includes(PLATFORM_ADMIN)) || roles.some((role) => held.includes(role))) return true;
   return refuseRole(response);
 };
 

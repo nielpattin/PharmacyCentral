@@ -9,8 +9,8 @@ import type { RouteRow } from "../../contracts/system.ts";
  * deploy/aws/lambda/policy.mjs. Access summarises the edge policy; the policy file is the authority.
  */
 
-// Every staff role that the edge lets through on a route with no role of its own. Platform Admin passes every role
-// check, so it is not listed.
+// Every staff role that the edge lets through on a route with no role of its own. Platform Admin reads every staff
+// route and writes only on the paths marked platform-admin, so it is not listed.
 const STAFF_ROLES = ["Pharmacy Manager", "Pharmacist", "Warehouse Staff"];
 
 export const ROUTE_TABLE: readonly RouteRow[] = [

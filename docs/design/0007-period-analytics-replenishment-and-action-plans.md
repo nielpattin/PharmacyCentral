@@ -40,10 +40,10 @@ Browser routes (all behind the edge role rules and the service role check):
 | --- | --- | --- | --- |
 | `GET /api/dashboard/analytics` | operations-query | Platform Admin, Pharmacy Manager | Period KPIs and inventory health |
 | `GET /api/procurement/replenishment-suggestions` | inventory | Platform Admin, Pharmacy Manager | Suggestion list for one site |
-| `POST /api/procurement/replenishment-suggestions/draft-orders` | inventory | Platform Admin, Pharmacy Manager | One Draft purchase order per supplier |
-| `GET /api/inventory/action-plans` | inventory | any employee (managers all, others own) | Plan list |
-| `POST /api/inventory/action-plans` | inventory | Platform Admin, Pharmacy Manager | Create a plan item |
-| `PATCH /api/inventory/action-plans/:id` | inventory | owner (status only) or manager (`ownerId` only) | Move the status, or reassign the owner |
+| `POST /api/procurement/replenishment-suggestions/draft-orders` | inventory | Pharmacy Manager | One Draft purchase order per supplier |
+| `GET /api/inventory/action-plans` | inventory | any employee (a manager all of their sites, Platform Admin all, others own) | Plan list |
+| `POST /api/inventory/action-plans` | inventory | Pharmacy Manager | Create a plan item |
+| `PATCH /api/inventory/action-plans/:id` | inventory | owner (status only), manager or Platform Admin (`ownerId` only) | Move the status, or reassign the owner |
 | `GET /api/auth/staff-directory` | identity | Platform Admin, Pharmacy Manager | Employee names for the owner picker |
 
 Internal routes (ops-query to owner services):

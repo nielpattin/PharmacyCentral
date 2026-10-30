@@ -35,8 +35,8 @@ export const permissionLiterals: Record<string, string> = {
   "Only a Pharmacy Manager or Warehouse Staff can view returns and removals.":
     "Chỉ Quản lý nhà thuốc hoặc Nhân viên kho được xem trả hàng và loại tồn.",
   "Only Warehouse Staff can create batches.": "Chỉ Nhân viên kho được tạo lô hàng.",
-  "Only a Pharmacist, Pharmacy Manager or Platform Admin can release or reject batches.":
-    "Chỉ Dược sĩ, Quản lý nhà thuốc hoặc Quản trị hệ thống được kiểm định lô.",
+  "Only a Pharmacist or Pharmacy Manager can release or reject batches.":
+    "Chỉ Dược sĩ hoặc Quản lý nhà thuốc được kiểm định lô.",
   "Only Warehouse Staff can record stock movements.": "Chỉ Nhân viên kho được ghi nhận biến động tồn kho.",
   "Only Warehouse Staff can create stock adjustments.": "Chỉ Nhân viên kho được tạo điều chỉnh tồn kho.",
   "Only a Pharmacy Manager can approve or reject adjustments.":

@@ -13,7 +13,7 @@ export const createInventoryImportRouter = (importService: InventoryImportServic
   router.post("/inventory/imports/opening-balances", async (request, response) => {
     if (!importService)
       return response.status(503).json({ title: "Inventory database is not configured", status: 503 });
-    // Opening stock is a Warehouse Staff record; Platform Admin passes every role check.
+    // Opening stock is a Warehouse Staff record; Platform Admin reads inventory and never writes it.
     if (!allowRoles(request, response, ["Warehouse Staff"])) return;
     const parsed = openingBalanceImportSchema.safeParse(request.body);
     if (!parsed.success)

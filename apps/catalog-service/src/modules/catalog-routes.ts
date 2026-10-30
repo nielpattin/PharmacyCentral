@@ -180,7 +180,7 @@ export const createCatalogRouter = (
     searchCache.clear();
     options.onProductsChanged?.();
   };
-  // Each write route names the rule it needs; Platform Admin passes every rule except the excluded ones (ROLE_RULES).
+  // Each write route names the rule it needs; Platform Admin reads and writes only where the rule names it (ROLE_RULES).
   const managers = requireEmployee(identity, ROLE_RULES.pharmacyManager);
   const platformAdminOnly = requireEmployee(identity, ROLE_RULES.platformAdminOnly);
   const staff = requireEmployee(identity);

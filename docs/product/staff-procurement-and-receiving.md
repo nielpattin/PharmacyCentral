@@ -15,7 +15,7 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
 
 - `[standard]` **Pharmacy Manager**: creates, edits (while Draft), approves and cancels purchase orders for assigned sites. Opens `/procurement`, which shows the Purchase orders tab only (Goods receipts needs `goodsReceipt.view`).
 - `[observed]` **Warehouse Staff**: records goods receipts and reads purchase orders for assigned sites, read-only, to receive against them. Opens `/receiving` (Goods receipts is the default tab). Cannot approve or cancel.
-- `[observed]` **Platform Admin**: everything on both pages, for every site (BR-AUTH-003).
+- `[observed]` **Platform Admin**: reads both pages for every site (BR-AUTH-003). It creates, approves and cancels no purchase order and records no receipt (BR-AUTH-010).
 - `[standard]` **Pharmacist**: no access to these pages. Batch quality is decided on the Quality page (see US4).
 - `[observed]` Sign-in is required. Lists and writes are limited to the employee's sites (BR-AUTH-004). Role gates are enforced at the edge (`deploy/aws/lambda/policy.mjs`) and in the service.
 - `[observed]` Create buttons open a side drawer: **Tạo đơn đặt hàng** on Purchase orders, **Nhận hàng** on Goods receipts, each also on key **N**.
@@ -26,7 +26,7 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
 
 - Source: `[observed]` [user guide](../user-guide.md#purchasing-and-receiving); BR-PROC-001 to BR-PROC-004.
 - Accepted when:
-  - **Tạo đơn đặt hàng** is enabled for Pharmacy Manager and Platform Admin only. Other roles see it disabled with the gate's reason.
+  - **Tạo đơn đặt hàng** is enabled for a Pharmacy Manager only. Other roles see it disabled with the gate's reason.
   - Supplier and site are required. Each line needs a product and a whole-number ordered quantity greater than 0. A decimal quantity is refused with 400 `invalid_request` (gap G14).
   - A request with no lines is refused with 400 `invalid_request`.
   - A missing or unknown supplier, site or product is refused with 400 `invalid_reference` and the title "Nhà cung cấp, site hoặc sản phẩm không tồn tại." (gap G4).
@@ -53,7 +53,7 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
   - **Hủy** appears on Draft, Approved and PartiallyReceived orders and needs the order number typed first. Success shows "Đã hủy đơn đặt hàng." Cancelling a Received or Cancelled order is refused with "Đơn đặt hàng ở trạng thái này không thể hủy."
   - Cancelling a PartiallyReceived order cancels only the unreceived part. Goods already received stay in stock.
   - **Duyệt mục đã chọn** approves each selected Draft that the actor did not create. It reports "Đã duyệt {done} trên {total} đơn đặt hàng." and "Chưa duyệt: {list}.", naming every order it left unchanged.
-  - Warehouse Staff see no Approve or Cancel control, and the API answers 403.
+  - Warehouse Staff and Platform Admin see no Approve, Cancel or Create control, and the API answers 403.
   - Approve or cancel on an order at a site outside the actor's sites is refused with 403 `site_access_denied`.
 
 ### US3. As Warehouse Staff, I record goods received, so that stock and the order both reflect the delivery
@@ -80,7 +80,7 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
 - Source: `[observed]` BR-RECV-008, BR-QUALITY-001 to BR-QUALITY-004; `[standard]` Decisions 1 and 15 (release is a Pharmacist decision, not a warehouse one).
 - Accepted when:
   - A new batch is **Chờ kiểm tra** (`PendingQc`). It is not counted as sellable or reserved, even though its on-hand already includes the receipt. Check available quantity, not on-hand (BR-QUALITY-003).
-  - **Đã đạt** (Release) and **Từ chối** (Reject) are available to Pharmacist, Pharmacy Manager and Platform Admin. Warehouse Staff see the batch read-only.
+  - **Đã đạt** (Release) and **Từ chối** (Reject) are available to Pharmacist and Pharmacy Manager. Warehouse Staff and Platform Admin see the batch read-only.
   - After release, the batch is sellable until its expiry date (BR-QUALITY-004).
   - A receipt into a batch that is already Released adds sellable stock at once. A receipt into a Rejected batch is refused (US3).
 
@@ -95,7 +95,7 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
 
 - Source: `[owner]` 2026-10-28; formulas `[standard]` (BR-PROC-007, BR-PROC-008, [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md)).
 - Accepted when:
-  - Procurement has the tab **Gợi ý đặt hàng** for Platform Admin and Pharmacy Manager only; the site is required and defaults to the first assigned site.
+  - Procurement has the tab **Gợi ý đặt hàng** for a Pharmacy Manager, who may create drafts from it; Platform Admin reads the tab and creates nothing. The site is required and defaults to the first assigned site.
   - The list shows, per product grouped by supplier: available, on order, daily sales speed, lead time (marked when it is the default and not observed), reorder point, suggested quantity and days of cover. The window, cover days, safety days and default lead time are inputs.
   - A row with no known supplier cannot be selected until a supplier is chosen. Quantities are editable positive integers.
   - **Tạo đơn nháp** creates one `Draft` purchase order per supplier for the selected rows in one step, or none when any reference fails. Nothing is approved or sent; approval stays with another manager (US2).
@@ -166,8 +166,8 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
 
 | # | Question | Decision | Why |
 | --- | --- | --- | --- |
-| 1 | Why are ordering and receiving two roles? | Keep the split. Pharmacy Manager orders and approves; Warehouse Staff records receipts; Platform Admin may do both. | `[standard]` Buyer and receiver are separate duties. A receipt confirms the order only when another person records it (three-way match of order, receipt and invoice). |
-| 2 | Can the creator approve their own order? | No. Approval needs another Pharmacy Manager or Platform Admin. Cancel needs no second person: it adds no stock or payment, so any Pharmacy Manager with site access may cancel. | `[standard]` Segregation of duties, ISO/IEC 27001 practice. Nobody checks their own purchase. Gap G1. |
+| 1 | Why are ordering and receiving two roles? | Keep the split. Pharmacy Manager orders and approves; Warehouse Staff records receipts; Platform Admin reads both and does neither (BR-AUTH-010). | `[standard]` Buyer and receiver are separate duties. A receipt confirms the order only when another person records it (three-way match of order, receipt and invoice). |
+| 2 | Can the creator approve their own order? | No. Approval needs another Pharmacy Manager; Platform Admin approves nothing. Cancel needs no second person: it adds no stock or payment, so any Pharmacy Manager with site access may cancel. | `[standard]` Segregation of duties, ISO/IEC 27001 practice. Nobody checks their own purchase. Gap G1. |
 | 3 | Should Warehouse Staff see purchase orders? | Yes, read-only, for their own sites. Writes stay with the Pharmacy Manager. Orders carry no prices. | `[standard]` Receiving checks lines against the order, so the receiver needs to see it. Least privilege keeps writes away. |
 | 4 | Approved or PartiallyReceived for a linked receipt? | Both. The user guide is corrected to say so. | `[standard]` Suppliers deliver in parts. The order stays open until every line is complete (BR-RECV-007). |
 | 5 | A product not on the order: which message? | Refuse with its own message, "Sản phẩm không có trên đơn đặt hàng này." | `[standard]` The fix differs. The warehouse checks the delivery note; it does not reduce a quantity. Gap G6. |

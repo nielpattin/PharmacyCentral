@@ -1,6 +1,6 @@
 # 0017. Roles are checked at the edge and in every service
 
-Status: Accepted
+Status: Accepted. The Platform Admin rule is replaced by [0019](0019-platform-admin-reads-and-administers.md).
 
 Date: 2026-10-26
 
@@ -12,8 +12,8 @@ Role rules lived in several places that drifted apart: the edge decided which em
 
 - The edge (`deploy/aws/lambda/policy.mjs`) holds one rule table for employee roles. The authorizer refuses a request whose roles the table does not allow.
 - Each service restates that table in its own `src/middleware/trusted-request.ts` and checks it again before any write. The two tables are kept identical; a change lands in both in the same commit.
-- Platform Admin passes every rule except the named exclusions in `platformAdminExcludedRoutes`. The exclusions are counter actions (prescriptions, dispensing, consultation answers, counter transactions, prescription invoices, cash and counter confirmations) and search-synonym approval.
-- Separation of duties is enforced by the owning service on the record itself: nobody approves, posts or publishes a record they created, counted or submitted, Platform Admin included.
+- Platform Admin: see [0019](0019-platform-admin-reads-and-administers.md). This ADR first let it pass every rule except a list of exclusions.
+- Separation of duties is enforced by the owning service on the record itself: nobody approves, posts or publishes a record they created, counted or submitted, every role.
 - A service checks site scope before any write. A caller without access to the record's site is refused before the write starts.
 
 ## Consequences

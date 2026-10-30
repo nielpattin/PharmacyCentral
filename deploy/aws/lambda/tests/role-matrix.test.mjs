@@ -2,10 +2,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { createAuthorizerHandler } from "../authorizer.mjs";
-import { employeeRolesForRequest, isEmployeeRoleAllowed, isPlatformAdminExcluded } from "../policy.mjs";
+import { employeeRolesForRequest, isEmployeeRoleAllowed } from "../policy.mjs";
 
 // The role contract of docs/product/staff-shell-sign-in-and-navigation.md (Role-by-section access), read per method.
-// Each row is [who, method, path, allowed]. Platform Admin passes every role rule except the named exclusions.
+// Each row is [who, method, path, allowed]. Platform Admin reads every staff route and writes only where a rule names it.
 const PA = ["Platform Admin"];
 const PM = ["Pharmacy Manager"];
 const PH = ["Pharmacist"];
@@ -40,6 +40,7 @@ const matrix = [
   ["sites read by id PH", PH, "GET", "/api/sites/11111111-1111-4111-8111-111111111111", true],
   ["sites create PM refused", PM, "POST", "/api/sites", false],
   ["sites create PA", PA, "POST", "/api/sites", true],
+  ["sites edit PA refused", PA, "PUT", "/api/sites/11111111-1111-4111-8111-111111111111", false],
   ["sites edit PM", PM, "PUT", "/api/sites/11111111-1111-4111-8111-111111111111", true],
   ["sites delete PM refused", PM, "DELETE", "/api/sites/11111111-1111-4111-8111-111111111111", false],
   ["sites delete PA", PA, "DELETE", "/api/sites/11111111-1111-4111-8111-111111111111", true],
@@ -53,11 +54,12 @@ const matrix = [
   ["pricing prices write PM", PM, "POST", "/api/pricing/prices", true],
   ["pricing prices write WS refused", WS, "POST", "/api/pricing/prices", false],
 
-  // Search synonyms: Pharmacist and Pharmacy Manager propose and approve; Platform Admin never approves.
+  // Search synonyms: Pharmacist and Pharmacy Manager propose and approve; Platform Admin reads only.
   ["synonyms read PH", PH, "GET", "/api/products/search-synonyms", true],
   ["synonyms read WS refused", WS, "GET", "/api/products/search-synonyms", false],
   ["synonyms propose PH", PH, "POST", "/api/products/search-synonyms", true],
-  ["synonyms propose PA", PA, "POST", "/api/products/search-synonyms", true],
+  ["synonyms propose PA refused", PA, "POST", "/api/products/search-synonyms", false],
+  ["synonyms read PA", PA, "GET", "/api/products/search-synonyms", true],
   ["synonyms approve PH", PH, "POST", "/api/products/search-synonyms/33333333-3333-4333-8333-333333333333/approve", true],
   ["synonyms approve PM", PM, "POST", "/api/products/search-synonyms/33333333-3333-4333-8333-333333333333/approve", true],
   ["synonyms approve PA refused", PA, "POST", "/api/products/search-synonyms/33333333-3333-4333-8333-333333333333/approve", false],
@@ -68,9 +70,10 @@ const matrix = [
   ["order detail PM", PM, "GET", "/api/orders/33333333-3333-4333-8333-333333333333", true],
   ["order transition PH", PH, "POST", "/api/orders/33333333-3333-4333-8333-333333333333/transition", true],
   ["order transition WS refused", WS, "POST", "/api/orders/33333333-3333-4333-8333-333333333333/transition", false],
-  ["order transition PA", PA, "POST", "/api/orders/33333333-3333-4333-8333-333333333333/transition", true],
+  ["order transition PA refused", PA, "POST", "/api/orders/33333333-3333-4333-8333-333333333333/transition", false],
+  ["orders read PA", PA, "GET", "/api/orders", true],
 
-  // Counter: Pharmacist writes; Pharmacy Manager reads; Platform Admin is refused every counter write.
+  // Counter: Pharmacist writes; Pharmacy Manager and Platform Admin read.
   ["prescriptions read PH", PH, "GET", "/api/prescriptions", true],
   ["prescriptions read PM", PM, "GET", "/api/prescriptions?limit=50", true],
   ["prescriptions read WS refused", WS, "GET", "/api/prescriptions", false],
@@ -89,11 +92,11 @@ const matrix = [
   ["counter transactions write PM refused", PM, "POST", "/api/counter-transactions", false],
   ["counter transactions write PA refused", PA, "POST", "/api/counter-transactions", false],
 
-  // Payments: a refund is open to Pharmacist, Pharmacy Manager and Platform Admin at the edge (payment-service decides
-  // by invoice kind); cash and counter confirmation are Pharmacist actions and Platform Admin is refused.
+  // Payments: a refund is open to Pharmacist and Pharmacy Manager at the edge (payment-service decides by invoice
+  // kind); cash and counter confirmation are Pharmacist actions. Platform Admin reads the register only.
   ["refund PH", PH, "POST", "/api/payments/33333333-3333-4333-8333-333333333333/refund", true],
   ["refund PM", PM, "POST", "/api/payments/33333333-3333-4333-8333-333333333333/refund", true],
-  ["refund PA", PA, "POST", "/api/payments/33333333-3333-4333-8333-333333333333/refund", true],
+  ["refund PA refused", PA, "POST", "/api/payments/33333333-3333-4333-8333-333333333333/refund", false],
   ["refund WS refused", WS, "POST", "/api/payments/33333333-3333-4333-8333-333333333333/refund", false],
   ["cash-paid PH", PH, "POST", "/api/payments/33333333-3333-4333-8333-333333333333/cash-paid", true],
   ["cash-paid PA refused", PA, "POST", "/api/payments/33333333-3333-4333-8333-333333333333/cash-paid", false],
@@ -119,7 +122,7 @@ const matrix = [
   ["replenishment suggestions read PH refused", PH, "GET", "/api/procurement/replenishment-suggestions", false],
   ["replenishment suggestions read WS refused", WS, "GET", "/api/procurement/replenishment-suggestions", false],
   ["replenishment draft orders create PM", PM, "POST", "/api/procurement/replenishment-suggestions/draft-orders", true],
-  ["replenishment draft orders create PA", PA, "POST", "/api/procurement/replenishment-suggestions/draft-orders", true],
+  ["replenishment draft orders create PA refused", PA, "POST", "/api/procurement/replenishment-suggestions/draft-orders", false],
   ["replenishment draft orders create PH refused", PH, "POST", "/api/procurement/replenishment-suggestions/draft-orders", false],
   ["replenishment draft orders create WS refused", WS, "POST", "/api/procurement/replenishment-suggestions/draft-orders", false],
 
@@ -127,7 +130,7 @@ const matrix = [
   ["opening balances import WS", WS, "POST", "/api/inventory/imports/opening-balances", true],
   ["opening balances import PM refused", PM, "POST", "/api/inventory/imports/opening-balances", false],
   ["opening balances import PH refused", PH, "POST", "/api/inventory/imports/opening-balances", false],
-  ["opening balances import PA", PA, "POST", "/api/inventory/imports/opening-balances", true],
+  ["opening balances import PA refused", PA, "POST", "/api/inventory/imports/opening-balances", false],
   ["balances read PH", PH, "GET", "/api/inventory/balances", true],
   ["batches read PH", PH, "GET", "/api/inventory/batches", true],
   ["batches read PM", PM, "GET", "/api/inventory/batches", true],
@@ -178,7 +181,8 @@ const matrix = [
   // Action plans (design 0007): only a Pharmacy Manager creates; every staff role reads and moves one. The owner check
   // of a move belongs to the service, so the edge admits each staff role on the path.
   ["action plan create PM", PM, "POST", "/api/inventory/action-plans", true],
-  ["action plan create PA", PA, "POST", "/api/inventory/action-plans", true],
+  ["action plan create PA refused", PA, "POST", "/api/inventory/action-plans", false],
+  ["action plan reassign PA", PA, "PATCH", "/api/inventory/action-plans/33333333-3333-4333-8333-333333333333", true],
   ["action plan create PH refused", PH, "POST", "/api/inventory/action-plans", false],
   ["action plan create WS refused", WS, "POST", "/api/inventory/action-plans", false],
   ["action plan read PH", PH, "GET", "/api/inventory/action-plans", true],
@@ -196,12 +200,24 @@ describe("role matrix - each rule per role and method", () => {
     });
   }
 
-  it("names every excluded Platform Admin write, and only those", () => {
-    assert.equal(isPlatformAdminExcluded("/api/prescriptions", "POST"), true);
-    assert.equal(isPlatformAdminExcluded("/api/prescriptions", "GET"), false);
-    assert.equal(isPlatformAdminExcluded("/api/prescriptions/intake/qr", "POST"), false, "a shopper's upload is not a counter write");
-    assert.equal(isPlatformAdminExcluded("/api/payments/x/refund", "POST"), false, "payment-service decides refunds by kind");
-    assert.equal(isPlatformAdminExcluded("/api/products/search-synonyms", "POST"), false);
+  it("keeps Platform Admin read-only on every staff route and open on the paths no staff rule covers", () => {
+    const allowed = (method, path) => isEmployeeRoleAllowed(PA, employeeRolesForRequest(path, method), path, method);
+    assert.equal(allowed("GET", "/api/inventory/balances"), true);
+    assert.equal(allowed("GET", "/api/procurement/purchase-orders"), true);
+    assert.equal(allowed("POST", "/api/inventory/adjustments"), false);
+    assert.equal(allowed("PUT", "/api/products/33333333-3333-4333-8333-333333333333"), false);
+    assert.equal(allowed("POST", "/api/products/imports"), false);
+    assert.equal(allowed("POST", "/api/admin/users"), true);
+    assert.equal(allowed("PUT", "/api/ai/anything-else"), true, "a path no staff route covers is not gated");
+    assert.equal(allowed("POST", "/api/auth/logout"), true);
+    assert.equal(allowed("POST", "/api/prescriptions/intake/qr"), true, "a shopper's upload is not a counter write");
+    assert.equal(allowed("POST", "/api/inventory/unknown-write"), false, "a staff route with no rule refuses a Platform Admin write");
+  });
+
+  it("lets an account that holds Platform Admin and another role use the other role", () => {
+    const roles = ["Platform Admin", "Pharmacy Manager"];
+    const path = "/api/procurement/purchase-orders";
+    assert.equal(isEmployeeRoleAllowed(roles, employeeRolesForRequest(path, "POST"), path, "POST"), true);
   });
 });
 

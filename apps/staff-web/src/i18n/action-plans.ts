@@ -53,7 +53,8 @@ export const actionPlansLiterals: Record<string, string> = {
     "Kế hoạch này chưa nằm trong các dòng đã tải. Tải thêm để tìm.",
   "No plan with this id is in the list.": "Không tìm thấy kế hoạch này trong danh sách.",
   "Only a Pharmacy Manager can create action plans.": "Chỉ Quản lý nhà thuốc mới tạo được kế hoạch hành động.",
-  "Only a Pharmacy Manager can reassign an action plan.": "Chỉ Quản lý nhà thuốc mới giao lại được kế hoạch hành động.",
+  "Only a Pharmacy Manager or Platform Admin can reassign an action plan.":
+    "Chỉ Quản lý nhà thuốc hoặc Quản trị nền tảng mới giao lại được kế hoạch hành động.",
   "Only the plan's owner can change its status.": "Chỉ người phụ trách kế hoạch mới đổi được trạng thái.",
   You: "Bạn",
 };

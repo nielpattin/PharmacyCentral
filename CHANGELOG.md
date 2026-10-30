@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Changed
+
+**deploy, identity-service, catalog-service, inventory-service, sales-service, payment-service, staff-web, tools, docs**
+
+- Platform Admin now reads and administers, and works nothing else (ADR 0019, BR-AUTH-010). It still manages users, roles and site access, audit, AI integrations, the System page, creating and deleting sites, and giving an action plan to another owner, and it reads every staff screen at every site. Every other write is refused with `role_forbidden`: catalog, price, supplier and location edits, site edits, every data import, purchase orders, goods receipts, all stock writes, replenishment decisions, batch quality, online order transitions and refunds, search synonyms, and action plan status. The `platformAdminExcludedRoutes` exclusion list is gone; the edge and each service use an allow-list for the administrator instead. An online-order refund is now the Pharmacy Manager's alone.
+- Staff Web hides every write control from Platform Admin and closes the Pharmacist overview and the five Import sections for it.
+- Seed B no longer uses the administrator for business writes. The administrator creates the sites; the Pharmacy Manager imports the master data and proposes search synonyms, Warehouse Staff imports the opening stock and does the receiving, transfers, returns, stocktakes and adjustments. A second demo manager, `manager2@pharmacycentral.vn`, raises the purchase orders the first one approves. The managers now hold all four sites and the warehouse account the three that hold stock.
+
 ### Fixed
 
 **deploy**

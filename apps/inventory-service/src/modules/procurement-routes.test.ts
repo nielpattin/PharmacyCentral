@@ -24,9 +24,10 @@ const createTestServer = async (repository: ProcurementRepository): Promise<{ se
   vi.stubEnv("INTERNAL_IDENTITY_SECRET", "test-identity-secret");
   const app = express();
   app.use(express.json());
-  // The edge forwards the verified roles; a call without them acts as Platform Admin, which passes every role check.
+  // The edge forwards the verified roles; a call without them acts as every staff role at once, which passes every role check.
   app.use((request, _response, next) => {
-    if (request.header("x-actor-roles") === undefined) request.headers["x-actor-roles"] = "Platform Admin";
+    if (request.header("x-actor-roles") === undefined)
+      request.headers["x-actor-roles"] = "Pharmacist,Pharmacy Manager,Warehouse Staff";
     request.headers["x-actor-id"] ??= ids.actor;
     next();
   });

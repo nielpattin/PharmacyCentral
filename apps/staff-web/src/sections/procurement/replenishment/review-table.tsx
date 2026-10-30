@@ -69,6 +69,8 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
   const [choices, setChoices] = useState<ReadonlyMap<string, string>>(() => new Map());
   const [quantities, setQuantities] = useState<ReadonlyMap<string, string>>(() => new Map());
   const planGate = useCan("actionPlan.create");
+  // Drafting is the Pharmacy Manager's. Anyone else reads the suggestions: no check boxes, quantities as plain text.
+  const canDraft = draftGate.allowed;
   const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
 
   const createDrafts = useMutation({
@@ -122,8 +124,10 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
         <span className="font-medium text-ink">
           {fillText(translateText("{count} suggested products"), { count: rows.length })}
         </span>
-        <span className="text-muted">{fillText(translateText("{count} selected"), { count: selectedCount })}</span>
-        {plan.ok ? (
+        {canDraft ? (
+          <span className="text-muted">{fillText(translateText("{count} selected"), { count: selectedCount })}</span>
+        ) : null}
+        {!canDraft ? null : plan.ok ? (
           <span className="text-muted">
             {fillText(translateText("Will create {orders} draft orders"), { orders: plan.orderCount })}
           </span>
@@ -145,7 +149,7 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-10" />
+              {canDraft ? <TableHead className="w-10" /> : null}
               <TableHead>{translateText("Product")}</TableHead>
               <TableHead className="text-right">{translateText("Available")}</TableHead>
               <TableHead className="text-right">{translateText("Inbound")}</TableHead>
@@ -163,7 +167,8 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
                 <SupplierRow
                   group={group}
                   suppliers={suppliers}
-                  columnCount={planGate.allowed ? COLUMN_COUNT + 1 : COLUMN_COUNT}
+                  columnCount={(canDraft ? COLUMN_COUNT : COLUMN_COUNT - 1) + (planGate.allowed ? 1 : 0)}
+                  canDraft={canDraft}
                   choices={choices}
                   selected={selected}
                   onSelectedChange={setSelected}
@@ -177,21 +182,23 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
                   const isChosen = selected.has(row.productId);
                   return (
                     <TableRow key={row.productId} className={cn(isChosen && "bg-primary-soft/40")}>
-                      <TableCell className="w-10">
-                        <input
-                          type="checkbox"
-                          className="size-4 accent-primary"
-                          disabled={!isSelectable(row, choices)}
-                          checked={isChosen}
-                          aria-label={fillText(translateText("Select {name}"), { name })}
-                          onChange={() =>
-                            setSelected((current) => setProductsSelected(current, [row.productId], !isChosen))
-                          }
-                        />
-                      </TableCell>
+                      {canDraft ? (
+                        <TableCell className="w-10">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-primary"
+                            disabled={!isSelectable(row, choices)}
+                            checked={isChosen}
+                            aria-label={fillText(translateText("Select {name}"), { name })}
+                            onChange={() =>
+                              setSelected((current) => setProductsSelected(current, [row.productId], !isChosen))
+                            }
+                          />
+                        </TableCell>
+                      ) : null}
                       <TableCell>
                         <span className="font-medium text-ink">{name}</span>
-                        {supplierId === null ? (
+                        {supplierId === null && canDraft ? (
                           <div className="mt-1 max-w-xs">
                             <Select
                               value=""
@@ -223,20 +230,24 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{formatQuantity(row.reorderPoint)}</TableCell>
                       <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          min={1}
-                          step={1}
-                          className="ms-auto w-24 text-right tabular-nums"
-                          value={quantity}
-                          aria-label={translateText("Suggested quantity")}
-                          aria-invalid={!quantityValid}
-                          onChange={(event) =>
-                            setQuantities((current) => new Map(current).set(row.productId, event.target.value))
-                          }
-                        />
-                        {quantityValid ? null : (
+                        {canDraft ? (
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            step={1}
+                            className="ms-auto w-24 text-right tabular-nums"
+                            value={quantity}
+                            aria-label={translateText("Suggested quantity")}
+                            aria-invalid={!quantityValid}
+                            onChange={(event) =>
+                              setQuantities((current) => new Map(current).set(row.productId, event.target.value))
+                            }
+                          />
+                        ) : (
+                          <span className="tabular-nums">{quantity}</span>
+                        )}
+                        {!canDraft || quantityValid ? null : (
                           <span className="mt-1 block text-xs text-danger">
                             {translateText("Enter a whole number of 1 or more.")}
                           </span>
@@ -289,6 +300,7 @@ const SupplierRow = ({
   group,
   suppliers,
   columnCount,
+  canDraft,
   choices,
   selected,
   onSelectedChange,
@@ -296,6 +308,7 @@ const SupplierRow = ({
   group: SupplierGroup;
   suppliers: JsonRecord[];
   columnCount: number;
+  canDraft: boolean;
   choices: ReadonlyMap<string, string>;
   selected: ReadonlySet<string>;
   onSelectedChange: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>;
@@ -310,17 +323,21 @@ const SupplierRow = ({
     <TableRow className="bg-surface-soft">
       <TableCell colSpan={columnCount}>
         <label className="flex flex-wrap items-center gap-3">
-          <input
-            type="checkbox"
-            className="size-4 accent-primary"
-            disabled={selectableIds.length === 0}
-            checked={check === "all"}
-            ref={(element) => {
-              if (element) element.indeterminate = check === "some";
-            }}
-            aria-label={fillText(translateText("Select all rows for {name}"), { name })}
-            onChange={() => onSelectedChange((current) => setProductsSelected(current, selectableIds, check !== "all"))}
-          />
+          {canDraft ? (
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              disabled={selectableIds.length === 0}
+              checked={check === "all"}
+              ref={(element) => {
+                if (element) element.indeterminate = check === "some";
+              }}
+              aria-label={fillText(translateText("Select all rows for {name}"), { name })}
+              onChange={() =>
+                onSelectedChange((current) => setProductsSelected(current, selectableIds, check !== "all"))
+              }
+            />
+          ) : null}
           <span className="font-semibold text-ink">{name}</span>
           <span className="text-xs text-muted">
             {fillText(translateText("{count} suggested products"), { count: group.rows.length })}

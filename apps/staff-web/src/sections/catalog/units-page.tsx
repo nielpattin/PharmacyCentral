@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, RowActions } from "@pharmacy/ui";
 import { useState } from "react";
 
+import { useSession } from "../../auth.ts";
 import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { PageActions } from "../../components/page-actions.tsx";
@@ -10,6 +11,8 @@ import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { translateText } from "../../i18n.ts";
+import { withActionColumn } from "../../lib/action-column.ts";
+import { can } from "../../permissions/staff-permissions.ts";
 import { idOf, readRows, text, type JsonRecord } from "../../staff-api.ts";
 import { yesNo } from "./catalog-fields.tsx";
 import { unitQueryKey } from "./catalog-keys.ts";
@@ -32,9 +35,12 @@ export const UnitsPage = (): React.JSX.Element => {
     enabled: productId !== "",
   });
 
+  // Product units are written by the Pharmacy Manager; every other role reads them.
+  const canWrite = can("catalog.write", useSession()).allowed;
+
   useHotkey("n", () => setDrawer({ kind: "create" }), {
     label: "Create new",
-    when: productId !== "" && drawer === undefined,
+    when: canWrite && productId !== "" && drawer === undefined,
   });
 
   const removeUnit = async (unit: JsonRecord): Promise<void> => {
@@ -96,7 +102,7 @@ export const UnitsPage = (): React.JSX.Element => {
   return (
     <>
       {/* Only offered once a product is chosen: a disabled button gives no hint why it cannot be used. */}
-      {productId === "" ? null : (
+      {productId === "" || !canWrite ? null : (
         <PageActions>
           <Button size="sm" onClick={() => setDrawer({ kind: "create" })}>
             {translateText("Add product unit")}
@@ -121,7 +127,7 @@ export const UnitsPage = (): React.JSX.Element => {
           ) : null}
           <DataTable
             rows={units.data ?? []}
-            columns={columns}
+            columns={withActionColumn(columns, canWrite)}
             loading={units.isPending}
             empty={translateText("This product has no units yet.")}
             getKey={(row) => idOf(row)}

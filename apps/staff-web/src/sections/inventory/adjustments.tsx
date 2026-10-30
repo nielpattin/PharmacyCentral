@@ -313,7 +313,7 @@ export const AdjustmentsTab = (): React.JSX.Element => {
           placeholder: translateText("Search by reason, notes or batch number"),
         }}
         paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
-        selection={{ keys: selected, onChange: setSelected }}
+        selection={decideGate.allowed ? { keys: selected, onChange: setSelected } : undefined}
         bulkActions={
           <>
             <GatedButton gate={decideGate} size="sm" onClick={() => void bulkTransition("approve")}>

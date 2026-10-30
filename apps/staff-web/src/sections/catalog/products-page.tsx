@@ -1,6 +1,7 @@
 import { Alert, Button, Input, RowActions, Select, StatusCell } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
+import { useSession } from "../../auth.ts";
 import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { PageActions } from "../../components/page-actions.tsx";
@@ -10,7 +11,9 @@ import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
+import { withActionColumn } from "../../lib/action-column.ts";
 import { translateText } from "../../i18n.ts";
+import { can } from "../../permissions/staff-permissions.ts";
 import { idOf, text, type JsonRecord } from "../../staff-api.ts";
 import { productListParams } from "./catalog-filters.ts";
 import { yesNo } from "./catalog-fields.tsx";
@@ -30,6 +33,8 @@ export const ProductsPage = (): React.JSX.Element => {
   const [drawer, setDrawer] = useState<ProductDrawerState>();
   const confirm = useConfirm();
   const run = useStaffAction();
+  // The catalog is written by the Pharmacy Manager; every other role reads it.
+  const canWrite = can("catalog.write", useSession()).allowed;
   const list = usePagedList({
     key: ["staff-products"],
     path: "/api/products",
@@ -45,7 +50,7 @@ export const ProductsPage = (): React.JSX.Element => {
     },
     { label: "Focus search" },
   );
-  useHotkey("n", () => setDrawer({ kind: "create" }), { label: "Create new", when: drawer === undefined });
+  useHotkey("n", () => setDrawer({ kind: "create" }), { label: "Create new", when: canWrite && drawer === undefined });
 
   const removeProduct = async (row: JsonRecord): Promise<void> => {
     const accepted = await confirm({
@@ -113,9 +118,11 @@ export const ProductsPage = (): React.JSX.Element => {
   return (
     <>
       <PageActions>
-        <Button size="sm" onClick={() => setDrawer({ kind: "create" })}>
-          {translateText("Create product")}
-        </Button>
+        {canWrite ? (
+          <Button size="sm" onClick={() => setDrawer({ kind: "create" })}>
+            {translateText("Create product")}
+          </Button>
+        ) : null}
       </PageActions>
       {list.error ? (
         <Alert variant="danger" className="mb-3">
@@ -155,7 +162,7 @@ export const ProductsPage = (): React.JSX.Element => {
           }
           toolbarExtra={<SavedViewsMenu pageKey="catalog-products" defaults={LIST_DEFAULTS} />}
           rows={list.rows}
-          columns={columns}
+          columns={withActionColumn(columns, canWrite)}
           loading={list.isLoading}
           empty={translateText("No products match these filters.")}
           getKey={(row) => idOf(row)}

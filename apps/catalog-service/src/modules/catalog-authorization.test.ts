@@ -166,7 +166,7 @@ describe("catalog authorization", () => {
   };
 
   describe("role matrix at the service", () => {
-    // Each write route with the role rule it needs. Platform Admin passes every rule here; the others are refused.
+    // Each write route with the role rule it needs. Platform Admin writes only on the admin rules; every other role is refused the rules it does not hold.
     const writes: Array<{ name: string; method: string; path: string; body?: unknown; rule: "admin" | "manager" }> = [
       { name: "create a site", method: "POST", path: "/sites", body: siteBody, rule: "admin" },
       { name: "delete a site", method: "DELETE", path: `/sites/${SITE_A}`, rule: "admin" },
@@ -223,13 +223,16 @@ describe("catalog authorization", () => {
       expect(repository.deleteSite).not.toHaveBeenCalled();
     });
 
-    it("lets Platform Admin and Pharmacy Manager through each write their role allows", async () => {
+    it("lets Platform Admin through the site create and delete only, and Pharmacy Manager through the other writes", async () => {
       const base = await start();
       for (const write of writes) {
         const admin = await call(base, write.method, write.path, employee(["Platform Admin"], []), write.body);
-        expect(admin.status, `${write.name} as admin`).not.toBe(403);
-        expect(admin.status, `${write.name} as admin`).not.toBe(401);
-        if (write.rule === "manager") {
+        if (write.rule === "admin") {
+          expect(admin.status, `${write.name} as admin`).not.toBe(403);
+          expect(admin.status, `${write.name} as admin`).not.toBe(401);
+        } else {
+          expect(admin.status, `${write.name} as admin`).toBe(403);
+          expect(admin.json, `${write.name} as admin`).toMatchObject({ code: "role_forbidden" });
           const manager = await call(
             base,
             write.method,
@@ -240,6 +243,14 @@ describe("catalog authorization", () => {
           expect(manager.status, `${write.name} as manager`).not.toBe(403);
           expect(manager.status, `${write.name} as manager`).not.toBe(401);
         }
+      }
+    });
+
+    it("lets Platform Admin read sites, suppliers and storage locations", async () => {
+      const base = await start();
+      for (const path of ["/sites", "/suppliers", "/storage-locations"]) {
+        const result = await call(base, "GET", path, employee(["Platform Admin"], []));
+        expect(result.status, path).toBe(200);
       }
     });
 
@@ -442,7 +453,13 @@ describe("catalog authorization", () => {
       const base = await start();
       repository.transitionPrice.mockRejectedValueOnce(new RefusalError(REFUSALS.priceSelfApproval));
 
-      const result = await call(base, "POST", `/pricing/prices/${PRICE}/publish`, employee(["Platform Admin"], []), {});
+      const result = await call(
+        base,
+        "POST",
+        `/pricing/prices/${PRICE}/publish`,
+        employee(["Pharmacy Manager"], [], MANAGER_ID),
+        {},
+      );
 
       expect(result.status).toBe(403);
       expect(result.json).toMatchObject({

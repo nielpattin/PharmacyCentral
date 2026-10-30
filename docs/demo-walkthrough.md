@@ -11,10 +11,11 @@ A script for presenting Pharmacy Central from a fresh demo dataset: who signs in
 
 | Role | Email | Site | App |
 | --- | --- | --- | --- |
-| Platform Admin | `admin@pharmacycentral.vn` | all | staff |
-| Pharmacy Manager | `manager@pharmacycentral.vn` | `SITE-RTL` (the shop) | staff |
+| Platform Admin | `admin@pharmacycentral.vn` | all (read only) | staff |
+| Pharmacy Manager | `manager@pharmacycentral.vn` | every site | staff |
+| Pharmacy Manager (second) | `manager2@pharmacycentral.vn` | every site | staff |
 | Pharmacist | `pharmacist@pharmacycentral.vn` | `SITE-RTL` | staff |
-| Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH` (the warehouse) | staff |
+| Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH` (the warehouse), `SITE-HUB`, `SITE-RTL` | staff |
 | Customer | `khachhang@pharmacycentral.vn` | none | customer |
 
 ### Why it must be reseeded on the day
@@ -31,7 +32,7 @@ Every date in the dataset is relative to the day it is seeded: batch expiries, t
 | Expiry | Batches that expire in 6, 12, 20, 27 and 45 days, and one already expired. |
 | Stock health | Dead stock (no movement for over 90 days), five shop products that end the period short against their sales, 7 products with stock but no price. |
 | Warehouse | Goods receipts `GR-WH-001` to `003`, replenishment, returns, a posted and an open stocktake, adjustments, all in several states. |
-| Action plans | 16 open plans raised by the system: 5 expiry, 4 dead stock, 7 replenishment. |
+| Action plans | 29 open plans raised by the system (the last run): 5 expiry, 10 dead stock, 7 price warnings, 7 replenishment. |
 | Customer | The demo shopper has dozens of orders in every state, one out for delivery, and a cart with one ticked and two unticked lines. |
 | Search | Six approved synonym groups and one (`ho khan, ho không đờm, ho rát cổ`) waiting for approval. |
 
@@ -51,7 +52,7 @@ Sign in at `/tai-khoan` as `khachhang@pharmacycentral.vn`.
 2. **Đơn thuốc**: `Trần Văn Bình` is waiting. Open it and dispense it, then create the invoice and confirm cash. `Lê Thị Cẩm` is already dispensed, `Phạm Quốc Dũng` cancelled, and the counter sales of the last 60 days fill the rest of the list.
 3. **Đơn hàng online**: the customer's order from step 1 appears here. Move it forward (confirm, prepare, ready, deliver, complete). Orders in each of those states are already in the list.
 4. **Kế hoạch hành động**: the plans owned by this pharmacist. Open a plan's title for the drawer with the next step and a link to the work. Change its status (Đang xử lý, Hoàn tất). The pharmacist can change a status only.
-5. **Từ đồng nghĩa tìm kiếm**: approve the waiting group. The admin submitted it, and nobody approves their own submission.
+5. **Từ đồng nghĩa tìm kiếm**: approve the waiting group. The manager submitted it, and nobody approves their own submission.
 
 ## 3. Pharmacy Manager (Staff Web)
 
@@ -77,7 +78,7 @@ Sign in at `/tai-khoan` as `khachhang@pharmacycentral.vn`.
 2. **Kiểm toán**: the activity log with 60 days of events; filter by action or entity.
 3. **Hệ thống**: service health, metrics, queues and the search index. Admin only.
 4. **Tích hợp AI**: the four AI feature cards. Set a provider here to turn the assistant and prescription reader on.
-5. The admin can also open any page above and act where the manager has no access, for example approving the adjustment at `SITE-WH` or deciding the shop's replenishment requests.
+5. The admin reads every page above and changes nothing there: no write buttons show. The only operational thing it does is give an action plan to another owner. Everything else is the job of the manager, the pharmacist and the warehouse account.
 
 ## Known limits
 

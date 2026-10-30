@@ -9,9 +9,10 @@ import type { InventoryImportService } from "./inventory-import-service.ts";
 const createTestServer = async (importService: InventoryImportService | undefined) => {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
-  // The edge forwards the verified roles; a call without them acts as Platform Admin, which passes every role check.
+  // The edge forwards the verified roles; a call without them acts as every staff role at once, which passes every role check.
   app.use((request, _response, next) => {
-    if (request.header("x-actor-roles") === undefined) request.headers["x-actor-roles"] = "Platform Admin";
+    if (request.header("x-actor-roles") === undefined)
+      request.headers["x-actor-roles"] = "Pharmacist,Pharmacy Manager,Warehouse Staff";
     next();
   });
   app.use(createInventoryImportRouter(importService));

@@ -28,6 +28,7 @@ if (!["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname)) {
 const adminEmail = "admin@pharmacycentral.vn";
 const pharmacistEmail = "pharmacist@pharmacycentral.vn";
 const managerEmail = "manager@pharmacycentral.vn";
+const secondManagerEmail = "manager2@pharmacycentral.vn";
 const warehouseEmail = "warehouse@pharmacycentral.vn";
 const customerEmail = "khachhang@pharmacycentral.vn";
 const adminPassword = requireEnv("ADMIN_PASSWORD");
@@ -114,7 +115,7 @@ const audienceByDataset = Object.freeze({
   openingBalances: "inventory-service",
 });
 
-// Local search synonym groups. The admin creates them and the pharmacist approves them, as four-eyes review requires.
+// Local search synonym groups. The manager proposes them and the pharmacist approves them, as four-eyes review requires.
 const searchSynonymGroups = [
   ["tiêu chảy", "đi ngoài", "đi lỏng"],
   ["sổ mũi", "chảy nước mũi"],
@@ -160,7 +161,30 @@ const uploadedImageUrls = new Set(
   ),
 );
 
-const { contexts } = await admin.call("/api/auth/context");
+// Who imports each dataset, as in the app: Platform Admin only creates the sites (it has no import), the Pharmacy
+// Manager imports master data and Warehouse Staff imports opening stock. The two accounts exist once the sites do.
+const importers = { sites: admin };
+
+const identityContext = async (session, audience) => {
+  const { contexts } = await session.call("/api/auth/context");
+  return contexts[audience];
+};
+
+// Platform Admin creates a site by hand, one at a time, because the import is the manager's.
+const createSites = async (sites) => {
+  const catalogContext = await identityContext(admin, "catalog-service");
+  const headers = { ...admin.headers, "x-internal-identity-context": catalogContext };
+  const known = new Set((await admin.call("/api/sites?limit=100", { headers })).map((row) => row.code));
+  const missing = sites.filter((site) => !known.has(site.code));
+  for (const site of missing) {
+    await admin.call("/api/sites", {
+      method: "POST",
+      body: site,
+      headers: { ...admin.headers, "x-internal-identity-context": await identityContext(admin, "catalog-service") },
+    });
+  }
+  return { created: missing.length, existing: sites.length - missing.length };
+};
 
 const order = ["sites", "storageLocations", "suppliers", "catalog", "openingBalances"];
 for (const id of order) {
@@ -187,12 +211,25 @@ for (const id of order) {
       );
     }
   }
+  if (id === "sites") {
+    console.log(`${dataset.label}: ${JSON.stringify(await createSites(payload.sites))}`);
+    // Right after the sites exist, so each account is created with its site access in one pass.
+    console.log("Seeding demo accounts...");
+    seedAccounts({ show: true });
+    importers.storageLocations = importers.suppliers = importers.catalog = await signIn({ email: managerEmail });
+    importers.openingBalances = await signIn({ email: warehouseEmail });
+    continue;
+  }
+  const importer = importers[id];
   let result;
   try {
-    result = await admin.call(dataset.endpoint, {
+    result = await importer.call(dataset.endpoint, {
       method: "POST",
       body: payload,
-      headers: { ...admin.headers, "x-internal-identity-context": contexts[audienceByDataset[id]] },
+      headers: {
+        ...importer.headers,
+        "x-internal-identity-context": await identityContext(importer, audienceByDataset[id]),
+      },
     });
   } catch (error) {
     // Opening balances are for an empty location. Once stock has moved (the demo transfers do that), the same file
@@ -206,15 +243,10 @@ for (const id of order) {
     continue;
   }
   console.log(`${dataset.label}: ${JSON.stringify(result?.summary ?? result)}`);
-  // Right after the sites exist, so each account is created with its site access in one pass.
-  if (id === "sites") {
-    console.log("Seeding demo accounts...");
-    seedAccounts({ show: true });
-  }
 }
 // After the accounts, so the pharmacist's session carries SITE-RTL access when it approves.
 console.log("Seeding search synonyms...");
-await seedSearchSynonyms(admin);
+await seedSearchSynonyms(await signIn({ email: managerEmail }));
 console.log("Seeding demo activity (transfers, adjustments, purchase orders, orders)...");
 await seedActivity();
 console.log("Seeding demo history (receipts with costs, 60 days of sales, expiring and dead stock)...");
@@ -244,9 +276,9 @@ async function catalogHeaders(session) {
   return { ...session.headers, "x-internal-identity-context": contexts["catalog-service"] };
 }
 
-async function seedSearchSynonyms(admin) {
-  const adminHeaders = await catalogHeaders(admin);
-  const { items } = await admin.call("/api/products/search-synonyms", { headers: adminHeaders });
+async function seedSearchSynonyms(proposer) {
+  const proposerHeaders = await catalogHeaders(proposer);
+  const { items } = await proposer.call("/api/products/search-synonyms", { headers: proposerHeaders });
   const groupsByKey = new Map();
   for (const group of items) {
     const key = synonymKey(group.terms);
@@ -262,7 +294,7 @@ async function seedSearchSynonyms(admin) {
       alreadyApproved += 1;
       continue;
     }
-    const submitted = existing.find((group) => group.submittedBy === admin.id);
+    const submitted = existing.find((group) => group.submittedBy === proposer.id);
     if (submitted) {
       toApprove.push(submitted);
       continue;
@@ -271,20 +303,20 @@ async function seedSearchSynonyms(admin) {
       console.warn(`Search synonym "${terms.join(", ")}" is pending from another employee. Approve it in staff-web.`);
       continue;
     }
-    const group = await admin.call("/api/products/search-synonyms", {
+    const group = await proposer.call("/api/products/search-synonyms", {
       method: "POST",
       body: { terms },
-      headers: adminHeaders,
+      headers: proposerHeaders,
     });
     created += 1;
     toApprove.push(group);
   }
 
   if (!groupsByKey.has(synonymKey(pendingSynonymGroup))) {
-    await admin.call("/api/products/search-synonyms", {
+    await proposer.call("/api/products/search-synonyms", {
       method: "POST",
       body: { terms: pendingSynonymGroup },
-      headers: adminHeaders,
+      headers: proposerHeaders,
     });
     created += 1;
   }
@@ -306,10 +338,11 @@ async function seedSearchSynonyms(admin) {
 }
 
 // Demo activity, so the list screens have rows in every state. Each record has a fixed number and is skipped when it
-// already exists, so running the command again adds nothing. The manager approves what the admin creates, as two
-// people must.
+// already exists, so running the command again adds nothing. The first manager approves what the second one and the
+// warehouse account create, as two people must. Platform Admin only reads.
 async function seedActivity() {
   const manager = await signIn({ email: managerEmail });
+  const buyer = await signIn({ email: secondManagerEmail });
   const warehouse = await signIn({ email: warehouseEmail });
   const pharmacist = await signIn({ email: pharmacistEmail });
   const customer = await signIn({ email: customerEmail });
@@ -370,7 +403,7 @@ async function seedActivity() {
   const transfer = async (number, sku, quantity, steps, fromLocation = "WH-A") => {
     if (await existing("/api/inventory/transfers", number)) return;
     const source = stock(sku, "SITE-WH", fromLocation);
-    const created = await post(admin, "/api/inventory/transfers", {
+    const created = await post(warehouse, "/api/inventory/transfers", {
       transferNumber: number,
       sourceSiteId: sites.get("SITE-WH").id,
       destinationSiteId: sites.get("SITE-RTL").id,
@@ -384,9 +417,8 @@ async function seedActivity() {
         },
       ],
     });
-    // The manager approves, Warehouse Staff ships at the source site, and the admin receives at the destination site,
-    // which the warehouse account cannot reach.
-    const actors = { approve: manager, ship: warehouse, receive: admin };
+    // The manager approves, and Warehouse Staff ships at the source site and receives at the destination site.
+    const actors = { approve: manager, ship: warehouse, receive: warehouse };
     for (const step of steps) await post(actors[step], `/api/inventory/transfers/${created.id}/${step}`, {});
   };
   await transfer("TR-DEMO-001", "THU-0031", 30, []);
@@ -398,7 +430,7 @@ async function seedActivity() {
     const rows = await admin.call("/api/inventory/adjustments?limit=100", { headers: await inventory(admin) });
     if (rows.some((row) => row.reason === reason)) return;
     const row = stock(sku, "SITE-RTL", "RTL-FRONT");
-    const created = await post(admin, "/api/inventory/adjustments", {
+    const created = await post(warehouse, "/api/inventory/adjustments", {
       productId: row.productId,
       productBatchId: row.productBatchId,
       siteId: row.siteId,
@@ -415,7 +447,7 @@ async function seedActivity() {
 
   // Purchase orders: one approved, one waiting, one cancelled.
   const purchaseOrder = async (number, sku, quantity, action) => {
-    // The manager decides on orders of their own site, never on one the admin created for someone else.
+    // The first manager decides on the orders the second manager raised.
     const decide = (id) => post(manager, `/api/procurement/purchase-orders/${id}/action`, { action });
     const found = await existing("/api/procurement/purchase-orders", number);
     if (found) {
@@ -423,7 +455,7 @@ async function seedActivity() {
       if (action) await decide(found.id).catch(() => undefined);
       return;
     }
-    const created = await post(admin, "/api/procurement/purchase-orders", {
+    const created = await post(buyer, "/api/procurement/purchase-orders", {
       purchaseOrderNumber: number,
       supplierId: suppliers.get("SUP-001").id,
       siteId: sites.get("SITE-RTL").id,
@@ -637,7 +669,7 @@ async function seedActivity() {
   // New batches wait for quality review, so the pharmacist-facing steps below release them first.
   const receiptNumber = "GR-DEMO-001";
   if (!(await existing("/api/procurement/goods-receipts", receiptNumber))) {
-    await admin.call("/api/procurement/goods-receipts", {
+    await warehouse.call("/api/procurement/goods-receipts", {
       method: "POST",
       body: {
         receiptNumber,
@@ -660,13 +692,13 @@ async function seedActivity() {
           },
         ],
       },
-      headers: await inventory(admin),
+      headers: await inventory(warehouse),
     });
   }
   // A partial delivery against the approved order, which leaves it "partially received".
   if (!(await existing("/api/procurement/goods-receipts", "GR-DEMO-002"))) {
     const order = need(await existing("/api/procurement/purchase-orders", "PO-DEMO-001"), "purchase order PO-DEMO-001");
-    await admin.call("/api/procurement/goods-receipts", {
+    await warehouse.call("/api/procurement/goods-receipts", {
       method: "POST",
       body: {
         receiptNumber: "GR-DEMO-002",
@@ -684,7 +716,7 @@ async function seedActivity() {
           },
         ],
       },
-      headers: await inventory(admin),
+      headers: await inventory(warehouse),
     });
   }
   const reloadBalances = async () => {
@@ -724,8 +756,8 @@ async function seedActivity() {
         },
       ],
     });
-    // Only Warehouse Staff and Platform Admin decide, and the warehouse account has no access to the shop site.
-    if (action) await post(admin, `/api/inventory/replenishment/${created.id}/${action}`, { reviewNotes: null });
+    // Only Warehouse Staff decide.
+    if (action) await post(warehouse, `/api/inventory/replenishment/${created.id}/${action}`, { reviewNotes: null });
   };
   await replenish("Kệ trưng bày sắp trống", "THU-0031", 40, undefined);
   await replenish("Chuẩn bị cho đợt khuyến mãi", "THU-0004", 60, "approve");
@@ -736,7 +768,7 @@ async function seedActivity() {
   const returned = async (reason, sku, quantity) => {
     if (returns.some((row) => row.reason === reason)) return;
     const row = stock(sku, "SITE-RTL", "RTL-FRONT");
-    await post(admin, "/api/inventory/returns", {
+    await post(warehouse, "/api/inventory/returns", {
       siteId: row.siteId,
       reason,
       lines: [
@@ -757,7 +789,7 @@ async function seedActivity() {
   const stocktake = async (note, skus, shouldPost) => {
     if (stocktakes.some((row) => row.notes === note)) return;
     const rows = skus.map((sku) => stock(sku, "SITE-RTL", "RTL-FRONT"));
-    const created = await post(admin, "/api/inventory/stocktakes", {
+    const created = await post(warehouse, "/api/inventory/stocktakes", {
       siteId: rows[0].siteId,
       storageLocationId: rows[0].storageLocationId,
       notes: note,
@@ -768,9 +800,9 @@ async function seedActivity() {
     for (const line of detail.lines ?? []) {
       // One unit short on the first line, so the posted count has a variance to show.
       const counted = Number(line.systemQuantity) - (line === detail.lines[0] ? 1 : 0);
-      await post(admin, `/api/inventory/stocktake-lines/${line.id}/count`, { countedQuantity: counted });
+      await post(warehouse, `/api/inventory/stocktake-lines/${line.id}/count`, { countedQuantity: counted });
     }
-    // Whoever created or counted a stocktake cannot post it, so the manager of the site posts what the admin counted.
+    // Whoever created or counted a stocktake cannot post it, so the manager of the site posts what the warehouse counted.
     await post(manager, `/api/inventory/stocktakes/${created.id}/post`, {});
   };
   await stocktake("Kiểm kê quý 4 - quầy thuốc", ["THU-0031", "THU-0004"], true);

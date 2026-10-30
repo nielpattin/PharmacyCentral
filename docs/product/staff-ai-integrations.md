@@ -15,7 +15,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
 
 ## Users and entry points
 
-- `[observed]` Platform Admin only. `apps/staff-web/src/App.tsx` sets `aiIntegrations: ["Platform Admin"]`, so other roles do not see the item.
+- `[observed]` Platform Admin only. `apps/staff-web/src/permissions/section-access.ts` sets `aiIntegrations: ["Platform Admin"]`, so other roles do not see the item.
 - `[observed]` The four credential routes answer `403` "Platform admin access required" to any other signed-in account. Rule: [BR-AUTH-007](../business-rules.md).
 - `[standard]` Customers and signed-out visitors have no access to any AI setting.
 - `[observed]` Entry: the sidebar item or `/ai-integrations`. Ctrl/Cmd+S saves the form that holds focus (label **Save**).

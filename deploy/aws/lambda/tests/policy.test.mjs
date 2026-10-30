@@ -283,7 +283,7 @@ describe("policy - employee roles and authorization", () => {
     assert.deepEqual(employeeRolesForRequest("/api/inventory/action-plans", "POST"), ["Pharmacy Manager"]);
     assert.deepEqual(
       employeeRolesForRequest("/api/inventory/action-plans/33333333-3333-4333-8333-333333333333", "PATCH"),
-      ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
+      ["Platform Admin", "Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
     );
 
     // Counter Sale

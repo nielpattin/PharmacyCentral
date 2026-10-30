@@ -101,12 +101,16 @@ views {
     description """
       The business master data is imported through the API, never served from a file by the web app.
       The images are uploaded to the object storage first, because the import file carries their
-      content hash keys.
+      content hash keys. Platform Admin only creates the sites; a Pharmacy Manager imports the master
+      data and Warehouse Staff the opening balances.
     """
 
-    platformAdmin -> pharmacyCentral.web.staffWeb "imports the sample CSV files"
+    platformAdmin -> pharmacyCentral.web.staffWeb "creates the sites, one at a time"
+    platformAdmin -> pharmacyCentral.services.catalogService "POST /api/sites"
+    branchManager -> pharmacyCentral.web.staffWeb "imports the storage locations, the suppliers and the products"
     pharmacyCentral.web.staffWeb -> pharmacyCentral.services.catalogService "POST /api/products/imports"
     pharmacyCentral.services.catalogService -> pharmacyCentral.data.postgres.catalogDb "the products, the prices and the suppliers"
+    warehouseStaff -> pharmacyCentral.web.staffWeb "imports the opening balances"
     pharmacyCentral.web.staffWeb -> pharmacyCentral.services.inventoryService "POST /api/inventory/imports/opening-balances"
     pharmacyCentral.services.inventoryService -> pharmacyCentral.data.postgres.inventoryDb "the batches and the balances"
     pharmacyCentral.services.inventoryService -> pharmacyCentral.data.rabbitmq "relay inventory.availability.changed.v1 from the outbox"
@@ -159,7 +163,7 @@ views {
       reads the trace through Tempo.
     """
 
-    platformAdmin -> pharmacyCentral.web.staffWeb "imports the opening balances"
+    warehouseStaff -> pharmacyCentral.web.staffWeb "imports the opening balances"
     pharmacyCentral.web.staffWeb -> pharmacyCentral.services.inventoryService "POST /api/inventory/imports/opening-balances, the HTTP server span"
     pharmacyCentral.services.inventoryService.stock -> pharmacyCentral.data.postgres.inventoryDb "one transaction: the balances, the ledger entry and the outbox row with its traceparent"
     pharmacyCentral.services.inventoryService.outbox -> pharmacyCentral.data.postgres.inventoryDb "read the next batch of unpublished rows and their traceparent"

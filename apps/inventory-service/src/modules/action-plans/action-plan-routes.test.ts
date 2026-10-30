@@ -26,9 +26,11 @@ const siteB = idOf(0xb);
 const FUTURE = "2099-06-01";
 const LATER = "2099-07-01";
 
-type Actor = { id: string; roles: string; sites?: string };
+type Actor = { id: string; roles: string; sites?: string; type?: "system" };
 const actors = {
   admin: { id: idOf(0x1), roles: "Platform Admin" } satisfies Actor,
+  /** The automatic detection that creates plans for every site, with or without one. */
+  system: { id: idOf(0x8), roles: "", type: "system" } satisfies Actor,
   manager: { id: idOf(0x2), roles: "Pharmacy Manager", sites: siteA } satisfies Actor,
   ownerOne: { id: idOf(0x3), roles: "Pharmacist", sites: siteA } satisfies Actor,
   ownerTwo: { id: idOf(0x4), roles: "Pharmacist", sites: siteB } satisfies Actor,
@@ -92,6 +94,7 @@ const call = (method: string, path: string, actor: Actor, body?: unknown) =>
       "content-type": "application/json",
       "x-actor-id": actor.id,
       "x-actor-roles": actor.roles,
+      ...(actor.type ? { "x-actor-type": actor.type } : {}),
       ...(actor.sites ? { "x-actor-site-ids": actor.sites } : {}),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -173,13 +176,15 @@ describe("POST /inventory/action-plans", () => {
     expect(body).toMatchObject({ code: "owner_not_at_site" });
   });
 
-  it("lets a Platform Admin create a plan with no site, and an owner with the Platform Admin role hold any site", async () => {
+  it("lets the system create a plan with no site, refuses Platform Admin the creation, and lets an owner with the Platform Admin role hold any site", async () => {
     const withoutSite = await createPlan(
       { siteId: undefined, sourceType: "price_warning", sourceRef: "price_warning:p-admin" },
-      actors.admin,
+      actors.system,
     );
     expect(withoutSite.status).toBe(201);
     expect(withoutSite.body.siteId).toBeNull();
+
+    expect((await createPlan({ sourceRef: "price_warning:p-admin-refused" }, actors.admin)).status).toBe(403);
 
     const adminOwner = await createPlan({ ownerId: idOf(0x7) });
     expect(adminOwner.status).toBe(201);
@@ -275,7 +280,6 @@ describe("PATCH /inventory/action-plans/:id", () => {
     for (const actor of [actors.manager, actors.admin]) {
       for (const body of [
         { status: "done" },
-        { title: "Đổi tên việc" },
         { detail: null },
         { dueDate: LATER },
         { ownerId: actors.warehouse.id, dueDate: LATER },
@@ -291,7 +295,7 @@ describe("PATCH /inventory/action-plans/:id", () => {
   it("refuses a manager a plan at another site, and an owner change to someone not at the plan's site", async () => {
     const elsewhere = await createPlan(
       { siteId: siteB, ownerId: actors.ownerTwo.id, sourceRef: `replenishment:${siteB}:${idOf(0x105)}` },
-      actors.admin,
+      actors.system,
     );
     expect(elsewhere.status).toBe(201);
     const outOfScope = await call("PATCH", `/inventory/action-plans/${elsewhere.body.id}`, actors.manager, {
@@ -345,7 +349,7 @@ describe("GET /inventory/action-plans", () => {
       }),
       createPlan(
         { siteId: siteB, ownerId: actors.ownerTwo.id, sourceRef: `replenishment:${siteB}:${idOf(0x203)}` },
-        actors.admin,
+        actors.system,
       ),
       createPlan(
         {
@@ -354,7 +358,7 @@ describe("GET /inventory/action-plans", () => {
           sourceRef: "price_warning:p-list",
           ownerId: actors.ownerOne.id,
         },
-        actors.admin,
+        actors.system,
       ),
     ]);
   let seeded: SeededPlans;

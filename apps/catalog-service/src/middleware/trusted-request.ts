@@ -193,12 +193,13 @@ const SITE_ID_KEYS: Record<string, true> = { siteId: true, sourceSiteId: true, d
 
 export const ACTOR_ROLES_HEADER = "x-actor-roles";
 
-// Restates `employeeRoleRules` and `platformAdminExcludedRoutes` of deploy/aws/lambda/policy.mjs for this service.
+// Restates `employeeRoleRules` of deploy/aws/lambda/policy.mjs for this service.
 // Methods: "*", "READ" (GET, HEAD), "WRITE" (other methods) or a method name.
 type Route = { methods: readonly string[]; path: string; exact?: boolean };
 type RoleRule = Route & { roles: readonly string[] };
 
 const ROLE_RULES: readonly RoleRule[] = [
+  { methods: ["*"], path: "/products/search-credential", roles: ["Platform Admin"] },
   { methods: ["*"], path: "/products/search-synonyms", roles: ["Pharmacist", "Pharmacy Manager"] },
   { methods: ["POST"], path: "/sites", exact: true, roles: ["Platform Admin"] },
   { methods: ["DELETE"], path: "/sites/*", exact: true, roles: ["Platform Admin"] },
@@ -207,10 +208,6 @@ const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["WRITE"], path: "/suppliers", roles: ["Pharmacy Manager"] },
   { methods: ["WRITE"], path: "/products", roles: ["Pharmacy Manager"] },
   { methods: ["WRITE"], path: "/pricing/prices", roles: ["Pharmacy Manager"] },
-];
-
-const PLATFORM_ADMIN_EXCLUDED: readonly Route[] = [
-  { methods: ["POST"], path: "/products/search-synonyms/*/approve", exact: true },
 ];
 
 const ROLE_FORBIDDEN_DETAIL = "Vai trò của tài khoản này không được thực hiện thao tác này.";
@@ -229,15 +226,17 @@ const routeMatches = (route: Route, path: string, method: string): boolean => {
   );
 };
 
+/**
+ * A role the rule names passes. A route with no rule, or a rule that names no role, admits any employee. Platform Admin
+ * is read-only: it reads every route, and writes only where a rule names it.
+ */
 const roleRefusal = (path: string, method: string, roles: readonly string[]): string | undefined => {
-  if (roles.includes("Platform Admin")) {
-    return PLATFORM_ADMIN_EXCLUDED.some((route) => routeMatches(route, path, method))
-      ? ROLE_FORBIDDEN_DETAIL
-      : undefined;
-  }
   const rule = ROLE_RULES.find((candidate) => routeMatches(candidate, path, method));
   if (rule === undefined || rule.roles.length === 0) return undefined;
-  return rule.roles.some((role) => roles.includes(role)) ? undefined : ROLE_FORBIDDEN_DETAIL;
+  if (rule.roles.some((role) => roles.includes(role))) return undefined;
+  const upper = method.toUpperCase();
+  const isRead = upper === "GET" || upper === "HEAD";
+  return roles.includes("Platform Admin") && isRead ? undefined : ROLE_FORBIDDEN_DETAIL;
 };
 
 /**
@@ -511,8 +510,8 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       return;
     }
 
-    // The roles a verified employee holds are checked here as the edge checks them: Platform Admin passes every rule
-    // except the excluded routes, and any other employee needs one of the roles the rule names.
+    // The roles a verified employee holds are checked here as the edge checks them: Platform Admin reads every
+    // route and writes only where a rule names it, and any other employee needs one of the roles the rule names.
     if (verifiedContext && verifiedContext.actorType === "employee") {
       const detail = roleRefusal(request.path, request.method, verifiedContext.roles);
       if (detail !== undefined) {
