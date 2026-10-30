@@ -92,6 +92,7 @@ describe("SalesRepository sales documents", () => {
         siteId: siteA,
         storageLocationId: location,
         patientName: "Nguyễn Thị A",
+        customerId: customer,
         createdBy: actor,
         createdAt: instant("2026-10-02T09:00:00.000000Z"),
       },
@@ -168,13 +169,17 @@ describe("SalesRepository sales documents", () => {
       id: orderIds.inSiteA,
       kind: "order",
       siteId: siteA,
+      customerId: customer,
       createdAt: "2026-10-15T12:00:00.000Z",
     });
     expect(documents.find((document) => document.id === prescriptionIds.inSiteA)).toStrictEqual({
       id: prescriptionIds.inSiteA,
       kind: "prescription",
       siteId: siteA,
+      customerId: customer,
       createdAt: "2026-10-02T09:00:00.000Z",
     });
+    const all = await repository.listSalesDocuments({ from, to });
+    expect(all.find((document) => document.id === prescriptionIds.inSiteB)?.customerId).toBeNull();
   });
 });

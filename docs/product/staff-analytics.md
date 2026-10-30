@@ -48,7 +48,7 @@ Platform Admin (read only) and Pharmacy Manager (`sectionRoles.analytics`; the e
 
 ### US4. As a manager, I read where the period's revenue came from
 
-- Source: `[standard]` 2026-10-30; definitions BR-REPORT-012 to 014.
+- Source: `[standard]` 2026-10-30; definitions BR-REPORT-012 to 015.
 - Accepted when:
   - **Doanh thu theo cơ sở** lists every site with a sale in the period: revenue, orders and average order value, highest revenue first. Revenue is the invoice amounts, so the rows add up to the revenue tile.
   - **Sản phẩm bán chạy** lists the ten products with the highest goods revenue and each one's share of goods revenue. The note shows the goods revenue total.
@@ -59,9 +59,19 @@ Platform Admin (read only) and Pharmacy Manager (`sectionRoles.analytics`; the e
   - The period, site and channel filters apply to every table. An empty period shows empty tables and "—" shares. A failed read fails the page, never a partial answer.
   - Test: pay an online order with a delivery fee and one product, and a counter prescription with a prescription-only product. The site rows sum to the revenue tile, the delivery fee appears in no product row, the prescription-only product lands in "Thuốc kê đơn", and the two shares sum to 100% of goods revenue.
 
+### US5. As a manager, I read who bought in the period
+
+- Source: `[standard]` 2026-10-30; definitions BR-REPORT-016.
+- Accepted when:
+  - The page shows **Khách hàng**: khách đã nhận diện (kèm số lần mua mỗi khách), khách mua 1 lần, khách mua lặp lại, và doanh thu từ khách đã nhận diện kèm tỷ trọng doanh thu.
+  - A sale is identified by the `customerId` on the **sales document**: an online order always has one, a counter prescription only when the pharmacist linked the customer, and a walk-in sale never does. The page says so.
+  - One-time means exactly one paid sale in the period, repeat means two or more; the period, site and channel filters apply.
+  - With no identified customer the counts show 0, the frequency and share show "—"; a failed read fails the page, never a partial answer.
+  - Test: two paid orders of one customer and one of another in the period, plus one walk-in counter sale: 2 identified customers, 1 one-time, 1 repeat, 1.5 purchases per customer, and the share excludes the walk-in sale.
+
 ## Contents and behavior
 
-Controls (US1), sales KPI tiles and channel table (US2), the breakdown tables (US4), inventory health tiles and tables (US3). Each read is a separate service call behind one request, `GET /api/dashboard/analytics` ([API guide](../api-guide.md#query-projections)); one failed read fails the page rather than showing a partial answer.
+Controls (US1), sales KPI tiles and channel table (US2), the customer tiles (US5), the breakdown tables (US4), inventory health tiles and tables (US3). Each read is a separate service call behind one request, `GET /api/dashboard/analytics` ([API guide](../api-guide.md#query-projections)); one failed read fails the page rather than showing a partial answer.
 
 ## States
 
@@ -74,7 +84,7 @@ Controls (US1), sales KPI tiles and channel table (US2), the breakdown tables (U
 
 ## Rules and designs
 
-- [BR-REPORT-008 to 015](../business-rules.md), BR-FIN-002, BR-FIN-003, BR-AUTH-004; [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md).
+- [BR-REPORT-008 to 016](../business-rules.md), BR-FIN-002, BR-FIN-003, BR-AUTH-004; [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md).
 
 ## Decisions
 
@@ -92,6 +102,7 @@ Controls (US1), sales KPI tiles and channel table (US2), the breakdown tables (U
 | 10 | Which sites appear? | `[standard]` Every site with a sale in the period; a sale with no site is one unnamed row, visible to Platform Admin only. | Site scope (BR-AUTH-004) keeps an unnamed sale away from a site-scoped manager. |
 | 11 | Rank the top list by revenue or units? | `[standard]` Revenue. | A product sells in several units (viên, hộp, chai), so a unit total would add quantities that are not comparable; revenue is the one figure every line carries. |
 | 12 | What are the ABC cut-offs? | `[standard]` 80% and 95% of cumulative goods revenue in the period; the crossing product stays in the class it completes. | The classic ABC shape; using the period's own revenue keeps the classes tied to the chosen filter. |
+| 13 | Which customer field identifies the buyer? | `[standard]` The `customerId` on the sales document, never the one on the invoice. | A counter invoice stores the staff member who created it, so an invoice-based count would treat the pharmacist as the buyer. A walk-in sale stays unidentified. |
 
 ## Gaps against the code (2026-10-30)
 

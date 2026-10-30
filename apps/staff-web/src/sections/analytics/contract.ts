@@ -62,6 +62,17 @@ export type PrescriptionRevenueRow = {
   share: Figure;
 };
 
+export type CustomerInsights = {
+  identifiedCustomerCount: Figure;
+  oneTimeCustomerCount: Figure;
+  repeatCustomerCount: Figure;
+  identifiedRevenue: Figure;
+  /** The share (0 to 1) of sale revenue from identified customers; null when the period has no revenue. */
+  identifiedShare: Figure;
+  /** Paid sales of identified customers over those customers; null when none is identified. */
+  purchasesPerCustomer: Figure;
+};
+
 export type AnalyticsResponse = {
   currency: string;
   generatedAt: string;
@@ -83,6 +94,7 @@ export type AnalyticsResponse = {
     };
   };
   channels: Array<{ channel: SalesChannel; revenue: Figure; orderCount: Figure }>;
+  customers: CustomerInsights;
   breakdown: {
     goodsRevenue: Figure;
     bySite: SalesSiteRow[];

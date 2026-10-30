@@ -219,6 +219,7 @@ export const AnalyticsSection = (): React.JSX.Element => {
   const abcRows: AbcRevenueRow[] = data?.breakdown?.abc ?? [];
   const categoryRevenueRows: CategoryRevenueRow[] = data?.breakdown?.byCategory ?? [];
   const prescriptionRevenueRows: PrescriptionRevenueRow[] = data?.breakdown?.byPrescription ?? [];
+  const customers = data?.customers;
   const goodsRevenue = data?.breakdown?.goodsRevenue;
 
   const currentDays =
@@ -353,6 +354,35 @@ export const AnalyticsSection = (): React.JSX.Element => {
             </>
           )}
         </div>
+      </section>
+
+      <section className="grid gap-2">
+        <Heading>Customers</Heading>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatTile
+            label={translateText("Identified customers")}
+            value={count(customers?.identifiedCustomerCount)}
+            hint={`${translateText("Purchases per customer")}: ${count(customers?.purchasesPerCustomer)}`}
+          />
+          <StatTile
+            label={translateText("One-time buyers")}
+            value={count(customers?.oneTimeCustomerCount)}
+            hint={translateText("One paid purchase in the period")}
+          />
+          <StatTile
+            label={translateText("Repeat buyers")}
+            value={count(customers?.repeatCustomerCount)}
+            hint={translateText("Two or more paid purchases in the period")}
+          />
+          <StatTile
+            label={translateText("Revenue from identified customers")}
+            value={money(customers?.identifiedRevenue)}
+            hint={`${translateText("Share of revenue")}: ${formatRate(customers?.identifiedShare, locale)}`}
+          />
+        </div>
+        <p className="text-xs text-muted">
+          {translateText("Only a customer account on the sale counts; a walk-in counter sale has none.")}
+        </p>
       </section>
 
       <section className="grid gap-2">

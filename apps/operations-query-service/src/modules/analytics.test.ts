@@ -7,6 +7,7 @@ import {
   analyticsQuerySchema,
   averageOrderValue,
   buildDashboardAnalytics,
+  customerInsightsOf,
   daysOfInventoryOf,
   DEAD_STOCK_ITEM_LIMIT,
   grossProfitOf,
@@ -30,6 +31,7 @@ import {
   type SalesDocument,
   type SiteName,
   type StockHealthRow,
+  type Sale,
 } from "./analytics.ts";
 
 const DAY = 86_400_000;
@@ -62,7 +64,8 @@ const document = (
   kind: "order" | "prescription",
   siteId: string | null,
   createdAt: string,
-): SalesDocument => ({ id: uuidOf(n), kind, siteId, createdAt });
+  customerId: string | null = null,
+): SalesDocument => ({ id: uuidOf(n), kind, siteId, customerId, createdAt });
 
 const invoiceOf = (
   n: number,
@@ -471,6 +474,82 @@ describe("ABC classification", () => {
       ["B", 1, 50],
       ["C", 0, 0],
     ]);
+  });
+});
+
+describe("customer insights", () => {
+  const filter = { siteId: null, scope: undefined };
+  const sale = (
+    documentId: string,
+    customerId: string | null,
+    revenue: number,
+    overrides: Partial<Sale> = {},
+  ): Sale => ({
+    documentId,
+    channel: "online",
+    siteId: SITE_A,
+    customerId,
+    createdAt: new Date("2026-10-09T10:00:00.000Z"),
+    revenue,
+    ...overrides,
+  });
+
+  it("counts identified customers, one-time and repeat buyers, the revenue share and the purchase frequency", () => {
+    const answer = customerInsightsOf(
+      [sale("1", "C1", 100), sale("2", "C1", 50), sale("3", "C2", 30), sale("4", null, 20)],
+      PERIOD,
+      filter,
+      "all",
+    );
+
+    expect(answer).toStrictEqual({
+      identifiedCustomerCount: 2,
+      oneTimeCustomerCount: 1,
+      repeatCustomerCount: 1,
+      identifiedRevenue: 180,
+      identifiedShare: 0.9,
+      purchasesPerCustomer: 1.5,
+    });
+  });
+
+  it("answers zeros, no share and no frequency for a period with no sale", () => {
+    expect(customerInsightsOf([], PERIOD, filter, "all")).toStrictEqual({
+      identifiedCustomerCount: 0,
+      oneTimeCustomerCount: 0,
+      repeatCustomerCount: 0,
+      identifiedRevenue: 0,
+      identifiedShare: null,
+      purchasesPerCustomer: null,
+    });
+  });
+
+  it("counts no customer when every sale is a walk-in, and keeps the unnamed share at zero", () => {
+    const answer = customerInsightsOf([sale("1", null, 100)], PERIOD, filter, "all");
+
+    expect(answer.identifiedCustomerCount).toBe(0);
+    expect(answer.identifiedRevenue).toBe(0);
+    expect(answer.identifiedShare).toBe(0);
+    expect(answer.purchasesPerCustomer).toBeNull();
+  });
+
+  it("applies the site, channel and period filters", () => {
+    const answer = customerInsightsOf(
+      [
+        sale("1", "C1", 100),
+        sale("2", "C1", 50),
+        sale("3", "C2", 30, { channel: "counter" }),
+        sale("4", "C3", 40, { siteId: SITE_B }),
+        sale("5", "C4", 60, { createdAt: new Date("2026-10-01T00:00:00.000Z") }),
+      ],
+      PERIOD,
+      { siteId: SITE_A, scope: undefined },
+      "online",
+    );
+
+    expect(answer.identifiedCustomerCount).toBe(1);
+    expect(answer.identifiedRevenue).toBe(150);
+    expect(answer.identifiedShare).toBe(1);
+    expect(answer.purchasesPerCustomer).toBe(2);
   });
 });
 

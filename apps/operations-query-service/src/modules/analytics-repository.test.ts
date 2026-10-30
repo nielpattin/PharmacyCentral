@@ -19,7 +19,9 @@ const json = (body: unknown, status = 200): Response =>
 /** The answers of the owning services, by `host/path`. An unlisted path answers an empty list. */
 const defaultAnswers: Record<string, () => Response> = {
   "sales.test/internal/analytics/sales-documents": () =>
-    json({ documents: [{ id: ORDER, kind: "order", siteId: SITE, createdAt: "2026-10-09T10:00:00.000Z" }] }),
+    json({
+      documents: [{ id: ORDER, kind: "order", siteId: SITE, customerId: null, createdAt: "2026-10-09T10:00:00.000Z" }],
+    }),
   "payment.test/internal/analytics/paid-invoices": () =>
     json({
       invoices: [

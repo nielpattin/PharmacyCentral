@@ -25,6 +25,7 @@ export const salesDocumentsAnswerSchema = z.object({
       id: uuid,
       kind: z.enum(["order", "prescription"]),
       siteId: uuid.nullable(),
+      customerId: uuid.nullable(),
       createdAt: isoDateTime,
     }),
   ),
@@ -151,6 +152,8 @@ export type Sale = {
   documentId: string;
   channel: SaleChannel;
   siteId: string | null;
+  /** The customer account on the document; null for a walk-in counter sale. */
+  customerId: string | null;
   createdAt: Date;
   revenue: number;
 };
@@ -183,6 +186,7 @@ export const joinSales = (documents: SalesDocument[], invoices: PaidInvoice[]): 
       documentId: document.id,
       channel: isOrder ? "online" : "counter",
       siteId: document.siteId,
+      customerId: document.customerId,
       createdAt: new Date(document.createdAt),
       revenue,
     });
@@ -404,6 +408,55 @@ const saleInScope = (sale: Sale, period: Period, filter: SiteFilter, channel: An
   if (createdAt < period.from.getTime() || createdAt >= period.to.getTime()) return false;
   if (!siteVisible(sale.siteId, filter)) return false;
   return channel === "all" || channel === sale.channel;
+};
+
+/**
+ * The customers behind the period's sales. Only a sale whose document names a customer account counts as identified:
+ * an online order always has one, a counter prescription only when the pharmacist linked the customer, and a walk-in
+ * sale never does. A customer with one paid sale in the period is one-time; with two or more, repeat.
+ */
+export type CustomerInsights = {
+  identifiedCustomerCount: number;
+  oneTimeCustomerCount: number;
+  repeatCustomerCount: number;
+  identifiedRevenue: number;
+  /** Share (0 to 1) of the period's sale revenue that comes from identified customers; null with no revenue. */
+  identifiedShare: number | null;
+  /** Paid sales of identified customers over those customers; null when none is identified. */
+  purchasesPerCustomer: number | null;
+};
+
+export const customerInsightsOf = (
+  sales: readonly Sale[],
+  period: Period,
+  filter: SiteFilter,
+  channel: AnalyticsChannel,
+): CustomerInsights => {
+  const purchases = new Map<string, number>();
+  let revenue = 0;
+  let identifiedRevenue = 0;
+  let identifiedSales = 0;
+  for (const sale of sales) {
+    if (!saleInScope(sale, period, filter, channel)) continue;
+    revenue += sale.revenue;
+    if (sale.customerId === null) continue;
+    identifiedRevenue += sale.revenue;
+    identifiedSales += 1;
+    purchases.set(sale.customerId, (purchases.get(sale.customerId) ?? 0) + 1);
+  }
+  let repeatCustomerCount = 0;
+  for (const count of purchases.values()) {
+    if (count > 1) repeatCustomerCount += 1;
+  }
+  const identifiedCustomerCount = purchases.size;
+  return {
+    identifiedCustomerCount,
+    oneTimeCustomerCount: identifiedCustomerCount - repeatCustomerCount,
+    repeatCustomerCount,
+    identifiedRevenue,
+    identifiedShare: revenue > 0 ? identifiedRevenue / revenue : null,
+    purchasesPerCustomer: identifiedCustomerCount > 0 ? identifiedSales / identifiedCustomerCount : null,
+  };
 };
 
 /** The revenue of one invoice line, in whole dong. */
@@ -747,6 +800,7 @@ export const buildDashboardAnalytics = (input: AnalyticsInput): DashboardAnalyti
       const totals = totalSales(sales, input.period, filter, channel);
       return { channel, revenue: totals.revenue, orderCount: totals.orderCount };
     }),
+    customers: customerInsightsOf(sales, input.period, filter, input.channel),
     breakdown,
     inventory: inventoryHealthOf(stockRows, {
       now: input.now,
@@ -777,6 +831,7 @@ export type DashboardAnalytics = {
     };
   };
   channels: Array<{ channel: SaleChannel; revenue: number; orderCount: number }>;
+  customers: CustomerInsights;
   breakdown: SalesBreakdown;
   inventory: InventoryHealth;
 };

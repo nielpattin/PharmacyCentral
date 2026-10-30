@@ -120,6 +120,10 @@ Definitions (also BR-REPORT-008 to 011):
 - **By prescription flag:** `prescription`, `otc`, and `unknown` only when a sold product is not in the catalog. The first two rows are always present, at 0 when the period sold none.
 - **What it does not do:** the grouping is the catalog as it stands now. The system snapshots neither the category nor the prescription flag on the sale, so editing either moves past sales with it. Closing that gap needs a snapshot column on the invoice line or the order line.
 
+#### Customer insights
+
+`customers` counts the buyers behind the same sales (BR-REPORT-016). A sale is identified when its **sales document** carries a `customerId`: an online order always does, a counter prescription only when the pharmacist linked the customer, and a walk-in sale never does. The invoice's `customerId` is not used, because a counter invoice stores the staff member who created it. A customer with one paid sale in the period is one-time, with two or more repeat; the answer carries `identifiedCustomerCount`, `oneTimeCustomerCount`, `repeatCustomerCount`, `identifiedRevenue`, `identifiedShare` of sale revenue, and `purchasesPerCustomer`. The period, site and channel filters apply, so a site-scoped manager sees the buyers of that site, and a walk-in sale lowers the identified share without adding a customer.
+
 #### `GET /api/procurement/replenishment-suggestions`
 
 Query: `siteId` (required, inside scope), `windowDays` (default 30, 7 to 180), `coverDays` (default 14, 1 to 90), `safetyDays` (default 7, 0 to 60), `defaultLeadTimeDays` (default 7, 1 to 90). Defaults are request parameters shown in the UI, not environment variables.

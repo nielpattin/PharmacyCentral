@@ -48,6 +48,17 @@ export const analyticsLiterals: Record<string, string> = {
   Class: "Nhóm",
   "A until 80% of goods revenue, B until 95%, C the rest. The product that crosses a cut-off stays in the class it completes.":
     "A đến 80% doanh thu hàng hóa, B đến 95%, C phần còn lại. Sản phẩm vượt mốc vẫn ở nhóm mà nó hoàn tất.",
+  Customers: "Khách hàng",
+  "Identified customers": "Khách đã nhận diện",
+  "Purchases per customer": "Số lần mua mỗi khách",
+  "One-time buyers": "Khách mua 1 lần",
+  "One paid purchase in the period": "Một lần mua đã trả tiền trong kỳ",
+  "Repeat buyers": "Khách mua lặp lại",
+  "Two or more paid purchases in the period": "Từ hai lần mua đã trả tiền trong kỳ",
+  "Revenue from identified customers": "Doanh thu từ khách đã nhận diện",
+  "Share of revenue": "Tỷ trọng doanh thu",
+  "Only a customer account on the sale counts; a walk-in counter sale has none.":
+    "Chỉ tính khách có tài khoản trên chứng từ bán; khách vãng lai tại quầy không được tính.",
   "Revenue by product group": "Doanh thu theo nhóm hàng",
   Uncategorized: "Chưa phân nhóm",
   "Grouped by the category the catalog holds today, so a changed category also moves past sales.":

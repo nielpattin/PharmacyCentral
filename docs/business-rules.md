@@ -804,6 +804,10 @@ Nhóm hàng của một sản phẩm là `category` hiện tại của catalog, 
 
 Sản phẩm có doanh thu hàng hóa dương trong kỳ được xếp hạng giảm dần (hòa thì theo `productId`), rồi cộng dồn tỷ trọng: sản phẩm làm tổng vượt 80% lần đầu thuộc nhóm A, sản phẩm làm tổng vượt 95% thuộc nhóm B, phần còn lại thuộc nhóm C. Sản phẩm vượt mốc vẫn ở nhóm mà nó hoàn tất, nên A luôn chiếm ít nhất 80% và A+B ít nhất 95% doanh thu hàng hóa. Sản phẩm không có doanh thu hàng hóa không vào nhóm nào; kỳ không bán hàng hóa trả ba nhóm rỗng với tỷ trọng null. Phân nhóm dùng đúng doanh thu hàng hóa của BR-REPORT-013 và cùng bộ lọc kỳ, cơ sở, kênh.
 
+### BR-REPORT-016. Khách hàng đã nhận diện trong kỳ
+
+Một giao dịch bán là của khách đã nhận diện khi **chứng từ bán** (đơn online hoặc đơn thuốc quầy) có `customerId`; khách vãng lai tại quầy không có. Không dùng `customerId` trên hóa đơn: hóa đơn quầy lưu nhân viên tạo hóa đơn vào trường đó, nên nó không phải danh tính người mua. Số khách đã nhận diện là số khách khác nhau trong các giao dịch bán đã trả tiền của kỳ, cơ sở và kênh đã chọn. Khách mua 1 lần có đúng một giao dịch như vậy trong kỳ; khách mua lặp lại có từ hai. Doanh thu từ khách đã nhận diện là tổng doanh thu các giao dịch đó; tỷ trọng là doanh thu đó chia tổng doanh thu bán của kỳ (null khi kỳ không có doanh thu). Số lần mua mỗi khách là số giao dịch đã nhận diện chia số khách đã nhận diện (null khi không có khách nào).
+
 ### BR-FIN-001. Tài chính là đọc, không ghi sổ kế toán
 
 Operations-query-service tổng hợp từ sự kiện và số liệu tồn. Không ghi sổ kế toán bên ngoài.

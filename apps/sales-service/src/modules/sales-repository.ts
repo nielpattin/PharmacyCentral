@@ -916,7 +916,12 @@ export class SalesRepository {
   }): Promise<SalesDocument[]> {
     const [orderRows, prescriptionRows] = await Promise.all([
       this.database.db
-        .select({ id: orders.id, siteId: orders.selectedStoreId, createdAt: orders.createdAt })
+        .select({
+          id: orders.id,
+          siteId: orders.selectedStoreId,
+          customerId: orders.customerId,
+          createdAt: orders.createdAt,
+        })
         .from(orders)
         .where(
           and(
@@ -927,7 +932,12 @@ export class SalesRepository {
         )
         .orderBy(asc(orders.createdAt), asc(orders.id)),
       this.database.db
-        .select({ id: prescriptions.id, siteId: prescriptions.siteId, createdAt: prescriptions.createdAt })
+        .select({
+          id: prescriptions.id,
+          siteId: prescriptions.siteId,
+          customerId: prescriptions.customerId,
+          createdAt: prescriptions.createdAt,
+        })
         .from(prescriptions)
         .where(
           and(
@@ -943,12 +953,14 @@ export class SalesRepository {
         id: row.id,
         kind: "order" as const,
         siteId: row.siteId,
+        customerId: row.customerId,
         createdAt: row.createdAt.toISOString(),
       })),
       ...prescriptionRows.map((row) => ({
         id: row.id,
         kind: "prescription" as const,
         siteId: row.siteId,
+        customerId: row.customerId,
         createdAt: row.createdAt.toISOString(),
       })),
     ];

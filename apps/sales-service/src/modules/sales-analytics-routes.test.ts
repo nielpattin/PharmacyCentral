@@ -13,6 +13,7 @@ const serviceSecret = "test-service-secret-1234567890123456";
 const siteA = "00000000-0000-4000-8000-00000000000a";
 const siteB = "00000000-0000-4000-8000-00000000000b";
 const documentId = "00000000-0000-4000-8000-0000000000d1";
+const customerId = "00000000-0000-4000-8000-0000000000c1";
 const period = "from=2026-10-01T00:00:00.000Z&to=2026-11-01T00:00:00.000Z";
 
 const identityHeader = (overrides: Partial<InternalIdentityContext>): string =>
@@ -41,7 +42,7 @@ describe("GET /internal/analytics/sales-documents", () => {
   beforeEach(async () => {
     listSalesDocuments.mockReset();
     listSalesDocuments.mockResolvedValue([
-      { id: documentId, kind: "order", siteId: siteA, createdAt: "2026-10-15T12:00:00.000Z" },
+      { id: documentId, kind: "order", siteId: siteA, customerId, createdAt: "2026-10-15T12:00:00.000Z" },
     ]);
     const app = express();
     app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret, expectedAudience: "sales-service" }));
@@ -76,7 +77,7 @@ describe("GET /internal/analytics/sales-documents", () => {
     expect(response.status).toBe(200);
     const body = salesDocumentsResponseSchema.parse(await response.json());
     expect(body.documents).toStrictEqual([
-      { id: documentId, kind: "order", siteId: siteA, createdAt: "2026-10-15T12:00:00.000Z" },
+      { id: documentId, kind: "order", siteId: siteA, customerId, createdAt: "2026-10-15T12:00:00.000Z" },
     ]);
     expect(listSalesDocuments).toHaveBeenCalledWith({
       from: new Date("2026-10-01T00:00:00.000Z"),

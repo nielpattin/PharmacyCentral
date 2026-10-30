@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**operations-query-service, sales-service, staff-web, docs**
+
+- Analytics now shows **customer insights** for the period: how many identified customers bought, how many bought once and how many bought two or more times, the revenue they brought with its share of the period's revenue, and purchases per customer. A sale counts as identified only when its sales document carries a `customerId` (an online order always, a counter prescription only when the pharmacist linked the customer, a walk-in sale never); the invoice's `customerId`, which on a counter invoice holds the staff member, is never used. `GET /api/dashboard/analytics` answers a `customers` block and `/internal/analytics/sales-documents` now carries `customerId`. Spec US5, BR-REPORT-016, design 0007.
+
 **operations-query-service, staff-web, docs**
 
 - Analytics now classifies the period's products by the **ABC rule**: A holds the products that complete 80% of goods revenue, B the next 15% and C the rest, with the product that crosses a cut-off in the class it completes. A new table shows each class's product count, goods revenue and share; a product with no goods revenue enters no class. Spec US4, BR-REPORT-015, design 0007.

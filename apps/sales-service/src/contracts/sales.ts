@@ -193,6 +193,8 @@ export const salesDocumentSchema = z.object({
   id: z.string().uuid(),
   kind: z.enum(["order", "prescription"]),
   siteId: z.string().uuid(),
+  /** The customer who bought: always set for an online order, optional for a counter prescription. */
+  customerId: z.string().uuid().nullable(),
   createdAt: z.string().datetime({ offset: true }),
 });
 
