@@ -23,6 +23,7 @@ import {
   shortId,
   statusParam,
 } from "./sales/rules.ts";
+import { OrderActions } from "./sales/order-actions.tsx";
 import { DetailField, moneyLocale, SalesAuditHistory } from "./sales/shared.tsx";
 
 const ORDERS_DEFAULTS = { q: "", status: ALL_STATUSES } as const;
@@ -34,7 +35,8 @@ const orderCode = (row: JsonRecord): string => `#${shortId(row.id).toUpperCase()
 
 /**
  * Orders shoppers placed on the customer site, newest first. The search matches the order id only: sales-service stores
- * no customer name. Opening an order shows its details and its audit history.
+ * no customer name. Opening an order shows its details and its audit history, and a Pharmacist or Pharmacy Manager
+ * processes it from the drawer (`OrderActions`).
  */
 export const OrdersSection = (): React.JSX.Element => {
   const { values, setValues } = useListUrlState(ORDERS_DEFAULTS);
@@ -130,19 +132,22 @@ export const OrdersSection = (): React.JSX.Element => {
           : {})}
         details={
           openRow ? (
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <DetailField
-                label="Store"
-                value={referenceLabel(references.sites, openRow.selectedStoreId, ["code", "name"])}
-              />
-              <DetailField
-                label="Fulfillment"
-                value={translateText(text(openRow.fulfillmentType, "") === "pickup" ? "Pickup" : "Delivery")}
-              />
-              <DetailField label="Payment" value={translateText(text(openRow.paymentStatus, "-"))} />
-              <DetailField label="Total" value={formatAmount(orderTotal(openRow), openRow.currency, moneyLocale())} />
-              <DetailField label="Placed" value={formatDateTime(openRow.createdAt)} />
-            </dl>
+            <div className="grid gap-4">
+              <dl className="grid gap-3 sm:grid-cols-2">
+                <DetailField
+                  label="Store"
+                  value={referenceLabel(references.sites, openRow.selectedStoreId, ["code", "name"])}
+                />
+                <DetailField
+                  label="Fulfillment"
+                  value={translateText(text(openRow.fulfillmentType, "") === "pickup" ? "Pickup" : "Delivery")}
+                />
+                <DetailField label="Payment" value={translateText(text(openRow.paymentStatus, "-"))} />
+                <DetailField label="Total" value={formatAmount(orderTotal(openRow), openRow.currency, moneyLocale())} />
+                <DetailField label="Placed" value={formatDateTime(openRow.createdAt)} />
+              </dl>
+              <OrderActions order={openRow} />
+            </div>
           ) : null
         }
         history={openRow ? <SalesAuditHistory entityType="order" entityId={text(openRow.id, "")} /> : undefined}

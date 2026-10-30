@@ -60,6 +60,10 @@ export const staffActions = {
     roles: pharmacist,
     reason: "Only a Pharmacist can answer consultations.",
   },
+  "order.transition": {
+    roles: ["Pharmacist", "Pharmacy Manager"],
+    reason: "Only a Pharmacist or Pharmacy Manager can process online orders.",
+  },
   "payment.confirmCash": {
     roles: pharmacist,
     reason: "Only a Pharmacist can confirm cash payments.",

@@ -1205,7 +1205,9 @@ describe("sales order stock API", () => {
 
   it("takes the stock off the shelf before staff hand an order over, and refuses an illegal move first", async () => {
     const consume = vi.fn().mockResolvedValue(undefined);
-    const getOrder = vi.fn().mockResolvedValue({ ...order, status: "Ready", paymentStatus: "Paid" });
+    const getOrder = vi
+      .fn()
+      .mockResolvedValue({ ...order, status: "Ready", paymentStatus: "Paid", fulfillmentType: "pickup" });
     const transitionOrder = vi.fn().mockResolvedValue({ ...order, status: "Completed" });
     const repository = { getOrder, transitionOrder } as unknown as SalesRepository;
     const testServer = await createTestServer(repository, { consume });
@@ -1217,12 +1219,45 @@ describe("sales order stock API", () => {
 
     expect(handedOver.status).toBe(200);
     expect(consume).toHaveBeenCalledTimes(1);
-    expect(illegal.status).toBe(500);
+    expect(illegal.status).toBe(409);
+    expect(await illegal.json()).toMatchObject({ code: "invalid_transition" });
     expect(consume).toHaveBeenCalledTimes(1);
   });
 
+  it("refuses a staff move the order's money or fulfillment forbids, before the stock is touched", async () => {
+    const consume = vi.fn().mockResolvedValue(undefined);
+    const getOrder = vi.fn();
+    const transitionOrder = vi.fn();
+    const repository = { getOrder, transitionOrder } as unknown as SalesRepository;
+    const testServer = await createTestServer(repository, { consume });
+    server = testServer.server;
+    const cash = { ...order, fulfillmentType: "delivery", paymentMethod: "cash_on_delivery" };
+
+    getOrder.mockResolvedValue({ ...cash, status: "Delivering", paymentStatus: "Pending" });
+    const unpaid = await transition(testServer.url, { status: "Completed" }, staff);
+    getOrder.mockResolvedValue({ ...cash, status: "Ready", paymentStatus: "Paid", fulfillmentType: "pickup" });
+    const pickup = await transition(testServer.url, { status: "Delivering" }, staff);
+    getOrder.mockResolvedValue({ ...cash, status: "Confirmed", paymentStatus: "Paid" });
+    const paid = await transition(testServer.url, { status: "Cancelled" }, staff);
+    getOrder.mockResolvedValue({ ...cash, status: "Ready", paymentStatus: "Paid" });
+    const notOut = await transition(testServer.url, { status: "Completed" }, staff);
+
+    expect(unpaid.status).toBe(409);
+    expect(await unpaid.json()).toMatchObject({ code: "cash_not_recorded" });
+    expect(pickup.status).toBe(409);
+    expect(await pickup.json()).toMatchObject({ code: "pickup_not_delivered" });
+    expect(paid.status).toBe(409);
+    expect(await paid.json()).toMatchObject({ code: "paid_order_needs_refund" });
+    expect(notOut.status).toBe(409);
+    expect(await notOut.json()).toMatchObject({ code: "delivery_not_collected" });
+    expect(consume).not.toHaveBeenCalled();
+    expect(transitionOrder).not.toHaveBeenCalled();
+  });
+
   it("keeps the order as it was when inventory cannot hand the goods over", async () => {
-    const getOrder = vi.fn().mockResolvedValue({ ...order, status: "Ready", paymentStatus: "Paid" });
+    const getOrder = vi
+      .fn()
+      .mockResolvedValue({ ...order, status: "Ready", paymentStatus: "Paid", fulfillmentType: "pickup" });
     const transitionOrder = vi.fn();
     const repository = { getOrder, transitionOrder } as unknown as SalesRepository;
     const testServer = await createTestServer(repository, {

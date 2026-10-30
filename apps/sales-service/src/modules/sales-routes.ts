@@ -26,7 +26,12 @@ import {
 } from "./delivery/domain/delivery-calculator.ts";
 import { CustomerContactUnavailableError, lookupCustomerContacts } from "./customer-contact.ts";
 import type { OrderStock } from "./orders/application/order-stock.ts";
-import { transitionOrder as assertOrderTransition, type OrderStatus } from "./orders/domain/order-status.ts";
+import {
+  InvalidOrderTransition,
+  staffMoveRefusal,
+  transitionOrder as assertOrderTransition,
+  type OrderStatus,
+} from "./orders/domain/order-status.ts";
 import { InsufficientStockError, InventoryRequestError } from "./orders/infrastructure/inventory-reservations.ts";
 import { PrescriptionDispenseError, SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
 import { actorMaySeeSite, siteAccessDenied } from "./staff-access.ts";
@@ -430,6 +435,8 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
         return response.status(403).json({ title: "Staff action required", status: 403, code: "forbidden" });
       // Refuse an illegal move before anything touches the stock.
       assertOrderTransition(current.status as OrderStatus, parsed.data.status);
+      const refusal = staff ? staffMoveRefusal(current, parsed.data.status) : undefined;
+      if (refusal) return response.status(409).json({ title: refusal.title, status: 409, code: refusal.code });
       // The goods leave the shelf when the order is handed over: out for delivery, or collected at the store.
       if (parsed.data.status === "Delivering" || parsed.data.status === "Completed")
         await orderStock.consume(id.data.id);
@@ -437,6 +444,10 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
       if (parsed.data.status === "Cancelled") await orderStock.releaseQuietly(id.data.id);
       return response.json(transitioned);
     } catch (error) {
+      if (error instanceof InvalidOrderTransition)
+        return response
+          .status(409)
+          .json({ title: "The order cannot move to that status", status: 409, code: "invalid_transition" });
       if (error instanceof InventoryRequestError)
         return response
           .status(502)

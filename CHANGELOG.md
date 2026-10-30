@@ -26,6 +26,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 - The chatbot button shows for signed-out visitors too. Opening it asks them to sign in (a link to `/tai-khoan`) instead of hiding the chatbot.
 
+**sales-service, payment-service, staff-web**
+
+- Staff can now process online orders in Staff Web: the order drawer offers the next status, **Xác nhận đã thu tiền** for cash on delivery (Pharmacist) and **Hoàn tiền và hủy đơn** for a paid order (Pharmacy Manager). Only the actions the order allows are shown.
+- Sales-service refuses, with a stable `code`, a staff move the order's money or fulfillment forbids (BR-ORD-005): `pickup_not_delivered`, `delivery_not_collected`, `payment_confirms_order`, `paid_order_needs_refund`, `cash_not_recorded`; an illegal status move answers `409 invalid_transition` instead of 500. A `Ready` order can be cancelled, and refunding it cancels it.
+- Finance Invoices no longer offers a Pharmacy Manager a refund of a counter invoice, which only a Pharmacist may refund.
+
 **deploy**
 
 - The local Typesense container no longer crashes at start (exit 139) on Docker Desktop with WSL2. Compose and the AWS task definition (`deploy/aws/data.tf`) now pin `typesense/typesense:31.0.rc23` by digest instead of 30.2, whose bundled brpc segfaults when the host kernel has no `/proc/self/io` (upstream typesense/typesense#2998). See the Troubleshooting table in `docs/runbook.md`.

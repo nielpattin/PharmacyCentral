@@ -25,6 +25,7 @@ const admitted: Record<StaffAction, readonly StaffRole[]> = {
   "prescription.cancel": [PHARMACIST],
   "prescription.createInvoice": [PHARMACIST],
   "consultation.answer": [PHARMACIST],
+  "order.transition": [PHARMACIST, PM],
   "payment.confirmCash": [PHARMACIST],
   "payment.refund.counter": [PHARMACIST],
   "payment.refund": [PM],

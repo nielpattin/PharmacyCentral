@@ -23,6 +23,7 @@ import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { translateText } from "../../i18n.ts";
 import { customerLabel, orderLabel, shortId } from "../procurement/labels.ts";
 import { formatDateTime, formatQuantity, idOf, text, type JsonRecord } from "../../staff-api.ts";
+import { isCounterInvoice } from "../sales/rules.ts";
 import { FINANCE_SUMMARY_KEY, INVOICES_KEY } from "./query-keys.ts";
 
 const LIST_DEFAULTS = { q: "", status: "all" } as const;
@@ -41,8 +42,9 @@ const LINK_CLASS =
   "inline-flex h-8 items-center rounded-md px-3 text-xs font-medium text-primary outline-none hover:bg-surface-soft focus-visible:ring-2 focus-visible:ring-primary/50";
 
 /**
- * Payment invoices, newest first. A Pharmacist (or Platform Admin) confirms cash and refunds here. A Pharmacy Manager
- * reads the same list without those actions, as the payment routes allow.
+ * Payment invoices, newest first. A Pharmacist confirms cash here. A Pharmacy Manager refunds the invoice of an online
+ * order; a counter invoice is refunded by a Pharmacist from the counter payments list, so no refund shows for it here.
+ * Platform Admin reads the list and acts on nothing, as the payment routes allow.
  */
 export const InvoicesTab = (): React.JSX.Element => {
   const confirmGate = useCan("payment.confirmCash");
@@ -175,7 +177,7 @@ export const InvoicesTab = (): React.JSX.Element => {
               {translateText("Confirm cash")}
             </Button>
           ) : null}
-          {refundGate.allowed && text(row.status, "") === "Paid" ? (
+          {refundGate.allowed && !isCounterInvoice(row) && text(row.status, "") === "Paid" ? (
             <Button size="sm" variant="danger-ghost" onClick={() => void refund(row)}>
               {translateText("Refund")}
             </Button>

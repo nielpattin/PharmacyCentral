@@ -242,7 +242,7 @@ Pharmacists and Platform Admin see Inventory read-only; movements, adjustments a
 
 ## Online orders
 
-**Online orders** (Pharmacist, Pharmacy Manager) lists shopper orders with status tabs: All, Pending, Confirmed, Preparing, Ready, Delivering, Completed and Cancelled. Each row shows the order number, store, fulfillment (Pickup or Delivery), status, payment status, total and placed time. The screen is view-only.
+**Online orders** (Pharmacist, Pharmacy Manager) lists shopper orders with status tabs: All, Pending, Confirmed, Preparing, Ready, Delivering, Completed and Cancelled. Each row shows the order number, store, fulfillment (Pickup or Delivery), status, payment status, total and placed time. Choose **View** to open an order, and process it from the drawer: **Xác nhận đơn** (cash on delivery only; a QR order is confirmed by its payment), **Bắt đầu soạn**, **Sẵn sàng**, then **Giao hàng** (delivery) and **Hoàn tất**, or **Hoàn tất** straight from ready for a pickup order. **Hủy đơn** cancels an unpaid order. A Pharmacist records cash on delivery with **Xác nhận đã thu tiền** once the order is ready or out; the order completes only after that. A Pharmacy Manager cancels a paid order that has not gone out with **Hoàn tiền và hủy đơn**, which refunds it and frees its stock. Only the actions the order allows are shown, and Platform Admin and Warehouse Staff see none.
 
 ## Prescriptions and counter
 

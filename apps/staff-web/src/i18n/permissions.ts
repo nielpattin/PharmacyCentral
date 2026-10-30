@@ -7,6 +7,8 @@ export const permissionLiterals: Record<string, string> = {
   "Only a Pharmacist can cancel prescriptions.": "Chỉ Dược sĩ được hủy đơn thuốc.",
   "Only a Pharmacist can create a counter invoice.": "Chỉ Dược sĩ được tạo hóa đơn tại quầy.",
   "Only a Pharmacist can answer consultations.": "Chỉ Dược sĩ được trả lời tư vấn.",
+  "Only a Pharmacist or Pharmacy Manager can process online orders.":
+    "Chỉ Dược sĩ hoặc Quản lý nhà thuốc được xử lý đơn hàng online.",
   "Only a Pharmacist can confirm cash payments.": "Chỉ Dược sĩ được xác nhận thanh toán tiền mặt.",
   "Only a Pharmacist can refund counter payments.": "Chỉ Dược sĩ được hoàn tiền thanh toán tại quầy.",
   "Only a Pharmacy Manager can refund payments.": "Chỉ Quản lý nhà thuốc được hoàn tiền thanh toán.",

@@ -224,14 +224,26 @@ describe("OrderStock", () => {
     await expect(row(id)).resolves.toEqual({ status: "Cancelled", stockHold: "released" });
   });
 
-  it("leaves a refunded order that is already ready or out to the staff", async () => {
+  it("cancels a refunded order that is ready, because the goods are still on the shelf", async () => {
     const ready = await place();
     inventory.holds.set(ready, "held");
     await db.update(schema.orders).set({ status: "Ready" }).where(eq(schema.orders.id, ready));
 
     await orderStock.cancelRefunded({ id: ready, status: "Ready" });
 
-    await expect(row(ready)).resolves.toEqual({ status: "Ready", stockHold: "held" });
-    expect(inventory.holds.get(ready)).toBe("held");
+    await expect(row(ready)).resolves.toEqual({ status: "Cancelled", stockHold: "released" });
+  });
+
+  it("leaves a refunded order that is already out to the staff", async () => {
+    const out = await place();
+    inventory.holds.set(out, "consumed");
+    await db
+      .update(schema.orders)
+      .set({ status: "Delivering", stockHold: "consumed" })
+      .where(eq(schema.orders.id, out));
+
+    await orderStock.cancelRefunded({ id: out, status: "Delivering" });
+
+    await expect(row(out)).resolves.toEqual({ status: "Delivering", stockHold: "consumed" });
   });
 });

@@ -59,10 +59,15 @@ export class OrderStock {
 
   /**
    * A refunded order that was not handed over will not happen: it is cancelled and its stock freed. An order that
-   * is ready or already out is left to the staff, and one that is already cancelled only has its hold checked.
+   * is already out or collected is left to the staff, and one that is already cancelled only has its hold checked.
    */
   public async cancelRefunded(order: { id: string; status: string }): Promise<void> {
-    if (order.status === "Pending" || order.status === "Confirmed" || order.status === "Preparing")
+    if (
+      order.status === "Pending" ||
+      order.status === "Confirmed" ||
+      order.status === "Preparing" ||
+      order.status === "Ready"
+    )
       await this.repository.transitionOrder(order.id, "Cancelled");
     else if (order.status !== "Cancelled") return;
     await this.releaseQuietly(order.id);

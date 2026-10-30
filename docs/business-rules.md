@@ -941,13 +941,21 @@ Tên sản phẩm và `unitPriceSnapshot` lấy từ catalog tại thời điể
 | Delivering | Completed |
 | Completed, Cancelled | (không có) |
 
-Chuyển không hợp lệ bị từ chối ("Invalid order transition").
+Chuyển không hợp lệ bị từ chối: 409 `invalid_transition` ("Invalid order transition").
 
-Pharmacist, Pharmacy Manager và Platform Admin chuyển trạng thái đơn trong phạm vi site của đơn (BR-AUTH-002, BR-AUTH-004).
+Nhân viên còn bị từ chối (409) những chuyển mà tiền hoặc cách nhận hàng không cho phép:
+
+- Đơn nhận tại nhà thuốc không bao giờ sang `Delivering` (`pickup_not_delivered`).
+- Đơn giao tận nơi không sang `Completed` thẳng từ `Ready`; phải qua `Delivering` (`delivery_not_collected`).
+- Đơn thanh toán QR không do nhân viên xác nhận; thanh toán xác nhận đơn (`payment_confirms_order`, BR-ORD-006).
+- Đơn đã thanh toán không hủy trực tiếp; hủy bằng hoàn tiền (`paid_order_needs_refund`, BR-ORD-010).
+- Đơn thanh toán khi nhận hàng chỉ `Completed` sau khi tiền mặt đã được ghi nhận, tức `paymentStatus = Paid` (`cash_not_recorded`, BR-PAY-002).
+
+Pharmacist và Pharmacy Manager chuyển trạng thái đơn trong phạm vi site của đơn (BR-AUTH-002, BR-AUTH-004).
 
 ### BR-ORD-006. Thanh toán thành công cập nhật trạng thái thanh toán của đơn
 
-Sales-service tiêu thụ `payment.invoice.paid.v1` và đặt `paymentStatus = Paid` cho đơn. Chuyển đơn sang `Confirmed` do nhân viên thực hiện qua BR-ORD-005.
+Sales-service tiêu thụ `payment.invoice.paid.v1` và đặt `paymentStatus = Paid` cho đơn. Đơn đang `Pending` được xác nhận (`Confirmed`) ngay khi nhận đủ tiền; nhân viên chỉ xác nhận tay đơn thanh toán khi nhận hàng (BR-ORD-005).
 
 ### BR-ORD-007. Giao hàng hoặc hoàn tất đơn thì hàng rời kệ
 

@@ -62,6 +62,66 @@ export const canConfirmCash = (status: string): boolean => status === "Pending";
 
 export const canRefund = (status: string): boolean => status === "Paid";
 
+/** The slice of an online order the processing rules read. */
+export type OrderFacts = {
+  status: string;
+  fulfillmentType: string;
+  paymentMethod: string;
+  paymentStatus: string;
+};
+
+export const orderFacts = (order: Readonly<Record<string, unknown>>): OrderFacts => ({
+  status: plain(order.status),
+  fulfillmentType: plain(order.fulfillmentType),
+  paymentMethod: plain(order.paymentMethod),
+  paymentStatus: plain(order.paymentStatus),
+});
+
+const cashOnDelivery = (order: OrderFacts): boolean => order.paymentMethod === "cash_on_delivery";
+
+/** What a staff member moves an order to, with the button label. */
+export type OrderMove = { status: string; label: string };
+
+const NEXT_MOVES: Readonly<Record<string, readonly OrderMove[]>> = {
+  Pending: [{ status: "Confirmed", label: "Confirm order" }],
+  Confirmed: [{ status: "Preparing", label: "Start preparing" }],
+  Preparing: [{ status: "Ready", label: "Mark ready" }],
+  Ready: [
+    { status: "Delivering", label: "Start delivery" },
+    { status: "Completed", label: "Complete order" },
+  ],
+  Delivering: [{ status: "Completed", label: "Complete order" }],
+};
+
+const CANCEL_MOVE: OrderMove = { status: "Cancelled", label: "Cancel order" };
+
+/**
+ * The moves sales-service accepts from staff for this order (BR-ORD-005): a pickup order is never delivered, a delivery
+ * order is completed only after it went out, a QR order is confirmed by its payment, cash on delivery completes once the cash is recorded, and a paid order is
+ * cancelled by refunding it, so none of those moves is offered.
+ */
+export const orderMoves = (order: OrderFacts): OrderMove[] => {
+  const moves = (NEXT_MOVES[order.status] ?? []).filter((move) => {
+    if (move.status === "Confirmed") return cashOnDelivery(order);
+    if (move.status === "Delivering") return order.fulfillmentType !== "pickup";
+    if (move.status === "Completed") {
+      if (order.status === "Ready" && order.fulfillmentType !== "pickup") return false;
+      return !cashOnDelivery(order) || order.paymentStatus === "Paid";
+    }
+    return true;
+  });
+  const cancellable = ["Pending", "Confirmed", "Preparing", "Ready"].includes(order.status);
+  return cancellable && order.paymentStatus !== "Paid" ? [...moves, CANCEL_MOVE] : moves;
+};
+
+/** Cash on delivery is taken at the handover: once the order is ready or out, while its invoice is unpaid. */
+export const canRecordOrderCash = (order: OrderFacts, invoiceStatus: string): boolean =>
+  cashOnDelivery(order) && ["Ready", "Delivering"].includes(order.status) && canConfirmCash(invoiceStatus);
+
+/** A paid invoice of an order that has not gone out is refunded, which cancels the order and frees its stock. */
+export const canRefundOrder = (order: OrderFacts, invoiceStatus: string): boolean =>
+  ["Pending", "Confirmed", "Preparing", "Ready"].includes(order.status) && canRefund(invoiceStatus);
+
 /**
  * An amount in its currency, in the screen's locale. Money needs a currency style, which the quantity formatter does not
  * give. A code that is not three letters shows the amount alone.

@@ -17,6 +17,10 @@ import {
   isDispenseQuantityValid,
   newIdempotencyKey,
   openDispenseLines,
+  orderMoves,
+  canRecordOrderCash,
+  canRefundOrder,
+  type OrderFacts,
   queryParam,
   remainingQuantity,
   statusParam,
@@ -189,5 +193,53 @@ describe("dispensableBatches", () => {
 
   it("accepts a batch that expires today, as the server does", () => {
     expect(dispensableBatches([batch("today", { expiryDate: "2026-10-25" })], "p1", "2026-10-25")).toHaveLength(1);
+  });
+});
+
+describe("online order moves", () => {
+  const order = (patch: Partial<OrderFacts>): OrderFacts => ({
+    status: "Pending",
+    fulfillmentType: "delivery",
+    paymentMethod: "cash_on_delivery",
+    paymentStatus: "Pending",
+    ...patch,
+  });
+  const targets = (facts: OrderFacts): string[] => orderMoves(facts).map((move) => move.status);
+
+  it("confirms only cash on delivery by hand; a QR order is confirmed by its payment", () => {
+    expect(targets(order({}))).toEqual(["Confirmed", "Cancelled"]);
+    expect(targets(order({ paymentMethod: "sepay_qr" }))).toEqual(["Cancelled"]);
+  });
+
+  it("offers no cancel for a paid order, which is refunded instead", () => {
+    expect(targets(order({ status: "Preparing", paymentMethod: "sepay_qr", paymentStatus: "Paid" }))).toEqual([
+      "Ready",
+    ]);
+  });
+
+  it("never delivers a pickup order", () => {
+    expect(targets(order({ status: "Ready", fulfillmentType: "pickup", paymentStatus: "Paid" }))).toEqual([
+      "Completed",
+    ]);
+    expect(targets(order({ status: "Ready", paymentStatus: "Paid" }))).toEqual(["Delivering"]);
+  });
+
+  it("completes cash on delivery only after the cash is recorded", () => {
+    expect(targets(order({ status: "Delivering" }))).toEqual([]);
+    expect(targets(order({ status: "Delivering", paymentStatus: "Paid" }))).toEqual(["Completed"]);
+  });
+
+  it("offers nothing on a finished order", () => {
+    expect(targets(order({ status: "Completed", paymentStatus: "Paid" }))).toEqual([]);
+    expect(targets(order({ status: "Cancelled" }))).toEqual([]);
+  });
+
+  it("takes cash on delivery at the handover and refunds a paid order only before it goes out", () => {
+    expect(canRecordOrderCash(order({ status: "Ready" }), "Pending")).toBe(true);
+    expect(canRecordOrderCash(order({ status: "Confirmed" }), "Pending")).toBe(false);
+    expect(canRecordOrderCash(order({ status: "Ready", paymentMethod: "sepay_qr" }), "Pending")).toBe(false);
+    expect(canRefundOrder(order({ status: "Preparing" }), "Paid")).toBe(true);
+    expect(canRefundOrder(order({ status: "Delivering" }), "Paid")).toBe(false);
+    expect(canRefundOrder(order({ status: "Preparing" }), "Pending")).toBe(false);
   });
 });
