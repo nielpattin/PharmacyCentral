@@ -15,7 +15,7 @@ Tags: `[owner]` a recorded owner decision; `[observed]` a code or doc fact read 
 
 ## Users and entry points
 
-- `[observed]` Signed-in customers only. A signed-out visitor sees no launcher and makes no `/api/chatbot/*` request. The service answers `401 unauthenticated` to any other caller (BR-CHAT-001). See Decision 1.
+- `[observed]` Signed-in customers only. A signed-out visitor sees the launcher; opening it shows **Đăng nhập để trò chuyện với trợ lý tư vấn** with an **Đăng nhập** link to `/tai-khoan`, and no chat input. No `/api/chatbot/*` request is made. The launcher shows once the session check has finished. The service answers `401 unauthenticated` to any other caller (BR-CHAT-001). See Decision 1.
 - `[observed]` Entry point: a round launcher fixed at the bottom right, labelled `aria-label` and `title` "Trợ lý tư vấn", with `/chatbot-icon.svg`. Staff never see the widget; it is mounted only in customer-web.
 
 ## User stories and acceptance criteria
@@ -166,7 +166,7 @@ Business rules, section 21 of [business-rules.md](../business-rules.md): BR-CHAT
 
 | # | Question | Decision | Why |
 | --- | --- | --- | --- |
-| 1 | Who may use the assistant? | Signed-in customers only. A signed-out visitor sees no launcher. `[standard]` | Each conversation and each limit belongs to one customer (BR-CHAT-002, BR-CHAT-004), and the questions can describe a person's health. Owner may change (who may use it). |
+| 1 | Who may use the assistant? | Signed-in customers only to chat. A signed-out visitor sees the launcher and a sign-in prompt, so the assistant can be found. `[standard]` | Each conversation and each limit belongs to one customer (BR-CHAT-002, BR-CHAT-004), and the questions can describe a person's health. Owner may change (who may use it). |
 | 2 | Prescription-only products in cards? | No amount. The card shows "Liên hệ báo giá", the **Thuốc kê đơn** badge and a **Gửi đơn thuốc** link (US8). `[standard]` | The product is not sold online (ADR 0016), so no price is offered for ordering. The user guide must say the same (gap G2). |
 | 3 | Badge wording? | Keep "Thuốc kê đơn" on cards. "Cần đơn thuốc" is only the text of a disabled button. `[standard]` | One label for the product status and one for the disabled control, the same across the app. |
 | 4 | Cards versus the answer? | A card appears only for a product the reply recommends, at most 5. The model names the SKUs it recommends in a structured field, and the server keeps only SKUs that a tool returned (US10). `[standard]` | A card the answer never mentions is unexplained. A recommended product without a card leaves the shopper no way to open it. Tool results stay the only source (BR-CHAT-006). |

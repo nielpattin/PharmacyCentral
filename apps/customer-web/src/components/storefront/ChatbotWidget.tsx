@@ -66,7 +66,8 @@ export const ChatbotWidget = (): React.JSX.Element | null => {
     },
   });
 
-  if (!session.authenticated) return null;
+  // Until the session probe answers, neither the chat nor the sign-in prompt is known to be the right one to show.
+  if (!session.resolved) return null;
 
   const submit = (event: React.SyntheticEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -95,94 +96,114 @@ export const ChatbotWidget = (): React.JSX.Element | null => {
           <header className="flex items-center justify-between border-b border-line px-4 py-3">
             <h2 className="text-sm font-semibold text-ink">Trợ lý tư vấn</h2>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={startNewChat}>
-                Cuộc trò chuyện mới
-              </Button>
+              {session.authenticated ? (
+                <Button variant="ghost" size="sm" onClick={startNewChat}>
+                  Cuộc trò chuyện mới
+                </Button>
+              ) : null}
               <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
                 Đóng
               </Button>
             </div>
           </header>
-          <div ref={container} className="flex-1 overflow-y-auto overscroll-contain px-4 py-3 text-sm">
-            <div ref={content} className="space-y-3">
-              {entries.length === 0 ? <p className="text-muted">Hỏi về sản phẩm hoặc cách gửi đơn thuốc.</p> : null}
-              {entries.map((entry, index) => (
-                <div
-                  key={`${entry.role}-${index}`}
-                  className={
-                    entry.role === "user"
-                      ? "ml-auto max-w-[85%] rounded-lg bg-primary px-3 py-2 text-white"
-                      : entry.products.length
-                        ? "w-full rounded-lg bg-surface-soft px-3 py-2 text-ink"
-                        : "max-w-[90%] rounded-lg bg-surface-soft px-3 py-2 text-ink"
-                  }
-                >
-                  <p className="whitespace-pre-line">{entry.content}</p>
-                  {entry.role === "assistant" && entry.products.length ? (
-                    <ul className="mt-2 space-y-2">
-                      {entry.products.map((product) => (
-                        <li key={product.id}>
-                          <Link
-                            className="flex items-start gap-3 rounded-lg border border-line bg-surface p-2 transition-shadow hover:shadow-md"
-                            href={`/san-pham/${product.id}`}
-                          >
-                            <ProductTile
-                              name={product.name}
-                              seed={product.sku}
-                              imageUrl={product.imageUrl}
-                              className="h-16 w-16 shrink-0"
-                              monogramClassName="text-lg"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p className="line-clamp-2 font-medium text-ink">{product.name}</p>
-                              <p className="mt-0.5 line-clamp-1 text-xs text-muted">
-                                {product.manufacturer ?? "Đang cập nhật nhà sản xuất"}
-                              </p>
-                              {product.prescriptionRequired ? (
-                                <div className="mt-1">
-                                  <Badge variant="danger">Thuốc kê đơn</Badge>
+          {session.authenticated ? (
+            <>
+              <div ref={container} className="flex-1 overflow-y-auto overscroll-contain px-4 py-3 text-sm">
+                <div ref={content} className="space-y-3">
+                  {entries.length === 0 ? <p className="text-muted">Hỏi về sản phẩm hoặc cách gửi đơn thuốc.</p> : null}
+                  {entries.map((entry, index) => (
+                    <div
+                      key={`${entry.role}-${index}`}
+                      className={
+                        entry.role === "user"
+                          ? "ml-auto max-w-[85%] rounded-lg bg-primary px-3 py-2 text-white"
+                          : entry.products.length
+                            ? "w-full rounded-lg bg-surface-soft px-3 py-2 text-ink"
+                            : "max-w-[90%] rounded-lg bg-surface-soft px-3 py-2 text-ink"
+                      }
+                    >
+                      <p className="whitespace-pre-line">{entry.content}</p>
+                      {entry.role === "assistant" && entry.products.length ? (
+                        <ul className="mt-2 space-y-2">
+                          {entry.products.map((product) => (
+                            <li key={product.id}>
+                              <Link
+                                className="flex items-start gap-3 rounded-lg border border-line bg-surface p-2 transition-shadow hover:shadow-md"
+                                href={`/san-pham/${product.id}`}
+                              >
+                                <ProductTile
+                                  name={product.name}
+                                  seed={product.sku}
+                                  imageUrl={product.imageUrl}
+                                  className="h-16 w-16 shrink-0"
+                                  monogramClassName="text-lg"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <p className="line-clamp-2 font-medium text-ink">{product.name}</p>
+                                  <p className="mt-0.5 line-clamp-1 text-xs text-muted">
+                                    {product.manufacturer ?? "Đang cập nhật nhà sản xuất"}
+                                  </p>
+                                  {product.prescriptionRequired ? (
+                                    <div className="mt-1">
+                                      <Badge variant="danger">Thuốc kê đơn</Badge>
+                                    </div>
+                                  ) : null}
+                                  <p className="mt-1 text-xs">
+                                    {product.price ? (
+                                      <>
+                                        <span className="font-semibold text-danger">
+                                          {formatMoney(product.price.amount, product.price.currency)}
+                                        </span>
+                                        <span className="text-muted"> / {product.price.unitName}</span>
+                                      </>
+                                    ) : (
+                                      <span className="text-muted">Liên hệ báo giá</span>
+                                    )}
+                                  </p>
                                 </div>
-                              ) : null}
-                              <p className="mt-1 text-xs">
-                                {product.price ? (
-                                  <>
-                                    <span className="font-semibold text-danger">
-                                      {formatMoney(product.price.amount, product.price.currency)}
-                                    </span>
-                                    <span className="text-muted"> / {product.price.unitName}</span>
-                                  </>
-                                ) : (
-                                  <span className="text-muted">Liên hệ báo giá</span>
-                                )}
-                              </p>
-                            </div>
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ))}
+                  {mutation.isPending ? <p className="text-muted">Đang trả lời…</p> : null}
+                  {mutation.isError ? (
+                    <p role="alert" className="text-danger">
+                      {failureText(mutation.error)}
+                    </p>
                   ) : null}
                 </div>
-              ))}
-              {mutation.isPending ? <p className="text-muted">Đang trả lời…</p> : null}
-              {mutation.isError ? (
-                <p role="alert" className="text-danger">
-                  {failureText(mutation.error)}
-                </p>
-              ) : null}
+              </div>
+              <form onSubmit={submit} className="flex gap-2 border-t border-line p-3">
+                <Input
+                  aria-label="Câu hỏi"
+                  value={draft}
+                  maxLength={MAX_QUESTION_LENGTH}
+                  placeholder="Nhập câu hỏi..."
+                  onChange={(event) => setDraft(event.target.value)}
+                />
+                <Button type="submit" disabled={mutation.isPending || draft.trim() === ""}>
+                  Gửi
+                </Button>
+              </form>
+            </>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center text-sm">
+              <p className="text-base font-semibold text-ink">Đăng nhập để trò chuyện với trợ lý tư vấn</p>
+              <p className="text-muted">
+                Trợ lý trả lời về sản phẩm và cách gửi đơn thuốc, và gắn cuộc trò chuyện với tài khoản khách hàng của
+                bạn.
+              </p>
+              <Link
+                href="/tai-khoan"
+                className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-white outline-none hover:bg-primary-dark focus-visible:ring-2 focus-visible:ring-primary/50"
+              >
+                Đăng nhập
+              </Link>
             </div>
-          </div>
-          <form onSubmit={submit} className="flex gap-2 border-t border-line p-3">
-            <Input
-              aria-label="Câu hỏi"
-              value={draft}
-              maxLength={MAX_QUESTION_LENGTH}
-              placeholder="Nhập câu hỏi..."
-              onChange={(event) => setDraft(event.target.value)}
-            />
-            <Button type="submit" disabled={mutation.isPending || draft.trim() === ""}>
-              Gửi
-            </Button>
-          </form>
+          )}
         </section>
       ) : null}
       <Button
