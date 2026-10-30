@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**operations-query-service, staff-web, docs**
+
+- Staff Web's Analytics is a five-tab workspace (**Tổng quan**, **Doanh thu**, **Khách hàng**, **Tồn kho**, **Mục tiêu**) that loads only the open tab. `GET /api/dashboard/analytics` now requires `section` (`overview`, `revenue`, `customers` or `inventory`) and answers a common envelope with just that one section instead of the full report; its answers are cached for 30 seconds per section and parameters with single-flight, reported by `X-Analytics-Cache: hit|miss|coalesced`. `GET /api/dashboard/sales-targets` stays the **Mục tiêu** tab's separate monthly read and is not cached, so a goal set through `PUT /api/sales-targets` shows at once. Documented in `docs/api-guide.md` and `docs/user-guide.md`.
+
 **inventory-service, staff-web, deploy, docs**
 
 - Inventory gains **Disposals** (biên bản tiêu hủy): a Pharmacist or Warehouse Staff member records the expired, damaged or recalled batches a site is destroying, with a reason, notes and a quantity per batch, and a Pharmacy Manager who did not create it approves or rejects it. New `disposal_records` and `disposal_lines` tables (inventory migration `0015`), `GET`/`POST /api/inventory/disposals` and `POST /api/inventory/disposals/{id}/approve|reject`. A proposal leaves stock untouched; approval re-checks availability, subtracts each line in one transaction and writes a `Disposal` ledger entry per line. An approved record prints an A4 slip with the batches, the total and signature blocks. Spec US9, BR-DIS-001 to 006, design 0008.

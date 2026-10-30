@@ -1,59 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 
-import {
-  Alert,
-  Badge,
-  Button,
-  DataTable,
-  type DataColumn,
-  Field,
-  Input,
-  Select,
-  Skeleton,
-  StatTile,
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@pharmacy/ui";
+import { Alert, Input, Field, ToggleGroup, ToggleGroupItem } from "@pharmacy/ui";
 
-import { dataTableLabels } from "../components/data-table-labels.ts";
-import { withActionColumn } from "../lib/action-column.ts";
-import { RefreshButton } from "../components/forms.tsx";
+import { RefreshButton, SubTabs } from "../components/forms.tsx";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
-import { useRetainedTarget } from "../hooks/useRetainedTarget.ts";
 import { referenceLabel, referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { translateText } from "../i18n.ts";
-import { useCan } from "../permissions/use-can.ts";
 import { formatDateTime, readOne, text } from "../staff-api.ts";
-import { CreatePlanDrawer } from "./action-plans/create-plan-drawer.tsx";
-import { deadStockDraft, type ActionPlanDraft } from "./action-plans/drafts.ts";
-import { fillText } from "./procurement/bulk-summary.ts";
-import { labelOrShortId } from "./inventory/format.ts";
-import type {
-  AbcRevenueRow,
-  AnalyticsChannel,
-  AnalyticsResponse,
-  CategoryRevenueRow,
-  DeadStockItem,
-  ExpiryBucket,
-  Figure,
-  FigurePair,
-  PrescriptionGroup,
-  PrescriptionRevenueRow,
-  ProductRevenueRow,
-  SalesChannel,
-  SalesSiteRow,
-  SalesTargetSiteRow,
-  SalesTargetsResponse,
-} from "./analytics/contract.ts";
-import {
-  formatCount,
-  formatMoney,
-  formatPercentChange,
-  formatRate,
-  partialCoveragePercent,
-  percentChange,
-} from "./analytics/figures.ts";
+import type { AnalyticsChannel, AnalyticsResponse, SalesTargetsResponse } from "./analytics/contract.ts";
+import { CustomersTab } from "./analytics/customers-tab.tsx";
+import { InventoryTab } from "./analytics/inventory-tab.tsx";
+import { OverviewTab } from "./analytics/overview-tab.tsx";
 import {
   firstDayOf,
   formatDayLabel,
@@ -69,17 +26,35 @@ import {
   type PeriodRangeError,
 } from "./analytics/period.ts";
 import {
-  ANALYTICS_CHANNELS,
   ANALYTICS_QUERY_KEY,
+  ANALYTICS_CHANNELS,
+  SALES_TARGETS_QUERY_KEY,
   analyticsPath,
   isAnalyticsChannel,
-  SALES_TARGETS_QUERY_KEY,
   salesTargetsPath,
 } from "./analytics/query.ts";
-import { SalesTargetDialog, type SalesTargetDraft } from "./analytics/target-dialog.tsx";
+import { RevenueTab } from "./analytics/revenue-tab.tsx";
+import { SiteFilter, figureFormat } from "./analytics/shared.tsx";
+import {
+  ANALYTICS_TABS,
+  ANALYTICS_TAB_LABELS,
+  ANALYTICS_TAB_SECTION,
+  analyticsTab,
+  analyticsTabOfLabel,
+} from "./analytics/tabs.ts";
+import { TargetsTab } from "./analytics/targets-tab.tsx";
+import { labelOrShortId } from "./inventory/format.ts";
 import { moneyLocale } from "./sales/shared.tsx";
 
-const LIST_DEFAULTS = { period: "30d", from: "", to: "", site: "all", channel: "all", month: "" } as const;
+const LIST_DEFAULTS = {
+  tab: "overview",
+  period: "30d",
+  from: "",
+  to: "",
+  site: "all",
+  channel: "all",
+  month: "",
+} as const;
 const NO_BOUNDS = { from: "", to: "" };
 
 const PERIOD_LABELS: Record<PeriodPreset, string> = {
@@ -99,73 +74,21 @@ const RANGE_MESSAGES: Record<PeriodRangeError, string> = {
   tooLong: "A period can be at most 365 days.",
 };
 
-const SALES_CHANNELS: readonly SalesChannel[] = ["counter", "online"];
-const SALES_CHANNEL_LABELS: Record<SalesChannel, string> = { counter: "Counter", online: "Online" };
-const PRESCRIPTION_LABELS: Record<PrescriptionGroup, string> = {
-  prescription: "Prescription medicine",
-  otc: "Over the counter medicine",
-  unknown: "Unknown product type",
-};
-
-type ExpiryKey = keyof AnalyticsResponse["inventory"]["expiry"];
-const EXPIRY_GROUPS: ReadonlyArray<{ key: ExpiryKey; label: string }> = [
-  { key: "expired", label: "Expired" },
-  { key: "within30", label: "Within 30 days" },
-  { key: "within60", label: "31 to 60 days" },
-  { key: "within90", label: "61 to 90 days" },
-];
-
-type ChannelRow = { channel: SalesChannel; revenue: Figure; orderCount: Figure };
-type ExpiryRow = { key: ExpiryKey; label: string; bucket: ExpiryBucket | undefined };
-type SiteStockRow = AnalyticsResponse["inventory"]["stockValue"]["bySite"][number];
-type DeadStockRow = DeadStockItem & { site: string };
-
-const Heading = ({ children }: { children: string }): React.JSX.Element => (
-  <h2 className="text-sm font-semibold text-ink">{translateText(children)}</h2>
-);
-
-const KpiTile = ({
-  label,
-  pair,
-  format,
-  locale,
-  note,
-  footnote,
-}: {
-  label: string;
-  pair: FigurePair | undefined;
-  format: (value: unknown) => string;
-  locale: string;
-  /** Replaces the comparison, for a figure that has none to show. */
-  note?: string | undefined;
-  /** Added under the comparison. */
-  footnote?: string | undefined;
-}): React.JSX.Element => (
-  <StatTile
-    label={translateText(label)}
-    value={format(pair?.current)}
-    hint={
-      note ? (
-        <span className="text-xs text-muted">{note}</span>
-      ) : (
-        <span className="grid gap-0.5">
-          <span>
-            {translateText("Previous period")}: {format(pair?.previous)}
-          </span>
-          <span>
-            {translateText("Change")}: {formatPercentChange(percentChange(pair?.current, pair?.previous), locale)}
-          </span>
-          {footnote ? <span className="text-muted">{footnote}</span> : null}
-        </span>
-      )
-    }
-  />
-);
-
+/**
+ * Period analytics as an ERP-style workspace: one tab per question, each tab one request. Only the active tab is
+ * mounted and only its request runs, so opening the page reads the period's KPIs, not the whole report.
+ *
+ * The tab and every filter live in the URL (`?tab=`, `?period=`, `?site=`, `?channel=`, `?month=`), so refresh, a deep
+ * link and Back restore the same view. The targets tab keeps its own month: a monthly goal cannot ride the page's
+ * 7/30/90-day period.
+ */
 export const AnalyticsSection = (): React.JSX.Element => {
   const list = useListUrlState(LIST_DEFAULTS);
   const references = useStaffReferences();
   const locale = moneyLocale();
+
+  const tab = analyticsTab(list.values.tab);
+  const section = ANALYTICS_TAB_SECTION[tab];
 
   const period: PeriodPreset = isPeriodPreset(list.values.period) ? list.values.period : "30d";
   const range: DayRange =
@@ -180,15 +103,19 @@ export const AnalyticsSection = (): React.JSX.Element => {
   const siteId = siteKnown ? list.values.site : "all";
   const siteFilter = siteId === "all" ? undefined : siteId;
   const channel: AnalyticsChannel = isAnalyticsChannel(list.values.channel) ? list.values.channel : "all";
+  const siteLabel = (value: string): string =>
+    labelOrShortId(referenceLabel(references.sites, value, ["code", "name"]), value);
 
+  // One request answers the active tab only. The fallback section never runs: the query is enabled on the four
+  // analytics tabs alone, and the targets tab reads its own report below.
   const analyticsQuery = useQuery({
-    queryKey: [...ANALYTICS_QUERY_KEY, bounds.from, bounds.to, siteFilter ?? "all", channel],
-    queryFn: () => readOne<AnalyticsResponse>(analyticsPath(bounds, siteFilter, channel)),
-    enabled: rangeError === undefined,
+    queryKey: [...ANALYTICS_QUERY_KEY, section ?? "targets", bounds.from, bounds.to, siteFilter ?? "all", channel],
+    queryFn: () => readOne<AnalyticsResponse>(analyticsPath(bounds, siteFilter, channel, section ?? "overview")),
+    enabled: section !== undefined && rangeError === undefined,
   });
 
-  // The target report has its own month: a monthly goal cannot ride the page's 7/30/90-day period. Its revenue is the
-  // whole calendar month of that month, all channels, under the page's site filter.
+  // The target report has its own month: its revenue is the whole calendar month, all channels, under the page's site
+  // filter. It is read only while the targets tab is open.
   const targetMonth =
     list.values.month !== "" && monthRange(list.values.month) ? list.values.month : monthOf(new Date());
   const targetRange = monthRange(targetMonth);
@@ -196,27 +123,36 @@ export const AnalyticsSection = (): React.JSX.Element => {
   const targetsQuery = useQuery({
     queryKey: [...SALES_TARGETS_QUERY_KEY, targetMonth, siteFilter ?? "all"],
     queryFn: () => readOne<SalesTargetsResponse>(salesTargetsPath(targetBounds, siteFilter, targetMonth)),
-    enabled: targetRange !== undefined,
+    enabled: tab === "targets" && targetRange !== undefined,
   });
 
   // After a failed request no figure from an earlier answer stays on screen: every figure reads "—" beside the alert.
   const data = analyticsQuery.isError ? undefined : analyticsQuery.data;
-  const loading = rangeError === undefined && analyticsQuery.isPending;
-  const error =
+  const analyticsLoading = section !== undefined && rangeError === undefined && analyticsQuery.isPending;
+  const analyticsError =
     analyticsQuery.isError && analyticsQuery.error instanceof Error ? analyticsQuery.error.message : undefined;
-  const currency = text(data?.currency, "VND");
-  const money = (value: unknown): string => formatMoney(value, currency, locale);
-  const count = (value: unknown): string => formatCount(value, locale);
-  const inventory = data?.inventory;
-  const grossProfit = data?.kpis?.grossProfit;
-  const grossProfitCoverage = grossProfit?.available ? partialCoveragePercent(grossProfit.coverage?.current) : null;
-  const planGate = useCan("actionPlan.create");
-  const targetGate = useCan("salesTarget.set");
-  const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
-  const planDrawer = useRetainedTarget(planDraft);
-  const [targetDraft, setTargetDraft] = useState<SalesTargetDraft>();
-  const targetDrawer = useRetainedTarget(targetDraft);
-  const deadStockDays = inventory?.deadStock?.deadStockDays;
+  const targetsData = targetsQuery.isError ? undefined : targetsQuery.data;
+  const targetsError = targetsQuery.isError
+    ? targetsQuery.error instanceof Error
+      ? targetsQuery.error.message
+      : "The request failed."
+    : undefined;
+  const activeError = section === undefined ? targetsError : analyticsError;
+
+  // The tab that is open narrows the union to its own block; another section's fields are absent, not empty.
+  const overview = data !== undefined && data.section === "overview" ? data : undefined;
+  const revenue = data !== undefined && data.section === "revenue" ? data : undefined;
+  const customers = data !== undefined && data.section === "customers" ? data : undefined;
+  const inventory = data !== undefined && data.section === "inventory" ? data : undefined;
+  const figures = figureFormat(text(data?.currency, "VND"), locale);
+  const targetFigures = figureFormat(text(targetsData?.currency, "VND"), locale);
+
+  const currentDays =
+    rangeError === undefined ? `${formatDayLabel(range.fromDay, locale)} – ${formatDayLabel(range.toDay, locale)}` : "";
+  const previousDays =
+    data === undefined
+      ? ""
+      : `${formatDayLabel(firstDayOf(data.previousPeriod.from), locale)} – ${formatDayLabel(lastDayBefore(data.previousPeriod.to), locale)}`;
 
   const selectPeriod = (next: PeriodPreset): void => {
     if (next === "custom") {
@@ -226,685 +162,145 @@ export const AnalyticsSection = (): React.JSX.Element => {
     list.setValues({ period: next, from: "", to: "" }, { history: "push" });
   };
 
-  const channelRows: ChannelRow[] = SALES_CHANNELS.map((salesChannel) => {
-    const row = data?.channels?.find((item) => item.channel === salesChannel);
-    // A missing channel or figure stays null ("—"); it is never filled with 0.
-    return { channel: salesChannel, revenue: row?.revenue ?? null, orderCount: row?.orderCount ?? null };
-  });
-  const expiryRows: ExpiryRow[] = EXPIRY_GROUPS.map((group) => ({
-    key: group.key,
-    label: group.label,
-    bucket: inventory?.expiry?.[group.key],
-  }));
-  const siteStockRows: SiteStockRow[] = inventory?.stockValue?.bySite ?? [];
-  const deadStockRows: DeadStockRow[] = (inventory?.deadStock?.items ?? []).map((item) => ({
-    ...item,
-    site: labelOrShortId(referenceLabel(references.sites, item.siteId, ["code", "name"]), item.siteId),
-  }));
-  const siteRevenueRows: SalesSiteRow[] = data?.breakdown?.bySite ?? [];
-  const topProductRows: ProductRevenueRow[] = data?.breakdown?.topProducts ?? [];
-  const abcRows: AbcRevenueRow[] = data?.breakdown?.abc ?? [];
-  const categoryRevenueRows: CategoryRevenueRow[] = data?.breakdown?.byCategory ?? [];
-  const prescriptionRevenueRows: PrescriptionRevenueRow[] = data?.breakdown?.byPrescription ?? [];
-  const customers = data?.customers;
-  const targetRows: SalesTargetSiteRow[] = targetsQuery.isError ? [] : (targetsQuery.data?.sites ?? []);
-  const targetTotals = targetsQuery.isError ? undefined : targetsQuery.data?.totals;
-  const targetsLoading = targetsQuery.isPending;
-  const goodsRevenue = data?.breakdown?.goodsRevenue;
-
-  const currentDays =
-    rangeError === undefined ? `${formatDayLabel(range.fromDay, locale)} – ${formatDayLabel(range.toDay, locale)}` : "";
-  const previousDays =
-    data?.previousPeriod === undefined
-      ? ""
-      : `${formatDayLabel(firstDayOf(data.previousPeriod.from), locale)} – ${formatDayLabel(lastDayBefore(data.previousPeriod.to), locale)}`;
+  // Refresh reads the open tab again, and nothing the other tabs hold.
+  const refresh = (): void => {
+    if (section === undefined) {
+      void targetsQuery.refetch();
+      return;
+    }
+    // A custom range that does not validate sends no request; the warning beside the filters already says why.
+    if (rangeError === undefined) void analyticsQuery.refetch();
+  };
 
   return (
     <div className="grid gap-6">
-      <p className="text-sm text-muted">
-        {translateText(
-          "Revenue, orders and stock health for the chosen period, site and channel. Revenue counts paid invoices.",
-        )}{" "}
-        {translateText("A dash (—) means the figure could not be answered, not zero.")}
-      </p>
+      <SubTabs
+        className="mb-0"
+        tabs={ANALYTICS_TABS.map((key) => ANALYTICS_TAB_LABELS[key])}
+        active={ANALYTICS_TAB_LABELS[tab]}
+        onChange={(label) => list.setValues({ tab: analyticsTabOfLabel(label) }, { history: "push" })}
+      />
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="grid gap-1.5">
-          <span className="text-sm font-medium text-ink">{translateText("Period")}</span>
-          <ToggleGroup<PeriodPreset> aria-label={translateText("Period")} value={period} onValueChange={selectPeriod}>
-            {(Object.keys(PERIOD_LABELS) as PeriodPreset[]).map((preset) => (
-              <ToggleGroupItem key={preset} value={preset}>
-                {translateText(PERIOD_LABELS[preset])}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
-        <div className="w-44">
-          <Field label={translateText("Site")}>
-            <Select
+      {section === undefined ? null : (
+        <>
+          <p className="text-sm text-muted">
+            {translateText(
+              "Revenue, orders and stock health for the chosen period, site and channel. Revenue counts paid invoices.",
+            )}{" "}
+            {translateText("A dash (—) means the figure could not be answered, not zero.")}
+          </p>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="grid gap-1.5">
+              <span className="text-sm font-medium text-ink">{translateText("Period")}</span>
+              <ToggleGroup<PeriodPreset>
+                aria-label={translateText("Period")}
+                value={period}
+                onValueChange={selectPeriod}
+              >
+                {(Object.keys(PERIOD_LABELS) as PeriodPreset[]).map((preset) => (
+                  <ToggleGroupItem key={preset} value={preset}>
+                    {translateText(PERIOD_LABELS[preset])}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+            <SiteFilter
               value={siteId}
-              onChange={(event) => list.setValues({ site: event.target.value }, { history: "push" })}
-            >
-              <option value="all">{translateText("All sites")}</option>
-              {siteOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        <div className="grid gap-1.5">
-          <span className="text-sm font-medium text-ink">{translateText("Channel")}</span>
-          <ToggleGroup<AnalyticsChannel>
-            aria-label={translateText("Channel")}
-            value={channel}
-            onValueChange={(next) => list.setValues({ channel: next }, { history: "push" })}
-          >
-            {ANALYTICS_CHANNELS.map((item) => (
-              <ToggleGroupItem key={item} value={item}>
-                {translateText(CHANNEL_LABELS[item])}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
-        <RefreshButton onClick={() => void analyticsQuery.refetch()} />
-      </div>
-
-      {period === "custom" ? (
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-44">
-            <Field label={translateText("From")}>
-              <Input
-                type="date"
-                value={list.values.from}
-                onChange={(event) => list.setValues({ from: event.target.value }, { history: "replace" })}
-              />
-            </Field>
+              options={siteOptions}
+              onChange={(next) => list.setValues({ site: next }, { history: "push" })}
+            />
+            <div className="grid gap-1.5">
+              <span className="text-sm font-medium text-ink">{translateText("Channel")}</span>
+              <ToggleGroup<AnalyticsChannel>
+                aria-label={translateText("Channel")}
+                value={channel}
+                onValueChange={(next) => list.setValues({ channel: next }, { history: "push" })}
+              >
+                {ANALYTICS_CHANNELS.map((item) => (
+                  <ToggleGroupItem key={item} value={item}>
+                    {translateText(CHANNEL_LABELS[item])}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+            <RefreshButton onClick={refresh} />
           </div>
-          <div className="w-44">
-            <Field label={translateText("To")}>
-              <Input
-                type="date"
-                value={list.values.to}
-                onChange={(event) => list.setValues({ to: event.target.value }, { history: "replace" })}
-              />
-            </Field>
-          </div>
-        </div>
-      ) : null}
 
-      {rangeError ? <Alert variant="warning">{translateText(RANGE_MESSAGES[rangeError])}</Alert> : null}
-      {error ? <Alert variant="danger">{translateText(error)}</Alert> : null}
-      {data ? (
-        <p className="text-xs text-muted">
-          {translateText("Current period")}: {currentDays}
-          {previousDays ? ` · ${translateText("Previous period")}: ${previousDays}` : null} ·{" "}
-          {translateText("Updated at")} {formatDateTime(data.generatedAt)}
-        </p>
-      ) : null}
+          {period === "custom" ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="w-44">
+                <Field label={translateText("From")}>
+                  <Input
+                    type="date"
+                    value={list.values.from}
+                    onChange={(event) => list.setValues({ from: event.target.value }, { history: "replace" })}
+                  />
+                </Field>
+              </div>
+              <div className="w-44">
+                <Field label={translateText("To")}>
+                  <Input
+                    type="date"
+                    value={list.values.to}
+                    onChange={(event) => list.setValues({ to: event.target.value }, { history: "replace" })}
+                  />
+                </Field>
+              </div>
+            </div>
+          ) : null}
 
-      <section className="grid gap-2">
-        <Heading>Revenue and orders</Heading>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2.5">
-          {loading ? (
-            ["Revenue", "Orders", "Average order value", "Gross profit"].map((label) => (
-              <Skeleton key={label} className="h-[98px]" />
-            ))
-          ) : (
-            <>
-              <KpiTile label="Revenue" pair={data?.kpis?.revenue} format={money} locale={locale} />
-              <KpiTile label="Orders" pair={data?.kpis?.orderCount} format={count} locale={locale} />
-              <KpiTile
-                label="Average order value"
-                pair={data?.kpis?.averageOrderValue}
-                format={money}
-                locale={locale}
-              />
-              <KpiTile
-                label="Gross profit"
-                pair={grossProfit}
-                format={money}
-                locale={locale}
-                {...(grossProfit && grossProfit.available === false
-                  ? {
-                      note: translateText(
-                        "No purchase cost is recorded for the sales of this period. Enter the unit cost on the goods receipt.",
-                      ),
-                    }
-                  : {})}
-                {...(grossProfitCoverage === null
-                  ? {}
-                  : {
-                      footnote: fillText(translateText("Based on {percent}% of revenue that has a recorded cost."), {
-                        percent: grossProfitCoverage,
-                      }),
-                    })}
-              />
-            </>
-          )}
-        </div>
-      </section>
+          {rangeError ? <Alert variant="warning">{translateText(RANGE_MESSAGES[rangeError])}</Alert> : null}
 
-      <section className="grid gap-2">
-        <Heading>Customers</Heading>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <StatTile
-            label={translateText("Identified customers")}
-            value={count(customers?.identifiedCustomerCount)}
-            hint={`${translateText("Purchases per customer")}: ${count(customers?.purchasesPerCustomer)}`}
-          />
-          <StatTile
-            label={translateText("New customers")}
-            value={count(customers?.newCustomerCount)}
-            hint={translateText("First paid purchase in the period")}
-          />
-          <StatTile
-            label={translateText("Returning customers")}
-            value={count(customers?.returningCustomerCount)}
-            hint={translateText("Bought before the period")}
-          />
-          <StatTile
-            label={translateText("One-time buyers")}
-            value={count(customers?.oneTimeCustomerCount)}
-            hint={translateText("One paid purchase in the period")}
-          />
-          <StatTile
-            label={translateText("Repeat buyers")}
-            value={count(customers?.repeatCustomerCount)}
-            hint={translateText("Two or more paid purchases in the period")}
-          />
-          <StatTile
-            label={translateText("Revenue from identified customers")}
-            value={money(customers?.identifiedRevenue)}
-            hint={`${translateText("Share of revenue")}: ${formatRate(customers?.identifiedShare, locale)}`}
-          />
-        </div>
-        <p className="text-xs text-muted">
-          {translateText(
-            "Only a customer account on the sale counts; a walk-in counter sale has none. New customers count by their first paid purchase across the whole system.",
-          )}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Revenue by channel</Heading>
-        <DataTable<ChannelRow>
-          storageKey="staff:analytics:channels"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={channelRows}
-          getKey={(row) => row.channel}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "channel",
-              label: translateText("Channel"),
-              render: (row) => translateText(SALES_CHANNEL_LABELS[row.channel]),
-            },
-            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
-            {
-              key: "orderCount",
-              label: translateText("Orders"),
-              align: "right",
-              render: (row) => count(row.orderCount),
-            },
-          ]}
-        />
-        <p className="text-xs text-muted">
-          {translateText(
-            "The channel filter does not apply to this table: both channels show for the chosen site and period.",
-          )}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Revenue by site</Heading>
-        <DataTable<SalesSiteRow>
-          storageKey="staff:analytics:revenue-by-site"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={siteRevenueRows}
-          getKey={(row) => row.siteId ?? "unknown"}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "siteName",
-              label: translateText("Site"),
-              render: (row) => (row.siteName === null ? translateText("Unknown site") : text(row.siteName)),
-            },
-            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
-            {
-              key: "orderCount",
-              label: translateText("Orders"),
-              align: "right",
-              render: (row) => count(row.orderCount),
-            },
-            {
-              key: "averageOrderValue",
-              label: translateText("Average order value"),
-              align: "right",
-              render: (row) => money(row.averageOrderValue),
-            },
-          ]}
-        />
-        <p className="text-xs text-muted">
-          {translateText("Site revenue includes the delivery fee, so the rows add up to the revenue tile.")}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Top products</Heading>
-        <DataTable<ProductRevenueRow>
-          storageKey="staff:analytics:top-products"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={topProductRows}
-          getKey={(row) => row.productId}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "productName",
-              label: translateText("Product"),
-              truncate: 32,
-              render: (row) => text(row.productName),
-            },
-            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
-            {
-              key: "share",
-              label: translateText("Share"),
-              align: "right",
-              render: (row) => formatRate(row.share, locale),
-            },
-          ]}
-        />
-        <p className="text-xs text-muted">
-          {translateText("Goods revenue")}: {money(goodsRevenue)} ·{" "}
-          {translateText(
-            "Goods only: the delivery fee is not attributed to a product, so each share is of goods revenue.",
-          )}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>ABC classification</Heading>
-        <DataTable<AbcRevenueRow>
-          storageKey="staff:analytics:abc"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={abcRows}
-          getKey={(row) => row.abcClass}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "abcClass",
-              label: translateText("Class"),
-              render: (row) => (
-                <Badge variant={row.abcClass === "A" ? "success" : row.abcClass === "B" ? "warning" : "secondary"}>
-                  {row.abcClass}
-                </Badge>
-              ),
-            },
-            {
-              key: "productCount",
-              label: translateText("Products"),
-              align: "right",
-              render: (row) => count(row.productCount),
-            },
-            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
-            {
-              key: "share",
-              label: translateText("Share"),
-              align: "right",
-              render: (row) => formatRate(row.share, locale),
-            },
-          ]}
-        />
-        <p className="text-xs text-muted">
-          {translateText(
-            "A until 80% of goods revenue, B until 95%, C the rest. The product that crosses a cut-off stays in the class it completes.",
-          )}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Revenue by product group</Heading>
-        <DataTable<CategoryRevenueRow>
-          storageKey="staff:analytics:product-groups"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={categoryRevenueRows}
-          getKey={(row) => row.category ?? "uncategorized"}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "category",
-              label: translateText("Category"),
-              render: (row) => (row.category === null ? translateText("Uncategorized") : text(row.category)),
-            },
-            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
-            {
-              key: "share",
-              label: translateText("Share"),
-              align: "right",
-              render: (row) => formatRate(row.share, locale),
-            },
-          ]}
-        />
-        <p className="text-xs text-muted">
-          {translateText(
-            "Grouped by the category the catalog holds today, so a changed category also moves past sales.",
-          )}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Prescription and over the counter</Heading>
-        <DataTable<PrescriptionRevenueRow>
-          storageKey="staff:analytics:prescription-split"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={prescriptionRevenueRows}
-          getKey={(row) => row.group}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "group",
-              label: translateText("Product type"),
-              render: (row) => translateText(PRESCRIPTION_LABELS[row.group]),
-            },
-            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
-            {
-              key: "share",
-              label: translateText("Share"),
-              align: "right",
-              render: (row) => formatRate(row.share, locale),
-            },
-          ]}
-        />
-        <p className="text-xs text-muted">
-          {translateText("Counts goods revenue by the prescription flag the catalog holds today.")}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Inventory health</Heading>
-        <p className="text-xs text-muted">
-          {translateText(
-            "The channel does not change inventory figures. Turnover and days of inventory cover the chosen period; stockout rate, dead stock and expiry are the current state.",
-          )}
-        </p>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2.5">
-          {loading ? (
-            Array.from({ length: 7 }, (_, index) => <Skeleton key={index} className="h-[98px]" />)
-          ) : (
-            <>
-              <StatTile
-                label={translateText("Inventory turnover")}
-                value={count(inventory?.turnover)}
-                hint={translateText("In the period")}
-              />
-              <StatTile
-                label={translateText("Days of inventory")}
-                value={count(inventory?.daysOfInventory)}
-                hint={translateText("Period days divided by turnover")}
-              />
-              <StatTile
-                label={translateText("Stockout rate")}
-                value={formatRate(inventory?.stockoutRate, locale)}
-                hint={
-                  <span className="grid gap-0.5">
-                    <span>{translateText("Now")}</span>
-                    <span>
-                      {translateText("Out of stock now")}: {count(inventory?.outOfStockProductCount)} /{" "}
-                      {count(inventory?.stockedProductCount)}
-                    </span>
-                  </span>
-                }
-              />
-              <StatTile
-                label={translateText("Dead stock")}
-                value={count(inventory?.deadStock?.productCount)}
-                hint={
-                  <span>
-                    {translateText("No movement in the last")} {count(inventory?.deadStock?.deadStockDays)}{" "}
-                    {translateText("days")}
-                  </span>
-                }
-              />
-              <StatTile
-                label={translateText("Dead stock quantity")}
-                value={count(inventory?.deadStock?.quantity)}
-                hint={translateText("Now")}
-              />
-              <StatTile
-                label={translateText("Dead stock value")}
-                value={money(inventory?.deadStock?.value)}
-                hint={translateText("Now")}
-              />
-              <StatTile
-                label={translateText("Total stock value")}
-                value={money(inventory?.stockValue?.total)}
-                hint={
-                  <span>
-                    {translateText("Products without a published price")}:{" "}
-                    {count(inventory?.stockValue?.missingPriceCount)}
-                  </span>
-                }
-              />
-            </>
-          )}
-        </div>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Stock value by site</Heading>
-        <DataTable<SiteStockRow>
-          storageKey="staff:analytics:stock-by-site"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={siteStockRows}
-          getKey={(row) => row.siteId}
-          empty={translateText("No records found")}
-          columns={[
-            { key: "siteName", label: translateText("Site"), render: (row) => text(row.siteName) },
-            {
-              key: "quantity",
-              label: translateText("Quantity"),
-              align: "right",
-              render: (row) => count(row.quantity),
-            },
-            { key: "value", label: translateText("Value"), align: "right", render: (row) => money(row.value) },
-          ]}
-        />
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Expiring in 30 / 60 / 90 days</Heading>
-        <DataTable<ExpiryRow>
-          storageKey="staff:analytics:expiry"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={expiryRows}
-          getKey={(row) => row.key}
-          empty={translateText("No records found")}
-          columns={[
-            { key: "label", label: translateText("Expiry group"), render: (row) => translateText(row.label) },
-            {
-              key: "productCount",
-              label: translateText("Products"),
-              align: "right",
-              render: (row) => count(row.bucket?.productCount),
-            },
-            {
-              key: "quantity",
-              label: translateText("Quantity"),
-              align: "right",
-              render: (row) => count(row.bucket?.quantity),
-            },
-            {
-              key: "value",
-              label: translateText("Value"),
-              align: "right",
-              render: (row) => money(row.bucket?.value),
-            },
-          ]}
-        />
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Dead stock items</Heading>
-        <DataTable<DeadStockRow>
-          storageKey="staff:analytics:dead-stock"
-          labels={dataTableLabels()}
-          interactive
-          exportCsv={{ filename: "analytics-dead-stock.csv" }}
-          loading={loading}
-          rows={deadStockRows}
-          getKey={(row) => `${row.siteId}:${row.productId}`}
-          empty={translateText("No records found")}
-          columns={withActionColumn<DataColumn<DeadStockRow>>(
-            [
-              { key: "productName", label: translateText("Product"), truncate: 32 },
-              { key: "site", label: translateText("Site") },
-              {
-                key: "quantity",
-                label: translateText("Quantity"),
-                align: "right",
-                render: (row) => count(row.quantity),
-              },
-              { key: "value", label: translateText("Value"), align: "right", render: (row) => money(row.value) },
-              {
-                key: "actions",
-                label: translateText("Actions"),
-                pinned: "right",
-                enableSorting: false,
-                render: (row) =>
-                  planGate.allowed && deadStockDays !== undefined ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setPlanDraft(
-                          deadStockDraft({
-                            siteId: row.siteId,
-                            productId: row.productId,
-                            productName: row.productName,
-                            quantity: row.quantity,
-                            deadStockDays,
-                          }),
-                        )
-                      }
-                    >
-                      {translateText("Create plan")}
-                    </Button>
-                  ) : null,
-              },
-            ],
-            planGate.allowed && deadStockDays !== undefined && deadStockRows.length > 0,
-          )}
-        />
-      </section>
-      <section className="grid gap-2">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="grid gap-1">
-            <Heading>Sales targets</Heading>
+          {rangeError === undefined ? (
             <p className="text-xs text-muted">
-              {translateText(
-                "The month's paid revenue against each site's target, all channels. A target is set by a Pharmacy Manager.",
+              {translateText("Current period")}: {currentDays}
+              {previousDays ? ` · ${translateText("Previous period")}: ${previousDays}` : null}
+              {data === undefined ? null : (
+                <>
+                  {" · "}
+                  {translateText("Updated at")} {formatDateTime(data.generatedAt)}
+                </>
               )}
+              {" · "}
+              {translateText("The figures may be up to 30 seconds old.")}
             </p>
-          </div>
-          <div className="w-44">
-            <Field label={translateText("Month")}>
-              <Input
-                type="month"
-                value={targetMonth}
-                onChange={(event) => list.setValues({ month: event.target.value }, { history: "replace" })}
-              />
-            </Field>
-          </div>
-        </div>
-        {targetsQuery.isError ? (
-          <Alert variant="danger">
-            {translateText(targetsQuery.error instanceof Error ? targetsQuery.error.message : "The request failed.")}
-          </Alert>
-        ) : null}
-        <DataTable<SalesTargetSiteRow>
-          storageKey="staff:analytics:sales-targets"
-          labels={dataTableLabels()}
-          interactive
-          exportCsv={{ filename: "analytics-sales-targets.csv" }}
-          loading={targetsLoading}
-          rows={targetRows}
-          getKey={(row) => row.siteId}
-          empty={translateText("No records found")}
-          columns={withActionColumn<DataColumn<SalesTargetSiteRow>>(
-            [
-              { key: "siteName", label: translateText("Site"), truncate: 32 },
-              {
-                key: "target",
-                label: translateText("Target"),
-                align: "right",
-                render: (row) => (row.target === null ? translateText("Not set") : money(row.target)),
-              },
-              {
-                key: "revenue",
-                label: translateText("Revenue"),
-                align: "right",
-                render: (row) => money(row.revenue),
-              },
-              {
-                key: "progress",
-                label: translateText("Progress"),
-                align: "right",
-                render: (row) => formatRate(row.progress, locale),
-              },
-              {
-                key: "actions",
-                label: translateText("Actions"),
-                pinned: "right",
-                enableSorting: false,
-                render: (row) => (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      setTargetDraft({
-                        siteId: row.siteId,
-                        siteName: row.siteName,
-                        month: targetMonth,
-                        amount: row.target,
-                      })
-                    }
-                  >
-                    {translateText(row.target === null ? "Set target" : "Change target")}
-                  </Button>
-                ),
-              },
-            ],
-            targetGate.allowed && targetRows.length > 0,
-          )}
-        />
-        <p className="text-xs text-muted">
-          {translateText("Total")}: {translateText("Target")} {money(targetTotals?.target)} · {translateText("Revenue")}{" "}
-          {money(targetTotals?.revenue)} · {translateText("Progress")} {formatRate(targetTotals?.progress, locale)}
-        </p>
-      </section>
-      {planDrawer ? (
-        <CreatePlanDrawer
-          key={planDrawer.key}
-          open={planDraft !== undefined}
-          draft={planDrawer.target}
-          onClose={() => setPlanDraft(undefined)}
+          ) : null}
+        </>
+      )}
+
+      {activeError ? <Alert variant="danger">{translateText(activeError)}</Alert> : null}
+
+      {tab === "overview" ? (
+        <OverviewTab data={overview} loading={analyticsLoading} locale={locale} format={figures} />
+      ) : null}
+      {tab === "revenue" ? (
+        <RevenueTab data={revenue} loading={analyticsLoading} locale={locale} format={figures} />
+      ) : null}
+      {tab === "customers" ? (
+        <CustomersTab data={customers} loading={analyticsLoading} locale={locale} format={figures} />
+      ) : null}
+      {tab === "inventory" ? (
+        <InventoryTab
+          data={inventory}
+          loading={analyticsLoading}
+          locale={locale}
+          format={figures}
+          siteLabel={siteLabel}
         />
       ) : null}
-      {targetDrawer ? (
-        <SalesTargetDialog
-          key={targetDrawer.key}
-          open={targetDraft !== undefined}
-          draft={targetDrawer.target}
-          onClose={() => setTargetDraft(undefined)}
+      {tab === "targets" ? (
+        <TargetsTab
+          data={targetsData}
+          loading={targetsQuery.isPending}
+          locale={locale}
+          format={targetFigures}
+          month={targetMonth}
+          onMonthChange={(next) => list.setValues({ month: next }, { history: "replace" })}
+          siteId={siteId}
+          siteOptions={siteOptions}
+          onSiteChange={(next) => list.setValues({ site: next }, { history: "push" })}
+          onRefresh={refresh}
         />
       ) : null}
     </div>

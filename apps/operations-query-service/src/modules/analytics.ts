@@ -3,12 +3,19 @@ import { z } from "zod";
 /**
  * The period analytics of design 0007 (`GET /dashboard/analytics`): the input schemas of the internal reads, the query
  * validation, and every definition as a pure function. No I/O happens here; `operations-repository.ts` reads the owning
- * services and hands the answers to `buildDashboardAnalytics`.
+ * services of one tab and hands the answers to `buildAnalyticsSection`, so a request only computes the tab it asked for.
  */
 
 export const ANALYTICS_CHANNELS = ["all", "counter", "online"] as const;
 export type AnalyticsChannel = (typeof ANALYTICS_CHANNELS)[number];
 export type SaleChannel = Exclude<AnalyticsChannel, "all">;
+
+/**
+ * The tabs of the page. Each one is its own answer: a request names the tab it wants, so the repository reads only the
+ * services of that tab and the page never waits for a figure it is not showing.
+ */
+export const ANALYTICS_SECTIONS = ["overview", "revenue", "customers", "inventory"] as const;
+export type AnalyticsSection = (typeof ANALYTICS_SECTIONS)[number];
 
 const DAY_MS = 86_400_000;
 export const MAX_PERIOD_DAYS = 366;
@@ -143,21 +150,36 @@ export type SiteName = z.output<typeof sitesAnswerSchema>[number];
 export type SaleLine = z.output<typeof paidInvoiceLineSchema>;
 export type ProductClassification = z.output<typeof productClassificationsAnswerSchema>["products"][number];
 
-/** The query of the route. `from` is inclusive, `to` exclusive; both are ISO date-times with an offset. */
+/** `from` is inclusive, `to` exclusive; both are ISO date-times with an offset. */
+const periodQueryShape = {
+  from: isoDateTime,
+  to: isoDateTime,
+  siteId: uuid.optional(),
+  channel: z.enum(ANALYTICS_CHANNELS).optional(),
+};
+
+/** The refusal of a period that ends before it starts, or that is longer than the reads allow. */
+const periodRefusal = (query: { from: string; to: string }): string | undefined => {
+  const span = Date.parse(query.to) - Date.parse(query.from);
+  if (!(span > 0)) return "to must be after from";
+  if (span > MAX_PERIOD_DAYS * DAY_MS) return "the period is longer than 366 days";
+  return undefined;
+};
+
+/** The query of `GET /dashboard/analytics`: the period and the tab whose figures are asked for. */
 export const analyticsQuerySchema = z
-  .object({
-    from: isoDateTime,
-    to: isoDateTime,
-    siteId: uuid.optional(),
-    channel: z.enum(ANALYTICS_CHANNELS).optional(),
-  })
+  .object({ ...periodQueryShape, section: z.enum(ANALYTICS_SECTIONS) })
   .superRefine((query, context) => {
-    const span = Date.parse(query.to) - Date.parse(query.from);
-    if (!(span > 0)) {
-      context.addIssue({ code: "custom", path: ["to"], message: "to must be after from" });
-    } else if (span > MAX_PERIOD_DAYS * DAY_MS) {
-      context.addIssue({ code: "custom", path: ["to"], message: "the period is longer than 366 days" });
-    }
+    const refusal = periodRefusal(query);
+    if (refusal !== undefined) context.addIssue({ code: "custom", path: ["to"], message: refusal });
+  });
+
+/** The query of `GET /dashboard/sales-targets`: the period, and the month of the targets beside it. */
+export const salesTargetQuerySchema = z
+  .object({ ...periodQueryShape, month: salesTargetMonthSchema })
+  .superRefine((query, context) => {
+    const refusal = periodRefusal(query);
+    if (refusal !== undefined) context.addIssue({ code: "custom", path: ["to"], message: refusal });
   });
 
 export type Period = { from: Date; to: Date };
@@ -850,105 +872,206 @@ export const inventoryHealthOf = (
   };
 };
 
-export type AnalyticsInput = {
-  now: Date;
-  period: Period;
-  siteId: string | null;
-  scope: readonly string[] | undefined;
-  channel: AnalyticsChannel;
-  documents: SalesDocument[];
-  invoices: PaidInvoice[];
-  customerFirstPaid: CustomerFirstPaid[];
-  dispenseCosts: DispenseCost[];
-  stockRows: StockHealthRow[];
-  basePrices: BasePrice[];
-  sites: SiteName[];
-  products: ProductClassification[];
-};
-
-/**
- * The answer of `GET /dashboard/analytics`. The channel filter applies to the sales KPIs only; `channels` lists both
- * channels for the current period under the site filter, and inventory health ignores the channel because stock belongs
- * to a site. Gross profit covers the sales whose goods all have a purchase cost recorded on a goods receipt; see
- * `grossProfitOf`. `breakdown` divides the same period's sales by site, product, category and prescription flag; unlike
- * the revenue tile it counts goods alone, so the delivery fee is left out of its product figures.
- */
-export const buildDashboardAnalytics = (input: AnalyticsInput): DashboardAnalytics => {
-  const filter: SiteFilter = { siteId: input.siteId, scope: input.scope };
-  const previous = previousPeriodOf(input.period);
-  const sales = joinSales(input.documents, input.invoices);
-  const firstPaidAt = new Map(input.customerFirstPaid.map((row) => [row.customerId, new Date(row.firstPaidAt)]));
-  const current = totalSales(sales, input.period, filter, input.channel);
-  const prior = totalSales(sales, previous, filter, input.channel);
-  const costs = indexDispenseCosts(input.dispenseCosts);
-  const profit = grossProfitOf(sales, costs, input.period, filter, input.channel);
-  const priorProfit = grossProfitOf(sales, costs, previous, filter, input.channel);
-  const stockRows = input.stockRows.filter((row) => siteVisible(row.siteId, filter));
-  const periodDays = (input.period.to.getTime() - input.period.from.getTime()) / DAY_MS;
-  const breakdown = salesBreakdownOf({
-    sales,
-    linesByDocument: indexSaleLines(input.invoices),
-    products: input.products,
-    sites: input.sites,
-    period: input.period,
-    filter,
-    channel: input.channel,
-  });
-  return {
-    currency: "VND" as const,
-    generatedAt: input.now.toISOString(),
-    period: { from: input.period.from.toISOString(), to: input.period.to.toISOString() },
-    previousPeriod: { from: previous.from.toISOString(), to: previous.to.toISOString() },
-    siteId: input.siteId,
-    channel: input.channel,
-    kpis: {
-      revenue: { current: current.revenue, previous: prior.revenue },
-      orderCount: { current: current.orderCount, previous: prior.orderCount },
-      averageOrderValue: { current: averageOrderValue(current), previous: averageOrderValue(prior) },
-      grossProfit: {
-        current: profit.current,
-        previous: priorProfit.current,
-        available: profit.current !== null,
-        reason: profit.current === null ? ("no_cost_data" as const) : null,
-        coverage: { current: profit.coverage, previous: priorProfit.coverage },
-      },
-    },
-    channels: (["counter", "online"] as const).map((channel) => {
-      const totals = totalSales(sales, input.period, filter, channel);
-      return { channel, revenue: totals.revenue, orderCount: totals.orderCount };
-    }),
-    customers: customerInsightsOf(sales, input.period, filter, input.channel, firstPaidAt),
-    breakdown,
-    inventory: inventoryHealthOf(stockRows, {
-      now: input.now,
-      periodDays,
-      prices: input.basePrices,
-      sites: input.sites,
-    }),
-  };
-};
-
-export type DashboardAnalytics = {
+/** What every tab's answer carries: the period it covers, the period before it, and the filter it answered for. */
+export type AnalyticsEnvelope = {
+  section: AnalyticsSection;
   currency: "VND";
   generatedAt: string;
   period: { from: string; to: string };
   previousPeriod: { from: string; to: string };
   siteId: string | null;
   channel: AnalyticsChannel;
-  kpis: {
-    revenue: { current: number; previous: number };
-    orderCount: { current: number; previous: number };
-    averageOrderValue: { current: number | null; previous: number | null };
-    grossProfit: {
-      current: number | null;
-      previous: number | null;
-      available: boolean;
-      reason: "no_cost_data" | null;
-      coverage: { current: number | null; previous: number | null };
-    };
-  };
-  channels: Array<{ channel: SaleChannel; revenue: number; orderCount: number }>;
-  customers: CustomerInsights;
-  breakdown: SalesBreakdown;
-  inventory: InventoryHealth;
 };
+
+/** The tiles of the overview, each with the same figure of the previous period beside it. */
+export type AnalyticsKpis = {
+  revenue: { current: number; previous: number };
+  orderCount: { current: number; previous: number };
+  averageOrderValue: { current: number | null; previous: number | null };
+  grossProfit: {
+    current: number | null;
+    previous: number | null;
+    available: boolean;
+    reason: "no_cost_data" | null;
+    coverage: { current: number | null; previous: number | null };
+  };
+};
+
+/** One channel of the period under the site filter; the requested channel does not narrow this row. */
+export type ChannelTotal = { channel: SaleChannel; revenue: number; orderCount: number };
+
+/**
+ * The overview tab: the sales tiles, the gross profit beside them, and both channels of the period. The channel filter
+ * applies to the tiles only, as it always has.
+ */
+export type OverviewAnalytics = AnalyticsEnvelope & {
+  section: "overview";
+  kpis: AnalyticsKpis;
+  channels: ChannelTotal[];
+};
+
+/** The revenue tab: the site, product, category and prescription breakdown of the period's sales. */
+export type RevenueAnalytics = AnalyticsEnvelope & { section: "revenue"; breakdown: SalesBreakdown };
+
+/** The customers tab: who bought in the period, and how many of them are new. */
+export type CustomersAnalytics = AnalyticsEnvelope & { section: "customers"; customers: CustomerInsights };
+
+/** The inventory tab: stock health of the caller's sites. The channel does not apply, because stock belongs to a site. */
+export type InventoryAnalytics = AnalyticsEnvelope & { section: "inventory"; inventory: InventoryHealth };
+
+/**
+ * The answer of `GET /dashboard/analytics`, one member per `ANALYTICS_SECTIONS` entry. A request answers exactly one
+ * member, so a caller never receives figures of a tab it did not ask for.
+ */
+export type DashboardAnalytics = OverviewAnalytics | RevenueAnalytics | CustomersAnalytics | InventoryAnalytics;
+
+type SectionQuery = {
+  now: Date;
+  period: Period;
+  siteId: string | null;
+  scope: readonly string[] | undefined;
+  channel: AnalyticsChannel;
+};
+
+/** Overview reads the sales of both periods, their paid invoices, and what the goods of those sales cost. */
+export type OverviewInput = SectionQuery & {
+  section: "overview";
+  documents: SalesDocument[];
+  invoices: PaidInvoice[];
+  dispenseCosts: DispenseCost[];
+};
+
+/** Revenue reads the period's sales with their invoice lines, and the catalog names and grouping of the products. */
+export type RevenueInput = SectionQuery & {
+  section: "revenue";
+  documents: SalesDocument[];
+  invoices: PaidInvoice[];
+  products: ProductClassification[];
+  sites: SiteName[];
+};
+
+/** Customers reads the period's sales and the first payment ever seen for each of their customers. */
+export type CustomersInput = SectionQuery & {
+  section: "customers";
+  documents: SalesDocument[];
+  invoices: PaidInvoice[];
+  customerFirstPaid: CustomerFirstPaid[];
+};
+
+/** Inventory reads the stock of the period and today's base prices; it takes no sales read at all. */
+export type InventoryInput = SectionQuery & {
+  section: "inventory";
+  stockRows: StockHealthRow[];
+  basePrices: BasePrice[];
+  sites: SiteName[];
+};
+
+export type AnalyticsSectionInput = OverviewInput | RevenueInput | CustomersInput | InventoryInput;
+
+const envelopeOf = (input: AnalyticsSectionInput): AnalyticsEnvelope => {
+  const previous = previousPeriodOf(input.period);
+  return {
+    section: input.section,
+    currency: "VND" as const,
+    generatedAt: input.now.toISOString(),
+    period: { from: input.period.from.toISOString(), to: input.period.to.toISOString() },
+    previousPeriod: { from: previous.from.toISOString(), to: previous.to.toISOString() },
+    siteId: input.siteId,
+    channel: input.channel,
+  };
+};
+
+/**
+ * The tiles of the overview: the period's sales beside those of the previous one. Gross profit covers the sales whose
+ * goods all have a purchase cost recorded on a goods receipt; see `grossProfitOf`.
+ */
+const kpisOf = (input: OverviewInput, sales: Sale[], filter: SiteFilter): AnalyticsKpis => {
+  const previous = previousPeriodOf(input.period);
+  const current = totalSales(sales, input.period, filter, input.channel);
+  const prior = totalSales(sales, previous, filter, input.channel);
+  const costs = indexDispenseCosts(input.dispenseCosts);
+  const profit = grossProfitOf(sales, costs, input.period, filter, input.channel);
+  const priorProfit = grossProfitOf(sales, costs, previous, filter, input.channel);
+  return {
+    revenue: { current: current.revenue, previous: prior.revenue },
+    orderCount: { current: current.orderCount, previous: prior.orderCount },
+    averageOrderValue: { current: averageOrderValue(current), previous: averageOrderValue(prior) },
+    grossProfit: {
+      current: profit.current,
+      previous: priorProfit.current,
+      available: profit.current !== null,
+      reason: profit.current === null ? ("no_cost_data" as const) : null,
+      coverage: { current: profit.coverage, previous: priorProfit.coverage },
+    },
+  };
+};
+
+/**
+ * One tab of the page, computed from the reads of that tab alone. The overview answers `kpis` and `channels`, revenue
+ * answers `breakdown`, customers answers `customers` and inventory answers `inventory`; nothing else is computed, so a
+ * tab never pays for the figures of another.
+ */
+export function buildAnalyticsSection(input: OverviewInput): OverviewAnalytics;
+export function buildAnalyticsSection(input: RevenueInput): RevenueAnalytics;
+export function buildAnalyticsSection(input: CustomersInput): CustomersAnalytics;
+export function buildAnalyticsSection(input: InventoryInput): InventoryAnalytics;
+export function buildAnalyticsSection(input: AnalyticsSectionInput): DashboardAnalytics {
+  const envelope = envelopeOf(input);
+  const filter: SiteFilter = { siteId: input.siteId, scope: input.scope };
+  switch (input.section) {
+    case "overview": {
+      const sales = joinSales(input.documents, input.invoices);
+      // Both channels of the current period under the site filter; the requested channel narrows the tiles, not this row.
+      return {
+        ...envelope,
+        section: "overview",
+        kpis: kpisOf(input, sales, filter),
+        channels: (["counter", "online"] as const).map((channel) => {
+          const totals = totalSales(sales, input.period, filter, channel);
+          return { channel, revenue: totals.revenue, orderCount: totals.orderCount };
+        }),
+      };
+    }
+    case "revenue":
+      return {
+        ...envelope,
+        section: "revenue",
+        breakdown: salesBreakdownOf({
+          sales: joinSales(input.documents, input.invoices),
+          linesByDocument: indexSaleLines(input.invoices),
+          products: input.products,
+          sites: input.sites,
+          period: input.period,
+          filter,
+          channel: input.channel,
+        }),
+      };
+    case "customers":
+      return {
+        ...envelope,
+        section: "customers",
+        customers: customerInsightsOf(
+          joinSales(input.documents, input.invoices),
+          input.period,
+          filter,
+          input.channel,
+          new Map(input.customerFirstPaid.map((row) => [row.customerId, new Date(row.firstPaidAt)])),
+        ),
+      };
+    case "inventory":
+      return {
+        ...envelope,
+        section: "inventory",
+        // Stock of a site the caller may not see never enters the figures.
+        inventory: inventoryHealthOf(
+          input.stockRows.filter((row) => siteVisible(row.siteId, filter)),
+          {
+            now: input.now,
+            periodDays: (input.period.to.getTime() - input.period.from.getTime()) / DAY_MS,
+            prices: input.basePrices,
+            sites: input.sites,
+          },
+        ),
+      };
+  }
+}

@@ -1,9 +1,10 @@
-import { Router, type Response } from "express";
+import { Router, type NextFunction, type Response } from "express";
 import { z } from "zod";
 
 import { listSiteIds } from "../middleware/trusted-request.ts";
 import { signCatalogIdentity } from "./catalog-identity.ts";
-import { analyticsQuerySchema, salesTargetMonthSchema } from "./analytics.ts";
+import { analyticsQuerySchema, salesTargetQuerySchema } from "./analytics.ts";
+import { AnalyticsCache } from "./analytics-cache.ts";
 import { ANALYTICS_ROLES, DASHBOARD_ROLES, REPORT_ROLES, roleRefusal } from "./operations-access.ts";
 import { decodePageCursor, encodePageCursor } from "./page-cursor.ts";
 import {
@@ -12,6 +13,32 @@ import {
   type AuditFilters,
   type IntegrationEvent,
 } from "./operations-repository.ts";
+
+const ANALYTICS_CACHE_TTL_MS = 30_000;
+const ANALYTICS_CACHE_MAX_ENTRIES = 200;
+
+/**
+ * The key of one cached analytics answer: the tab asked for, the period, the filter and the caller's site scope. `*` is a
+ * caller with no site restriction, the empty string a site-scoped caller assigned no site; the scope is sorted, so two
+ * callers whose access differs never share a row. Nothing about the caller's identity enters the key.
+ */
+const analyticsCacheKey = (parts: {
+  section: string;
+  from: string;
+  to: string;
+  siteId: string | undefined;
+  channel: string | undefined;
+  scope: readonly string[] | undefined;
+}): string =>
+  [
+    "dashboard/analytics",
+    parts.section,
+    parts.from,
+    parts.to,
+    parts.siteId ?? "",
+    parts.channel ?? "all",
+    parts.scope === undefined ? "*" : [...parts.scope].sort().join(","),
+  ].join("|");
 
 const eventSchema = z.object({
   eventId: z.string().uuid(),
@@ -23,6 +50,24 @@ const eventSchema = z.object({
 
 export const createOperationsRouter = (repository: OperationsRepository | undefined): Router => {
   const router = Router();
+  // One cache per router: a restart or a second task starts cold, and a stale row lives at most the TTL.
+  const analyticsCache = new AnalyticsCache({
+    ttlMs: ANALYTICS_CACHE_TTL_MS,
+    maxEntries: ANALYTICS_CACHE_MAX_ENTRIES,
+  });
+  /** payment-service refuses a period whose paid invoices exceed its read cap; the page says so instead of a 500. */
+  const refuseRange = (response: Response, error: unknown, next: NextFunction): void => {
+    if (error instanceof AnalyticsReadError && error.status === 422 && error.code === "analytics_range_too_large") {
+      response.status(422).json({
+        title: "Analytics range too large",
+        status: 422,
+        code: "analytics_range_too_large",
+        detail: "Khoảng thời gian có quá nhiều hóa đơn đã thanh toán để tổng hợp; hãy chọn khoảng ngắn hơn.",
+      });
+      return;
+    }
+    next(error);
+  };
   const dashboard = async (
     request: import("express").Request,
     response: import("express").Response,
@@ -137,35 +182,35 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
         status: 400,
         code: "invalid_request",
         detail:
-          "Khoảng thời gian cần from trước to và không quá 366 ngày; siteId là UUID; channel là all, counter hoặc online.",
+          "Cần section là overview, revenue, customers hoặc inventory; khoảng thời gian cần from trước to và không quá 366 ngày; siteId là UUID; channel là all, counter hoặc online.",
       });
       return;
     }
+    const operations = repository;
+    const { section, from, to, siteId } = parsed.data;
+    const channel = parsed.data.channel ?? "all";
+    const siteIds = listSiteIds(request);
     try {
-      response.json(
-        await repository.dashboardAnalytics(
-          {
-            from: new Date(parsed.data.from),
-            to: new Date(parsed.data.to),
-            siteId: parsed.data.siteId,
-            channel: parsed.data.channel ?? "all",
-          },
-          () => signCatalogIdentity(request),
-          listSiteIds(request),
-        ),
+      const cached = await analyticsCache.getOrLoad(
+        analyticsCacheKey({
+          section,
+          from,
+          to,
+          siteId,
+          channel,
+          scope: siteIds,
+        }),
+        () =>
+          operations.dashboardAnalytics(
+            { section, from: new Date(from), to: new Date(to), siteId, channel },
+            () => signCatalogIdentity(request),
+            siteIds,
+          ),
       );
+      response.set("X-Analytics-Cache", cached.outcome);
+      response.json(cached.value);
     } catch (error) {
-      // payment-service refuses a period whose paid invoices exceed its read cap; the page says so instead of a 500.
-      if (error instanceof AnalyticsReadError && error.status === 422 && error.code === "analytics_range_too_large") {
-        response.status(422).json({
-          title: "Analytics range too large",
-          status: 422,
-          code: "analytics_range_too_large",
-          detail: "Khoảng thời gian có quá nhiều hóa đơn đã thanh toán để tổng hợp; hãy chọn khoảng ngắn hơn.",
-        });
-        return;
-      }
-      next(error);
+      refuseRange(response, error, next);
     }
   });
   router.get("/dashboard/sales-targets", async (request, response, next) => {
@@ -182,9 +227,8 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       response.status(refusal.status).json(refusal);
       return;
     }
-    const parsed = analyticsQuerySchema.safeParse(request.query);
-    const month = salesTargetMonthSchema.safeParse(request.query.month);
-    if (!parsed.success || !month.success) {
+    const parsed = salesTargetQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
       response.status(400).json({
         title: "Invalid request",
         status: 400,
@@ -193,30 +237,20 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       });
       return;
     }
+    const operations = repository;
+    const { month, from, to, siteId } = parsed.data;
+    const siteIds = listSiteIds(request);
     try {
+      // Targets are never cached: a target changed by `PUT /api/sales-targets` must show on the very next read.
       response.json(
-        await repository.salesTargetsReport(
-          {
-            month: month.data,
-            from: new Date(parsed.data.from),
-            to: new Date(parsed.data.to),
-            siteId: parsed.data.siteId,
-          },
+        await operations.salesTargetsReport(
+          { month, from: new Date(from), to: new Date(to), siteId },
           () => signCatalogIdentity(request),
-          listSiteIds(request),
+          siteIds,
         ),
       );
     } catch (error) {
-      if (error instanceof AnalyticsReadError && error.status === 422 && error.code === "analytics_range_too_large") {
-        response.status(422).json({
-          title: "Analytics range too large",
-          status: 422,
-          code: "analytics_range_too_large",
-          detail: "Khoảng thời gian có quá nhiều hóa đơn đã thanh toán để tổng hợp; hãy chọn khoảng ngắn hơn.",
-        });
-        return;
-      }
-      next(error);
+      refuseRange(response, error, next);
     }
   });
   router.get("/operations/audit", audit);

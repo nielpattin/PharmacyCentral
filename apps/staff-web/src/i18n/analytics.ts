@@ -19,11 +19,18 @@ export const analyticsLiterals: Record<string, string> = {
   "Current period": "Kỳ hiện tại",
   "Previous period": "Kỳ trước",
   "Updated at": "Cập nhật lúc",
+  "The figures may be up to 30 seconds old.": "Số liệu có thể cũ tối đa 30 giây.",
   "Choose both dates.": "Chọn cả ngày bắt đầu và ngày kết thúc.",
   "The start date must be on or before the end date.": "Ngày bắt đầu phải trước hoặc trùng ngày kết thúc.",
   "A period can be at most 365 days.": "Một khoảng thời gian tối đa 365 ngày.",
   "The date is not valid.": "Ngày không hợp lệ.",
   Revenue: "Doanh thu",
+  // The raw ?tab= values appear in the breadcrumb through the shell's generic search-tab label.
+  overview: "Tổng quan",
+  revenue: "Doanh thu",
+  customers: "Khách hàng",
+  inventory: "Tồn kho",
+  targets: "Mục tiêu",
   "Revenue and orders": "Doanh thu và đơn hàng",
   Now: "Hiện tại",
   Orders: "Số đơn",
@@ -64,6 +71,7 @@ export const analyticsLiterals: Record<string, string> = {
   "Only a customer account on the sale counts; a walk-in counter sale has none. New customers count by their first paid purchase across the whole system.":
     "Chỉ tính khách có tài khoản trên chứng từ bán; khách vãng lai tại quầy không được tính. Khách mới tính theo lần mua đã trả tiền đầu tiên trên toàn hệ thống.",
   "Sales targets": "Mục tiêu doanh số",
+  Targets: "Mục tiêu",
   "The month's paid revenue against each site's target, all channels. A target is set by a Pharmacy Manager.":
     "Doanh thu đã trả tiền của tháng so với mục tiêu từng cơ sở, mọi kênh. Quản lý nhà thuốc đặt mục tiêu.",
   Month: "Tháng",

@@ -4,9 +4,10 @@ import {
   ABC_A_CUMULATIVE_SHARE,
   ABC_B_CUMULATIVE_SHARE,
   abcOf,
+  ANALYTICS_SECTIONS,
   analyticsQuerySchema,
   averageOrderValue,
-  buildDashboardAnalytics,
+  buildAnalyticsSection,
   buildSalesTargetsReport,
   customerInsightsOf,
   daysOfInventoryOf,
@@ -20,20 +21,93 @@ import {
   lineValue,
   previousPeriodOf,
   salesBreakdownOf,
+  salesTargetQuerySchema,
   stockoutRateOf,
   totalSales,
   turnoverOf,
-  type AnalyticsInput,
+  type AnalyticsChannel,
   type BasePrice,
+  type CustomerFirstPaid,
+  type CustomersAnalytics,
   type DispenseCost,
+  type InventoryAnalytics,
+  type OverviewAnalytics,
   type PaidInvoice,
+  type Period,
   type ProductClassification,
+  type RevenueAnalytics,
+  type Sale,
   type SaleLine,
   type SalesDocument,
   type SiteName,
   type StockHealthRow,
-  type Sale,
 } from "./analytics.ts";
+
+/**
+ * One field per read a tab can ask for, so a test composes the fixture it needs and the builders below hand each tab
+ * exactly its own fields. Building one tab never looks at the reads of another, which the per-section tests assert.
+ */
+type AnalyticsFixture = {
+  now: Date;
+  period: Period;
+  siteId: string | null;
+  scope: readonly string[] | undefined;
+  channel: AnalyticsChannel;
+  documents: SalesDocument[];
+  invoices: PaidInvoice[];
+  customerFirstPaid: CustomerFirstPaid[];
+  dispenseCosts: DispenseCost[];
+  stockRows: StockHealthRow[];
+  basePrices: BasePrice[];
+  sites: SiteName[];
+  products: ProductClassification[];
+};
+
+/** The fields every tab's input carries; each builder below adds the reads of the tab it answers. */
+const commonInput = (input: AnalyticsFixture) => ({
+  now: input.now,
+  period: input.period,
+  siteId: input.siteId,
+  scope: input.scope,
+  channel: input.channel,
+});
+
+const overviewAnswer = (input: AnalyticsFixture): OverviewAnalytics =>
+  buildAnalyticsSection({
+    section: "overview",
+    ...commonInput(input),
+    documents: input.documents,
+    invoices: input.invoices,
+    dispenseCosts: input.dispenseCosts,
+  });
+
+const revenueAnswer = (input: AnalyticsFixture): RevenueAnalytics =>
+  buildAnalyticsSection({
+    section: "revenue",
+    ...commonInput(input),
+    documents: input.documents,
+    invoices: input.invoices,
+    products: input.products,
+    sites: input.sites,
+  });
+
+const customersAnswer = (input: AnalyticsFixture): CustomersAnalytics =>
+  buildAnalyticsSection({
+    section: "customers",
+    ...commonInput(input),
+    documents: input.documents,
+    invoices: input.invoices,
+    customerFirstPaid: input.customerFirstPaid,
+  });
+
+const inventoryAnswer = (input: AnalyticsFixture): InventoryAnalytics =>
+  buildAnalyticsSection({
+    section: "inventory",
+    ...commonInput(input),
+    stockRows: input.stockRows,
+    basePrices: input.basePrices,
+    sites: input.sites,
+  });
 
 const DAY = 86_400_000;
 const uuidOf = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
@@ -107,13 +181,13 @@ const stock = (overrides: Partial<StockHealthRow> = {}): StockHealthRow => ({
  * The fixture of the KPI tests. Documents 1 to 5 are sales in the current period (6 is created exactly at `to`, so it is
  * outside it); 7 and 8 are sales of the previous period; 9 is an invoice with no sales document.
  */
-const salesInput = (overrides: Partial<AnalyticsInput> = {}): AnalyticsInput => ({
-  now: NOW,
-  period: PERIOD,
-  siteId: null,
-  scope: undefined,
-  channel: "all",
-  documents: [
+const salesInput = (overrides: Partial<AnalyticsFixture> = {}): AnalyticsFixture => ({
+  now: overrides.now ?? NOW,
+  period: overrides.period ?? PERIOD,
+  siteId: overrides.siteId ?? null,
+  scope: overrides.scope,
+  channel: overrides.channel ?? "all",
+  documents: overrides.documents ?? [
     document(1, "order", SITE_A, "2026-10-09T10:00:00.000Z"),
     document(2, "prescription", SITE_A, "2026-10-10T10:00:00.000Z"),
     document(3, "order", SITE_B, "2026-10-12T10:00:00.000Z"),
@@ -123,7 +197,7 @@ const salesInput = (overrides: Partial<AnalyticsInput> = {}): AnalyticsInput => 
     document(7, "order", SITE_A, "2026-10-03T10:00:00.000Z"),
     document(8, "prescription", SITE_B, "2026-10-07T12:00:00.000Z"),
   ],
-  invoices: [
+  invoices: overrides.invoices ?? [
     invoiceOf(1, "order", 100_000),
     invoiceOf(2, "prescription", 50_000),
     invoiceOf(3, "order", 200_000),
@@ -134,13 +208,12 @@ const salesInput = (overrides: Partial<AnalyticsInput> = {}): AnalyticsInput => 
     invoiceOf(8, "prescription", 40_000),
     invoiceOf(9, "order", 70_000),
   ],
-  customerFirstPaid: [],
-  dispenseCosts: [],
-  stockRows: [],
-  basePrices: PRICES,
-  sites: SITES,
-  products: PRODUCTS,
-  ...overrides,
+  customerFirstPaid: overrides.customerFirstPaid ?? [],
+  dispenseCosts: overrides.dispenseCosts ?? [],
+  stockRows: overrides.stockRows ?? [],
+  basePrices: overrides.basePrices ?? PRICES,
+  sites: overrides.sites ?? SITES,
+  products: overrides.products ?? PRODUCTS,
 });
 
 describe("previous period", () => {
@@ -183,21 +256,21 @@ describe("sale join", () => {
 
 describe("sales KPIs", () => {
   it("buckets by document createdAt, with `from` inclusive and `to` exclusive", () => {
-    const answer = buildDashboardAnalytics(salesInput());
+    const answer = overviewAnswer(salesInput());
     // Current: 1, 2, 3, 4 and the document created exactly at `from` (5). Document 6 is at `to`, so it is out.
     expect(answer.kpis.revenue).toStrictEqual({ current: 390_000, previous: 120_000 });
     expect(answer.kpis.orderCount).toStrictEqual({ current: 5, previous: 2 });
   });
 
   it("averages revenue per sale, and answers null for an average over no sale", () => {
-    const answer = buildDashboardAnalytics(salesInput());
+    const answer = overviewAnswer(salesInput());
     expect(answer.kpis.averageOrderValue).toStrictEqual({ current: 78_000, previous: 60_000 });
     expect(averageOrderValue({ revenue: 0, orderCount: 0 })).toBeNull();
     expect(averageOrderValue({ revenue: 10, orderCount: 4 })).toBe(3);
   });
 
   it("filters the sales KPIs by channel and lists both channels beside them", () => {
-    const counter = buildDashboardAnalytics(salesInput({ channel: "counter" }));
+    const counter = overviewAnswer(salesInput({ channel: "counter" }));
     expect(counter.kpis.revenue.current).toBe(50_000);
     expect(counter.kpis.orderCount.current).toBe(1);
     expect(counter.channels).toStrictEqual([
@@ -205,32 +278,32 @@ describe("sales KPIs", () => {
       { channel: "online", revenue: 340_000, orderCount: 4 },
     ]);
 
-    const online = buildDashboardAnalytics(salesInput({ channel: "online" }));
+    const online = overviewAnswer(salesInput({ channel: "online" }));
     expect(online.kpis.revenue).toStrictEqual({ current: 340_000, previous: 80_000 });
     expect(online.channels).toStrictEqual(counter.channels);
   });
 
   it("applies the requested site to the sales, and a scope excludes sites outside it and sales with no site", () => {
-    const siteA = buildDashboardAnalytics(salesInput({ siteId: SITE_A }));
+    const siteA = overviewAnswer(salesInput({ siteId: SITE_A }));
     expect(siteA.siteId).toBe(SITE_A);
     expect(siteA.kpis.revenue).toStrictEqual({ current: 160_000, previous: 80_000 });
 
-    const scoped = buildDashboardAnalytics(salesInput({ scope: [SITE_A] }));
+    const scoped = overviewAnswer(salesInput({ scope: [SITE_A] }));
     expect(scoped.kpis.revenue.current).toBe(160_000);
     expect(scoped.kpis.orderCount.current).toBe(3);
 
-    const outside = buildDashboardAnalytics(salesInput({ scope: [SITE_A], siteId: SITE_B }));
+    const outside = overviewAnswer(salesInput({ scope: [SITE_A], siteId: SITE_B }));
     expect(outside.kpis.revenue.current).toBe(0);
   });
 
   it("answers a null average when the filter leaves no sale in the period", () => {
-    const answer = buildDashboardAnalytics(salesInput({ siteId: SITE_B, channel: "counter" }));
+    const answer = overviewAnswer(salesInput({ siteId: SITE_B, channel: "counter" }));
     expect(answer.kpis.orderCount.current).toBe(0);
     expect(answer.kpis.averageOrderValue).toStrictEqual({ current: null, previous: 40_000 });
   });
 
   it("answers no gross profit, with its reason, while no sale has a recorded cost", () => {
-    expect(buildDashboardAnalytics(salesInput()).kpis.grossProfit).toStrictEqual({
+    expect(overviewAnswer(salesInput()).kpis.grossProfit).toStrictEqual({
       current: null,
       previous: null,
       available: false,
@@ -240,7 +313,7 @@ describe("sales KPIs", () => {
   });
 
   it("reports the previous period beside the current one", () => {
-    const answer = buildDashboardAnalytics(salesInput());
+    const answer = overviewAnswer(salesInput());
     expect(answer.period).toStrictEqual({ from: "2026-10-08T00:00:00.000Z", to: "2026-10-15T00:00:00.000Z" });
     expect(answer.previousPeriod).toStrictEqual({ from: "2026-10-01T00:00:00.000Z", to: "2026-10-08T00:00:00.000Z" });
     expect(answer.currency).toBe("VND");
@@ -255,12 +328,73 @@ describe("sales KPIs", () => {
   });
 });
 
+/** The keys every tab answers, so a test can assert that no other tab's figures came along. */
+const ENVELOPE_KEYS = ["channel", "currency", "generatedAt", "period", "previousPeriod", "section", "siteId"];
+
+describe("analytics sections", () => {
+  it("answers the overview with the envelope, the tiles and both channels, and nothing of the other tabs", () => {
+    const answer = overviewAnswer(salesInput());
+    expect(Object.keys(answer).sort()).toStrictEqual([...ENVELOPE_KEYS, "channels", "kpis"].sort());
+    expect(answer.section).toBe("overview");
+    expect(answer.currency).toBe("VND");
+    expect(answer.channel).toBe("all");
+    expect(answer.siteId).toBeNull();
+    expect(answer.generatedAt).toBe(NOW.toISOString());
+    expect(answer.period).toStrictEqual({ from: PERIOD.from.toISOString(), to: PERIOD.to.toISOString() });
+    expect(answer.previousPeriod).toStrictEqual({ from: "2026-10-01T00:00:00.000Z", to: "2026-10-08T00:00:00.000Z" });
+  });
+
+  it("answers revenue with the breakdown alone", () => {
+    const answer = revenueAnswer(breakdownInput());
+    expect(Object.keys(answer).sort()).toStrictEqual([...ENVELOPE_KEYS, "breakdown"].sort());
+    expect(answer.section).toBe("revenue");
+    expect(answer.breakdown.goodsRevenue).toBe(220);
+  });
+
+  it("answers customers with the customer figures alone, from the first payment of each buyer", () => {
+    const answer = customersAnswer(
+      salesInput({
+        documents: [document(1, "order", SITE_A, "2026-10-09T10:00:00.000Z", uuidOf(0x31))],
+        customerFirstPaid: [{ customerId: uuidOf(0x31), firstPaidAt: "2026-10-09T00:00:00.000Z" }],
+      }),
+    );
+    expect(Object.keys(answer).sort()).toStrictEqual([...ENVELOPE_KEYS, "customers"].sort());
+    expect(answer.section).toBe("customers");
+    expect(answer.customers.identifiedCustomerCount).toBe(1);
+    expect(answer.customers.newCustomerCount).toBe(1);
+    expect(answer.customers.identifiedRevenue).toBe(100_000);
+  });
+
+  it("answers inventory with stock health alone, and no sales read is needed for it", () => {
+    const answer = inventoryAnswer(
+      salesInput({ documents: [], invoices: [], stockRows: [stock({ onHand: 10, productId: P1 })] }),
+    );
+    expect(Object.keys(answer).sort()).toStrictEqual([...ENVELOPE_KEYS, "inventory"].sort());
+    expect(answer.section).toBe("inventory");
+    expect(answer.inventory.stockedProductCount).toBe(1);
+    expect(answer.inventory.stockValue.total).toBe(10_000);
+  });
+
+  it("keeps the channel and site filters of each tab, and inventory ignores the channel", () => {
+    const customers = customersAnswer(salesInput({ siteId: SITE_B, channel: "counter" }));
+    expect(customers.siteId).toBe(SITE_B);
+    expect(customers.channel).toBe("counter");
+    expect(customers.customers.identifiedCustomerCount).toBe(0);
+
+    const inventory = inventoryAnswer(
+      salesInput({ channel: "online", scope: [SITE_A], stockRows: [stock({ onHand: 10 })] }),
+    );
+    expect(inventory.channel).toBe("online");
+    expect(inventory.inventory.stockedProductCount).toBe(1);
+  });
+});
+
 /**
  * The breakdown fixture. Documents 1 to 4 are sales of the current period at two sites, with one sale whose site is
  * unknown; 7 is a sale of the previous period. Document 1 carries a delivery fee line, and P4 is not in the catalog, so
  * it falls back to the description of its line and counts as an unknown prescription group.
  */
-const breakdownInput = (overrides: Partial<AnalyticsInput> = {}): AnalyticsInput =>
+const breakdownInput = (overrides: Partial<AnalyticsFixture> = {}): AnalyticsFixture =>
   salesInput({
     documents: [
       document(1, "order", SITE_A, "2026-10-09T10:00:00.000Z"),
@@ -289,8 +423,9 @@ const breakdownInput = (overrides: Partial<AnalyticsInput> = {}): AnalyticsInput
 
 describe("sales breakdown", () => {
   it("adds the site rows up to the revenue tile, delivery fee included", () => {
-    const answer = buildDashboardAnalytics(breakdownInput());
-    expect(answer.kpis.revenue.current).toBe(260);
+    const answer = revenueAnswer(breakdownInput());
+    // The revenue tile of the overview counts the same sales; the two tabs must add up to the same figure.
+    expect(overviewAnswer(breakdownInput()).kpis.revenue.current).toBe(260);
     expect(answer.breakdown.bySite.map((row) => [row.siteName, row.revenue, row.orderCount])).toStrictEqual([
       ["Chi nhánh A", 150, 2],
       ["Chi nhánh B", 80, 1],
@@ -300,7 +435,7 @@ describe("sales breakdown", () => {
   });
 
   it("counts goods alone for the product tables, so the delivery fee is not attributed to a product", () => {
-    const breakdown = buildDashboardAnalytics(breakdownInput()).breakdown;
+    const breakdown = revenueAnswer(breakdownInput()).breakdown;
     expect(breakdown.goodsRevenue).toBe(220);
     expect(breakdown.topProducts.map((row) => [row.productName, row.revenue])).toStrictEqual([
       ["Paracetamol", 120],
@@ -312,7 +447,7 @@ describe("sales breakdown", () => {
   });
 
   it("groups by the catalog category, merging an uncategorized product with one the catalog no longer lists", () => {
-    const breakdown = buildDashboardAnalytics(breakdownInput()).breakdown;
+    const breakdown = revenueAnswer(breakdownInput()).breakdown;
     expect(breakdown.byCategory.map((row) => [row.category, row.revenue])).toStrictEqual([
       ["Medicine", 170],
       [null, 50],
@@ -341,7 +476,7 @@ describe("sales breakdown", () => {
   });
 
   it("splits goods revenue by the current prescription flag, adding an unknown row only when a sold product is not listed", () => {
-    const breakdown = buildDashboardAnalytics(breakdownInput()).breakdown;
+    const breakdown = revenueAnswer(breakdownInput()).breakdown;
     expect(breakdown.byPrescription).toStrictEqual([
       { group: "prescription", revenue: 50, share: 50 / 220 },
       { group: "otc", revenue: 160, share: 160 / 220 },
@@ -350,7 +485,7 @@ describe("sales breakdown", () => {
   });
 
   it("applies the channel filter to every breakdown table", () => {
-    const online = buildDashboardAnalytics(breakdownInput({ channel: "online" })).breakdown;
+    const online = revenueAnswer(breakdownInput({ channel: "online" })).breakdown;
     expect(online.bySite.map((row) => [row.siteName, row.revenue])).toStrictEqual([
       ["Chi nhánh A", 100],
       ["Chi nhánh B", 80],
@@ -359,14 +494,14 @@ describe("sales breakdown", () => {
     expect(online.goodsRevenue).toBe(170);
     expect(online.byPrescription[0]).toStrictEqual({ group: "prescription", revenue: 0, share: 0 });
 
-    const counter = buildDashboardAnalytics(breakdownInput({ channel: "counter" })).breakdown;
+    const counter = revenueAnswer(breakdownInput({ channel: "counter" })).breakdown;
     expect(counter.goodsRevenue).toBe(50);
     expect(counter.bySite.map((row) => row.revenue)).toStrictEqual([50]);
     expect(counter.topProducts.map((row) => row.productName)).toStrictEqual(["Amoxicillin"]);
   });
 
   it("leaves out a site outside the caller's scope, and a sale with no site", () => {
-    const scoped = buildDashboardAnalytics(breakdownInput({ scope: [SITE_A] })).breakdown;
+    const scoped = revenueAnswer(breakdownInput({ scope: [SITE_A] })).breakdown;
     expect(scoped.bySite.map((row) => row.siteName)).toStrictEqual(["Chi nhánh A"]);
     expect(scoped.goodsRevenue).toBe(110);
     expect(scoped.topProducts.map((row) => [row.productName, row.revenue])).toStrictEqual([
@@ -376,7 +511,7 @@ describe("sales breakdown", () => {
   });
 
   it("answers empty tables and unanswered shares for a period with no sale", () => {
-    const empty = buildDashboardAnalytics(
+    const empty = revenueAnswer(
       breakdownInput({
         documents: [document(7, "order", SITE_A, "2026-10-03T10:00:00.000Z")],
       }),
@@ -464,7 +599,7 @@ describe("ABC classification", () => {
   });
 
   it("classifies the products of a period from their goods revenue", () => {
-    const breakdown = buildDashboardAnalytics(
+    const breakdown = revenueAnswer(
       breakdownInput({
         documents: [document(1, "order", SITE_A, "2026-10-09T10:00:00.000Z")],
         invoices: [invoiceOf(1, "order", 350, [line(P1, 3, 100, "Paracetamol"), line(P2, 1, 50, "Amoxicillin")])],
@@ -812,16 +947,37 @@ describe("analytics query", () => {
     analyticsQuerySchema.safeParse({
       from: "2026-10-08T00:00:00.000Z",
       to: "2026-10-15T00:00:00.000Z",
+      section: "overview",
       ...overrides,
     });
 
-  it("accepts a period, an optional site and a channel", () => {
+  it("accepts a period, a section, an optional site and a channel", () => {
     expect(query({ siteId: SITE_A, channel: "online" }).success).toBe(true);
     const parsed = query();
     expect(parsed.success && parsed.data).toStrictEqual({
       from: "2026-10-08T00:00:00.000Z",
       to: "2026-10-15T00:00:00.000Z",
+      section: "overview",
     });
+  });
+
+  it("requires a section and accepts exactly the four tabs", () => {
+    expect(query({ section: undefined }).success).toBe(false);
+    for (const section of ANALYTICS_SECTIONS) expect(query({ section }).success).toBe(true);
+    expect(query({ section: "all" }).success).toBe(false);
+  });
+
+  it("asks the targets route for a month instead of a section", () => {
+    const targets = (overrides: Record<string, unknown> = {}) =>
+      salesTargetQuerySchema.safeParse({
+        from: "2026-10-01T00:00:00.000Z",
+        to: "2026-11-01T00:00:00.000Z",
+        month: "2026-10",
+        ...overrides,
+      });
+    expect(targets().success).toBe(true);
+    expect(targets({ month: undefined }).success).toBe(false);
+    expect(targets({ month: "2026-13" }).success).toBe(false);
   });
 
   it("refuses a period whose end is not after its start", () => {
@@ -864,7 +1020,7 @@ const COSTS: DispenseCost[] = [
 
 describe("gross profit", () => {
   it("is the revenue less the cost of the sales whose goods are all costed, beside the previous period", () => {
-    const { grossProfit } = buildDashboardAnalytics(salesInput({ dispenseCosts: COSTS })).kpis;
+    const { grossProfit } = overviewAnswer(salesInput({ dispenseCosts: COSTS })).kpis;
     expect(grossProfit).toStrictEqual({
       current: 90_000,
       previous: 50_000,
@@ -875,7 +1031,7 @@ describe("gross profit", () => {
   });
 
   it("leaves out the revenue of a sale that is only partly costed instead of guessing the rest", () => {
-    const answer = buildDashboardAnalytics(salesInput({ dispenseCosts: COSTS, siteId: SITE_B, channel: "online" }));
+    const answer = overviewAnswer(salesInput({ dispenseCosts: COSTS, siteId: SITE_B, channel: "online" }));
     // Only sale 3 is at site B in this period and it is half costed: no gross profit, never a figure from half the goods.
     expect(answer.kpis.revenue.current).toBe(200_000);
     expect(answer.kpis.grossProfit.current).toBeNull();
@@ -897,19 +1053,19 @@ describe("gross profit", () => {
   });
 
   it("follows the channel and site filters of the revenue", () => {
-    const counter = buildDashboardAnalytics(salesInput({ dispenseCosts: COSTS, channel: "counter" })).kpis;
+    const counter = overviewAnswer(salesInput({ dispenseCosts: COSTS, channel: "counter" })).kpis;
     expect(counter.revenue.current).toBe(50_000);
     expect(counter.grossProfit.current).toBe(30_000);
     expect(counter.grossProfit.coverage.current).toBe(1);
     // The previous counter sale is at site B and has no cost.
     expect(counter.grossProfit.previous).toBeNull();
 
-    const scoped = buildDashboardAnalytics(salesInput({ dispenseCosts: COSTS, scope: [SITE_B] }));
+    const scoped = overviewAnswer(salesInput({ dispenseCosts: COSTS, scope: [SITE_B] }));
     expect(scoped.kpis.grossProfit.current).toBeNull();
   });
 
   it("is a true zero, with no coverage, for a period with no sale", () => {
-    const answer = buildDashboardAnalytics(salesInput({ dispenseCosts: COSTS, siteId: SITE_B, channel: "counter" }));
+    const answer = overviewAnswer(salesInput({ dispenseCosts: COSTS, siteId: SITE_B, channel: "counter" }));
     expect(answer.kpis.grossProfit.current).toBe(0);
     expect(answer.kpis.grossProfit.available).toBe(true);
     expect(answer.kpis.grossProfit.coverage.current).toBeNull();
@@ -923,7 +1079,7 @@ describe("gross profit", () => {
   });
 
   it("never counts the revenue of an invoice that is not paid", () => {
-    const withoutInvoice = buildDashboardAnalytics(
+    const withoutInvoice = overviewAnswer(
       salesInput({ dispenseCosts: COSTS, invoices: [invoiceOf(2, "prescription", 50_000)] }),
     );
     // Order 1 has no paid invoice, so it is no sale even though its goods were costed.
@@ -931,7 +1087,7 @@ describe("gross profit", () => {
   });
 
   it("rounds to whole dong", () => {
-    const answer = buildDashboardAnalytics(
+    const answer = overviewAnswer(
       salesInput({ dispenseCosts: [cost("Order", 1, 3, 3, 33_333.33)], channel: "online", siteId: SITE_A }),
     );
     expect(answer.kpis.grossProfit.current).toBe(66_667);

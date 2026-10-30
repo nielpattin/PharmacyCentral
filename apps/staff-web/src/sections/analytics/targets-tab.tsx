@@ -1,0 +1,142 @@
+import { useState } from "react";
+
+import { Button, DataTable, type DataColumn, Field, Input } from "@pharmacy/ui";
+
+import { dataTableLabels } from "../../components/data-table-labels.ts";
+import { RefreshButton } from "../../components/forms.tsx";
+import { useRetainedTarget } from "../../hooks/useRetainedTarget.ts";
+import { translateText } from "../../i18n.ts";
+import { withActionColumn } from "../../lib/action-column.ts";
+import { useCan } from "../../permissions/use-can.ts";
+import type { SalesTargetSiteRow, SalesTargetsResponse } from "./contract.ts";
+import { formatRate } from "./figures.ts";
+import { Heading, SiteFilter, type FigureFormat } from "./shared.tsx";
+import { SalesTargetDialog, type SalesTargetDraft } from "./target-dialog.tsx";
+
+/**
+ * The month's paid revenue against each site's goal. The month is its own control: a monthly target cannot ride the
+ * page's 7/30/90-day period.
+ */
+export const TargetsTab = ({
+  data,
+  loading,
+  locale,
+  format,
+  month,
+  onMonthChange,
+  siteId,
+  siteOptions,
+  onSiteChange,
+  onRefresh,
+}: {
+  data: SalesTargetsResponse | undefined;
+  loading: boolean;
+  locale: string;
+  format: FigureFormat;
+  /** The "YYYY-MM" month the report covers. */
+  month: string;
+  onMonthChange: (month: string) => void;
+  siteId: string;
+  siteOptions: Array<{ value: string; label: string }>;
+  onSiteChange: (siteId: string) => void;
+  /** Reads the month's target report again. */
+  onRefresh: () => void;
+}): React.JSX.Element => {
+  const targetGate = useCan("salesTarget.set");
+  const [targetDraft, setTargetDraft] = useState<SalesTargetDraft>();
+  const targetDrawer = useRetainedTarget(targetDraft);
+  const rows: SalesTargetSiteRow[] = data?.sites ?? [];
+  const totals = data?.totals;
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="grid gap-1">
+          <Heading>Sales targets</Heading>
+          <p className="text-xs text-muted">
+            {translateText(
+              "The month's paid revenue against each site's target, all channels. A target is set by a Pharmacy Manager.",
+            )}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-44">
+            <Field label={translateText("Month")}>
+              <Input type="month" value={month} onChange={(event) => onMonthChange(event.target.value)} />
+            </Field>
+          </div>
+          <SiteFilter value={siteId} options={siteOptions} onChange={onSiteChange} />
+          <RefreshButton onClick={onRefresh} />
+        </div>
+      </div>
+      <DataTable<SalesTargetSiteRow>
+        storageKey="staff:analytics:sales-targets"
+        labels={dataTableLabels()}
+        interactive
+        exportCsv={{ filename: "analytics-sales-targets.csv" }}
+        loading={loading}
+        rows={rows}
+        getKey={(row) => row.siteId}
+        empty={translateText("No records found")}
+        columns={withActionColumn<DataColumn<SalesTargetSiteRow>>(
+          [
+            { key: "siteName", label: translateText("Site"), truncate: 32 },
+            {
+              key: "target",
+              label: translateText("Target"),
+              align: "right",
+              render: (row) => (row.target === null ? translateText("Not set") : format.money(row.target)),
+            },
+            {
+              key: "revenue",
+              label: translateText("Revenue"),
+              align: "right",
+              render: (row) => format.money(row.revenue),
+            },
+            {
+              key: "progress",
+              label: translateText("Progress"),
+              align: "right",
+              render: (row) => formatRate(row.progress, locale),
+            },
+            {
+              key: "actions",
+              label: translateText("Actions"),
+              pinned: "right",
+              enableSorting: false,
+              render: (row) => (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setTargetDraft({
+                      siteId: row.siteId,
+                      siteName: row.siteName,
+                      month,
+                      amount: row.target,
+                    })
+                  }
+                >
+                  {translateText(row.target === null ? "Set target" : "Change target")}
+                </Button>
+              ),
+            },
+          ],
+          targetGate.allowed && rows.length > 0,
+        )}
+      />
+      <p className="text-xs text-muted">
+        {translateText("Total")}: {translateText("Target")} {format.money(totals?.target)} · {translateText("Revenue")}{" "}
+        {format.money(totals?.revenue)} · {translateText("Progress")} {formatRate(totals?.progress, locale)}
+      </p>
+      {targetDrawer ? (
+        <SalesTargetDialog
+          key={targetDrawer.key}
+          open={targetDraft !== undefined}
+          draft={targetDrawer.target}
+          onClose={() => setTargetDraft(undefined)}
+        />
+      ) : null}
+    </div>
+  );
+};

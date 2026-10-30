@@ -7,7 +7,7 @@ import { auditEvents, financeEntries, projectionCounters, reportRows } from "../
 import type { z } from "zod";
 import {
   basePricesAnswerSchema,
-  buildDashboardAnalytics,
+  buildAnalyticsSection,
   buildSalesTargetsReport,
   customerFirstPaidAnswerSchema,
   dispenseCostsAnswerSchema,
@@ -20,6 +20,7 @@ import {
   sitesAnswerSchema,
   stockHealthAnswerSchema,
   type AnalyticsChannel,
+  type AnalyticsSection,
   type DashboardAnalytics,
   type Period,
   type SalesTargetsReport,
@@ -67,7 +68,14 @@ export type AuditRow = typeof auditEvents.$inferSelect & {
   occurredAtUtc: Date;
 };
 
-export type AnalyticsQuery = { from: Date; to: Date; siteId?: string | undefined; channel: AnalyticsChannel };
+export type AnalyticsQuery = {
+  /** The tab to answer; the other tabs are neither read nor computed. */
+  section: AnalyticsSection;
+  from: Date;
+  to: Date;
+  siteId?: string | undefined;
+  channel: AnalyticsChannel;
+};
 
 /** A read of an owning service answered an error. `code` is the owner's code when its answer names one. */
 export class AnalyticsReadError extends Error {
@@ -369,9 +377,10 @@ export class OperationsRepository {
   }
 
   /**
-   * Period KPIs and inventory health of design 0007. Every read here is strict: a failed or malformed answer throws, so
-   * the page shows an error rather than figures that leave a service out. `siteIds` is the caller's site scope, which
-   * the site-bound reads receive as `x-actor-site-ids`, as the existing scoped reads do.
+   * One tab of the period analytics of design 0007. The reads are those of the asked tab alone, so the page never waits
+   * for, nor pays for, a figure it is not showing. Every read is strict: a failed or malformed answer throws, so the
+   * page shows an error rather than figures that leave a service out. `siteIds` is the caller's site scope, which the
+   * site-bound reads receive as `x-actor-site-ids`, as the existing scoped reads do.
    */
   public async dashboardAnalytics(
     query: AnalyticsQuery,
@@ -380,79 +389,146 @@ export class OperationsRepository {
     now = new Date(),
   ): Promise<DashboardAnalytics> {
     const period: Period = { from: query.from, to: query.to };
-    const previous = previousPeriodOf(period);
     const siteHeaders = siteIds ? { [ACTOR_SITE_IDS_HEADER]: siteIds.join(",") } : {};
-    const salesWindow = new URLSearchParams({ from: previous.from.toISOString(), to: period.to.toISOString() });
-    const customerWindow = new URLSearchParams({ from: period.from.toISOString(), to: period.to.toISOString() });
-    const invoiceWindow = new URLSearchParams({ since: previous.from.toISOString() });
-    const costWindow = new URLSearchParams({ since: previous.from.toISOString() });
-    const stockWindow = new URLSearchParams({ from: period.from.toISOString(), to: period.to.toISOString() });
-    const today = now.toISOString().slice(0, 10);
-    const [documents, invoices, customerFirstPaid, costs, stock, prices, sites, products] = await Promise.all([
-      this.readAnswer(
-        this.options.salesUrl,
-        `/internal/analytics/sales-documents?${salesWindow.toString()}`,
-        { ...internalServiceHeaders(), ...siteHeaders },
-        salesDocumentsAnswerSchema,
-      ),
-      this.readAnswer(
-        this.options.paymentUrl,
-        `/internal/analytics/paid-invoices?${invoiceWindow.toString()}`,
-        internalServiceHeaders(),
-        paidInvoicesAnswerSchema,
-      ),
-      this.readAnswer(
-        this.options.salesUrl,
-        `/internal/analytics/customer-first-paid?${customerWindow.toString()}`,
-        { ...internalServiceHeaders(), ...siteHeaders },
-        customerFirstPaidAnswerSchema,
-      ),
-      this.readAnswer(
-        this.options.inventoryUrl,
-        `/internal/analytics/dispense-costs?${costWindow.toString()}`,
-        internalServiceHeaders(),
-        dispenseCostsAnswerSchema,
-      ),
-      this.readAnswer(
-        this.options.inventoryUrl,
-        `/internal/analytics/stock-health?${stockWindow.toString()}`,
-        { ...internalServiceHeaders(), ...siteHeaders },
-        stockHealthAnswerSchema,
-      ),
-      this.readAnswer(
-        this.options.catalogUrl,
-        `/pricing/base-prices?day=${today}`,
-        internalServiceHeaders(),
-        basePricesAnswerSchema,
-      ),
-      this.readAnswer(
-        this.options.catalogUrl,
-        "/sites",
-        { "x-internal-identity-context": catalogIdentity() },
-        sitesAnswerSchema,
-      ),
-      this.readAnswer(
-        this.options.catalogUrl,
-        "/internal/analytics/products",
-        internalServiceHeaders(),
-        productClassificationsAnswerSchema,
-      ),
-    ]);
-    return buildDashboardAnalytics({
+    const currentWindow = new URLSearchParams({ from: period.from.toISOString(), to: period.to.toISOString() });
+    const base = {
       now,
       period,
       siteId: query.siteId ?? null,
       scope: siteIds,
       channel: query.channel,
-      documents: documents.documents,
-      invoices: invoices.invoices,
-      customerFirstPaid: customerFirstPaid.customers,
-      dispenseCosts: costs.rows,
-      stockRows: stock.rows,
-      basePrices: prices,
-      sites,
-      products: products.products,
-    });
+    };
+    const sites = () =>
+      this.readAnswer(
+        this.options.catalogUrl,
+        "/sites",
+        { "x-internal-identity-context": catalogIdentity() },
+        sitesAnswerSchema,
+      );
+    switch (query.section) {
+      case "overview": {
+        // The tiles compare with the previous period, so the sales and their costs start there; the tab needs nothing else.
+        const previous = previousPeriodOf(period);
+        const salesWindow = new URLSearchParams({ from: previous.from.toISOString(), to: period.to.toISOString() });
+        const sinceWindow = new URLSearchParams({ since: previous.from.toISOString() });
+        const [documents, invoices, costs] = await Promise.all([
+          this.readAnswer(
+            this.options.salesUrl,
+            `/internal/analytics/sales-documents?${salesWindow.toString()}`,
+            { ...internalServiceHeaders(), ...siteHeaders },
+            salesDocumentsAnswerSchema,
+          ),
+          this.readAnswer(
+            this.options.paymentUrl,
+            `/internal/analytics/paid-invoices?${sinceWindow.toString()}`,
+            internalServiceHeaders(),
+            paidInvoicesAnswerSchema,
+          ),
+          this.readAnswer(
+            this.options.inventoryUrl,
+            `/internal/analytics/dispense-costs?${sinceWindow.toString()}`,
+            internalServiceHeaders(),
+            dispenseCostsAnswerSchema,
+          ),
+        ]);
+        return buildAnalyticsSection({
+          ...base,
+          section: "overview",
+          documents: documents.documents,
+          invoices: invoices.invoices,
+          dispenseCosts: costs.rows,
+        });
+      }
+      case "revenue": {
+        // The breakdown divides the current period alone: a sale is bucketed by the document's own creation date.
+        const sinceWindow = new URLSearchParams({ since: period.from.toISOString() });
+        const [documents, invoices, products, siteNames] = await Promise.all([
+          this.readAnswer(
+            this.options.salesUrl,
+            `/internal/analytics/sales-documents?${currentWindow.toString()}`,
+            { ...internalServiceHeaders(), ...siteHeaders },
+            salesDocumentsAnswerSchema,
+          ),
+          this.readAnswer(
+            this.options.paymentUrl,
+            `/internal/analytics/paid-invoices?${sinceWindow.toString()}`,
+            internalServiceHeaders(),
+            paidInvoicesAnswerSchema,
+          ),
+          this.readAnswer(
+            this.options.catalogUrl,
+            "/internal/analytics/products",
+            internalServiceHeaders(),
+            productClassificationsAnswerSchema,
+          ),
+          sites(),
+        ]);
+        return buildAnalyticsSection({
+          ...base,
+          section: "revenue",
+          documents: documents.documents,
+          invoices: invoices.invoices,
+          products: products.products,
+          sites: siteNames,
+        });
+      }
+      case "customers": {
+        const sinceWindow = new URLSearchParams({ since: period.from.toISOString() });
+        const [documents, invoices, customerFirstPaid] = await Promise.all([
+          this.readAnswer(
+            this.options.salesUrl,
+            `/internal/analytics/sales-documents?${currentWindow.toString()}`,
+            { ...internalServiceHeaders(), ...siteHeaders },
+            salesDocumentsAnswerSchema,
+          ),
+          this.readAnswer(
+            this.options.paymentUrl,
+            `/internal/analytics/paid-invoices?${sinceWindow.toString()}`,
+            internalServiceHeaders(),
+            paidInvoicesAnswerSchema,
+          ),
+          this.readAnswer(
+            this.options.salesUrl,
+            `/internal/analytics/customer-first-paid?${currentWindow.toString()}`,
+            { ...internalServiceHeaders(), ...siteHeaders },
+            customerFirstPaidAnswerSchema,
+          ),
+        ]);
+        return buildAnalyticsSection({
+          ...base,
+          section: "customers",
+          documents: documents.documents,
+          invoices: invoices.invoices,
+          customerFirstPaid: customerFirstPaid.customers,
+        });
+      }
+      case "inventory": {
+        // Stock health takes no sales read: it counts the stock of the period and values it at today's base prices.
+        const today = now.toISOString().slice(0, 10);
+        const [stock, prices, siteNames] = await Promise.all([
+          this.readAnswer(
+            this.options.inventoryUrl,
+            `/internal/analytics/stock-health?${currentWindow.toString()}`,
+            { ...internalServiceHeaders(), ...siteHeaders },
+            stockHealthAnswerSchema,
+          ),
+          this.readAnswer(
+            this.options.catalogUrl,
+            `/pricing/base-prices?day=${today}`,
+            internalServiceHeaders(),
+            basePricesAnswerSchema,
+          ),
+          sites(),
+        ]);
+        return buildAnalyticsSection({
+          ...base,
+          section: "inventory",
+          stockRows: stock.rows,
+          basePrices: prices,
+          sites: siteNames,
+        });
+      }
+    }
   }
 
   /**
