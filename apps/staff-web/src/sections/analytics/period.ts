@@ -103,3 +103,17 @@ export const firstDayOf = (inclusiveIso: string): string => formatDay(new Date(D
 
 export const isPeriodPreset = (value: string): value is PeriodPreset =>
   (PERIOD_PRESETS as readonly string[]).includes(value);
+
+/** The local calendar month of a date, as "YYYY-MM". */
+export const monthOf = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+/** The inclusive day range of a "YYYY-MM" month, or undefined when the text is not a real month. */
+export const monthRange = (month: string): DayRange | undefined => {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return undefined;
+  const first = parseDay(`${month}-01`);
+  if (!first) return undefined;
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+  return { fromDay: `${month}-01`, toDay: formatDay(last) };
+};
+
+export const isMonth = (value: string): boolean => monthRange(value) !== undefined;

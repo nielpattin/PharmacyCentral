@@ -214,6 +214,28 @@ export const customerFirstPaidResponseSchema = z.object({ customers: z.array(cus
 
 export type CustomerFirstPaid = z.infer<typeof customerFirstPaidSchema>;
 
+/** A calendar month as the target API takes it: `YYYY-MM`. */
+export const salesTargetMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+
+/** `PUT /sales-targets`: one site's revenue goal for a month; writing the same pair again replaces the amount. */
+export const setSalesTargetSchema = z.object({
+  siteId: z.string().uuid(),
+  month: salesTargetMonthSchema,
+  amount: z.number().positive().max(1_000_000_000_000),
+});
+
+export const salesTargetSchema = z.object({
+  siteId: z.string().uuid(),
+  month: salesTargetMonthSchema,
+  amount: z.number().nonnegative(),
+  currency: z.string(),
+});
+
+export const salesTargetsResponseSchema = z.object({ targets: z.array(salesTargetSchema) });
+
+export type SetSalesTarget = z.infer<typeof setSalesTargetSchema>;
+export type SalesTarget = z.infer<typeof salesTargetSchema>;
+
 export type OrderChangedEvent = z.infer<typeof orderChangedEventSchema>;
 export type CartLine = z.infer<typeof cartLineSchema>;
 export type DeliveryPoint = z.infer<typeof deliveryPointSchema>;

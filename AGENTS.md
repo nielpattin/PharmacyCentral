@@ -99,7 +99,7 @@ The local gateway and AWS ALB forward traffic with identical path patterns. The 
 - `GET /api/products` exactly (the product list) -> `search-service:3009`
 - `/api/sites*`, `/api/storage-locations*`, `/api/products*` (every other method and path under it), `/api/suppliers*`, `/api/pricing*`, `/api/stores*`, `/api/availability*` -> `catalog-service:3002`
 - `/api/procurement*`, `/api/inventory*`, `/api/quality*` -> `inventory-service:3004`
-- `/api/carts*`, `/api/orders*`, `/api/delivery*`, `/api/prescriptions*`, `/api/counter-transactions*` -> `sales-service:3005`
+- `/api/carts*`, `/api/orders*`, `/api/delivery*`, `/api/prescriptions*`, `/api/counter-transactions*`, `/api/sales-targets*` -> `sales-service:3005`
 - `/api/payments*` -> `payment-service:3006`
 - `/api/chatbot*` -> `chatbot-service:3008`
 - `/api/system*` -> `ops-console-service:3010` (Platform Admin only)

@@ -12,6 +12,8 @@ import {
   mergeCartRequestSchema,
   orderTransitionSchema,
   salesDocumentsQuerySchema,
+  salesTargetMonthSchema,
+  setSalesTargetSchema,
 } from "../contracts/sales.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { actorSiteIds, listSiteIds } from "../middleware/trusted-request.ts";
@@ -714,6 +716,37 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
         siteIds: actorSiteIds(request),
       });
       return response.json({ customers });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // A manager sets one site's revenue goal for a month; the edge and this service both allow only that role to write.
+  router.put("/sales-targets", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    const parsed = setSalesTargetSchema.safeParse(request.body);
+    if (!parsed.success) return invalid(response);
+    if (!actorMaySeeSite(request, parsed.data.siteId)) return siteAccessDenied(response);
+    const actorId = actor(request);
+    if (!actorId) return response.status(401).json({ title: "Authentication required", status: 401 });
+    try {
+      return response.json(await repository.setSalesTarget({ ...parsed.data, actorId }));
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // The targets of one month, for operations-query's revenue-against-target report.
+  router.get("/internal/analytics/sales-targets", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    const month = salesTargetMonthSchema.safeParse(queryString(request.query.month));
+    if (!month.success) return invalid(response);
+    try {
+      const targets = await repository.listSalesTargets({
+        month: month.data,
+        siteIds: actorSiteIds(request),
+      });
+      return response.json({ targets });
     } catch (error) {
       return next(error);
     }

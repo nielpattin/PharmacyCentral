@@ -113,6 +113,13 @@
       "when": 1793363438909,
       "tag": "0015_sour_fantastic_four",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793364103460,
+      "tag": "0016_left_eternals",
+      "breakpoints": true
     }
   ]
 }

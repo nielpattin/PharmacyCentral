@@ -126,6 +126,12 @@ Definitions (also BR-REPORT-008 to 011):
 
 `newCustomerCount` and `returningCustomerCount` split those customers by their **first paid sale ever** (BR-REPORT-017). The first payment is written to `orders.paidAt` or `prescriptions.paidAt` when `payment.invoice.paid.v1` arrives, and a refund keeps it. The payload carries `prescriptionId` as well as `orderId`, because a counter invoice has no customer of its own. `GET /internal/analytics/customer-first-paid` answers one row per customer who bought in the period with `min(paidAt)` over their whole history; the period and site scope choose the customers, never the history the date comes from. A database that already holds paid invoices before the column needs `pnpm run backfill:paid-at` once, or its customers all read as new; a missing date counts as new rather than failing the page.
 
+#### Monthly sales targets
+
+A monthly goal belongs to **sales-service**, because it is the write model that owns the sales the goal measures and already carries the manager scope; operations-query stays read-only (ADR 0001) and only composes the report. `PUT /api/sales-targets` takes `{ siteId, month: "YYYY-MM", amount }` from a Pharmacy Manager, refuses a site outside the caller's scope and every other role, and upserts on `(site_id, month)`, so writing the same pair again replaces the amount. It publishes `sales.target.set.v1` to the outbox as the audit trail. `GET /internal/analytics/sales-targets?month=` answers the month's rows to operations-query under the service secret.
+
+`GET /api/dashboard/sales-targets?month=&from=&to=&siteId=` answers the report: every site the caller may see is a row with `{ siteId, siteName, target, revenue, progress }`, plus `totals`. Revenue is the same paid-invoice join as Analytics over the month's `from`/`to` (the browser sends the local calendar bounds, as it does for every period), all channels, delivery fee included; a sale with no site is in no row, and a target whose site left the catalog is dropped. `progress` is `revenue / target`, null without a target. The Analytics page gives the section its own month picker, independent of the page's 7/30/90-day period, and reuses the page's site filter; the write action is hidden when the role may not write.
+
 #### `GET /api/procurement/replenishment-suggestions`
 
 Query: `siteId` (required, inside scope), `windowDays` (default 30, 7 to 180), `coverDays` (default 14, 1 to 90), `safetyDays` (default 7, 0 to 60), `defaultLeadTimeDays` (default 7, 1 to 90). Defaults are request parameters shown in the UI, not environment variables.
@@ -193,9 +199,15 @@ An employee with no assigned site (and not Platform Admin) is refused by the edg
 
 One nullable column is added to `goods_receipt_lines` (see "Purchase cost and gross profit"). No other table changes.
 
+`sales-service`, migrations `0014`…`0016`:
+
+`orders.paid_at timestamptz null` and `prescriptions.paid_at timestamptz null`: the first payment ever, written by `payment.invoice.paid.v1` and kept on refund; partial indexes `(customer_id, paid_at)` where `paid_at is not null`.
+
+`sales_targets(id uuid pk, site_id uuid, month date, amount numeric(18,2), currency varchar(3) default 'VND', created_by uuid, updated_by uuid, created_at, updated_at)`, unique `(site_id, month)`, index `month`.
+
 ### Events
 
-None. Plans are not published; operations-query keeps reading its own projections and the HTTP reads it already uses.
+`sales.target.set.v1` (`targetId`, `siteId`, `month`, `amount`, `actorId`) is written to the sales outbox when a manager sets a target; no consumer projects it today, it is the audit trail. Plans are not published; operations-query keeps reading its own projections and the HTTP reads it already uses.
 
 ### Security and CSRF
 

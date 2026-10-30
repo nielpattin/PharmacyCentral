@@ -23,6 +23,8 @@ const defaultAnswers: Record<string, () => Response> = {
       documents: [{ id: ORDER, kind: "order", siteId: SITE, customerId: null, createdAt: "2026-10-09T10:00:00.000Z" }],
     }),
   "sales.test/internal/analytics/customer-first-paid": () => json({ customers: [] }),
+  "sales.test/internal/analytics/sales-targets": () =>
+    json({ targets: [{ siteId: SITE, month: "2026-10", amount: 1_000_000, currency: "VND" }] }),
   "payment.test/internal/analytics/paid-invoices": () =>
     json({
       invoices: [
@@ -131,6 +133,24 @@ describe("OperationsRepository.dashboardAnalytics", () => {
     const products = requestTo("catalog.test", "/internal/analytics/products");
     expect(products?.headers.get("x-internal-service-secret")).toBe("test-internal-secret");
     expect(products?.headers.get("x-actor-site-ids")).toBeNull();
+  });
+
+  it("throws when a read fails, never an answer that leaves that service out", async () => {
+    const targetReport = await repository.salesTargetsReport(
+      { month: "2026-10", from: new Date("2026-10-01T00:00:00.000Z"), to: new Date("2026-11-01T00:00:00.000Z") },
+      () => "signed-for-catalog",
+      [SITE],
+    );
+    expect(targetReport.sites).toStrictEqual([
+      { siteId: SITE, siteName: "Chi nhánh A", target: 1_000_000, revenue: 100_000, progress: 0.1 },
+    ]);
+    expect(targetReport.totals).toStrictEqual({ target: 1_000_000, revenue: 100_000, progress: 0.1 });
+    const targets = requestTo("sales.test", "/internal/analytics/sales-targets");
+    expect(targets?.url.searchParams.get("month")).toBe("2026-10");
+    expect(targets?.headers.get("x-actor-site-ids")).toBe(SITE);
+    expect(requestTo("sales.test", "/internal/analytics/sales-documents")?.url.searchParams.get("from")).toBe(
+      "2026-10-01T00:00:00.000Z",
+    );
   });
 
   it("throws when a read fails, never an answer that leaves that service out", async () => {

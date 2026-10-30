@@ -9,6 +9,8 @@ import {
   isPeriodPreset,
   lastDayBefore,
   MAX_PERIOD_DAYS,
+  monthOf,
+  monthRange,
   parseDay,
   periodBounds,
   periodRangeError,
@@ -96,6 +98,20 @@ describe("periodBounds", () => {
 });
 
 describe("day helpers", () => {
+  it("turns a month into its whole inclusive day range, leap February included", () => {
+    expect(monthRange("2026-10")).toEqual({ fromDay: "2026-10-01", toDay: "2026-10-31" });
+    expect(monthRange("2024-02")).toEqual({ fromDay: "2024-02-01", toDay: "2024-02-29" });
+    expect(monthRange("2026-11")).toEqual({ fromDay: "2026-11-01", toDay: "2026-11-30" });
+  });
+
+  it("refuses a month that is not real and writes the local month of a date", () => {
+    expect(monthRange("2026-13")).toBeUndefined();
+    expect(monthRange("2026-1")).toBeUndefined();
+    expect(monthRange("Oct 2026")).toBeUndefined();
+    expect(monthOf(new Date(2026, 9, 28))).toBe("2026-10");
+    expect(monthOf(new Date(2026, 0, 5))).toBe("2026-01");
+  });
+
   it("parses only real days and formats them back", () => {
     expect(parseDay("2026-10-28")).toEqual(new Date(2026, 9, 28));
     expect(parseDay("2024-02-29")).toEqual(new Date(2024, 1, 29));

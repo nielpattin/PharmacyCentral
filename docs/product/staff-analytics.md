@@ -79,9 +79,20 @@ Platform Admin (read only) and Pharmacy Manager (`sectionRoles.analytics`; the e
   - Without a first-purchase date (data from before the column, before the backfill) the customer counts as new rather than failing the page.
   - Test: one customer paid an order before the period and one inside, another customer's first paid order is inside: 1 returning, 1 new, and the two add up to 2 identified.
 
+### US7. As a manager, I set a monthly target and watch the month against it
+
+- Source: `[standard]` 2026-10-30; definitions BR-REPORT-018.
+- Accepted when:
+  - **Mục tiêu doanh số** has its own month picker, independent of the page's 7/30/90-day period, and shows one row per site the caller may see: the target, the month's paid revenue, and the share of the target reached.
+  - A site without a target shows "Chưa đặt" and a blank share, never 0%; the totals add the visible rows.
+  - A Pharmacy Manager sets or changes a site's target for the picked month from the row; the write is refused outside their sites and for every other role, Platform Admin included. The action is hidden, not disabled, when the role may not write.
+  - The revenue follows the site filter of the page and counts every channel, delivery fee included; it is the paid revenue of sales created in the month.
+  - A failed read shows an error in the section and no stale target or revenue.
+  - Test: set 1,000,000 ₫ for a site with 500,000 ₫ paid in the month: the row shows 50%; change it to 400,000 ₫ and the same row shows 125%; a site with no target stays "Chưa đặt".
+
 ## Contents and behavior
 
-Controls (US1), sales KPI tiles and channel table (US2), the customer tiles (US5 and US6), the breakdown tables (US4), inventory health tiles and tables (US3). Each read is a separate service call behind one request, `GET /api/dashboard/analytics` ([API guide](../api-guide.md#query-projections)); one failed read fails the page rather than showing a partial answer.
+Controls (US1), sales KPI tiles and channel table (US2), the customer tiles (US5 and US6), the breakdown tables (US4), inventory health tiles and tables (US3), and the monthly sales targets (US7). The analytics figures come from one request, `GET /api/dashboard/analytics`, and the targets from `GET /api/dashboard/sales-targets` ([API guide](../api-guide.md#query-projections)); one failed read fails its own part rather than showing a partial answer.
 
 ## States
 
@@ -94,7 +105,7 @@ Controls (US1), sales KPI tiles and channel table (US2), the customer tiles (US5
 
 ## Rules and designs
 
-- [BR-REPORT-008 to 017](../business-rules.md), BR-FIN-002, BR-FIN-003, BR-AUTH-004; [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md).
+- [BR-REPORT-008 to 018](../business-rules.md), BR-FIN-002, BR-FIN-003, BR-AUTH-004; [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md).
 
 ## Decisions
 
@@ -114,6 +125,7 @@ Controls (US1), sales KPI tiles and channel table (US2), the customer tiles (US5
 | 12 | What are the ABC cut-offs? | `[standard]` 80% and 95% of cumulative goods revenue in the period; the crossing product stays in the class it completes. | The classic ABC shape; using the period's own revenue keeps the classes tied to the chosen filter. |
 | 13 | Which customer field identifies the buyer? | `[standard]` The `customerId` on the sales document, never the one on the invoice. | A counter invoice stores the staff member who created it, so an invoice-based count would treat the pharmacist as the buyer. A walk-in sale stays unidentified. |
 | 14 | What makes a customer new? | `[standard]` Their first paid purchase on the whole system falls inside the period. The site filter chooses the customers, not the date. | A customer who bought at another site last month is not new at this one; only the first purchase ever says so. |
+| 15 | Where do sales targets live, and why not in the analytics service? | `[standard]` In sales-service, one `sales_targets` row per (site, month); operations-query composes the read-only report. | ADR 0001 keeps operations-query a read model. Sales owns the revenue the goal is measured against and already has the write path, so the target follows it; a manager-only write and the site scope stay in one service. |
 
 ## Gaps against the code (2026-10-30)
 

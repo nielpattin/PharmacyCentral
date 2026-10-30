@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { listSiteIds } from "../middleware/trusted-request.ts";
 import { signCatalogIdentity } from "./catalog-identity.ts";
-import { analyticsQuerySchema } from "./analytics.ts";
+import { analyticsQuerySchema, salesTargetMonthSchema } from "./analytics.ts";
 import { ANALYTICS_ROLES, DASHBOARD_ROLES, REPORT_ROLES, roleRefusal } from "./operations-access.ts";
 import { decodePageCursor, encodePageCursor } from "./page-cursor.ts";
 import {
@@ -156,6 +156,57 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       );
     } catch (error) {
       // payment-service refuses a period whose paid invoices exceed its read cap; the page says so instead of a 500.
+      if (error instanceof AnalyticsReadError && error.status === 422 && error.code === "analytics_range_too_large") {
+        response.status(422).json({
+          title: "Analytics range too large",
+          status: 422,
+          code: "analytics_range_too_large",
+          detail: "Khoảng thời gian có quá nhiều hóa đơn đã thanh toán để tổng hợp; hãy chọn khoảng ngắn hơn.",
+        });
+        return;
+      }
+      next(error);
+    }
+  });
+  router.get("/dashboard/sales-targets", async (request, response, next) => {
+    if (!repository) {
+      unavailable(response);
+      return;
+    }
+    const refusal = roleRefusal(
+      request,
+      ANALYTICS_ROLES,
+      "Mục tiêu doanh số chỉ dành cho Quản trị nền tảng và Quản lý dược.",
+    );
+    if (refusal) {
+      response.status(refusal.status).json(refusal);
+      return;
+    }
+    const parsed = analyticsQuerySchema.safeParse(request.query);
+    const month = salesTargetMonthSchema.safeParse(request.query.month);
+    if (!parsed.success || !month.success) {
+      response.status(400).json({
+        title: "Invalid request",
+        status: 400,
+        code: "invalid_request",
+        detail: "Cần month dạng YYYY-MM; from trước to và không quá 366 ngày; siteId là UUID.",
+      });
+      return;
+    }
+    try {
+      response.json(
+        await repository.salesTargetsReport(
+          {
+            month: month.data,
+            from: new Date(parsed.data.from),
+            to: new Date(parsed.data.to),
+            siteId: parsed.data.siteId,
+          },
+          () => signCatalogIdentity(request),
+          listSiteIds(request),
+        ),
+      );
+    } catch (error) {
       if (error instanceof AnalyticsReadError && error.status === 422 && error.code === "analytics_range_too_large") {
         response.status(422).json({
           title: "Analytics range too large",

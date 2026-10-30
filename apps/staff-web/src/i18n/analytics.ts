@@ -63,6 +63,20 @@ export const analyticsLiterals: Record<string, string> = {
   "Share of revenue": "Tỷ trọng doanh thu",
   "Only a customer account on the sale counts; a walk-in counter sale has none. New customers count by their first paid purchase across the whole system.":
     "Chỉ tính khách có tài khoản trên chứng từ bán; khách vãng lai tại quầy không được tính. Khách mới tính theo lần mua đã trả tiền đầu tiên trên toàn hệ thống.",
+  "Sales targets": "Mục tiêu doanh số",
+  "The month's paid revenue against each site's target, all channels. A target is set by a Pharmacy Manager.":
+    "Doanh thu đã trả tiền của tháng so với mục tiêu từng cơ sở, mọi kênh. Quản lý nhà thuốc đặt mục tiêu.",
+  Month: "Tháng",
+  Target: "Mục tiêu",
+  "Not set": "Chưa đặt",
+  "Set target": "Đặt mục tiêu",
+  "Change target": "Đổi mục tiêu",
+  Progress: "Tiến độ",
+  Total: "Tổng",
+  "Set sales target": "Đặt mục tiêu doanh số",
+  "Monthly target (VND)": "Mục tiêu tháng (VND)",
+  "Whole dong, for the calendar month.": "Đơn vị đồng, cho tháng dương lịch.",
+  "Sales target saved.": "Đã lưu mục tiêu doanh số.",
   "Revenue by product group": "Doanh thu theo nhóm hàng",
   Uncategorized: "Chưa phân nhóm",
   "Grouped by the category the catalog holds today, so a changed category also moves past sales.":

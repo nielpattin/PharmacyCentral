@@ -42,6 +42,7 @@ export const employeePrefixes = [
   "/api/reports",
   "/api/prescriptions",
   "/api/counter-transactions",
+  "/api/sales-targets",
   "/api/admin",
   "/api/customers",
   "/api/sites",
@@ -135,6 +136,7 @@ export const employeeRoleRules = [
   { methods: "*", path: "/api/reports", match: "prefix", roles: [PHARMACY_MANAGER] },
   // Period analytics (design 0007): a Pharmacy Manager reads it; Platform Admin reads every route.
   { methods: "*", path: "/api/dashboard/analytics", match: "prefix", roles: [PHARMACY_MANAGER] },
+  { methods: "*", path: "/api/dashboard/sales-targets", match: "prefix", roles: [PHARMACY_MANAGER] },
   { methods: "*", path: "/api/dashboard", match: "prefix", roles: [PHARMACY_MANAGER, WAREHOUSE_STAFF] },
   { methods: "*", path: "/api/operations/dashboard", match: "prefix", roles: [PHARMACY_MANAGER, WAREHOUSE_STAFF] },
 
@@ -149,6 +151,8 @@ export const employeeRoleRules = [
   // withdrawal are not staff roles: the shopper is not an employee, so the role check does not apply to them.
   { methods: "READ", path: "/api/orders", match: "prefix", roles: [PHARMACIST, PHARMACY_MANAGER] },
   { methods: "*", path: "/api/orders/*/transition", match: "exact", roles: [PHARMACIST, PHARMACY_MANAGER] },
+  // Sales targets: a Pharmacy Manager sets a site's monthly goal; Platform Admin reads the report but writes nothing.
+  { methods: "*", path: "/api/sales-targets", match: "prefix", roles: [PHARMACY_MANAGER] },
 
   // Counter: the Pharmacist dispenses, takes payment and answers consultations. A Pharmacy Manager supervises and may
   // read the same records, never change them. Platform Admin reads them too.

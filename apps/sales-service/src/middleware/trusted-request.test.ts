@@ -67,6 +67,7 @@ const createApp = (): express.Express => {
   app.all("/delivery/calculate", echoActorHeaders);
   app.all("/orders", echoActorHeaders);
   app.all("/orders/:id/transition", echoActorHeaders);
+  app.all("/sales-targets", echoActorHeaders);
   app.all("/prescriptions", echoActorHeaders);
   app.all("/health/live", echoActorHeaders);
   return app;
@@ -326,6 +327,25 @@ describe("sales trusted request middleware", () => {
 
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("lets only a Pharmacy Manager write a sales target, never a Pharmacist or Platform Admin", async () => {
+    const { server, url } = await startServer(createApp());
+    activeServer = server;
+
+    const write = (roles: string[]) =>
+      fetch(`${url}/sales-targets`, {
+        method: "PUT",
+        headers: {
+          "x-internal-identity-context": signInternalIdentityContext(createTestContext({ roles }), identitySecret),
+          "content-type": "application/json",
+        },
+        body: "{}",
+      });
+
+    expect((await write(["Pharmacy Manager"])).status).toBe(200);
+    expect((await write(["Pharmacist"])).status).toBe(403);
+    expect((await write(["Platform Admin"])).status).toBe(403);
   });
 
   it("lets a shopper post a consultation, which carries no staff role", async () => {

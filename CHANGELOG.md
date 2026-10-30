@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**sales-service, operations-query-service, staff-web, deploy, docs**
+
+- Analytics gains **Mục tiêu doanh số**: a Pharmacy Manager sets a monthly revenue goal per site (new `sales_targets` table, migration `0016`, `PUT /api/sales-targets`), and `GET /api/dashboard/sales-targets` reports each site's paid revenue of the month, all channels, against it with the share reached. The section has its own month picker, reuses the page's site filter, and hides the write action from roles that cannot use it; Platform Admin reads. The write publishes `sales.target.set.v1`. The route is added to the gateway, ALB and edge policy with a Pharmacy Manager rule. Spec US7, BR-REPORT-018, design 0007.
+
 **sales-service, payment-service, operations-query-service, staff-web, docs**
 
 - Analytics now splits the identified customers into **Khách mới** and **Khách quay lại** by their first paid purchase ever. Sales documents gain nullable `paid_at` (sales migration `0014`), set when the first `payment.invoice.paid.v1` arrives — the payload now also carries `prescriptionId` — and kept after a refund; `GET /internal/analytics/customer-first-paid` answers that date for the period's customers. A customer is new when the date falls inside the period, returning when it is earlier. A database that already holds paid invoices needs `pnpm run backfill:paid-at` once. Spec US6, BR-REPORT-017, design 0007.

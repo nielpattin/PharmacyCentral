@@ -133,3 +133,22 @@ export type AnalyticsResponse = {
     };
   };
 };
+
+/** One site's row of the month's revenue-against-target report. */
+export type SalesTargetSiteRow = {
+  siteId: string;
+  siteName: string;
+  /** The month's goal; null when the site has none. */
+  target: Figure;
+  revenue: Figure;
+  /** `revenue / target`; null without a target. */
+  progress: Figure;
+};
+
+export type SalesTargetsResponse = {
+  month: string;
+  currency: string;
+  period: { from: string; to: string };
+  sites: SalesTargetSiteRow[];
+  totals: { target: Figure; revenue: Figure; progress: Figure };
+};

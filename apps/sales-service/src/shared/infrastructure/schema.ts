@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -250,5 +251,29 @@ export const outboxMessages = pgTable(
     index("outbox_messages_unpublished_idx")
       .on(table.occurredAt)
       .where(sql`${table.publishedAt} is null`),
+  ],
+);
+
+/**
+ * The revenue a site aims for in a calendar month. One row per (site, month); a manager upserts it. Analytics reads it
+ * through the service-only route and owns the revenue it is compared with.
+ */
+export const salesTargets = pgTable(
+  "sales_targets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    siteId: uuid("site_id").notNull(),
+    /** The first day of the month; the API writes and reads it as `YYYY-MM`. */
+    month: date("month").notNull(),
+    amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("VND"),
+    createdBy: uuid("created_by").notNull(),
+    updatedBy: uuid("updated_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("sales_targets_site_month_unique").on(table.siteId, table.month),
+    index("sales_targets_month_idx").on(table.month),
   ],
 );

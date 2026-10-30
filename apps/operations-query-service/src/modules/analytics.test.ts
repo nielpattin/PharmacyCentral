@@ -7,6 +7,7 @@ import {
   analyticsQuerySchema,
   averageOrderValue,
   buildDashboardAnalytics,
+  buildSalesTargetsReport,
   customerInsightsOf,
   daysOfInventoryOf,
   DEAD_STOCK_ITEM_LIMIT,
@@ -580,6 +581,93 @@ describe("customer insights", () => {
 
     expect(answer.newCustomerCount).toBe(2);
     expect(answer.returningCustomerCount).toBe(1);
+  });
+});
+
+describe("sales targets", () => {
+  const siteA = { id: SITE_A, name: "Nhà thuốc A" };
+  const siteB = { id: SITE_B, name: "Nhà thuốc B" };
+  const sale = (siteId: string | null, channel: "counter" | "online", revenue: number): Sale => ({
+    documentId: `sale-${siteId}-${channel}-${revenue}`,
+    channel,
+    siteId,
+    customerId: null,
+    createdAt: new Date("2026-10-09T10:00:00.000Z"),
+    revenue,
+  });
+
+  it("reports each site's paid revenue against its target, whatever the channel, and adds the rows up", () => {
+    const report = buildSalesTargetsReport({
+      month: "2026-10",
+      period: PERIOD,
+      siteId: null,
+      scope: undefined,
+      sites: [siteA, siteB],
+      targets: [{ siteId: SITE_A, month: "2026-10", amount: 1000, currency: "VND" }],
+      sales: [sale(SITE_A, "online", 500), sale(SITE_B, "counter", 300)],
+    });
+
+    expect(report.sites).toStrictEqual([
+      { siteId: SITE_A, siteName: "Nhà thuốc A", target: 1000, revenue: 500, progress: 0.5 },
+      { siteId: SITE_B, siteName: "Nhà thuốc B", target: null, revenue: 300, progress: null },
+    ]);
+    expect(report.totals).toStrictEqual({ target: 1000, revenue: 800, progress: 0.8 });
+    expect(report.month).toBe("2026-10");
+    expect(report.period).toStrictEqual({ from: PERIOD.from.toISOString(), to: PERIOD.to.toISOString() });
+  });
+
+  it("keeps the site filter and drops a target whose site is out of scope, never showing its revenue", () => {
+    const report = buildSalesTargetsReport({
+      month: "2026-10",
+      period: PERIOD,
+      siteId: null,
+      scope: [SITE_A],
+      sites: [siteA, siteB],
+      targets: [
+        { siteId: SITE_A, month: "2026-10", amount: 1000, currency: "VND" },
+        { siteId: SITE_B, month: "2026-10", amount: 5000, currency: "VND" },
+      ],
+      sales: [sale(SITE_A, "online", 500), sale(SITE_B, "counter", 300), sale(null, "online", 200)],
+    });
+
+    expect(report.sites).toStrictEqual([
+      { siteId: SITE_A, siteName: "Nhà thuốc A", target: 1000, revenue: 500, progress: 0.5 },
+    ]);
+    expect(report.totals).toStrictEqual({ target: 1000, revenue: 500, progress: 0.5 });
+  });
+
+  it("answers no progress when no site has a target, and lists every visible site", () => {
+    const report = buildSalesTargetsReport({
+      month: "2026-11",
+      period: PERIOD,
+      siteId: SITE_B,
+      scope: undefined,
+      sites: [siteA, siteB],
+      targets: [],
+      sales: [sale(SITE_B, "counter", 300)],
+    });
+
+    expect(report.sites).toStrictEqual([
+      { siteId: SITE_B, siteName: "Nhà thuốc B", target: null, revenue: 300, progress: null },
+    ]);
+    expect(report.totals).toStrictEqual({ target: 0, revenue: 300, progress: null });
+  });
+
+  it("answers zero revenue and no target for a month with no sale, never a missing figure", () => {
+    const report = buildSalesTargetsReport({
+      month: "2026-12",
+      period: PERIOD,
+      siteId: null,
+      scope: undefined,
+      sites: [siteA],
+      targets: [],
+      sales: [],
+    });
+
+    expect(report.sites).toStrictEqual([
+      { siteId: SITE_A, siteName: "Nhà thuốc A", target: null, revenue: 0, progress: null },
+    ]);
+    expect(report.totals).toStrictEqual({ target: 0, revenue: 0, progress: null });
   });
 });
 

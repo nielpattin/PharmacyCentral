@@ -8,17 +8,21 @@ import type { z } from "zod";
 import {
   basePricesAnswerSchema,
   buildDashboardAnalytics,
+  buildSalesTargetsReport,
   customerFirstPaidAnswerSchema,
   dispenseCostsAnswerSchema,
   paidInvoicesAnswerSchema,
   previousPeriodOf,
   productClassificationsAnswerSchema,
   salesDocumentsAnswerSchema,
+  joinSales,
+  salesTargetsAnswerSchema,
   sitesAnswerSchema,
   stockHealthAnswerSchema,
   type AnalyticsChannel,
   type DashboardAnalytics,
   type Period,
+  type SalesTargetsReport,
 } from "./analytics.ts";
 import type { PageCursor } from "./page-cursor.ts";
 
@@ -448,6 +452,58 @@ export class OperationsRepository {
       basePrices: prices,
       sites,
       products: products.products,
+    });
+  }
+
+  /**
+   * One month's revenue against the targets of the caller's sites (design 0007). The targets come from sales-service,
+   * the revenue from the same paid-invoice join as Analytics, and the site names from catalog-service. A failed read
+   * throws, so the section shows an error rather than a target without its revenue.
+   */
+  public async salesTargetsReport(
+    query: { month: string; from: Date; to: Date; siteId?: string | undefined },
+    catalogIdentity: CatalogIdentity,
+    siteIds: string[] | undefined,
+  ): Promise<SalesTargetsReport> {
+    const period: Period = { from: query.from, to: query.to };
+    const siteHeaders = siteIds ? { [ACTOR_SITE_IDS_HEADER]: siteIds.join(",") } : {};
+    const documentWindow = new URLSearchParams({ from: period.from.toISOString(), to: period.to.toISOString() });
+    const invoiceWindow = new URLSearchParams({ since: period.from.toISOString() });
+    const targetWindow = new URLSearchParams({ month: query.month });
+    const [documents, invoices, targets, sites] = await Promise.all([
+      this.readAnswer(
+        this.options.salesUrl,
+        `/internal/analytics/sales-documents?${documentWindow.toString()}`,
+        { ...internalServiceHeaders(), ...siteHeaders },
+        salesDocumentsAnswerSchema,
+      ),
+      this.readAnswer(
+        this.options.paymentUrl,
+        `/internal/analytics/paid-invoices?${invoiceWindow.toString()}`,
+        internalServiceHeaders(),
+        paidInvoicesAnswerSchema,
+      ),
+      this.readAnswer(
+        this.options.salesUrl,
+        `/internal/analytics/sales-targets?${targetWindow.toString()}`,
+        { ...internalServiceHeaders(), ...siteHeaders },
+        salesTargetsAnswerSchema,
+      ),
+      this.readAnswer(
+        this.options.catalogUrl,
+        "/sites",
+        { "x-internal-identity-context": catalogIdentity() },
+        sitesAnswerSchema,
+      ),
+    ]);
+    return buildSalesTargetsReport({
+      month: query.month,
+      period,
+      siteId: query.siteId ?? null,
+      scope: siteIds,
+      sites,
+      targets: targets.targets,
+      sales: joinSales(documents.documents, invoices.invoices),
     });
   }
 

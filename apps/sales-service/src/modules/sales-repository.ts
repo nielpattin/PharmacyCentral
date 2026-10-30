@@ -16,7 +16,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 
-import type { CustomerFirstPaid, SalesDocument } from "../contracts/sales.ts";
+import type { CustomerFirstPaid, SalesDocument, SalesTarget } from "../contracts/sales.ts";
 import type { SalesDatabase } from "../shared/infrastructure/database.ts";
 import {
   afterCursor,
@@ -36,6 +36,7 @@ import {
   outboxMessages,
   prescriptionLines,
   prescriptions,
+  salesTargets,
   idempotencyRecords,
 } from "../shared/infrastructure/schema.ts";
 import { transitionOrder, type OrderStatus } from "./orders/domain/order-status.ts";
@@ -1021,6 +1022,70 @@ export class SalesRepository {
       customerId: row.customerId,
       firstPaidAt: (row.firstPaidAt instanceof Date ? row.firstPaidAt : new Date(row.firstPaidAt)).toISOString(),
     }));
+  }
+
+  /** The targets a caller may see for one `YYYY-MM` month, narrowed to the sites it names. */
+  public async listSalesTargets(input: { month: string; siteIds?: string[] | undefined }): Promise<SalesTarget[]> {
+    if (input.siteIds?.length === 0) return [];
+    const rows = await this.database.db
+      .select({
+        siteId: salesTargets.siteId,
+        month: salesTargets.month,
+        amount: salesTargets.amount,
+        currency: salesTargets.currency,
+      })
+      .from(salesTargets)
+      .where(
+        and(
+          eq(salesTargets.month, `${input.month}-01`),
+          input.siteIds ? inArray(salesTargets.siteId, input.siteIds) : undefined,
+        ),
+      )
+      .orderBy(asc(salesTargets.siteId));
+    return rows.map((row) => ({
+      siteId: row.siteId,
+      month: row.month.slice(0, 7),
+      amount: Number(row.amount),
+      currency: row.currency,
+    }));
+  }
+
+  /** Writes one site's target for a month, replacing the amount when the pair already has one. */
+  public async setSalesTarget(input: {
+    siteId: string;
+    month: string;
+    amount: number;
+    actorId: string;
+  }): Promise<SalesTarget> {
+    const amount = input.amount.toFixed(2);
+    const [row] = await this.database.db
+      .insert(salesTargets)
+      .values({
+        siteId: input.siteId,
+        month: `${input.month}-01`,
+        amount,
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      })
+      .onConflictDoUpdate({
+        target: [salesTargets.siteId, salesTargets.month],
+        set: { amount, updatedBy: input.actorId, updatedAt: new Date() },
+      })
+      .returning();
+    if (!row) throw new Error("The sales target was not written");
+    await this.appendEvent("sales.target.set.v1", row.id, {
+      targetId: row.id,
+      siteId: row.siteId,
+      month: input.month,
+      amount: Number(row.amount),
+      actorId: input.actorId,
+    });
+    return {
+      siteId: row.siteId,
+      month: input.month,
+      amount: Number(row.amount),
+      currency: row.currency,
+    };
   }
 
   private async findCart(database: SalesDatabase["db"], customerId: string) {

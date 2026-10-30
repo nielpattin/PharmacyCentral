@@ -63,6 +63,16 @@ export const customerFirstPaidAnswerSchema = z.object({
   customers: z.array(z.object({ customerId: uuid, firstPaidAt: isoDateTime })),
 });
 
+/** The month of a sales target, `YYYY-MM`. */
+export const salesTargetMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+
+/** `GET /internal/analytics/sales-targets` of sales-service: one row per site with a target in the month. */
+export const salesTargetsAnswerSchema = z.object({
+  targets: z.array(
+    z.object({ siteId: uuid, month: salesTargetMonthSchema, amount: z.number().nonnegative(), currency: z.string() }),
+  ),
+});
+
 /** `GET /internal/analytics/stock-health` of inventory-service: quantities in base units, one row per (site, product). */
 export const stockHealthAnswerSchema = z.object({
   rows: z.array(
@@ -125,6 +135,7 @@ export const productClassificationsAnswerSchema = z.object({
 export type SalesDocument = z.output<typeof salesDocumentsAnswerSchema>["documents"][number];
 export type PaidInvoice = z.output<typeof paidInvoicesAnswerSchema>["invoices"][number];
 export type CustomerFirstPaid = z.output<typeof customerFirstPaidAnswerSchema>["customers"][number];
+export type SalesTarget = z.output<typeof salesTargetsAnswerSchema>["targets"][number];
 export type DispenseCost = z.output<typeof dispenseCostsAnswerSchema>["rows"][number];
 export type StockHealthRow = z.output<typeof stockHealthAnswerSchema>["rows"][number];
 export type BasePrice = z.output<typeof basePricesAnswerSchema>[number];
@@ -478,6 +489,88 @@ export const customerInsightsOf = (
     purchasesPerCustomer: identifiedCustomerCount > 0 ? identifiedSales / identifiedCustomerCount : null,
     newCustomerCount,
     returningCustomerCount: identifiedCustomerCount - newCustomerCount,
+  };
+};
+
+/** The revenue and paid-sale count of each named site in the period, under the site filter, all channels. */
+export const siteRevenueOf = (
+  sales: readonly Sale[],
+  period: Period,
+  filter: SiteFilter,
+): Array<{ siteId: string; revenue: number; orderCount: number }> => {
+  const rows = new Map<string, { revenue: number; orderCount: number }>();
+  for (const sale of sales) {
+    if (sale.siteId === null || !saleInScope(sale, period, filter, "all")) continue;
+    const row = rows.get(sale.siteId) ?? { revenue: 0, orderCount: 0 };
+    row.revenue += sale.revenue;
+    row.orderCount += 1;
+    rows.set(sale.siteId, row);
+  }
+  return [...rows].map(([siteId, row]) => ({ siteId, ...row }));
+};
+
+/** One site's month: its goal (null when none is set), the revenue it took, and the share of the goal reached. */
+export type SalesTargetRow = {
+  siteId: string;
+  siteName: string;
+  target: number | null;
+  revenue: number;
+  /** `revenue / target`; null without a target, never 0 for a missing one. */
+  progress: number | null;
+};
+
+export type SalesTargetsReport = {
+  month: string;
+  currency: "VND";
+  period: { from: string; to: string };
+  sites: SalesTargetRow[];
+  totals: { target: number; revenue: number; progress: number | null };
+};
+
+/**
+ * The month's revenue against each site's target (BR-REPORT-018). Every site the caller may see is a row, whether or
+ * not it has a target or a sale, so a manager can set the goal of a quiet site. Revenue counts the paid invoices of
+ * the sales created in the month, whatever the channel; a sale with no site belongs to no site row. A target of a
+ * site the catalog no longer lists is dropped. The totals add the rows; a revenue of 0 is answered, never "missing".
+ */
+export const buildSalesTargetsReport = (input: {
+  month: string;
+  period: Period;
+  siteId: string | null;
+  scope: readonly string[] | undefined;
+  sites: readonly SiteName[];
+  targets: readonly SalesTarget[];
+  sales: readonly Sale[];
+}): SalesTargetsReport => {
+  const filter: SiteFilter = { siteId: input.siteId, scope: input.scope };
+  const revenue = new Map(siteRevenueOf(input.sales, input.period, filter).map((row) => [row.siteId, row.revenue]));
+  const targets = new Map(input.targets.map((target) => [target.siteId, target.amount]));
+  const sites = input.sites
+    .filter((site) => siteVisible(site.id, filter))
+    .map((site) => {
+      const target = targets.get(site.id) ?? null;
+      const siteRevenue = revenue.get(site.id) ?? 0;
+      return {
+        siteId: site.id,
+        siteName: site.name,
+        target,
+        revenue: siteRevenue,
+        progress: target !== null && target > 0 ? siteRevenue / target : null,
+      };
+    })
+    .sort((left, right) => left.siteName.localeCompare(right.siteName));
+  const totalTarget = sites.reduce((sum, row) => sum + (row.target ?? 0), 0);
+  const totalRevenue = sites.reduce((sum, row) => sum + row.revenue, 0);
+  return {
+    month: input.month,
+    currency: "VND",
+    period: { from: input.period.from.toISOString(), to: input.period.to.toISOString() },
+    sites,
+    totals: {
+      target: totalTarget,
+      revenue: totalRevenue,
+      progress: totalTarget > 0 ? totalRevenue / totalTarget : null,
+    },
   };
 };
 

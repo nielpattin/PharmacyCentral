@@ -19,6 +19,7 @@ export const apiServiceForPath = (path: string): string | undefined => {
     case "delivery":
     case "prescriptions":
     case "counter-transactions":
+    case "sales-targets":
       return "sales-service";
     case "payments":
       return "payment-service";

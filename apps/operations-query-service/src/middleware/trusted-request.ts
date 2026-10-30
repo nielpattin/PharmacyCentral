@@ -208,6 +208,7 @@ const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/reports", roles: ["Pharmacy Manager"] },
   { methods: ["*"], path: "/operations/dashboard", roles: ["Pharmacy Manager", "Warehouse Staff"] },
   { methods: ["*"], path: "/dashboard/analytics", roles: ["Pharmacy Manager"] },
+  { methods: ["*"], path: "/dashboard/sales-targets", roles: ["Pharmacy Manager"] },
   { methods: ["*"], path: "/dashboard", roles: ["Pharmacy Manager", "Warehouse Staff"] },
 ];
 

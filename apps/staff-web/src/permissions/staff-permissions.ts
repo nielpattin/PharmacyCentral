@@ -189,6 +189,7 @@ export const staffActions = {
     reason: "Only Warehouse Staff or the person who requested it can cancel a replenishment request.",
   },
   "actionPlan.create": { roles: manager, reason: "Only a Pharmacy Manager can create action plans." },
+  "salesTarget.set": { roles: manager, reason: "Only a Pharmacy Manager can set a sales target." },
   "actionPlan.reassign": {
     roles: ["Platform Admin", "Pharmacy Manager"],
     reason: "Only a Pharmacy Manager or Platform Admin can reassign an action plan.",

@@ -209,4 +209,26 @@ describe("SalesRepository sales documents", () => {
     const all = await repository.listSalesDocuments({ from, to });
     expect(all.find((document) => document.id === prescriptionIds.inSiteB)?.customerId).toBeNull();
   });
+
+  it("writes a site's monthly target once and replaces the amount on a second write", async () => {
+    await repository.setSalesTarget({ siteId: siteA, month: "2026-10", amount: 1_000_000, actorId: actor });
+    const replaced = await repository.setSalesTarget({
+      siteId: siteA,
+      month: "2026-10",
+      amount: 1_500_000,
+      actorId: actor,
+    });
+    await repository.setSalesTarget({ siteId: siteB, month: "2026-10", amount: 2_000_000, actorId: actor });
+
+    expect(replaced).toStrictEqual({ siteId: siteA, month: "2026-10", amount: 1_500_000, currency: "VND" });
+    await expect(repository.listSalesTargets({ month: "2026-10" })).resolves.toStrictEqual([
+      { siteId: siteA, month: "2026-10", amount: 1_500_000, currency: "VND" },
+      { siteId: siteB, month: "2026-10", amount: 2_000_000, currency: "VND" },
+    ]);
+    await expect(repository.listSalesTargets({ month: "2026-10", siteIds: [siteB] })).resolves.toStrictEqual([
+      { siteId: siteB, month: "2026-10", amount: 2_000_000, currency: "VND" },
+    ]);
+    await expect(repository.listSalesTargets({ month: "2026-10", siteIds: [] })).resolves.toStrictEqual([]);
+    await expect(repository.listSalesTargets({ month: "2026-11" })).resolves.toStrictEqual([]);
+  });
 });

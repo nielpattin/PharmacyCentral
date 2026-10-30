@@ -812,6 +812,10 @@ Một giao dịch bán là của khách đã nhận diện khi **chứng từ b�
 
 Khách đã nhận diện của kỳ được chia theo **lần mua đã trả tiền đầu tiên** của họ trên toàn hệ thống: khách mới khi lần đó nằm trong kỳ, khách quay lại khi lần đó trước kỳ. Mốc đầu tiên là `paidAt` trên chứng từ bán, đặt khi hóa đơn đầu tiên của chứng từ được trả và **không bị xóa khi hoàn tiền**, vì việc mua đầu tiên vẫn đã xảy ra. Bộ lọc cơ sở chọn khách của kỳ, không đổi mốc lịch sử: khách đã mua ở cơ sở khác trước kỳ vẫn là khách quay lại. Khi chứng từ chưa có mốc (dữ liệu trước khi có cột mà chưa chạy backfill), khách tính là mới. Hai con số cộng lại bằng số khách đã nhận diện của BR-REPORT-016.
 
+### BR-REPORT-018. Mục tiêu doanh số theo cơ sở và tháng
+
+Mỗi cơ sở có tối đa một mục tiêu doanh số cho một tháng dương lịch, tính bằng đồng, lớn hơn 0. Chỉ **Quản lý nhà thuốc** được đặt hoặc đổi mục tiêu, và chỉ cho cơ sở trong phạm vi của mình; Quản trị nền tảng chỉ đọc ([ADR 0019](adr/0019-platform-admin-reads-and-administers.md)). Ghi lại cùng cặp cơ sở và tháng thì thay số tiền, không tạo dòng thứ hai. Doanh thu so với mục tiêu là tổng hóa đơn đã trả của các chứng từ bán được tạo trong tháng, **mọi kênh**, gồm phí giao hàng, theo đúng định nghĩa doanh thu của BR-REPORT-008; một giao dịch không có cơ sở không thuộc dòng mục tiêu nào. Tỷ lệ đạt là doanh thu chia mục tiêu; cơ sở chưa có mục tiêu thì tỷ lệ null, không phải 0. Tổng của báo cáo là tổng các dòng cơ sở mà người xem được thấy; mục tiêu của cơ sở đã bị xóa khỏi danh mục không vào báo cáo.
+
 ### BR-FIN-001. Tài chính là đọc, không ghi sổ kế toán
 
 Operations-query-service tổng hợp từ sự kiện và số liệu tồn. Không ghi sổ kế toán bên ngoài.

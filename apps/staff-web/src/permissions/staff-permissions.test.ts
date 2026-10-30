@@ -64,6 +64,7 @@ const admitted: Record<StaffAction, readonly StaffRole[]> = {
   "replenishment.decide": [WAREHOUSE],
   "replenishment.cancel": [WAREHOUSE],
   "actionPlan.create": [PM],
+  "salesTarget.set": [PM],
   "actionPlan.reassign": [PM],
   "catalog.write": [PM],
   "catalog.site.create": [],

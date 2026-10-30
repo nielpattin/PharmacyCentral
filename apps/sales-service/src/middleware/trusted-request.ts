@@ -89,6 +89,7 @@ export const DEFAULT_EMPLOYEE_PREFIXES: readonly string[] = [
   "/reports",
   "/prescriptions",
   "/counter-transactions",
+  "/sales-targets",
   "/admin",
   "/customers",
 ];
@@ -212,6 +213,7 @@ const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/prescriptions/intake-credential", roles: ["Platform Admin"] },
   { methods: ["READ"], path: "/orders", roles: ["Pharmacist", "Pharmacy Manager"] },
   { methods: ["*"], path: "/orders/*/transition", exact: true, roles: ["Pharmacist", "Pharmacy Manager"] },
+  { methods: ["WRITE"], path: "/sales-targets", roles: ["Pharmacy Manager"] },
   { methods: ["READ"], path: "/prescriptions", roles: ["Pharmacist", "Pharmacy Manager"] },
   { methods: ["WRITE"], path: "/prescriptions", roles: ["Pharmacist"] },
   { methods: ["READ"], path: "/counter-transactions", roles: ["Pharmacist", "Pharmacy Manager"] },

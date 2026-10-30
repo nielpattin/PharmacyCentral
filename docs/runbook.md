@@ -131,7 +131,7 @@ Both local gateways forward paths with identical patterns: `gateway` (container 
 - `GET /api/products` exactly (the product list) -> `search-service:3009`
 - `/api/sites*`, `/api/storage-locations*`, `/api/products*` (every other method and path under it), `/api/suppliers*`, `/api/pricing*`, `/api/stores*`, `/api/availability*` -> `catalog-service:3002`
 - `/api/procurement*`, `/api/inventory*` -> `inventory-service:3004`
-- `/api/carts*`, `/api/orders*`, `/api/delivery*`, `/api/prescriptions*`, `/api/counter-transactions*` -> `sales-service:3005`
+- `/api/carts*`, `/api/orders*`, `/api/delivery*`, `/api/prescriptions*`, `/api/counter-transactions*`, `/api/sales-targets*` -> `sales-service:3005`
 - `/api/payments*` -> `payment-service:3006`
 - `/api/operations*`, `/api/dashboard*`, `/api/finance*`, `/api/audit*`, `/api/reports*` -> `operations-query-service:3007`
 - `/api/system*` -> `ops-console-service:3010`
@@ -224,6 +224,8 @@ pnpm run backfill:paid-at
 ```
 
 It reads the paid and refunded invoices from `payment_service`, writes the earliest payment date per document, and prints how many sales rows now carry one. It needs the compose Postgres (`docker compose exec postgres psql`), like `seed:demo`, and is safe to run again.
+
+Sales `0015` indexes the first-payment lookup (`customer_id`, `paid_at` where paid), and `0016` adds `sales_targets`: one row per site and month, unique on `(site_id, month)`. Neither needs a backfill; a month starts with no targets until a Pharmacy Manager sets one.
 
 ### Database roles
 

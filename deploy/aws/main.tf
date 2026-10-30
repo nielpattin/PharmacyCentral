@@ -61,7 +61,7 @@ locals {
     }
     sales-service = {
       priority = 50
-      paths    = ["/carts*", "/orders*", "/delivery*", "/prescriptions*", "/counter-transactions*"]
+      paths    = ["/carts*", "/orders*", "/delivery*", "/prescriptions*", "/counter-transactions*", "/sales-targets*"]
       service  = "sales-service"
     }
     payments = {

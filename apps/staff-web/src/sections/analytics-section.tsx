@@ -43,6 +43,8 @@ import type {
   ProductRevenueRow,
   SalesChannel,
   SalesSiteRow,
+  SalesTargetSiteRow,
+  SalesTargetsResponse,
 } from "./analytics/contract.ts";
 import {
   formatCount,
@@ -57,6 +59,8 @@ import {
   formatDayLabel,
   isPeriodPreset,
   lastDayBefore,
+  monthOf,
+  monthRange,
   periodBounds,
   periodRangeError,
   presetRange,
@@ -64,10 +68,18 @@ import {
   type PeriodPreset,
   type PeriodRangeError,
 } from "./analytics/period.ts";
-import { ANALYTICS_CHANNELS, ANALYTICS_QUERY_KEY, analyticsPath, isAnalyticsChannel } from "./analytics/query.ts";
+import {
+  ANALYTICS_CHANNELS,
+  ANALYTICS_QUERY_KEY,
+  analyticsPath,
+  isAnalyticsChannel,
+  SALES_TARGETS_QUERY_KEY,
+  salesTargetsPath,
+} from "./analytics/query.ts";
+import { SalesTargetDialog, type SalesTargetDraft } from "./analytics/target-dialog.tsx";
 import { moneyLocale } from "./sales/shared.tsx";
 
-const LIST_DEFAULTS = { period: "30d", from: "", to: "", site: "all", channel: "all" } as const;
+const LIST_DEFAULTS = { period: "30d", from: "", to: "", site: "all", channel: "all", month: "" } as const;
 const NO_BOUNDS = { from: "", to: "" };
 
 const PERIOD_LABELS: Record<PeriodPreset, string> = {
@@ -175,6 +187,18 @@ export const AnalyticsSection = (): React.JSX.Element => {
     enabled: rangeError === undefined,
   });
 
+  // The target report has its own month: a monthly goal cannot ride the page's 7/30/90-day period. Its revenue is the
+  // whole calendar month of that month, all channels, under the page's site filter.
+  const targetMonth =
+    list.values.month !== "" && monthRange(list.values.month) ? list.values.month : monthOf(new Date());
+  const targetRange = monthRange(targetMonth);
+  const targetBounds = targetRange ? periodBounds(targetRange) : NO_BOUNDS;
+  const targetsQuery = useQuery({
+    queryKey: [...SALES_TARGETS_QUERY_KEY, targetMonth, siteFilter ?? "all"],
+    queryFn: () => readOne<SalesTargetsResponse>(salesTargetsPath(targetBounds, siteFilter, targetMonth)),
+    enabled: targetRange !== undefined,
+  });
+
   // After a failed request no figure from an earlier answer stays on screen: every figure reads "—" beside the alert.
   const data = analyticsQuery.isError ? undefined : analyticsQuery.data;
   const loading = rangeError === undefined && analyticsQuery.isPending;
@@ -187,8 +211,11 @@ export const AnalyticsSection = (): React.JSX.Element => {
   const grossProfit = data?.kpis?.grossProfit;
   const grossProfitCoverage = grossProfit?.available ? partialCoveragePercent(grossProfit.coverage?.current) : null;
   const planGate = useCan("actionPlan.create");
+  const targetGate = useCan("salesTarget.set");
   const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
   const planDrawer = useRetainedTarget(planDraft);
+  const [targetDraft, setTargetDraft] = useState<SalesTargetDraft>();
+  const targetDrawer = useRetainedTarget(targetDraft);
   const deadStockDays = inventory?.deadStock?.deadStockDays;
 
   const selectPeriod = (next: PeriodPreset): void => {
@@ -220,6 +247,9 @@ export const AnalyticsSection = (): React.JSX.Element => {
   const categoryRevenueRows: CategoryRevenueRow[] = data?.breakdown?.byCategory ?? [];
   const prescriptionRevenueRows: PrescriptionRevenueRow[] = data?.breakdown?.byPrescription ?? [];
   const customers = data?.customers;
+  const targetRows: SalesTargetSiteRow[] = targetsQuery.isError ? [] : (targetsQuery.data?.sites ?? []);
+  const targetTotals = targetsQuery.isError ? undefined : targetsQuery.data?.totals;
+  const targetsLoading = targetsQuery.isPending;
   const goodsRevenue = data?.breakdown?.goodsRevenue;
 
   const currentDays =
@@ -775,12 +805,106 @@ export const AnalyticsSection = (): React.JSX.Element => {
           )}
         />
       </section>
+      <section className="grid gap-2">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="grid gap-1">
+            <Heading>Sales targets</Heading>
+            <p className="text-xs text-muted">
+              {translateText(
+                "The month's paid revenue against each site's target, all channels. A target is set by a Pharmacy Manager.",
+              )}
+            </p>
+          </div>
+          <div className="w-44">
+            <Field label={translateText("Month")}>
+              <Input
+                type="month"
+                value={targetMonth}
+                onChange={(event) => list.setValues({ month: event.target.value }, { history: "replace" })}
+              />
+            </Field>
+          </div>
+        </div>
+        {targetsQuery.isError ? (
+          <Alert variant="danger">
+            {translateText(targetsQuery.error instanceof Error ? targetsQuery.error.message : "The request failed.")}
+          </Alert>
+        ) : null}
+        <DataTable<SalesTargetSiteRow>
+          storageKey="staff:analytics:sales-targets"
+          labels={dataTableLabels()}
+          interactive
+          exportCsv={{ filename: "analytics-sales-targets.csv" }}
+          loading={targetsLoading}
+          rows={targetRows}
+          getKey={(row) => row.siteId}
+          empty={translateText("No records found")}
+          columns={withActionColumn<DataColumn<SalesTargetSiteRow>>(
+            [
+              { key: "siteName", label: translateText("Site"), truncate: 32 },
+              {
+                key: "target",
+                label: translateText("Target"),
+                align: "right",
+                render: (row) => (row.target === null ? translateText("Not set") : money(row.target)),
+              },
+              {
+                key: "revenue",
+                label: translateText("Revenue"),
+                align: "right",
+                render: (row) => money(row.revenue),
+              },
+              {
+                key: "progress",
+                label: translateText("Progress"),
+                align: "right",
+                render: (row) => formatRate(row.progress, locale),
+              },
+              {
+                key: "actions",
+                label: translateText("Actions"),
+                pinned: "right",
+                enableSorting: false,
+                render: (row) => (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setTargetDraft({
+                        siteId: row.siteId,
+                        siteName: row.siteName,
+                        month: targetMonth,
+                        amount: row.target,
+                      })
+                    }
+                  >
+                    {translateText(row.target === null ? "Set target" : "Change target")}
+                  </Button>
+                ),
+              },
+            ],
+            targetGate.allowed && targetRows.length > 0,
+          )}
+        />
+        <p className="text-xs text-muted">
+          {translateText("Total")}: {translateText("Target")} {money(targetTotals?.target)} · {translateText("Revenue")}{" "}
+          {money(targetTotals?.revenue)} · {translateText("Progress")} {formatRate(targetTotals?.progress, locale)}
+        </p>
+      </section>
       {planDrawer ? (
         <CreatePlanDrawer
           key={planDrawer.key}
           open={planDraft !== undefined}
           draft={planDrawer.target}
           onClose={() => setPlanDraft(undefined)}
+        />
+      ) : null}
+      {targetDrawer ? (
+        <SalesTargetDialog
+          key={targetDrawer.key}
+          open={targetDraft !== undefined}
+          draft={targetDrawer.target}
+          onClose={() => setTargetDraft(undefined)}
         />
       ) : null}
     </div>

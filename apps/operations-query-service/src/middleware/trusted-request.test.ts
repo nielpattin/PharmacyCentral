@@ -126,4 +126,10 @@ describe("trusted request role restatement", () => {
     expect(refused.status).toBe(403);
     expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
   });
+
+  it("keeps the targets report to a Pharmacy Manager and Platform Admin, out of Warehouse Staff's dashboard", async () => {
+    expect((await callAs(["Pharmacy Manager"], "/dashboard/sales-targets")).status).toBe(200);
+    expect((await callAs(["Platform Admin"], "/dashboard/sales-targets")).status).toBe(200);
+    expect((await callAs(["Warehouse Staff"], "/dashboard/sales-targets")).status).toBe(403);
+  });
 });
