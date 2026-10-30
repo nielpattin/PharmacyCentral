@@ -7,7 +7,7 @@ This document describes how internal teams and shoppers use the two Pharmacy Cen
 - **Staff Web** (`http://staff.pharmacy.localhost/`, or `http://localhost:5302/` without the named URLs) for employees: pharmacists, pharmacy managers, warehouse staff and platform administrators.
 - **Customer Web** (`http://customer.pharmacy.localhost/`, or `http://localhost:5301/` without the named URLs) for shoppers: product search, cart, checkout, orders, prescriptions, account and the shopping assistant.
 
-Screens are described as the code renders them. A sidebar item lists only for roles that may open it; the labels are the ones shown on screen.
+Screens are described as the code renders them. A workspace or page lists only for roles that may open it; the labels are the ones shown on screen. A page keeps its tabs inside the page.
 
 ## Sign in
 
@@ -16,7 +16,7 @@ Screens are described as the code renders them. A sidebar item lists only for ro
 1. Start the local system: `pnpm run stack:up` for the full stack in containers, or `pnpm run infra:up` followed by `pnpm dev` for development mode. Run `pnpm run urls:up` once per session to enable the named URLs.
 2. Open `http://staff.pharmacy.localhost/`.
 3. Enter your employee email and password, then choose **Sign in**.
-4. The sidebar shows only the workspaces permitted for your roles.
+4. The sidebar shows only the workspaces and pages permitted for your roles.
 
 Customer accounts cannot sign in to Staff Web (it answers "Employee account required").
 
@@ -40,11 +40,12 @@ Every list in Staff Web follows the same conventions.
 | `/` | Focus the search box |
 | `n` | Open the create form of the page |
 | `Ctrl`/`Cmd` + `S` | Save the form you are editing |
+| `Ctrl`/`Cmd` + `K` | Search pages |
 | `[` | Collapse or expand the sidebar |
 | `?` | Show the shortcuts of the current page |
 | `Esc` | Close the dialog or drawer |
 
-Shortcuts other than `Ctrl`/`Cmd` + `S` and `Esc` are ignored while you type in a field.
+Shortcuts other than `Ctrl`/`Cmd` + `S`, `Ctrl`/`Cmd` + `K` and `Esc` are ignored while you type in a field.
 
 ### Customer Web
 
@@ -84,14 +85,18 @@ Staff Web has four business roles. Access is decided by role, and non-admin user
 
 | Role | Sidebar workspaces |
 | --- | --- |
-| Platform Admin | Every sidebar workspace except Pharmacist overview and the five Data import entries, including Governance (Users, Audit, AI integrations) and System. Its work screens carry no action buttons; it only creates and deletes sites in Sites, and only reassigns in Action plans |
-| Pharmacy Manager | Dashboard, Analytics, Action plans, Prescriptions, Online orders, Procurement, Reporting, Finance, Sites, Storage locations, Catalog, Search synonyms, Units, Pricing, Suppliers, Data import, Transfers, Replenishment, Stocktake, Inventory, Adjustments, Returns and removals, Quality |
-| Pharmacist | Pharmacist overview, Action plans, Prescriptions, Online orders, Replenishment, Search synonyms, Inventory, Quality |
-| Warehouse Staff | Dashboard, Action plans, Transfers, Replenishment, Receiving, Stocktake, Inventory, Adjustments, Returns and removals, Quality, Data import (Stock only) |
+| Platform Admin | Overview (Dashboard, Analytics), Action plans, Pharmacy counter (Prescriptions, Online orders), Inventory, Purchasing, Finance, Catalog (Products, Units, Pricing, Search synonyms, Sites, Storage locations, Suppliers), Administration (Users & audit, AI integrations, System). Its work screens carry no action buttons; it only creates and deletes sites in Sites, and only reassigns in Action plans |
+| Pharmacy Manager | Overview (Dashboard, Analytics), Action plans, Pharmacy counter (Prescriptions, Online orders), Inventory, Purchasing, Finance, Catalog (Products, Units, Pricing, Search synonyms, Sites, Storage locations, Suppliers) |
+| Pharmacist | Action plans, Pharmacy counter (Prescriptions, Online orders), Inventory, Search synonyms |
+| Warehouse Staff | Dashboard, Action plans, Inventory, Purchasing |
+
+The sidebar has two levels: a workspace and the pages in it. A page keeps its tabs inside the page, so **Inventory**, **Purchasing**, **Finance**, **Users & audit** and **Prescriptions** are one sidebar row each. A workspace with only one page for the signed-in role shows that page directly (for example Warehouse Staff see **Purchasing**, and a Pharmacist sees **Search synonyms**). Only the active workspace is expanded; **Administration** stays pinned at the bottom. **Search pages** at the top of the sidebar, or `Ctrl/Cmd+K`, finds every page the role may open.
+
+**Data import** is not a sidebar group. Each list shows an **Import** action to the role that owns the dataset: Products, Sites, Storage locations and Suppliers for a Pharmacy Manager, and **Import opening balances** on Inventory for Warehouse Staff.
 
 Permissions per role, including which actions each role may perform, are defined in [Business rules](business-rules.md#4-quy-t%E1%BA%AFc-role-v%C3%A0-ph%C3%A2n-quy%E1%BB%81n).
 
-A user who holds only the Pharmacist role lands on **Pharmacist overview** after sign-in. Dashboard is the landing page for Platform Admins, Pharmacy Managers and Warehouse Staff.
+A user who holds only the Pharmacist role lands on **Pharmacy counter > Prescriptions**, with **Counter transactions** selected. Dashboard is the landing page for Platform Admins, Pharmacy Managers and Warehouse Staff.
 
 A Pharmacy Manager sees the prescription, counter and consultation records as a read-only view with the notice "View only: dispensing, payments and consultation replies need the Pharmacist role."
 
@@ -130,7 +135,7 @@ A figure that could not be read shows "—", never 0. A sale counts once its inv
 
 ### Catalog, units and pricing
 
-The catalog is split across three sidebar pages, each read by Platform Admin and written by a Pharmacy Manager.
+The **Catalog** workspace holds Products, Units, Pricing, Search synonyms, Sites, Storage locations and Suppliers. Platform Admin reads each page; a Pharmacy Manager writes it.
 
 - **Catalog** lists products (SKU, name, category, manufacturer). **Create product** and the edit action take SKU, barcode, name, category, manufacturer, generic name, active ingredient, indications, strength, dosage form, package description, registration number, prescription-required flag (`true`/`false`), image URL or uploaded image, status, notes and active flag. A product can be deleted after confirmation.
 - **Units** lists the units of a selected product. **Add product unit** sets the unit name, barcode, conversion factor to the base unit, and the base, default sale and default purchase flags (`true`/`false`).
@@ -153,7 +158,7 @@ Prices are recorded per product unit in the catalog service.
 
 ### Data import
 
-**Data import** (a Pharmacy Manager sees **Sites**, **Storage locations**, **Suppliers** and **Products and prices**; Warehouse Staff see **Stock**, the opening balances. Platform Admin sees none of them and creates sites one at a time in **Sites**) has one sidebar entry per dataset, in this dependency order:
+**Data import** is not a sidebar group. A Pharmacy Manager gets **Import** on **Sites**, **Storage locations**, **Suppliers** and **Products**; Warehouse Staff get **Import opening balances** on **Inventory**. Platform Admin has no import action and creates sites one at a time in **Sites**. The datasets keep this dependency order:
 
 1. **Sites**
 2. **Storage locations**
@@ -219,7 +224,7 @@ Only released batches that have not passed their expiry date count as sellable. 
 
 ## Inventory operations
 
-**Inventory** (Warehouse Staff) is a tabbed workspace. The sidebar items **Inventory**, **Adjustments**, **Transfers**, **Stocktake**, **Returns and removals** and **Replenishment** each open it on the matching tab. Two rows pick the view: the group (**Stock**, **Supply**, **Control**), then a tab inside it. A row with a single choice is hidden, so a role that reads only some tabs sees fewer.
+**Inventory** is one page in the **Inventory** workspace, with all stock operations as tabs. There is no separate sidebar row for Adjustments, Transfers, Stocktake, Returns or Replenishment. Two rows pick the view: the group (**Stock**, **Supply**, **Control**), then a tab inside it. A row with a single choice is hidden, so a role that reads only some tabs sees fewer.
 
 | Group | Tab | What it does |
 | --- | --- | --- |
@@ -250,7 +255,7 @@ Pharmacists and Platform Admin see Inventory read-only; movements, adjustments a
 
 ## Prescriptions and counter
 
-**Prescriptions** (Pharmacist, Pharmacy Manager) is titled **Prescriptions and counter sales**. The sidebar item **Pharmacist overview** opens the same page on the **Counter transactions** tab.
+**Prescriptions** (Pharmacist, Pharmacy Manager) is one page in the **Pharmacy counter** workspace, titled **Prescriptions and counter sales**. A Pharmacist lands on its **Counter transactions** tab after sign-in; there is no separate **Pharmacist overview** sidebar row.
 
 Tabs:
 
@@ -386,13 +391,13 @@ The **Trợ lý tư vấn** button floats on every Customer Web page and keeps i
 
 For a per-role script over the full demo dataset, see [Demo walkthrough](demo-walkthrough.md); run `pnpm run demo:reset` the same day. The short path below uses the accounts above, with `pnpm run seed:default` and `pnpm run seed:demo` already run.
 
-1. **Platform Admin**: sign in to Staff Web. Open **Users** to review accounts and access, **Audit** for the activity log, **AI integrations** for the four AI feature cards, and **System** for the service health. Every operational screen opens read-only. In **Sites**, **Create site** adds one by hand: the demo seed creates its four sites this way.
-2. **Pharmacy Manager**: open **Data import** and import **Storage locations**, **Suppliers** and **Products and prices**. Then open **Sites**, **Storage locations**, **Suppliers** and **Catalog**, then **Units** and **Pricing** to see sale units and price drafts.
-3. **Pharmacy Manager** (`manager2@pharmacycentral.vn`): open **Procurement** and create a purchase order. The first Pharmacy Manager approves it, because nobody approves their own order.
-4. **Warehouse Staff**: open **Receiving** and record the goods receipt against that order. **Pharmacist** then opens **Quality** and releases the new batch.
-5. **Warehouse Staff**: open **Inventory** to see balances and movements; open **Transfers** to create and ship a transfer; open **Returns and removals** and **Stocktake**; open **Adjustments** to submit an adjustment for a Pharmacy Manager to approve.
-6. **Pharmacist**: sign in, open **Pharmacist overview**, then **Prescriptions**, choose **Create prescription**, then **Dispense** on its row. In **Counter transactions**, create the invoice and confirm cash.
-7. **Pharmacy Manager**: open **Finance** and **Reporting** to review the summary, invoices and report rows, and refund a paid online order in **Invoices**.
+1. **Platform Admin**: sign in to Staff Web. Open **Administration**, then **Users & audit** for accounts and the activity log, **AI integrations** for the four AI feature cards, and **System** for the service health. Every operational screen opens read-only. In **Catalog > Sites**, **Create site** adds one by hand: the demo seed creates its four sites this way.
+2. **Pharmacy Manager**: open **Catalog > Storage locations** and choose **Import storage locations**; do the same for **Suppliers** and **Products**. Then open **Units** and **Pricing** to see sale units and price drafts.
+3. **Pharmacy Manager** (`manager2@pharmacycentral.vn`): open **Purchasing**, then **Purchase orders**, and create a purchase order. The first Pharmacy Manager approves it, because nobody approves their own order.
+4. **Warehouse Staff**: open **Purchasing > Goods receipts** and record the goods receipt against that order. **Pharmacist** then opens **Inventory > Batches** and releases the new batch.
+5. **Warehouse Staff**: open **Inventory** to see balances and movements. Use the **Transfers** tab to create and ship a transfer, the **Returns** and **Stocktake** tabs, and the **Adjustments** tab to submit an adjustment for a Pharmacy Manager to approve.
+6. **Pharmacist**: sign in, open **Pharmacy counter > Prescriptions**, choose **Create prescription**, then **Dispense** on its row. Open the **Counter transactions** tab, create the invoice and confirm cash.
+7. **Pharmacy Manager**: open **Finance** and review the **Summary**, **Invoices** and **Reports** tabs, and refund a paid online order in **Invoices**.
 8. **Pharmacist**: open **Search synonyms**, submit a group, then sign in as another Pharmacist or the Pharmacy Manager to approve it; the proposer can never approve. Platform Admin only reads the list.
 9. **Customer**: open Customer Web at `http://customer.pharmacy.localhost/`, search for a product, add it to the cart, sign in, and check out with pickup or delivery. Open **Đơn hàng** (`/don-hang`) and the **Đơn của tôi** tab to track it, and try **Gửi đơn thuốc** and the shopping assistant.
 

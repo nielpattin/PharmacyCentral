@@ -243,7 +243,6 @@ export const governanceLiterals: Record<string, string> = {
   "API routes": "Đường dẫn API",
   Dashboards: "Bảng điều khiển Grafana",
   Resources: "Tài nguyên",
-  Overview: "Tổng quan",
   "Service catalog unavailable.": "Không tải được danh mục dịch vụ.",
   "This service has no catalog entry.": "Dịch vụ này không có trong danh mục.",
   Routes: "Đường dẫn API",

@@ -3,32 +3,26 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import {
-  BadgeDollarSign,
   BarChart3,
-  Building2,
-  ClipboardList,
   ChevronDown,
+  ChevronRight,
   FileText,
-  ListChecks,
   LayoutDashboard,
+  ListChecks,
   LogOut,
-  MapPin,
   Menu,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
-  Ruler,
-  Server,
+  Search,
   Settings,
-  Keyboard,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
   Tags,
-  TrendingUp,
   Upload,
   X,
+  Keyboard,
 } from "lucide-react";
 
 import { Alert, Breadcrumb, Button, Field, Input, PageHeader, ToastProvider, type BreadcrumbItem } from "@pharmacy/ui";
@@ -42,6 +36,7 @@ import {
   useSession,
 } from "./auth.ts";
 import { ConfirmProvider } from "./components/confirm.tsx";
+import { CommandPalette } from "./components/command-palette.tsx";
 import { ForcedPasswordChange } from "./components/forced-password-change.tsx";
 import { HotkeysListener } from "./components/hotkeys-listener.tsx";
 import { PageActionsContext } from "./components/page-actions.tsx";
@@ -49,9 +44,19 @@ import { ShortcutsDialog } from "./components/shortcuts-dialog.tsx";
 import { useHotkey } from "./hooks/useHotkey.ts";
 import { useMountEffect } from "./hooks/useMountEffect.ts";
 import { useStoredState } from "./hooks/useStoredState.ts";
+import { formatShortcut } from "./lib/hotkeys.ts";
 import { StaffNotFoundPage } from "./pages/NotFoundPage.tsx";
 import { toggleLanguage, translateText, useLanguage } from "./i18n.ts";
 import { datasets } from "./import-datasets.ts";
+import {
+  landingSection,
+  pageForSection,
+  paletteEntries,
+  visibleWorkspaces,
+  type VisiblePage,
+  type VisibleWorkspace,
+  type WorkspaceId,
+} from "./navigation/workspaces.ts";
 import { AiIntegrationsSection } from "./sections/ai-integrations-section.tsx";
 import { AccountSection } from "./sections/account-section.tsx";
 import { ActionPlansSection } from "./sections/action-plans-section.tsx";
@@ -75,9 +80,6 @@ import { request, setIdentityContextsEnabled, setSessionEndedListener } from "./
 import { governanceTabPaths, pathForSection, sectionFromPath, type Section, type StaffPath } from "./router.ts";
 import "./styles.css";
 
-export type NavItem = { key: Section; label: string; icon: React.JSX.Element };
-type NavGroup = { id: string; label: string; items: NavItem[] };
-
 /** A staff account as `/api/auth/me` and `/api/auth/login` answer it. */
 type StaffAccount = {
   id: string;
@@ -91,98 +93,37 @@ type StaffAccount = {
 
 const sidebarCollapsedStorageKey = "pharmacy-central:sidebar-collapsed";
 
-/** Sections that open the inventory workspace, each on its own first tab. */
-const INVENTORY_SECTIONS: ReadonlySet<Section> = new Set([
-  "transfers",
-  "replenishment",
-  "stocktake",
-  "inventory",
-  "adjustments",
-  "returns",
-  "quality",
-]);
-
-/** The sidebar item that stands for each inventory tab, so the highlight follows the tab on screen. */
-const INVENTORY_TAB_SECTION: Record<InventoryTab, Section> = {
-  Balances: "inventory",
-  Batches: "quality",
-  Movements: "inventory",
-  Transfers: "transfers",
-  Replenishment: "replenishment",
-  Returns: "returns",
-  Adjustments: "adjustments",
-  Stocktake: "stocktake",
+const workspaceIcons: Record<WorkspaceId, React.JSX.Element> = {
+  overview: <LayoutDashboard size={16} strokeWidth={2} />,
+  actionPlans: <ListChecks size={16} strokeWidth={2} />,
+  counter: <FileText size={16} strokeWidth={2} />,
+  inventory: <Package size={16} strokeWidth={2} />,
+  purchasing: <ShoppingBag size={16} strokeWidth={2} />,
+  finance: <BarChart3 size={16} strokeWidth={2} />,
+  catalog: <Tags size={16} strokeWidth={2} />,
+  administration: <ShieldCheck size={16} strokeWidth={2} />,
+  dataImport: <Upload size={16} strokeWidth={2} />,
 };
 
-const navGroups: NavGroup[] = [
-  {
-    id: "operations",
-    label: "Operations",
-    items: [
-      { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} strokeWidth={2} /> },
-      { key: "analytics", label: "Analytics", icon: <TrendingUp size={16} strokeWidth={2} /> },
-      { key: "actionPlans", label: "Action plans", icon: <ListChecks size={16} strokeWidth={2} /> },
-      { key: "pharmacistOverview", label: "Pharmacist overview", icon: <FileText size={16} strokeWidth={2} /> },
-      { key: "prescriptions", label: "Prescriptions", icon: <FileText size={16} strokeWidth={2} /> },
-      { key: "orders", label: "Online orders", icon: <ShoppingBag size={16} strokeWidth={2} /> },
-      { key: "transfers", label: "Transfers", icon: <Package size={16} strokeWidth={2} /> },
-      { key: "replenishment", label: "Replenishment", icon: <Package size={16} strokeWidth={2} /> },
-      { key: "procurement", label: "Procurement", icon: <ShoppingBag size={16} strokeWidth={2} /> },
-      { key: "reporting", label: "Reporting", icon: <BarChart3 size={16} strokeWidth={2} /> },
-      { key: "finance", label: "Finance", icon: <BarChart3 size={16} strokeWidth={2} /> },
-    ],
-  },
-  {
-    id: "master-data",
-    label: "Master data",
-    items: [
-      { key: "sites", label: "Sites", icon: <Building2 size={16} strokeWidth={2} /> },
-      { key: "storageLocations", label: "Storage locations", icon: <MapPin size={16} strokeWidth={2} /> },
-      { key: "catalog", label: "Catalog", icon: <Tags size={16} strokeWidth={2} /> },
-      { key: "searchSynonyms", label: "Search synonyms", icon: <Sparkles size={16} strokeWidth={2} /> },
-      { key: "units", label: "Units", icon: <Ruler size={16} strokeWidth={2} /> },
-      { key: "pricing", label: "Pricing", icon: <BadgeDollarSign size={16} strokeWidth={2} /> },
-      { key: "supplier", label: "Suppliers", icon: <Building2 size={16} strokeWidth={2} /> },
-    ],
-  },
-  {
-    id: "data-import",
-    label: "Data import",
-    items: [
-      { key: "importProducts", label: datasets.catalog.label, icon: <Upload size={16} strokeWidth={2} /> },
-      { key: "importSites", label: datasets.sites.label, icon: <Upload size={16} strokeWidth={2} /> },
-      {
-        key: "importLocations",
-        label: datasets.storageLocations.label,
-        icon: <Upload size={16} strokeWidth={2} />,
-      },
-      { key: "importSuppliers", label: datasets.suppliers.label, icon: <Upload size={16} strokeWidth={2} /> },
-      { key: "importStock", label: datasets.openingBalances.label, icon: <Upload size={16} strokeWidth={2} /> },
-    ],
-  },
-  {
-    id: "warehouse",
-    label: "Warehouse",
-    items: [
-      { key: "receiving", label: "Receiving", icon: <ShoppingBag size={16} strokeWidth={2} /> },
-      { key: "stocktake", label: "Stocktake", icon: <ClipboardList size={16} strokeWidth={2} /> },
-      { key: "inventory", label: "Inventory", icon: <Package size={16} strokeWidth={2} /> },
-      { key: "adjustments", label: "Adjustments", icon: <Package size={16} strokeWidth={2} /> },
-      { key: "returns", label: "Returns and removals", icon: <Package size={16} strokeWidth={2} /> },
-      { key: "quality", label: "Quality", icon: <ShieldCheck size={16} strokeWidth={2} /> },
-    ],
-  },
-  {
-    id: "governance",
-    label: "Governance",
-    items: [
-      { key: "users", label: "Users", icon: <ShieldCheck size={16} strokeWidth={2} /> },
-      { key: "audit", label: "Audit", icon: <ShieldCheck size={16} strokeWidth={2} /> },
-      { key: "aiIntegrations", label: "AI integrations", icon: <Sparkles size={16} strokeWidth={2} /> },
-      { key: "system", label: "System", icon: <Server size={16} strokeWidth={2} /> },
-    ],
-  },
-];
+/** The tab a route opens before its URL names one. */
+const defaultTabBySection: Partial<Record<Section, string>> = {
+  pharmacistOverview: "Counter transactions",
+  procurement: "Purchase orders",
+  finance: "Summary",
+  receiving: "Goods receipts",
+  reporting: "Reports",
+};
+
+/** The tab each inventory route opens, so the breadcrumb names the view even before `?tab=` is written. */
+const inventoryDefaultTab: Partial<Record<Section, InventoryTab>> = {
+  inventory: "Balances",
+  transfers: "Transfers",
+  replenishment: "Replenishment",
+  stocktake: "Stocktake",
+  adjustments: "Adjustments",
+  returns: "Returns",
+  quality: "Batches",
+};
 
 const BrandBlock = (): React.JSX.Element => (
   <div className="brand">
@@ -201,13 +142,15 @@ const StaffApp = (): React.JSX.Element => {
   const location = useLocation();
   const queryClient = useQueryClient();
   const roles = session.roles ?? [];
-  const visibleNavGroups = navGroups
-    .map((group) => ({ ...group, items: group.items.filter((item) => canAccessSection(item.key, roles)) }))
-    .filter((group) => group.items.length > 0);
-  const firstVisibleSection = visibleNavGroups[0]?.items[0]?.key ?? "dashboard";
+  const workspaces = visibleWorkspaces(roles);
   const requestedSection = sectionFromPath(location.pathname);
   const activeSection =
-    requestedSection && canAccessSection(requestedSection, roles) ? requestedSection : firstVisibleSection;
+    requestedSection && canAccessSection(requestedSection, roles) ? requestedSection : landingSection(roles);
+  const activePage = pageForSection(activeSection);
+  const activeVisibleWorkspace =
+    activePage === undefined ? undefined : workspaces.find((workspace) => workspace.id === activePage.workspace.id);
+  const activeVisiblePage = activeVisibleWorkspace?.pages.find((page) => page.entries.includes(activeSection));
+  const pageTitle = activePage?.page.label ?? "Account settings";
 
   const governanceTab = location.pathname === governanceTabPaths.users ? "Users" : "Audit";
   const [email, setEmail] = useState("");
@@ -217,12 +160,21 @@ const StaffApp = (): React.JSX.Element => {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useStoredState(sidebarCollapsedStorageKey, z.boolean(), false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [actionsTarget, setActionsTarget] = useState<HTMLElement | null>(null);
   const profileMenuRef = useRef<HTMLDetailsElement>(null);
   const search = useSearch({ strict: false }) as Record<string, unknown>;
   const authenticated = session.authenticated;
 
   useHotkey("[", () => setSidebarCollapsed(!sidebarCollapsed), { label: "Toggle sidebar", when: authenticated });
+  useHotkey(
+    "mod+k",
+    (event) => {
+      event.preventDefault();
+      setPaletteOpen(true);
+    },
+    { label: "Open page search", when: authenticated, allowWhileEditing: true },
+  );
   useHotkey("?", () => setShortcutsOpen(true), { label: "Show keyboard shortcuts", when: authenticated });
   useHotkey("escape", () => setMobileNavOpen(false), {
     label: "Close navigation",
@@ -358,33 +310,34 @@ const StaffApp = (): React.JSX.Element => {
   if (requestedSection !== activeSection) return <Navigate to={pathForSection(activeSection)} replace />;
 
   const governanceTabLabel = activeSection === "users" || activeSection === "audit" ? governanceTab : undefined;
-  // Several sidebar items open the one inventory workspace, and its tab can move to another item's subject. The tab
-  // then names the page, so the title and the breadcrumb leaf agree with what is on screen.
-  const inventoryTab =
-    INVENTORY_SECTIONS.has(activeSection) &&
+  const inventorySectionTab = inventoryDefaultTab[activeSection];
+  const requestedInventoryTab =
+    inventorySectionTab !== undefined &&
     typeof search.tab === "string" &&
     isInventoryTab(search.tab) &&
     tabGate(INVENTORY_TAB_ACTIONS[search.tab], session).allowed
       ? search.tab
       : undefined;
-  const searchTab = typeof search.tab === "string" && search.tab !== "" ? search.tab : governanceTabLabel;
-  const tabSection = inventoryTab === undefined ? undefined : INVENTORY_TAB_SECTION[inventoryTab];
-  // The item shown as current: the tab's own item when this role has it, else the one that was opened.
-  const navSection =
-    tabSection !== undefined && visibleNavGroups.some((group) => group.items.some((item) => item.key === tabSection))
-      ? tabSection
-      : activeSection;
-  const activeGroup = visibleNavGroups.find((group) => group.items.some((item) => item.key === navSection));
-  // The account page is opened from the profile menu, so it has no sidebar item and no group.
-  const activeLabel =
-    activeGroup?.items.find((item) => item.key === navSection)?.label ??
-    (navSection === "account" ? "Account settings" : "Dashboard");
-  const tabValue = INVENTORY_SECTIONS.has(activeSection) ? inventoryTab : searchTab;
-  const currentTab = tabValue && tabValue !== activeLabel ? tabValue : undefined;
+  const inventoryTab =
+    requestedInventoryTab ??
+    (inventorySectionTab !== undefined && tabGate(INVENTORY_TAB_ACTIONS[inventorySectionTab], session).allowed
+      ? inventorySectionTab
+      : undefined);
+  const searchTab =
+    inventorySectionTab === undefined && typeof search.tab === "string" && search.tab !== "" ? search.tab : undefined;
+  const currentTab = inventoryTab ?? governanceTabLabel ?? searchTab ?? defaultTabBySection[activeSection];
+  const showWorkspaceCrumb =
+    activePage !== undefined &&
+    (activePage.workspace.hidden === true || (activeVisibleWorkspace !== undefined && !activeVisibleWorkspace.flat));
   const breadcrumbItems: BreadcrumbItem[] = [
-    ...(activeGroup ? [{ label: translateText(activeGroup.label) }] : []),
-    { label: translateText(activeLabel), ...(currentTab ? { href: pathForSection(navSection) } : {}) },
-    ...(currentTab ? [{ label: translateText(currentTab) }] : []),
+    ...(showWorkspaceCrumb && activePage ? [{ label: translateText(activePage.workspace.label) }] : []),
+    {
+      label: translateText(pageTitle),
+      ...(currentTab !== undefined && currentTab !== pageTitle && activeVisiblePage
+        ? { href: activeVisiblePage.path }
+        : {}),
+    },
+    ...(currentTab !== undefined && currentTab !== pageTitle ? [{ label: translateText(currentTab) }] : []),
   ];
 
   const renderSection = (): React.JSX.Element => {
@@ -460,6 +413,79 @@ const StaffApp = (): React.JSX.Element => {
     }
   };
 
+  // A plain anchor, not a router Link: the sidebar's active page follows the route, and a new tab must still work.
+  const navigateTo =
+    (path: StaffPath) =>
+    (event: React.MouseEvent<HTMLAnchorElement>): void => {
+      setMobileNavOpen(false);
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      event.preventDefault();
+      void navigate({ to: path });
+    };
+
+  const renderWorkspace = (workspace: VisibleWorkspace): React.JSX.Element | null => {
+    const primary = workspace.pages[0];
+    if (primary === undefined) return null;
+    const active = workspace.pages.some((page) => page.entries.includes(activeSection));
+    if (workspace.flat) {
+      return (
+        <a
+          key={workspace.id}
+          href={primary.path}
+          className={`sidebar-nav-link${active ? " active" : ""}`}
+          title={sidebarCollapsed ? translateText(primary.label) : undefined}
+          onClick={navigateTo(primary.path)}
+          {...(active ? { "aria-current": "page" as const } : {})}
+        >
+          {active ? <span className="sidebar-nav-active-indicator" aria-hidden="true" /> : null}
+          <span className="sidebar-nav-icon" aria-hidden="true">
+            {workspaceIcons[workspace.id]}
+          </span>
+          <span className="sidebar-nav-label">{translateText(primary.label)}</span>
+        </a>
+      );
+    }
+
+    const childrenId = `sidebar-children-${workspace.id}`;
+    return (
+      <div key={workspace.id} className={`sidebar-workspace${active ? " active" : ""}`}>
+        <a
+          href={primary.path}
+          className="sidebar-nav-link sidebar-parent"
+          title={sidebarCollapsed ? translateText(workspace.label) : undefined}
+          onClick={navigateTo(primary.path)}
+          aria-expanded={active}
+          aria-controls={childrenId}
+        >
+          <span className="sidebar-nav-icon" aria-hidden="true">
+            {workspaceIcons[workspace.id]}
+          </span>
+          <span className="sidebar-nav-label">{translateText(workspace.label)}</span>
+          <span className="sidebar-chevron" aria-hidden="true">
+            {active ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+          </span>
+        </a>
+        <div id={childrenId} className="sidebar-children" hidden={!active}>
+          {workspace.pages.map((page: VisiblePage) => {
+            const pageActive = page.entries.includes(activeSection);
+            return (
+              <a
+                key={page.id}
+                href={page.path}
+                className={`sidebar-child-link${pageActive ? " active" : ""}`}
+                onClick={navigateTo(page.path)}
+                {...(pageActive ? { "aria-current": "page" as const } : {})}
+              >
+                {pageActive ? <span className="sidebar-nav-active-indicator" aria-hidden="true" /> : null}
+                <span className="sidebar-nav-label">{translateText(page.label)}</span>
+              </a>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="app-shell">
       <div className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
@@ -491,41 +517,27 @@ const StaffApp = (): React.JSX.Element => {
             <X size={18} strokeWidth={2} aria-hidden="true" />
             <span>{translateText("Close navigation")}</span>
           </button>
+          <button
+            type="button"
+            className="sidebar-search"
+            onClick={() => setPaletteOpen(true)}
+            aria-label={translateText("Open page search")}
+            title={formatShortcut("mod+k")}
+          >
+            <Search size={15} strokeWidth={2} aria-hidden="true" />
+            <span className="sidebar-search-label">{translateText("Search pages")}</span>
+            <kbd className="sidebar-search-key">{formatShortcut("mod+k")}</kbd>
+          </button>
           <div className="sidebar-scroll">
-            {visibleNavGroups.map((group) => (
-              <section key={group.id} className="sidebar-section">
-                <div className="sidebar-group-label">{translateText(group.label)}</div>
-                <nav className="sidebar-nav" aria-label={translateText(group.label)}>
-                  {group.items.map((item) => {
-                    // A plain anchor, not a router Link: the router marks the link whose path matches as current,
-                    // which would ignore the tab-aware navSection.
-                    const active = navSection === item.key;
-                    return (
-                      <a
-                        key={item.key}
-                        href={pathForSection(item.key)}
-                        className={active ? "active" : undefined}
-                        title={sidebarCollapsed ? translateText(item.label) : undefined}
-                        onClick={(event) => {
-                          setMobileNavOpen(false);
-                          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)
-                            return;
-                          event.preventDefault();
-                          void navigate({ to: pathForSection(item.key) });
-                        }}
-                        {...(active ? { "aria-current": "page" as const } : {})}
-                      >
-                        {active ? <span className="sidebar-nav-active-indicator" aria-hidden="true" /> : null}
-                        <span className="sidebar-nav-icon" aria-hidden="true">
-                          {item.icon}
-                        </span>
-                        <span className="sidebar-nav-label">{translateText(item.label)}</span>
-                      </a>
-                    );
-                  })}
-                </nav>
-              </section>
-            ))}
+            <div className="sidebar-groups">
+              {workspaces.filter((workspace) => !workspace.pinned).map((workspace) => renderWorkspace(workspace))}
+            </div>
+            {workspaces.some((workspace) => workspace.pinned) ? (
+              <div className="sidebar-pinned">
+                <div className="sidebar-divider" aria-hidden="true" />
+                {workspaces.filter((workspace) => workspace.pinned).map((workspace) => renderWorkspace(workspace))}
+              </div>
+            ) : null}
           </div>
         </aside>
         {mobileNavOpen ? (
@@ -547,6 +559,15 @@ const StaffApp = (): React.JSX.Element => {
               aria-label={translateText("Open navigation")}
             >
               <Menu size={19} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="topbar-icon-button"
+              onClick={() => setPaletteOpen(true)}
+              aria-label={translateText("Open page search")}
+              title={formatShortcut("mod+k")}
+            >
+              <Search size={17} strokeWidth={2} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -591,7 +612,7 @@ const StaffApp = (): React.JSX.Element => {
           <PageActionsContext.Provider value={actionsTarget}>
             <div className="content-panel">
               <PageHeader
-                title={translateText(inventoryTab ?? activeLabel)}
+                title={translateText(pageTitle)}
                 breadcrumb={
                   <Breadcrumb
                     items={breadcrumbItems}
@@ -620,6 +641,16 @@ const StaffApp = (): React.JSX.Element => {
         </main>
       </div>
       <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <CommandPalette
+        key={paletteOpen ? "open" : "closed"}
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        entries={paletteEntries(roles)}
+        onSelect={(path) => {
+          setPaletteOpen(false);
+          void navigate({ to: path });
+        }}
+      />
     </div>
   );
 };

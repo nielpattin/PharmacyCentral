@@ -6,6 +6,7 @@ import { DataTable, type Column } from "../../components/data-table.tsx";
 import { withActionColumn } from "../../lib/action-column.ts";
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
 import { GatedButton } from "../../components/gated-button.tsx";
+import { ImportAction } from "../../components/import-action.tsx";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
@@ -125,7 +126,12 @@ export const BalancesTab = (): React.JSX.Element => {
     <div ref={rootRef} className="grid gap-3">
       <ListError error={list.error} />
       <DataTable
-        toolbarExtra={<SavedViewsMenu pageKey="inventory:balances" defaults={BALANCE_DEFAULTS} />}
+        toolbarExtra={
+          <div className="flex items-center gap-2">
+            <ImportAction section="importStock" label="Import opening balances" />
+            <SavedViewsMenu pageKey="inventory:balances" defaults={BALANCE_DEFAULTS} />
+          </div>
+        }
         rows={balances}
         columns={withActionColumn(columns, balances.some(canPlanRow))}
         loading={list.isLoading}

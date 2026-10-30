@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useSession } from "../../auth.ts";
 import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
+import { ImportAction } from "../../components/import-action.tsx";
 import { PageActions } from "../../components/page-actions.tsx";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
@@ -118,6 +119,7 @@ export const ProductsPage = (): React.JSX.Element => {
   return (
     <>
       <PageActions>
+        <ImportAction section="importProducts" label="Import products" />
         {canWrite ? (
           <Button size="sm" onClick={() => setDrawer({ kind: "create" })}>
             {translateText("Create product")}

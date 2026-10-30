@@ -571,7 +571,7 @@ Recovery: fix the cause the logs show. The alert clears after 10 minutes without
 
 ## System page (ops-console-service)
 
-staff-web has a System page in the Governance group. Only a Platform Admin sees it. It talks to `ops-console-service` (port 3010), which has no database and writes nothing. The page has four tabs, held in the URL as `?tab=`: Services, Messaging, API routes and Dashboards. The header (status line, refresh) stays on every tab; the window picker shows on Services only.
+staff-web has a System page in the Administration workspace. Only a Platform Admin sees it. It talks to `ops-console-service` (port 3010), which has no database and writes nothing. The page has four tabs, held in the URL as `?tab=`: Services, Messaging, API routes and Dashboards. The header (status line, refresh) stays on every tab; the window picker shows on Services only.
 
 The tabs show:
 

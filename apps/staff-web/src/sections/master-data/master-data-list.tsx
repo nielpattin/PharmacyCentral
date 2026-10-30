@@ -6,6 +6,7 @@ import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { withActionColumn } from "../../lib/action-column.ts";
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
+import { ImportAction } from "../../components/import-action.tsx";
 import { PageActions } from "../../components/page-actions.tsx";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useDebounced } from "../../hooks/useDebounced.ts";
@@ -23,6 +24,12 @@ import { sameValues, type MasterDataConfig, type RecordValues } from "./master-d
 import { MasterRecordForm } from "./master-record-form.tsx";
 
 const LIST_DEFAULTS = { q: "" } as const;
+
+const importByKind = {
+  sites: { section: "importSites", label: "Import sites" },
+  locations: { section: "importLocations", label: "Import storage locations" },
+  suppliers: { section: "importSuppliers", label: "Import suppliers" },
+} as const;
 const SEARCH_DEBOUNCE_MS = 250;
 
 // The record open in the drawer. `baseline` is what was loaded or opened blank, so dirty means "differs from it".
@@ -206,6 +213,7 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
   return (
     <>
       <PageActions>
+        <ImportAction {...importByKind[config.id]} />
         {createGate.allowed ? (
           <Button size="sm" onClick={openCreate}>
             {translateText(config.createLabel)}

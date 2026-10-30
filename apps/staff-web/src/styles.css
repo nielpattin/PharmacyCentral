@@ -61,7 +61,7 @@ a {
 
 .sidebar {
   display: flex;
-  flex: 0 0 284px;
+  flex: 0 0 264px;
   flex-direction: column;
   padding: 12px;
   background: linear-gradient(180deg, rgba(26, 31, 39, 0.98), rgba(16, 20, 28, 0.98));
@@ -105,9 +105,9 @@ a {
 .sidebar-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  display: grid;
-  align-content: start;
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding: 0 4px 8px 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -127,33 +127,94 @@ a {
   background-clip: content-box;
 }
 
-.sidebar-group-label {
-  padding: 0 8px;
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 34px;
+  margin: 0 0 8px;
+  padding: 0 9px;
+  border: 1px solid var(--sidebar-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--sidebar-muted);
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: left;
 }
 
-.sidebar-nav {
-  display: grid;
+.sidebar-search:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--sidebar-text);
+}
+
+.sidebar-search:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.sidebar-search-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-search-key {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--sidebar-line);
+  border-radius: 4px;
+  color: var(--sidebar-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.sidebar-groups {
+  display: flex;
+  flex-direction: column;
   gap: 2px;
-  margin-top: 6px;
 }
 
-.sidebar-nav a {
+.sidebar-pinned {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.sidebar-divider {
+  height: 1px;
+  margin: 0 8px 8px;
+  background: var(--sidebar-line);
+}
+
+.sidebar-nav-link,
+.sidebar-child-link {
   position: relative;
   isolation: isolate;
   overflow: hidden;
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 40px;
-  padding: 0 20px;
+  min-height: 36px;
+  padding: 0 12px;
   border-radius: 8px;
   color: var(--sidebar-text);
   line-height: 1.2;
+}
+
+.sidebar-nav-link {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.sidebar-chevron {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+  color: var(--sidebar-muted);
 }
 
 .sidebar-nav-active-indicator {
@@ -185,14 +246,53 @@ a {
   flex-shrink: 0;
 }
 
-.sidebar-nav a.active {
-  background: rgba(255, 255, 255, 0.08);
+.sidebar-nav-link.active {
   color: #ffffff;
   font-weight: 700;
 }
 
-.sidebar-nav a.active .sidebar-nav-icon {
+.sidebar-nav-link.active .sidebar-nav-icon {
   color: #ffffff;
+}
+
+.sidebar-workspace.active > .sidebar-parent {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.sidebar-workspace.active > .sidebar-parent .sidebar-nav-icon,
+.sidebar-workspace.active > .sidebar-parent .sidebar-chevron {
+  color: #ffffff;
+}
+
+.sidebar-children {
+  display: grid;
+  gap: 1px;
+  margin: 1px 0 4px 21px;
+  padding-left: 8px;
+  border-left: 1px solid var(--sidebar-line);
+}
+
+.sidebar-children[hidden] {
+  display: none;
+}
+
+.sidebar-child-link {
+  min-height: 32px;
+  padding: 0 10px;
+  color: var(--sidebar-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.sidebar-child-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--sidebar-text);
+}
+
+.sidebar-child-link.active {
+  color: #ffffff;
+  font-weight: 700;
 }
 
 .sidebar-head {
@@ -271,8 +371,10 @@ a {
   }
 
   .app.sidebar-collapsed .brand > div,
-  .app.sidebar-collapsed .sidebar-group-label,
-  .app.sidebar-collapsed .sidebar-nav-label {
+  .app.sidebar-collapsed .sidebar-nav-label,
+  .app.sidebar-collapsed .sidebar-search-label,
+  .app.sidebar-collapsed .sidebar-search-key,
+  .app.sidebar-collapsed .sidebar-chevron {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -281,9 +383,18 @@ a {
     white-space: nowrap;
   }
 
-  .app.sidebar-collapsed .sidebar-nav a {
+  .app.sidebar-collapsed .sidebar-search,
+  .app.sidebar-collapsed .sidebar-nav-link {
     justify-content: center;
     padding: 0;
+  }
+
+  .app.sidebar-collapsed .sidebar-search {
+    margin-inline: 4px;
+  }
+
+  .app.sidebar-collapsed .sidebar-children {
+    display: none;
   }
 }
 
@@ -602,7 +713,8 @@ a {
    The raw shell controls (sidebar links, topbar buttons, profile menu) get the same press timing as the shared
    components. Tokens and the reasoning live in packages/ui/src/weight.css. */
 
-.sidebar-nav a,
+.sidebar-nav-link,
+.sidebar-child-link,
 .sidebar-collapse-toggle,
 .topbar-icon-button,
 .profile-menu-item {
@@ -612,7 +724,8 @@ a {
     border-color var(--weight-hover) var(--weight-ease-out);
 }
 
-.sidebar-nav a:hover:not(.active) {
+.sidebar-nav-link:hover:not(.active),
+.sidebar-child-link:hover:not(.active) {
   background: rgba(255, 255, 255, 0.07);
 }
 
@@ -620,7 +733,8 @@ a {
   background: var(--surface-soft);
 }
 
-.sidebar-nav a:active:not(.active) {
+.sidebar-nav-link:active:not(.active),
+.sidebar-child-link:active:not(.active) {
   background: rgba(255, 255, 255, 0.14);
 }
 
@@ -628,7 +742,8 @@ a {
   background: var(--line);
 }
 
-.sidebar-nav a:active,
+.sidebar-nav-link:active,
+.sidebar-child-link:active,
 .sidebar-collapse-toggle:active,
 .topbar-icon-button:active,
 .profile-trigger:active,
@@ -637,7 +752,8 @@ a {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .sidebar-nav a,
+  .sidebar-nav-link,
+  .sidebar-child-link,
   .sidebar-collapse-toggle,
   .topbar-icon-button,
   .profile-trigger {
@@ -649,7 +765,8 @@ a {
       var(--weight-spring);
   }
 
-  .sidebar-nav a:active,
+  .sidebar-nav-link:active,
+  .sidebar-child-link:active,
   .sidebar-collapse-toggle:active,
   .topbar-icon-button:active,
   .profile-trigger:active {
@@ -668,7 +785,7 @@ a {
     transition: transform var(--weight-release) var(--weight-spring);
   }
 
-  .sidebar-nav a:hover .sidebar-nav-icon {
+  .sidebar-nav-link:hover .sidebar-nav-icon {
     transform: translateX(3px);
   }
 

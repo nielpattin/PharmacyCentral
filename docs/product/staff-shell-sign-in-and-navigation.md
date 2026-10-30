@@ -16,7 +16,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 
 - Employees with one of four roles: Platform Admin, Pharmacy Manager, Pharmacist, Warehouse Staff ([BR-AUTH-001](../business-rules.md)). An employee with no role is not allowed (Decision 9).
 - A customer account is refused at the staff sign-in with "Cần tài khoản nhân viên để vào khu vực này." and keeps no session ([BR-AUTH-006](../business-rules.md)).
-- Entry: `http://staff.pharmacy.localhost/` ([user guide](../user-guide.md#sign-in)). With no section requested, a user lands on the first section they may open in sidebar order: **Pharmacist overview** for a Pharmacist, **Dashboard** for the other roles.
+- Entry: `http://staff.pharmacy.localhost/` ([user guide](../user-guide.md#sign-in)). With no section requested, a Pharmacist lands on `/pharmacist-overview`, the **Counter transactions** tab of the Prescriptions page in the **Pharmacy counter** workspace; the other roles land on **Dashboard** in the **Overview** workspace.
 
 ## User stories and acceptance criteria
 
@@ -25,18 +25,22 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 - Source: `[observed]` 2026-10-26; refusal and session rules `[standard]` (D6, D9).
 - Accepted when:
   - Signed out, the form has **Email**, **Password** and **Sign in**, and no sign-up, reset or Google control. Smoke run.
-  - `admin@`, `manager@` and `warehouse@pharmacycentral.vn` land on `/`; `pharmacist@pharmacycentral.vn` lands on `/pharmacist-overview`. A wrong password shows the server's message, translated, and keeps the email. Smoke run.
+  - `admin@`, `manager@` and `warehouse@pharmacycentral.vn` land on `/`; `pharmacist@pharmacycentral.vn` lands on `/pharmacist-overview`, shown as **Prescriptions** with **Counter transactions** selected. A wrong password shows the server's message, translated, and keeps the email. Smoke run.
   - `khachhang@pharmacycentral.vn` sees "Cần tài khoản nhân viên để vào khu vực này." and no `pharmacy_session` cookie remains.
   - Every staff sign-in, successful or failed, is in the audit log without the password. API smoke run.
 - Rules: BR-AUTH-001, BR-AUTH-006, BR-USER-009.
 
-### US2. As an employee, I see only the sidebar items my roles may use, and I never land on a page I cannot use
+### US2. As an employee, I see only the workspaces and pages my roles may use, and I never land on a page I cannot use
 
 - Source: `[observed]` 2026-10-26; target `[standard]` (D2).
 - Accepted when:
-  - For each demo account the sidebar shows exactly the role table's items that are not `—`, in table order. One smoke run per role (gap G24 for Pharmacy Manager). Counts in target: Platform Admin 27 items in four groups, two of them the Analytics and Action plans sections this table does not list; Pharmacy Manager 20 in four; Pharmacist 7 in three; Warehouse Staff 10 in three.
+  - For each demo account the sidebar shows only pages whose section is not `—` in the role table. Counts: Platform Admin 8 workspaces, Pharmacy Manager 7, Pharmacist 4, Warehouse Staff 4. A workspace with one visible page is shown as that page, and a workspace with no visible page is hidden. One smoke run per role.
+  - A page that holds tabs has **one** sidebar row. Changing the tab inside Inventory, Purchasing, Finance, Users and audit, or Prescriptions does not move the sidebar highlight to another row. Every page the sidebar shows is reachable in at most two clicks (workspace, then page).
+  - **Search pages** (`Ctrl/Cmd+K`, and the search control at the top of the sidebar) lists every page the role may open, including the data-import pages and Account settings. Selecting a result opens it. Unit test of `paletteEntries`; smoke run.
+  - A workspace with one visible page is shown as that page: Warehouse Staff see **Purchasing**, **Dashboard** and the other single pages directly; a Pharmacist sees **Search synonyms** directly. The active workspace is the only one expanded; **Administration** is pinned below the working workspaces. Smoke run.
+  - A sidebar item never opens a non-default tab of another item. The six former inventory rows (**Transfers**, **Replenishment**, **Stocktake**, **Adjustments**, **Returns and removals**, **Quality**) and the former **Receiving**, **Reporting**, **Audit** and **Pharmacist overview** rows are now tabs or default tabs of their page. Unit test of `pageForSection`; smoke run.
   - A Pharmacist opening `/users` ends on `/pharmacist-overview`, and Back does not return to `/users`. Smoke run.
-  - A Pharmacist opening `/inventory?tab=Batches` sees Batches read-only, with "Batches" as the breadcrumb leaf. A tab the role may not read is not listed, and a requested one falls back to the first readable tab. Unit test of `tabGate`.
+  - A Pharmacist opening `/inventory?tab=Batches` sees Batches read-only, with **Inventory > Batches** as the breadcrumb and **Inventory** still the active sidebar row. A tab the role may not read is not listed, and a requested one falls back to the first readable tab. Unit test of `tabGate`.
 - Rules: BR-AUTH-001, BR-AUTH-002. The sidebar is display only; the server refuses.
 
 ### US3. As a site-scoped employee, I see and choose only my sites, and the server refuses other sites
@@ -83,45 +87,62 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 
 **Sign-in gate.** On load the shell calls `/api/auth/csrf`, then `/api/auth/me`, and shows "Checking session..." meanwhile. An account whose `actorType` is not `employee` is refused. The form posts to `/api/auth/login`; the server's message shows in a danger alert. Google is a customer sign-in only (Decision 5).
 
-**Shell and sidebar.** Sidebar on the left with five groups in this order: Operations, Master data, Data import, Warehouse, Governance. A group with no visible item is hidden. Top bar: mobile menu, keyboard shortcuts, and a profile menu (email, translated roles) with **Account settings** (opens `/account`, see [Account settings](staff-account.md)), **Switch language** and **Sign out**. Page header with the title, a breadcrumb (group > item > tab) and **Refresh**, which invalidates every query.
+**Shell and sidebar.** Sidebar on the left with eight workspaces in this order: Overview, Action plans, Pharmacy counter, Inventory, Purchasing, Finance, Catalog, Administration. Administration is pinned below the working workspaces. A workspace with no visible page is hidden; a workspace with one visible page is shown as that page. Only the active workspace is expanded, and it shows its pages as text rows; tabs stay inside the page. The sidebar has **Search pages** at the top (`Ctrl/Cmd+K`). Top bar: mobile menu, page search, keyboard shortcuts, and a profile menu (email, translated roles) with **Account settings** (opens `/account`, see [Account settings](staff-account.md)), **Switch language** and **Sign out**. Page header with the title, a breadcrumb (workspace > page > tab) and **Refresh**, which invalidates every query.
+
+The workspace and page structure. The role table below is per section; a section that is a tab of a shared page does not get its own sidebar row.
+
+| Workspace | Pages (sidebar) | Tabs inside the page | Roles |
+| --- | --- | --- | --- |
+| Overview | Dashboard, Analytics | — | Platform Admin, Pharmacy Manager, Warehouse Staff (Dashboard only) |
+| Action plans | Action plans | — | All four roles |
+| Pharmacy counter | Prescriptions, Online orders | Prescriptions / Counter transactions / Consultations | Platform Admin, Pharmacy Manager, Pharmacist |
+| Inventory | Inventory | Stock (Balances, Batches, Movements), Supply (Transfers, Replenishment, Returns), Control (Adjustments, Stocktake) | All four roles, tabs by role |
+| Purchasing | Purchasing | Purchase orders / Goods receipts / Reorder suggestions | Platform Admin, Pharmacy Manager, Warehouse Staff |
+| Finance | Finance | Summary / Invoices / Reports | Platform Admin, Pharmacy Manager |
+| Catalog | Products, Units, Pricing, Search synonyms, Sites, Storage locations, Suppliers | — | Platform Admin, Pharmacy Manager; Pharmacist only Search synonyms |
+| Administration (pinned) | Users & audit, AI integrations, System | Users / Audit | Platform Admin |
+
+**Data import** has no sidebar entry. Each list that owns a dataset shows an **Import** action to the role that may import it: Products, Sites, Storage locations and Suppliers for a Pharmacy Manager, and **Import opening balances** on Inventory for Warehouse Staff. The `/imports/...` URLs remain direct links. **Account settings** opens from the profile menu and is also in **Search pages**.
 
 ### Role-by-section access
 
-The target access for each role, per D1 to D4. Other staff specs link to this table for roles. The last column names the gaps where the code differs; `—` means the code already matches the row. Legend: **✓** full use, within D1 and D3. **Read** view only; a parenthetical names the only write the role may make from that section. **Approve** decides another person's record, never one's own. **Request** creates and cancels one's own replenishment requests only. **—** not in the sidebar; the server refuses writes.
+The target access for each role, per D1 to D4. Other staff specs link to this table for roles. The last column names the gaps where the code differs; `—` means the code already matches the row. Legend: **✓** full use, within D1 and D3. **Read** view only; a parenthetical names the only write the role may make from that section. **Approve** decides another person's record, never one's own. **Request** creates and cancels one's own replenishment requests only. **—** not reachable by the role; the server refuses writes. A section marked ✓ or Read is reached through its page in the workspace table above.
 
-| Group | Sidebar item (`section`) | Platform Admin | Pharmacy Manager | Pharmacist | Warehouse Staff | Code differs |
+| Workspace | Section (`section`) | Platform Admin | Pharmacy Manager | Pharmacist | Warehouse Staff | Code differs |
 | --- | --- | --- | --- | --- | --- | --- |
-| Operations | Dashboard (`dashboard`) | Read | ✓ | — | ✓ | — |
-| Operations | Pharmacist overview (`pharmacistOverview`) | — | — | ✓ | — | — |
-| Operations | Prescriptions (`prescriptions`) | Read | Read | ✓ | — | — |
-| Operations | Online orders (`orders`) | Read | ✓ (moves status) | ✓ (moves status) | — | G3, G4 |
-| Operations | Transfers (`transfers`) | Read | — | — | ✓ (approver is not creator) | G5, G24 |
-| Operations | Replenishment (`replenishment`) | Read | — | Request | ✓ (approve, fulfil) | G6, G24 |
-| Operations | Procurement (`procurement`) | Read | ✓ (approver is not creator) | — | — | — |
-| Operations | Reporting (`reporting`) | Read | ✓ | — | — | — |
-| Operations | Finance (`finance`) | Read | ✓ | — | — | — |
-| Master data | Sites (`sites`) | Read (create, delete) | ✓ | — | — | — |
-| Master data | Storage locations (`storageLocations`) | Read | ✓ | — | — | — |
-| Master data | Catalog (`catalog`) | Read | ✓ | — | — | — |
-| Master data | Search synonyms (`searchSynonyms`) | Read | ✓ (approves another's) | ✓ (approves another's) | — | — |
-| Master data | Units (`units`) | Read | ✓ | — | — | — |
-| Master data | Pricing (`pricing`) | Read | ✓ | — | — | — |
-| Master data | Suppliers (`supplier`) | Read | ✓ | — | — | — |
+| Overview | Dashboard (`dashboard`) | Read | ✓ | — | ✓ | — |
+| Overview | Analytics (`analytics`) | Read | ✓ | — | — | — |
+| Action plans | Action plans (`actionPlans`) | ✓ | ✓ | ✓ | ✓ | — |
+| Pharmacy counter | Pharmacist overview (`pharmacistOverview`) | — | — | ✓ | — | — |
+| Pharmacy counter | Prescriptions (`prescriptions`) | Read | Read | ✓ | — | — |
+| Pharmacy counter | Online orders (`orders`) | Read | ✓ (moves status) | ✓ (moves status) | — | G3, G4 |
+| Inventory | Transfers (`transfers`) | Read | — | — | ✓ (approver is not creator) | G5, G24 |
+| Inventory | Replenishment (`replenishment`) | Read | — | Request | ✓ (approve, fulfil) | G6, G24 |
+| Purchasing | Procurement (`procurement`) | Read | ✓ (approver is not creator) | — | — | — |
+| Finance | Reporting (`reporting`) | Read | ✓ | — | — | — |
+| Finance | Finance (`finance`) | Read | ✓ | — | — | — |
+| Catalog | Sites (`sites`) | Read (create, delete) | ✓ | — | — | — |
+| Catalog | Storage locations (`storageLocations`) | Read | ✓ | — | — | — |
+| Catalog | Catalog (`catalog`) | Read | ✓ | — | — | — |
+| Catalog | Search synonyms (`searchSynonyms`) | Read | ✓ (approves another's) | ✓ (approves another's) | — | — |
+| Catalog | Units (`units`) | Read | ✓ | — | — | — |
+| Catalog | Pricing (`pricing`) | Read | ✓ | — | — | — |
+| Catalog | Suppliers (`supplier`) | Read | ✓ | — | — | — |
 | Data import | Products (`importProducts`) | — | ✓ | — | — | — |
 | Data import | Sites (`importSites`) | — | ✓ | — | — | — |
 | Data import | Storage locations (`importLocations`) | — | ✓ | — | — | — |
 | Data import | Suppliers (`importSuppliers`) | — | ✓ | — | — | — |
 | Data import | Opening balances (`importStock`) | — | — | — | ✓ | — |
-| Warehouse | Receiving (`receiving`) | Read | — | — | ✓ | — |
-| Warehouse | Stocktake (`stocktake`) | Read | — | — | ✓ (posting makes Pending adjustments) | G10, G24 |
-| Warehouse | Inventory (`inventory`) | Read | Read | Read | ✓ | — |
-| Warehouse | Adjustments (`adjustments`) | Read | Approve | — | Propose | — |
-| Warehouse | Returns and removals (`returns`) | Read | — | — | ✓ | — |
-| Warehouse | Quality (`quality`) | Read | ✓ (release, reject) | ✓ (release, reject) | Read | — |
-| Governance | Users (`users`) | ✓ | — | — | — | — |
-| Governance | Audit (`audit`) | ✓ (read-only) | — | — | — | — |
-| Governance | AI integrations (`aiIntegrations`) | ✓ | — | — | — | — |
-| Governance | System (`system`) | ✓ | — | — | — | — |
+| Purchasing | Receiving (`receiving`) | Read | — | — | ✓ | — |
+| Inventory | Stocktake (`stocktake`) | Read | — | — | ✓ (posting makes Pending adjustments) | G10, G24 |
+| Inventory | Inventory (`inventory`) | Read | Read | Read | ✓ | — |
+| Inventory | Adjustments (`adjustments`) | Read | Approve | — | Propose | — |
+| Inventory | Returns and removals (`returns`) | Read | — | — | ✓ | G24 |
+| Inventory | Quality (`quality`) | Read | ✓ (release, reject) | ✓ (release, reject) | Read | — |
+| Administration | Users (`users`) | ✓ | — | — | — | — |
+| Administration | Audit (`audit`) | ✓ (read-only) | — | — | — | — |
+| Administration | AI integrations (`aiIntegrations`) | ✓ | — | — | — | — |
+| Administration | System (`system`) | ✓ | — | — | — | — |
 
 - Platform Admin manages and views only what no other staff role touches (BR-AUTH-010). It opens every section except Pharmacist overview and the five imports, and reads them without a write control. It writes only users, roles and site access (Users), audit, AI integrations, System, creating and deleting a site, and giving an action plan to another owner. Every other write is refused with `role_forbidden`, and `canAccessSection` with `staffActions` shows the same to the page. An account that also holds another role keeps that role's rights.
 - Users, Audit, AI integrations and System are Platform Admin only; Audit is read-only for everyone (D10).
@@ -135,7 +156,7 @@ The target access for each role, per D1 to D4. Other staff specs link to this ta
 
 - **Signed out:** the sign-in form at a known URL. The URL is kept, so after sign-in the same page opens if the role allows it (D6). A failed sign-in shows the server's message in a danger alert.
 - **Session ended (401):** the sign-in form with "Phiên đã hết hạn. Vui lòng đăng nhập lại.".
-- **Signed in, section not allowed:** moved to the first section the role may open. No message.
+- **Signed in, section not allowed:** moved to the role's landing page (Dashboard, or the Pharmacist's Counter transactions view). No message.
 - **Signed in, action not allowed:** the control is not shown (`GatedButton` renders nothing, as in Odoo). When no row shown has an allowed action, the whole **Thao tác** column goes too (`withActionColumn`). The service and the edge still refuse the call. Rules live in `permissions/staff-permissions.ts`.
 
 ## Out of scope
@@ -172,6 +193,7 @@ The target access for each role, per D1 to D4. Other staff specs link to this ta
 | 18 | Transfers and purchase orders | [standard] Transfers: approval by a Warehouse Staff member other than the creator. Purchase orders: Pharmacy Manager creates and cancels; approval by a different Pharmacy Manager. Warehouse Staff read approved orders to receive. | D1 names purchase orders and transfers in the no-self-approval rule. |
 | 19 | Online order status and refunds | [standard] Pharmacist and Pharmacy Manager move an order from Pending to Completed and cancel before handover (BR-ORD-005), within their sites. Refund of an online order: Pharmacy Manager only, with a reason up to 500 characters (BR-PAY-003). Pharmacist refunds counter invoices only, inside Prescriptions. | D2 fixed choices; D13 refund reason. Owner may change: who refunds online orders. |
 | 20 | Audit and failed sign-ins | [standard] Audit is Platform Admin only and read-only (D10). Failed staff sign-ins are recorded, without the password. | OWASP Logging Cheat Sheet lists failed authentication as an event to log. |
+| 21 | Navigation hierarchy | [standard] The sidebar has two levels: workspace and page. Tabs stay inside the page, so a page has one sidebar row and switching tabs never moves the highlight. Only the active workspace expands; a workspace with one visible page is shown as that page; Administration is pinned. **Search pages** (`Ctrl/Cmd+K`) lists every page the role may open, including the data imports and Account settings. The data imports are actions on the list they fill, not sidebar rows. | Carbon: the left panel does not support three tiers, so deeper content uses tabs in the page. Shopify and GitHub: the active section expands and settings has its own grouped navigation. NN/g: keep labels, show the current location, use click-activated submenus, and avoid cascading levels. |
 
 ## Gaps against the code (2026-10-26)
 
@@ -180,7 +202,7 @@ The target access for each role, per D1 to D4. Other staff specs link to this ta
 | G3 | Pharmacist and Pharmacy Manager move orders from Pending to Completed and cancel before handover. The staff order list is narrowed to assigned sites. | The edge admits only Pharmacist and Pharmacy Manager on the transition, and staff `GET /orders` is site-scoped. The page is still view-only: `orders-section.tsx` has no move action and no store selector. The user guide says "view-only". | `deploy/aws/lambda/policy.mjs` (`employeeRoleRules`); `apps/sales-service/src/modules/sales-routes.ts`; `apps/staff-web/src/sections/orders-section.tsx`; [user guide, Online orders](../user-guide.md#online-orders). |
 | G4 | Online-order refund by a Pharmacy Manager, with a reason. | The refund route admits only Pharmacy Manager for an online-order invoice (`refundRefusal`). The orders page has no refund action (online-orders spec G5). | `apps/payment-service/src/modules/payment-access.ts`; `deploy/aws/lambda/policy.mjs`; `apps/staff-web/src/sections/orders-section.tsx`. |
 | G5 | A transfer is approved by someone other than its creator. | The creator is refused (`transferActionAllowed`). The approver is a Pharmacy Manager (`inventory.transfer.approve`, `policy.mjs`), and Warehouse Staff cannot approve (Decision 18). | [BR-TRF-005](../business-rules.md); `apps/inventory-service/src/modules/inventory-routes.ts`; `deploy/aws/lambda/policy.mjs`. |
-| G6 | Pharmacist requests and cancels own requests. Warehouse Staff approve, reject and fulfil; Warehouse Staff do not create. | Pharmacy Manager can still create requests (`replenishment.create`; `policy.mjs` `POST /api/inventory/replenishment`) and sees the sidebar item (`sectionRoles.replenishment`); the table gives it "—" (G24). | `apps/staff-web/src/permissions/staff-permissions.ts`; `deploy/aws/lambda/policy.mjs` (`employeeRoleRules`). |
+| G6 | Pharmacist requests and cancels own requests. Warehouse Staff approve, reject and fulfil; Warehouse Staff do not create. | Pharmacy Manager can still create requests (`replenishment.create`; `policy.mjs` `POST /api/inventory/replenishment`) and sees the Replenishment tab (`sectionRoles.replenishment`); the table gives it "—" (G24). | `apps/staff-web/src/permissions/staff-permissions.ts`; `deploy/aws/lambda/policy.mjs` (`employeeRoleRules`). |
 | G10 | Stocktake posting creates Pending adjustments for a Pharmacy Manager to approve. | Posting creates Approved adjustments directly (`status: "Approved"`). | [BR-STK-007](../business-rules.md); `apps/inventory-service/src/modules/inventory-repository.ts` (`postStocktake`). |
 | G14 | No employee without a role. A session with no role shows "Tài khoản chưa được gán vai trò. Liên hệ quản trị viên." and is signed out. | Identity refuses `roles: []` on create and on role update (`assertAccessGrant`, detail "Chọn ít nhất một vai trò."). No code has the session message: the text is absent from `apps/staff-web`. | `apps/identity-service/src/modules/accounts/application/account-service.ts` (`assertAccessGrant`); `apps/staff-web/src/i18n/shell.ts`. |
 | G15 | A 401 on any request ends the session visibly. A role change or revoke ends the session at the next request. | A 401 ends the session with the notice and keeps the URL (`App.tsx` `endSession`). A role change does not end sessions: `updateUserAccess` revokes nothing, and the new roles reach the services when the identity context is re-issued (5 minutes, `account-routes.ts`). Revoke ends the session (`/users/:id/revoke-sessions`). | `apps/staff-web/src/App.tsx`; `apps/identity-service/src/modules/accounts/application/account-service.ts` (`updateUserAccess`); `apps/identity-service/src/modules/accounts/presentation/http/account-routes.ts`; [ADR 0006](../adr/0006-edge-identity-context.md). |
@@ -188,4 +210,4 @@ The target access for each role, per D1 to D4. Other staff specs link to this ta
 | G21 | The profile menu lists the user's sites. | The profile menu does not list sites. | `App.tsx` profile menu. |
 | G22 | The user guide states the target roles and workflows. | Still differs: the Roles table (line 81) gives Pharmacy Manager Transfers, Replenishment and Stocktake; line 187 describes Inventory as Warehouse Staff only (line 210 gives Pharmacists read-only; no line gives Pharmacy Manager read); line 214 calls Online orders "view-only". | `docs/user-guide.md` lines 81, 187, 214. |
 | G23 | The business rules state the target roles and approvers. | Still differ: BR-PAY-003 (no role rule by invoice kind), BR-STK-007 (posting creates `Approved` adjustments), BR-TRF-005, BR-PROC-005 and BR-ADJ-006 (no approver role and no creator rule). BR-SYN-004 states the target. BR-AUTH-001 gives transfer approval to Pharmacy Manager (G5). | `docs/business-rules.md`. |
-| G24 | The sidebar for Pharmacy Manager has 20 items in four groups, with no Transfers, Replenishment, Stocktake or Returns (table: "—"). | `sectionRoles` gives Pharmacy Manager those four sections, so it has 24 items in four groups. | `apps/staff-web/src/permissions/section-access.ts`. |
+| G24 | The role table gives Pharmacy Manager no Transfers, Replenishment, Stocktake or Returns. | `sectionRoles` still gives the manager those four sections, and `tabGate` shows the matching Inventory tabs to them. The sidebar no longer lists the tabs separately. | `apps/staff-web/src/permissions/section-access.ts`; `apps/staff-web/src/permissions/staff-permissions.ts`. |
