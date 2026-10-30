@@ -12,6 +12,9 @@ import {
 
 const logger = createLogger({ name: "catalog-service" });
 
+/** Reads that take the service secret alone, such as the analytics reads of operations-query-service. */
+export const SERVICE_ONLY_PREFIXES: readonly string[] = ["/internal/analytics"];
+
 export interface TrustedRequestEnforcementOptions {
   /**
    * Secret used to verify HMAC signed internal identity context.
@@ -494,6 +497,16 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       delete request.headers["x-actor-id"];
       delete request.headers["x-actor-type"];
       delete request.headers[ACTOR_ROLES_HEADER];
+    }
+
+    // A service-only read takes the service secret alone. A verified identity of any kind, or an actor type the secret
+    // did not vouch for as `system`, is refused before a handler runs.
+    if (
+      SERVICE_ONLY_PREFIXES.some((prefix) => matchesPathPrefix(request.path, prefix)) &&
+      (verifiedContext || request.headers["x-actor-type"] !== "system")
+    ) {
+      response.status(403).json({ title: "Service access required", status: 403, code: "service_required" });
+      return;
     }
 
     // A shopper's own paths stay open; anything behind the counter stops here even though the context verifies.

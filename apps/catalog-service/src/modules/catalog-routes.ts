@@ -606,6 +606,13 @@ export const createCatalogRouter = (
     response.json(await repository.listBasePricesOn(day));
   });
 
+  // Read by operations-query for the period breakdown, including products that are no longer active. The edge and the
+  // ALB do not forward `/internal/...`, and trusted-request admits this path only with the service secret.
+  router.get("/internal/analytics/products", async (_request, response) => {
+    if (!repository) return databaseUnavailable(response);
+    response.json({ products: await repository.listProductClassifications() });
+  });
+
   router.get("/pricing/active", async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = activePriceQuerySchema.safeParse(request.query);

@@ -244,4 +244,37 @@ describe("DrizzleStoreRepository keyset and text lists", () => {
     await expect(codes()).resolves.toEqual(["SUP-01", "SUP-02"]);
     await expect(codes("%")).resolves.toEqual([]);
   });
+
+  it("answers every product's name and grouping in SKU order, including a product that is no longer active", async () => {
+    const retired = "00000000-0000-4000-8000-0000000000b3";
+    await db.insert(schema.products).values({
+      id: retired,
+      sku: "ZINC-100",
+      name: "Kẽm",
+      category: "Vitamin and supplement",
+      prescriptionRequired: false,
+      isActive: false,
+    });
+
+    await expect(repository.listProductClassifications()).resolves.toEqual([
+      {
+        productId: products.amoxicillin,
+        productName: "Amoxicillin 250mg",
+        category: null,
+        prescriptionRequired: false,
+      },
+      {
+        productId: products.paracetamol,
+        productName: "Paracetamol 500mg",
+        category: null,
+        prescriptionRequired: false,
+      },
+      {
+        productId: retired,
+        productName: "Kẽm",
+        category: "Vitamin and supplement",
+        prescriptionRequired: false,
+      },
+    ]);
+  });
 });

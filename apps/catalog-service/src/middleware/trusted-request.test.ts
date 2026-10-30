@@ -68,6 +68,45 @@ describe("trusted request actor headers", () => {
     });
     expect(response.status).toBe(401);
   });
+
+  it("admits the service secret alone on an internal analytics read and refuses a verified identity", async () => {
+    const app = express();
+    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+    app.get("/internal/analytics/products", (_req, res) => {
+      res.json({ ok: true });
+    });
+
+    const { server, url } = await startServer(app);
+    activeServer = server;
+
+    const context: InternalIdentityContext = {
+      version: "v1",
+      requestId: "req-service-only",
+      correlationId: "corr-service-only",
+      actorId: "00000000-0000-4000-8000-000000000001",
+      actorType: "employee",
+      roles: ["Platform Admin"],
+      siteIds: [],
+      issuedAt: new Date(Date.now() - 1000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      audience: "catalog-service",
+    };
+    const employee = await fetch(`${url}/internal/analytics/products`, {
+      headers: { "x-internal-identity-context": signInternalIdentityContext(context, identitySecret) },
+    });
+    expect(employee.status).toBe(403);
+    expect(await employee.json()).toMatchObject({ code: "service_required" });
+
+    const service = await fetch(`${url}/internal/analytics/products`, {
+      headers: { "x-internal-service-secret": serviceSecret },
+    });
+    expect(service.status).toBe(200);
+
+    const disguised = await fetch(`${url}/internal/analytics/products`, {
+      headers: { "x-internal-service-secret": serviceSecret, "x-actor-type": "employee" },
+    });
+    expect(disguised.status).toBe(403);
+  });
 });
 
 describe("trusted request role restatement", () => {

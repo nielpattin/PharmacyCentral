@@ -829,6 +829,24 @@ export class DrizzleStoreRepository {
     }));
   }
 
+  /**
+   * Every product, active or not, with the grouping the catalog holds today. The period analytics groups past sales by
+   * it, so a product that stopped selling keeps its name and category here.
+   */
+  public async listProductClassifications(): Promise<
+    Array<{ productId: string; productName: string; category: string | null; prescriptionRequired: boolean }>
+  > {
+    return this.database.db
+      .select({
+        productId: products.id,
+        productName: products.name,
+        category: products.category,
+        prescriptionRequired: products.prescriptionRequired,
+      })
+      .from(products)
+      .orderBy(asc(products.sku));
+  }
+
   public async createPrice(input: typeof productPrices.$inferInsert): Promise<typeof productPrices.$inferSelect> {
     if (input.siteId !== null && input.siteId !== undefined)
       throw new BusinessRuleError("Prices are global across pharmacies");

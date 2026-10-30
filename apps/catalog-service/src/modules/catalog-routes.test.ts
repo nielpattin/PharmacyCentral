@@ -14,6 +14,7 @@ import {
 import { encodePageCursor } from "../shared/pagination/page-cursor.ts";
 
 const SECRET = "test-internal-identity-secret";
+const SERVICE_SECRET = "test-internal-service-secret";
 const CATALOG = "catalog-service";
 const ids = {
   site: "00000000-0000-4000-8000-000000000001",
@@ -76,6 +77,7 @@ const createTestServer = async (
   app.use(
     createTrustedRequestMiddleware({
       identitySecret: SECRET,
+      serviceSecret: SERVICE_SECRET,
       expectedAudience: CATALOG,
       isPublic: (request) =>
         ["GET", "HEAD"].includes(request.method) &&
@@ -442,6 +444,34 @@ describe("catalog API", () => {
     expect(listBasePricesOn).toHaveBeenCalledTimes(2);
     expect(listBasePricesOn).toHaveBeenNthCalledWith(1, "2026-10-20");
     expect(listBasePricesOn).toHaveBeenNthCalledWith(2, new Date().toISOString().slice(0, 10));
+  });
+
+  it("answers every product's grouping to the period analytics, service only", async () => {
+    const rows = [
+      {
+        productId: ids.product,
+        productName: "Paracetamol 500mg",
+        category: "Medicine",
+        prescriptionRequired: false,
+      },
+    ];
+    const listProductClassifications = vi.fn<() => Promise<unknown[]>>().mockResolvedValue(rows);
+    const repository = { listProductClassifications } as unknown as DrizzleStoreRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const answer = await fetch(`${testServer.url}/internal/analytics/products`, {
+      headers: { "x-internal-service-secret": SERVICE_SECRET },
+    });
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toEqual({ products: rows });
+    expect(listProductClassifications).toHaveBeenCalledTimes(1);
+
+    const employee = await fetch(`${testServer.url}/internal/analytics/products`, {
+      headers: actors.manager.headers,
+    });
+    expect(employee.status).toBe(403);
+    expect(await employee.json()).toMatchObject({ code: "service_required" });
   });
 
   it("answers a product by its id with its units, as before the count routes", async () => {
