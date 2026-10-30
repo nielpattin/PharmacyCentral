@@ -211,20 +211,6 @@ export const createPaymentRouter = (
     }
   });
 
-  router.post("/payments/:id/cash-paid", async (request, response, next) => {
-    if (!repository) return unavailable(response);
-    const id = idSchema.safeParse(request.params);
-    if (!id.success) return invalid(response);
-    const refusal = cashConfirmationRefusal(actorRoles(request));
-    if (refusal) return response.status(refusal.status).json(refusal);
-    try {
-      const invoice = await repository.markCashPaid(id.data.id, actor(request));
-      return invoice ? response.json(invoice) : response.status(404).json({ title: "Invoice not found", status: 404 });
-    } catch (error) {
-      return next(error);
-    }
-  });
-
   router.post("/payments/:id/confirm-counter", async (request, response, next) => {
     if (!repository) return unavailable(response);
     const id = idSchema.safeParse(request.params);

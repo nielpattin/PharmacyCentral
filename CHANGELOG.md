@@ -14,6 +14,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Staff Web hides every write control from Platform Admin and closes the Pharmacist overview and the five Import sections for it.
 - Seed B no longer uses the administrator for business writes. The administrator creates the sites; the Pharmacy Manager imports the master data and proposes search synonyms, Warehouse Staff imports the opening stock and does the receiving, transfers, returns, stocktakes and adjustments. A second demo manager, `manager2@pharmacycentral.vn`, raises the purchase orders the first one approves. The managers now hold all four sites and the warehouse account the three that hold stock.
 
+### Removed
+
+**payment-service**
+
+- `POST /api/payments/{id}/cash-paid`, a duplicate of `POST /api/payments/{id}/confirm-counter` that no screen called. The demo seeds use `confirm-counter`.
+
 ### Fixed
 
 **deploy**

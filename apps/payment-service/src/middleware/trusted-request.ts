@@ -211,12 +211,6 @@ const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["WRITE"], path: "/payments", roles: ["Pharmacist"] },
 ];
 
-const PLATFORM_ADMIN_EXCLUDED: readonly Route[] = [
-  { methods: ["POST"], path: "/payments/prescriptions/*" },
-  { methods: ["POST"], path: "/payments/*/cash-paid", exact: true },
-  { methods: ["POST"], path: "/payments/*/confirm-counter", exact: true },
-];
-
 const ROLE_FORBIDDEN_DETAIL = "Vai trò của tài khoản này không được thực hiện thao tác này.";
 
 const routeMatches = (route: Route, path: string, method: string): boolean => {

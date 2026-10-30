@@ -280,7 +280,6 @@ After an approval, an edit of an approved group, or a delete of an approved grou
 - `GET /api/payments/invoices/{id}/invoice`
 - `GET /api/payments/{id}`
 - `GET /api/payments/{id}/invoice`
-- `POST /api/payments/{id}/cash-paid` (Pharmacist only)
 - `POST /api/payments/{id}/confirm-counter` (Pharmacist only)
 - `POST /api/payments/{id}/refund` takes `{ "reason" }` (1 to 500 characters). A counter invoice is refunded by a Pharmacist only; an online-order invoice by a Pharmacy Manager only. The wrong role answers `403 role_forbidden`.
 - `GET /api/payments/{id}/reconciliation`

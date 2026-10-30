@@ -267,25 +267,6 @@ export const employeeRoleRules = [
   { methods: "WRITE", path: "/api/inventory/returns", match: "prefix", roles: [WAREHOUSE_STAFF] },
 ];
 
-/**
- * Platform Admin is refused these requests even though it passes every role rule. Each one is a counter action or a
- * decision that must rest with someone other than the administrator: Platform Admin reads the counter, never acts on it
- * (Decision 10); cash at the counter is confirmed by a Pharmacist; a search synonym group is approved by a clinician.
- * A shopper's own request on the same path is not excluded (see `isPlatformAdminExcluded`). Separation of duties (nobody
- * approves a record they made) is enforced by the owning service, not here.
- */
-export const platformAdminExcludedRoutes = [
-  { method: "POST", path: "/api/prescriptions", match: "exact" },
-  { method: "POST", path: "/api/prescriptions/*/cancel", match: "exact" },
-  { method: "POST", path: "/api/prescriptions/*/dispense", match: "exact" },
-  { method: "POST", path: "/api/prescriptions/consultations/*/answer", match: "exact" },
-  { method: "WRITE", path: "/api/counter-transactions", match: "prefix" },
-  { method: "POST", path: "/api/payments/prescriptions/*", match: "prefix" },
-  { method: "POST", path: "/api/payments/*/cash-paid", match: "exact" },
-  { method: "POST", path: "/api/payments/*/confirm-counter", match: "exact" },
-  { method: "POST", path: "/api/products/search-synonyms/*/approve", match: "exact" },
-];
-
 export const normalizeApiPath = (path = "/") => {
   let p = path.split("?")[0].trim();
   if (!p.startsWith("/")) p = `/${p}`;

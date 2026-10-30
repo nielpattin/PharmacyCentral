@@ -74,13 +74,12 @@ describe("payment write roles at the route", () => {
       body: JSON.stringify(body),
     });
 
-  describe("confirm-counter and cash-paid", () => {
-    for (const path of ["confirm-counter", "cash-paid"]) {
-      it(`${path}: a Pharmacist confirms cash`, async () => {
-        const response = await post(`/payments/${invoiceId}/${path}`, "Pharmacist");
-        expect(response.status).toBe(200);
-        expect(writes).toStrictEqual(["cash"]);
-      });
+  describe("confirm-counter", () => {
+    it("a Pharmacist confirms cash", async () => {
+      const response = await post(`/payments/${invoiceId}/confirm-counter`, "Pharmacist");
+      expect(response.status).toBe(200);
+      expect(writes).toStrictEqual(["cash"]);
+    });
 
       it(`${path}: Platform Admin alone is refused and nothing is written`, async () => {
         const response = await post(`/payments/${invoiceId}/${path}`, "Platform Admin");

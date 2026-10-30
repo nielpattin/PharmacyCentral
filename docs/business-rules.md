@@ -515,7 +515,7 @@ Danh sách đơn thuốc cho khách chỉ trả đơn gắn `customerId` là tà
 
 ### BR-PAY-002. Xác nhận thanh toán tại quầy
 
-Thanh toán tại quầy bằng tiền mặt hoặc chuyển khoản đã nhận được ghi nhận qua `POST /payments/:id/cash-paid` hoặc `POST /payments/:id/confirm-counter`. Chỉ hóa đơn `Pending` được xác nhận; người xác nhận lấy từ `X-Actor-Id`; quyền Pharmacist (Platform Admin bị từ chối, BR-AUTH-010).
+Thanh toán tại quầy bằng tiền mặt hoặc chuyển khoản đã nhận được ghi nhận qua `POST /payments/:id/confirm-counter`. Chỉ hóa đơn `Pending` được xác nhận; người xác nhận lấy từ `X-Actor-Id`; quyền Pharmacist (role khác, kể cả Platform Admin, bị từ chối, BR-AUTH-010).
 
 ### BR-PAY-003. Hoàn tiền yêu cầu lý do và hoàn toàn bộ hóa đơn
 

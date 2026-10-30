@@ -459,11 +459,14 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
       await transition(created.id, status);
     }
     if (document.payment === "cash" && document.fate === "completed") {
-      await call(pharmacist, "payment-service", `/api/payments/${invoice.id}/cash-paid`, { method: "POST", body: {} });
+      await call(pharmacist, "payment-service", `/api/payments/${invoice.id}/confirm-counter`, {
+        method: "POST",
+        body: {},
+      });
     }
     if (document.fate === "refunded") {
       if (document.payment === "cash")
-        await call(pharmacist, "payment-service", `/api/payments/${invoice.id}/cash-paid`, {
+        await call(pharmacist, "payment-service", `/api/payments/${invoice.id}/confirm-counter`, {
           method: "POST",
           body: {},
         });
@@ -533,7 +536,10 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
       method: "POST",
       body: {},
     });
-    await call(pharmacist, "payment-service", `/api/payments/${invoice.id}/cash-paid`, { method: "POST", body: {} });
+    await call(pharmacist, "payment-service", `/api/payments/${invoice.id}/confirm-counter`, {
+      method: "POST",
+      body: {},
+    });
   };
 
   let done = 0;

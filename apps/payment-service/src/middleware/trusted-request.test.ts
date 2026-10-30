@@ -126,10 +126,13 @@ describe("trusted request role restatement", () => {
     expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
   });
 
-  it("refuses Platform Admin cash taken at the counter, which a Pharmacist makes", async () => {
-    const response = await callAs("employee", ["Platform Admin"], `${paymentId}/cash-paid`, "POST");
-    expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+  it("refuses Platform Admin every money write, and lets it read the payment register", async () => {
+    for (const path of [`${paymentId}/refund`, `${paymentId}/confirm-counter`, "/payments/prescriptions/123"]) {
+      const response = await callAs("employee", ["Platform Admin"], path, "POST");
+      expect(response.status, path).toBe(403);
+      expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+    }
+    expect((await callAs("employee", ["Platform Admin"], "/payments/invoices", "GET")).status).toBe(200);
   });
 
   it("refuses a Pharmacy Manager confirming counter cash, which only a Pharmacist may do", async () => {

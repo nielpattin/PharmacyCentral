@@ -68,10 +68,7 @@ export const siteScopeRefusal = (
         detail: "Bản ghi thuộc nhà thuốc bạn không được phân quyền.",
       };
 
-/**
- * Cash confirmation (`confirm-counter`, `cash-paid`) is a Pharmacist act. Platform Admin is excluded: holding the
- * Platform Admin role does not satisfy it, only an explicit Pharmacist role does.
- */
+/** Cash confirmation (`confirm-counter`) is a Pharmacist act; no other role satisfies it. */
 export const cashConfirmationRefusal = (roles: readonly string[]): AccessRefusal | undefined =>
   roles.includes("Pharmacist") ? undefined : roleForbidden("Chỉ Dược sĩ được xác nhận tiền mặt.");
 

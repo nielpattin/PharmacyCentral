@@ -561,7 +561,7 @@ async function seedActivity() {
       }
       if (paid === "cash") {
         // The pharmacist takes the cash at the counter; a refund is the manager's or the pharmacist's.
-        await pharmacist.call(`/api/payments/${invoice.id}/cash-paid`, {
+        await pharmacist.call(`/api/payments/${invoice.id}/confirm-counter`, {
           method: "POST",
           body: {},
           headers: await withContext(pharmacist, "payment-service"),
