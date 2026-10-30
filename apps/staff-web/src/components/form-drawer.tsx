@@ -10,9 +10,11 @@ import { EntityDrawer } from "./entity-drawer.tsx";
 /**
  * A create or edit form in a side drawer. Leaving with unsaved input asks first, both from the drawer's close control
  * and from in-app navigation. Ctrl/Cmd+S submits the form. The submit button sits in the footer and points at the form
- * by id. Mount this only while the drawer should be open, so the guard and the shortcut are active only then.
+ * by id. The drawer may stay mounted after it closes, to play its exit animation: pass `open`, and the unsaved-changes
+ * guard and the shortcut act only while it is open.
  */
 export const FormDrawer = ({
+  open = true,
   title,
   subtitle,
   formId,
@@ -22,6 +24,7 @@ export const FormDrawer = ({
   onClose,
   children,
 }: {
+  open?: boolean | undefined;
   title: string;
   subtitle?: string | undefined;
   formId: string;
@@ -33,14 +36,14 @@ export const FormDrawer = ({
 }): React.JSX.Element => {
   const confirm = useConfirm();
   const formRef = useRef<HTMLFormElement>(null);
-  useUnsavedChangesGuard(isDirty);
+  useUnsavedChangesGuard(isDirty && open);
   useHotkey(
     "mod+s",
     (event) => {
       event.preventDefault();
       formRef.current?.requestSubmit();
     },
-    { label: "Save", allowWhileEditing: true },
+    { label: "Save", allowWhileEditing: true, when: open },
   );
   const requestClose = async (): Promise<void> => {
     if (isDirty && !(await confirm({ title: "Discard unsaved changes?", confirmLabel: "Discard", tone: "danger" }))) {
@@ -50,7 +53,7 @@ export const FormDrawer = ({
   };
   return (
     <EntityDrawer
-      open
+      open={open}
       onClose={() => void requestClose()}
       title={translateText(title)}
       {...(subtitle ? { subtitle: translateText(subtitle) } : {})}

@@ -21,6 +21,7 @@ const Fact = ({ label, children }: { label: string; children: React.ReactNode })
  * what to do about it with a link to the page where the work happens. Every role that sees a plan can open it.
  */
 export const PlanDetailDrawer = ({
+  open,
   plan,
   siteLabel,
   ownerLabel,
@@ -29,6 +30,7 @@ export const PlanDetailDrawer = ({
   onReassign,
   onClose,
 }: {
+  open: boolean;
   plan: ActionPlan;
   siteLabel: string;
   ownerLabel: string;
@@ -44,7 +46,7 @@ export const PlanDetailDrawer = ({
 
   return (
     <EntityDrawer
-      open
+      open={open}
       onClose={onClose}
       title={plan.title}
       subtitle={translateText(SOURCE_LABELS[plan.sourceType])}

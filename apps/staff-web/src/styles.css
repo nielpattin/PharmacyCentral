@@ -597,3 +597,102 @@ a {
     padding: 12px;
   }
 }
+
+/* ─── Physical weight ───────────────────────────────────────
+   The raw shell controls (sidebar links, topbar buttons, profile menu) get the same press timing as the shared
+   components. Tokens and the reasoning live in packages/ui/src/weight.css. */
+
+.sidebar-nav a,
+.sidebar-collapse-toggle,
+.topbar-icon-button,
+.profile-menu-item {
+  transition:
+    background-color var(--weight-hover) var(--weight-ease-out),
+    color var(--weight-hover) var(--weight-ease-out),
+    border-color var(--weight-hover) var(--weight-ease-out);
+}
+
+.sidebar-nav a:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.topbar-icon-button:hover {
+  background: var(--surface-soft);
+}
+
+.sidebar-nav a:active:not(.active) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.profile-menu-item:active:not(:disabled) {
+  background: var(--line);
+}
+
+.sidebar-nav a:active,
+.sidebar-collapse-toggle:active,
+.topbar-icon-button:active,
+.profile-trigger:active,
+.profile-menu-item:active:not(:disabled) {
+  transition-duration: var(--weight-press);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sidebar-nav a,
+  .sidebar-collapse-toggle,
+  .topbar-icon-button,
+  .profile-trigger {
+    transition-property: background-color, color, border-color, box-shadow, transform;
+    transition-duration:
+      var(--weight-hover), var(--weight-hover), var(--weight-hover), var(--weight-release), var(--weight-release);
+    transition-timing-function:
+      var(--weight-ease-out), var(--weight-ease-out), var(--weight-ease-out), var(--weight-ease-out),
+      var(--weight-spring);
+  }
+
+  .sidebar-nav a:active,
+  .sidebar-collapse-toggle:active,
+  .topbar-icon-button:active,
+  .profile-trigger:active {
+    transform: translateY(1px) scale(0.97);
+    transition-duration: var(--weight-press);
+    transition-timing-function: var(--weight-ease-out);
+  }
+
+  .sidebar-collapse-toggle:active,
+  .topbar-icon-button:active {
+    transform: translateY(var(--weight-sink)) scale(0.88);
+  }
+
+  /* The icon leans toward where the link goes, and the active pill lands with a settle. */
+  .sidebar-nav-icon {
+    transition: transform var(--weight-release) var(--weight-spring);
+  }
+
+  .sidebar-nav a:hover .sidebar-nav-icon {
+    transform: translateX(3px);
+  }
+
+  .sidebar-nav-active-indicator {
+    animation: weight-indicator-in var(--weight-toast) var(--weight-spring) both;
+  }
+
+  .profile-dropdown {
+    transform-origin: top right;
+    animation: weight-panel-in var(--weight-menu) var(--weight-ease-out) both;
+  }
+
+  .profile-menu:not([open]) .profile-dropdown {
+    animation: none;
+  }
+}
+
+@keyframes weight-indicator-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px) scaleX(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

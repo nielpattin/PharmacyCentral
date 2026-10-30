@@ -18,6 +18,7 @@ import { EmptyState } from "../components/forms.tsx";
 import { SavedViewsMenu } from "../components/saved-views-menu.tsx";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { usePagedList } from "../hooks/usePagedList.ts";
+import { useRetainedTarget } from "../hooks/useRetainedTarget.ts";
 import { useSearchDraft } from "../hooks/useSearchDraft.ts";
 import { useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { translateText } from "../i18n.ts";
@@ -93,6 +94,9 @@ const ActionPlansList = (): React.JSX.Element => {
   const shown = visiblePlans(rows, focusId);
   const editing = rows.find((plan) => plan.id === editingId);
   const viewing = rows.find((plan) => plan.id === viewingId);
+  // Both drawers stay mounted after they close, to slide out; the retained target keeps their content.
+  const planDetail = useRetainedTarget(viewing);
+  const planEdit = useRetainedTarget(editing);
   const today = todayIsoDate();
   const ownerOptions = ownerOptionsFor(employees, undefined);
 
@@ -310,25 +314,38 @@ const ActionPlansList = (): React.JSX.Element => {
         paging={{ hasMore: plans.hasMore, loadingMore: plans.isLoadingMore, onLoadMore: plans.loadMore }}
         exportCsv={{ filename: "action-plans.csv" }}
       />
-      {viewing ? (
+      {planDetail ? (
         <PlanDetailDrawer
-          plan={viewing}
-          siteLabel={viewing.siteId === null ? "-" : referenceName(references.sites, viewing.siteId, ["code", "name"])}
-          ownerLabel={ownerNameOf(viewing.ownerId, employees, session)}
+          key={planDetail.key}
+          open={viewing !== undefined}
+          plan={planDetail.target}
+          siteLabel={
+            planDetail.target.siteId === null
+              ? "-"
+              : referenceName(references.sites, planDetail.target.siteId, ["code", "name"])
+          }
+          ownerLabel={ownerNameOf(planDetail.target.ownerId, employees, session)}
           roles={session.roles ?? []}
           today={today}
           onReassign={
-            canReassignActionPlan(session, viewing).allowed
+            canReassignActionPlan(session, planDetail.target).allowed
               ? () => {
                   setViewingId(undefined);
-                  setEditingId(viewing.id);
+                  setEditingId(planDetail.target.id);
                 }
               : undefined
           }
           onClose={() => setViewingId(undefined)}
         />
       ) : null}
-      {editing ? <ReassignPlanDrawer plan={editing} onClose={() => setEditingId(undefined)} /> : null}
+      {planEdit ? (
+        <ReassignPlanDrawer
+          key={planEdit.key}
+          open={editing !== undefined}
+          plan={planEdit.target}
+          onClose={() => setEditingId(undefined)}
+        />
+      ) : null}
     </div>
   );
 };

@@ -67,7 +67,9 @@ type Pending =
 const ConfirmContext = createContext<ConfirmApi | undefined>(undefined);
 
 export const ConfirmProvider = ({ children }: { children: ReactNode }): React.JSX.Element => {
+  // The answered request stays rendered, closed, until the dialog has played its exit; the next request replaces it.
   const [pending, setPending] = useState<Pending>();
+  const [open, setOpen] = useState(false);
   const nextId = useRef(0);
   const current = useRef<Pending | undefined>(undefined);
 
@@ -76,13 +78,14 @@ export const ConfirmProvider = ({ children }: { children: ReactNode }): React.JS
     current.current?.settle(null);
     current.current = request;
     setPending(request);
+    setOpen(true);
   }, []);
 
   const finish = useCallback((id: number, answer: Answer) => {
     const request = current.current;
     if (!request || request.id !== id) return;
     current.current = undefined;
-    setPending(undefined);
+    setOpen(false);
     request.settle(answer);
   }, []);
 
@@ -111,10 +114,20 @@ export const ConfirmProvider = ({ children }: { children: ReactNode }): React.JS
     <ConfirmContext.Provider value={api}>
       {children}
       {pending?.kind === "confirm" ? (
-        <ConfirmDialog key={pending.id} options={pending.options} onAnswer={(answer) => finish(pending.id, answer)} />
+        <ConfirmDialog
+          key={pending.id}
+          open={open}
+          options={pending.options}
+          onAnswer={(answer) => finish(pending.id, answer)}
+        />
       ) : null}
       {pending?.kind === "prompt" ? (
-        <PromptDialog key={pending.id} options={pending.options} onAnswer={(answer) => finish(pending.id, answer)} />
+        <PromptDialog
+          key={pending.id}
+          open={open}
+          options={pending.options}
+          onAnswer={(answer) => finish(pending.id, answer)}
+        />
       ) : null}
     </ConfirmContext.Provider>
   );
@@ -131,9 +144,11 @@ export const useConfirm = (): ConfirmFn => useConfirmApi().confirm;
 export const usePrompt = (): PromptFn => useConfirmApi().prompt;
 
 const ConfirmDialog = ({
+  open,
   options,
   onAnswer,
 }: {
+  open: boolean;
   options: ConfirmOptions;
   onAnswer: (answer: boolean) => void;
 }): React.JSX.Element => {
@@ -141,7 +156,7 @@ const ConfirmDialog = ({
   const required = options.typeToConfirm;
   const ready = required === undefined || typed === required;
   return (
-    <Dialog open onClose={() => onAnswer(false)} title={translateText(options.title)} className="max-w-md">
+    <Dialog open={open} onClose={() => onAnswer(false)} title={translateText(options.title)} className="max-w-md">
       {options.description ? <p className="text-sm text-muted">{translateText(options.description)}</p> : null}
       {required !== undefined ? (
         <div className="mt-4 grid gap-2">
@@ -173,9 +188,11 @@ const ConfirmDialog = ({
 };
 
 const PromptDialog = ({
+  open,
   options,
   onAnswer,
 }: {
+  open: boolean;
   options: PromptOptions;
   onAnswer: (answer: string | null) => void;
 }): React.JSX.Element => {
@@ -187,7 +204,7 @@ const PromptDialog = ({
     if (valid) onAnswer(value);
   };
   return (
-    <Dialog open onClose={() => onAnswer(null)} title={translateText(options.title)} className="max-w-md">
+    <Dialog open={open} onClose={() => onAnswer(null)} title={translateText(options.title)} className="max-w-md">
       <form onSubmit={submit} className="grid gap-4">
         {options.description ? <p className="text-sm text-muted">{translateText(options.description)}</p> : null}
         <Field

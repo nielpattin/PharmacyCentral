@@ -19,6 +19,7 @@ import { dataTableLabels } from "../components/data-table-labels.ts";
 import { withActionColumn } from "../lib/action-column.ts";
 import { RefreshButton } from "../components/forms.tsx";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
+import { useRetainedTarget } from "../hooks/useRetainedTarget.ts";
 import { referenceLabel, referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { translateText } from "../i18n.ts";
 import { useCan } from "../permissions/use-can.ts";
@@ -175,6 +176,7 @@ export const AnalyticsSection = (): React.JSX.Element => {
   const grossProfitCoverage = grossProfit?.available ? partialCoveragePercent(grossProfit.coverage?.current) : null;
   const planGate = useCan("actionPlan.create");
   const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
+  const planDrawer = useRetainedTarget(planDraft);
   const deadStockDays = inventory?.deadStock?.deadStockDays;
 
   const selectPeriod = (next: PeriodPreset): void => {
@@ -544,7 +546,14 @@ export const AnalyticsSection = (): React.JSX.Element => {
           )}
         />
       </section>
-      {planDraft ? <CreatePlanDrawer draft={planDraft} onClose={() => setPlanDraft(undefined)} /> : null}
+      {planDrawer ? (
+        <CreatePlanDrawer
+          key={planDrawer.key}
+          open={planDraft !== undefined}
+          draft={planDrawer.target}
+          onClose={() => setPlanDraft(undefined)}
+        />
+      ) : null}
     </div>
   );
 };

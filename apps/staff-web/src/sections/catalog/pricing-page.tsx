@@ -6,6 +6,7 @@ import { useConfirm } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { withActionColumn } from "../../lib/action-column.ts";
 import { GatedButton } from "../../components/gated-button.tsx";
+import { useOpenKey } from "../../hooks/useOpenKey.ts";
 import { PageActions } from "../../components/page-actions.tsx";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
@@ -65,6 +66,7 @@ export const PricingPage = (): React.JSX.Element => {
   const [search, setSearch] = useSearchDraft(values.q, (q) => setValues({ q }));
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerKey = useOpenKey(drawerOpen);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const session = useSession();
@@ -320,7 +322,7 @@ export const PricingPage = (): React.JSX.Element => {
           exportCsv={{ filename: "prices.csv" }}
         />
       </div>
-      {drawerOpen ? <PriceDrawer onClose={() => setDrawerOpen(false)} /> : null}
+      <PriceDrawer key={drawerKey} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </>
   );
 };

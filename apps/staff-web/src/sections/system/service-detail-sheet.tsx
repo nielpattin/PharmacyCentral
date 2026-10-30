@@ -128,12 +128,15 @@ const ChartCard = ({
 const SHEET_TABS = ["Overview", "Resources"] as const;
 
 export const ServiceDetailSheet = ({
+  open,
   serviceName,
   overview,
   initialWindow,
   grafanaUrl,
   onClose,
 }: {
+  /** False while the sheet plays its exit animation; it stays mounted until that ends. */
+  open: boolean;
   /** The service the sheet opens with. A Calls or Called by link inside the sheet shows that service instead. */
   serviceName: string;
   overview: SystemOverview;
@@ -179,7 +182,7 @@ export const ServiceDetailSheet = ({
 
   return (
     <Sheet
-      open
+      open={open}
       onClose={onClose}
       title={shownService}
       description={translateText("Service detail")}

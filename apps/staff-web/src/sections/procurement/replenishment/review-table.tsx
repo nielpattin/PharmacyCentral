@@ -16,6 +16,7 @@ import { Fragment, useState } from "react";
 
 import { useConfirm } from "../../../components/confirm.tsx";
 import { GatedButton } from "../../../components/gated-button.tsx";
+import { useRetainedTarget } from "../../../hooks/useRetainedTarget.ts";
 import { productLabel, useProductLookup } from "../../../hooks/useProductLookup.ts";
 import { referenceLabel, referenceOptions } from "../../../hooks/useStaffReferences.ts";
 import { translateText } from "../../../i18n.ts";
@@ -72,6 +73,7 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
   // Drafting is the Pharmacy Manager's. Anyone else reads the suggestions: no check boxes, quantities as plain text.
   const canDraft = draftGate.allowed;
   const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
+  const planDrawer = useRetainedTarget(planDraft);
 
   const createDrafts = useMutation({
     mutationFn: (body: DraftOrdersBody) => writeJson<unknown>(DRAFT_ORDERS_PATH, "POST", body),
@@ -290,7 +292,14 @@ export const ReplenishmentReview = ({ siteId, rows, suppliers, onCreated }: Revi
           </TableBody>
         </Table>
       </div>
-      {planDraft ? <CreatePlanDrawer draft={planDraft} onClose={() => setPlanDraft(undefined)} /> : null}
+      {planDrawer ? (
+        <CreatePlanDrawer
+          key={planDrawer.key}
+          open={planDraft !== undefined}
+          draft={planDrawer.target}
+          onClose={() => setPlanDraft(undefined)}
+        />
+      ) : null}
     </div>
   );
 };

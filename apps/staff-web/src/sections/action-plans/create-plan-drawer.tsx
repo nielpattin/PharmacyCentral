@@ -22,9 +22,11 @@ import { useStaffDirectory } from "./queries.ts";
  * date are the staff member's choice, and the title and detail may be edited first. Mount it only while it is open.
  */
 export const CreatePlanDrawer = ({
+  open,
   draft,
   onClose,
 }: {
+  open: boolean;
   draft: ActionPlanDraft;
   onClose: () => void;
 }): React.JSX.Element => {
@@ -65,6 +67,7 @@ export const CreatePlanDrawer = ({
 
   return (
     <FormDrawer
+      open={open}
       title="Create action plan"
       formId="action-plan-create-form"
       submitLabel="Create plan"

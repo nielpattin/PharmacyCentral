@@ -181,11 +181,25 @@ export const readOne = async <T = JsonRecord>(path: string): Promise<T> => reque
 export const lookupCustomers = (query: string): Promise<JsonRecord[]> =>
   readRows(`/api/customers/lookup?q=${encodeURIComponent(query.trim())}`);
 
+/**
+ * A write answers no sooner than this, so the control that sent it holds its working state long enough to be seen. A
+ * write that really takes longer is unaffected; one that answers at once still feels like it moved something.
+ */
+export const MINIMUM_WRITE_MS = 320;
+
 export const writeJson = async <T = JsonRecord>(
   path: string,
   method: "POST" | "PUT" | "PATCH" | "DELETE",
   body?: JsonRecord,
-): Promise<T> => request<T>(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
+): Promise<T> => {
+  const startedAt = performance.now();
+  try {
+    return await request<T>(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
+  } finally {
+    const remaining = MINIMUM_WRITE_MS - (performance.now() - startedAt);
+    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+  }
+};
 
 export const action = async <T = JsonRecord>(path: string, value: string): Promise<T> =>
   writeJson<T>(path, "POST", { action: value });

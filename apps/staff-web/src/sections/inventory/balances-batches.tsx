@@ -13,6 +13,7 @@ import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
+import { useRetainedTarget } from "../../hooks/useRetainedTarget.ts";
 import { translateText } from "../../i18n.ts";
 import { useCan } from "../../permissions/use-can.ts";
 import { formatDate, formatQuantity, numberValue, text, type JsonRecord } from "../../staff-api.ts";
@@ -49,6 +50,7 @@ export const BalancesTab = (): React.JSX.Element => {
   const labels = useInventoryLabels(balances.map((row) => text(row.productId, "")));
   const planGate = useCan("actionPlan.create");
   const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
+  const planDrawer = useRetainedTarget(planDraft);
   const today = todayIsoDate();
 
   const canPlanRow = (row: JsonRecord): boolean => {
@@ -133,7 +135,14 @@ export const BalancesTab = (): React.JSX.Element => {
         storageKey="staff:inventory:balances"
         exportCsv={{ filename: "inventory-balances.csv" }}
       />
-      {planDraft ? <CreatePlanDrawer draft={planDraft} onClose={() => setPlanDraft(undefined)} /> : null}
+      {planDrawer ? (
+        <CreatePlanDrawer
+          key={planDrawer.key}
+          open={planDraft !== undefined}
+          draft={planDrawer.target}
+          onClose={() => setPlanDraft(undefined)}
+        />
+      ) : null}
     </div>
   );
 };

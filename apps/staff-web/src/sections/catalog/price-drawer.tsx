@@ -35,7 +35,7 @@ const currencyCode = ({ value }: { value: string }): string | undefined =>
   /^[A-Za-z]{3}$/.test(value.trim()) ? undefined : "Use a three-letter currency code, such as VND.";
 
 /** Creates a price draft. The unit list follows the chosen product, and the price stays a draft until published. */
-export const PriceDrawer = ({ onClose }: { onClose: () => void }): React.JSX.Element => {
+export const PriceDrawer = ({ open, onClose }: { open: boolean; onClose: () => void }): React.JSX.Element => {
   const run = useStaffAction();
   const confirm = useConfirm();
   const formId = useId();
@@ -76,14 +76,14 @@ export const PriceDrawer = ({ onClose }: { onClose: () => void }): React.JSX.Ele
     queryFn: () => readRows(`/api/products/${encodeURIComponent(productId)}/units`),
     enabled: productId !== "",
   });
-  useUnsavedChangesGuard(isDirty);
+  useUnsavedChangesGuard(isDirty && open);
   useHotkey(
     "mod+s",
     (event) => {
       event.preventDefault();
       formRef.current?.requestSubmit();
     },
-    { label: "Save", allowWhileEditing: true },
+    { label: "Save", allowWhileEditing: true, when: open },
   );
 
   const requestClose = async (): Promise<void> => {
@@ -102,7 +102,7 @@ export const PriceDrawer = ({ onClose }: { onClose: () => void }): React.JSX.Ele
 
   return (
     <EntityDrawer
-      open
+      open={open}
       onClose={() => void requestClose()}
       title={translateText("Create price draft")}
       details={

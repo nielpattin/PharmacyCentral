@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { withActionColumn } from "../../lib/action-column.ts";
+import { useRetainedTarget } from "../../hooks/useRetainedTarget.ts";
 import { translateText } from "../../i18n.ts";
 import { useCan } from "../../permissions/use-can.ts";
 import { asRows, formatDateTime, formatQuantity, readOne, text, type JsonRecord } from "../../staff-api.ts";
@@ -39,6 +40,7 @@ export const SummaryTab = (): React.JSX.Element => {
   const canPlanLine = (row: JsonRecord): boolean =>
     planGate.allowed && typeof row.productId === "string" && row.priceStatus === "Missing price";
   const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
+  const planDrawer = useRetainedTarget(planDraft);
 
   return (
     <div className="grid gap-6">
@@ -155,7 +157,14 @@ export const SummaryTab = (): React.JSX.Element => {
           )}
         />
       </section>
-      {planDraft ? <CreatePlanDrawer draft={planDraft} onClose={() => setPlanDraft(undefined)} /> : null}
+      {planDrawer ? (
+        <CreatePlanDrawer
+          key={planDrawer.key}
+          open={planDraft !== undefined}
+          draft={planDrawer.target}
+          onClose={() => setPlanDraft(undefined)}
+        />
+      ) : null}
     </div>
   );
 };

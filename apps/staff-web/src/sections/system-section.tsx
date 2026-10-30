@@ -13,6 +13,7 @@ import { evaluateOverallHealth, evaluateServiceHealth } from "./system/health.ts
 import { GrafanaCard } from "./system/grafana-card.tsx";
 import { MessagingTab } from "./system/messaging-tab.tsx";
 import { RoutesCard } from "./system/routes-card.tsx";
+import { useRetainedTarget } from "../hooks/useRetainedTarget.ts";
 import { ServiceDetailSheet } from "./system/service-detail-sheet.tsx";
 import { ServicesTab } from "./system/services-tab.tsx";
 import { StatusPill } from "./system/status-pill.tsx";
@@ -35,6 +36,8 @@ export const SystemSection = (): React.JSX.Element => {
   const tab = isSystemTab(list.values.tab) ? list.values.tab : LIST_DEFAULTS.tab;
   // The service whose detail sheet is open. The sheet mounts only while a service is selected.
   const [selectedService, setSelectedService] = useState<string | null>(null);
+  // The sheet stays mounted after it closes, to slide out; the retained name keeps its content.
+  const sheetService = useRetainedTarget(selectedService ?? undefined);
   // The window the availability strips and the sheet's charts read. The header picker drives it.
   const [windowMinutes, setWindowMinutes] = useState<SystemMetricsWindowMinutes>(DEFAULT_SYSTEM_WINDOW_MINUTES);
 
@@ -107,10 +110,11 @@ export const SystemSection = (): React.JSX.Element => {
       ) : tab === "API routes" || errorMessage ? null : (
         <p className="text-sm text-muted">{translateText("Loading system overview...")}</p>
       )}
-      {tab === "Services" && selectedService !== null && overview ? (
+      {tab === "Services" && sheetService && overview ? (
         <ServiceDetailSheet
-          key={selectedService}
-          serviceName={selectedService}
+          key={sheetService.key}
+          open={selectedService !== null}
+          serviceName={sheetService.target}
           overview={overview}
           initialWindow={windowMinutes}
           grafanaUrl={grafanaUrl}

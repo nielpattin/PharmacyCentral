@@ -88,6 +88,7 @@ export const SavedViewsMenu = ({
                 <li key={view.id} className="flex items-center gap-1">
                   <button
                     type="button"
+                    data-weight="item"
                     onClick={() => apply(view, close)}
                     className="flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-surface-soft"
                   >

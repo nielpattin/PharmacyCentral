@@ -17,7 +17,15 @@ import { useStaffDirectory } from "./queries.ts";
  * Lets a manager or Platform Admin give one plan to another employee of its site, move its due date and retitle it
  * (BR-PLAN-002). The status and the detail stay with the owner. Only the fields that changed are sent.
  */
-export const ReassignPlanDrawer = ({ plan, onClose }: { plan: ActionPlan; onClose: () => void }): React.JSX.Element => {
+export const ReassignPlanDrawer = ({
+  open,
+  plan,
+  onClose,
+}: {
+  open: boolean;
+  plan: ActionPlan;
+  onClose: () => void;
+}): React.JSX.Element => {
   const queryClient = useQueryClient();
   const toast = useToast();
   const directory = useStaffDirectory(true);
@@ -49,6 +57,7 @@ export const ReassignPlanDrawer = ({ plan, onClose }: { plan: ActionPlan; onClos
 
   return (
     <FormDrawer
+      open={open}
       title="Reassign action plan"
       subtitle={plan.title}
       formId="action-plan-reassign-form"

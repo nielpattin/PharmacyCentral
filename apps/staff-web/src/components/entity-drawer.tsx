@@ -48,6 +48,8 @@ export const EntityDrawer = ({
   footer,
 }: EntityDrawerProps): React.JSX.Element => {
   const [tab, setTab] = useState<DrawerTab>("details");
+  // The drawer may stay mounted while it closes; a new opening starts on the details tab.
+  if (!open && tab !== "details") setTab("details");
   const tabsId = useId();
   const hasHistory = history !== undefined;
   const activeTab: DrawerTab = hasHistory ? tab : "details";
