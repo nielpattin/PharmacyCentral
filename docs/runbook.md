@@ -365,6 +365,26 @@ Credentials for local development. The admin comes from the default seed (A), an
 | Customer | `khachhang@pharmacycentral.vn` | Customer portal |
 | Customer (sample shoppers) | `nguyen.lan@example.com`, `tran.minh.khoa@example.com`, `le.thanh.huong@example.com`, `pham.quoc.viet@example.com`, `vo.ngoc.mai@example.com`, `dang.hoang.nam@example.com` | Customer portal |
 
+## Staff-web interaction motion
+
+Staff-web gives every action physical weight through one opt-in stylesheet, `packages/ui/src/weight.css` (exported as `@pharmacy/ui/weight.css`). `apps/staff-web/src/index.css` imports it after `theme.css`; customer-web does not, so the shared components stay instant there. The decision and its reasoning are in [ADR 0020](adr/0020-interactions-have-physical-weight.md).
+
+- Components carry markers, not timing: `data-weight` (`press`, `item`, `field`, `row`, `panel`, `backdrop`, `dialog`, `sheet`, `toast`, `thumb`) and `data-state` (`open`/`closed`). Adjust the feel by editing the tokens at the top of `weight.css` (`--weight-press`, `--weight-release`, `--weight-sink`, `--weight-scale-down`, `--weight-spring`), never by adding a duration at a call site.
+- A panel that leaves gets an exit animation: `usePresence(open)` keeps it mounted until the animation ends and unmounts it at once when no animation exists. It also goes inert and stops taking clicks while closing.
+- Close through `open`, not by mounting conditionally. For a drawer that opens for one row, use the retained pattern:
+
+  ```tsx
+  const planDrawer = useRetainedTarget(planDraft);
+  {planDrawer ? (
+    <CreatePlanDrawer key={planDrawer.key} open={planDraft !== undefined} draft={planDrawer.target} onClose={...} />
+  ) : null}
+  ```
+
+  `key` changes on every opening, so the drawer starts clean; the drawer takes `open` and gates its unsaved-changes guard and save shortcut on it (`FormDrawer` does both).
+- Every write goes through `writeJson`, which answers no sooner than `MINIMUM_WRITE_MS` (320ms) so the control that sent it holds its working state long enough to be seen. A slower write is unaffected; a read is never delayed.
+- Movement is skipped under `prefers-reduced-motion`; colour and opacity still change.
+- Driving the UI in a test: wait for the closing panel to leave the DOM, not only for `data-state` to read `closed`. In headless Chromium a page with no animation frames can stall CSS animations, so drive it with a `requestAnimationFrame` loop when a script must see the exit finish.
+
 ## Workspace verification
 
 Run all verification gates from repository root:
