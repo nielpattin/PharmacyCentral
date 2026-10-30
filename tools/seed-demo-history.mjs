@@ -752,14 +752,14 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
 // their own record. Runs once: goods receipt GR-WH-001 marks it.
 export async function seedWarehouseActivity({ admin, signIn }) {
   const warehouse = await signIn({ email: "warehouse@pharmacycentral.vn" });
+  const manager = await signIn({ email: "manager@pharmacycentral.vn" });
+  const buyer = await signIn({ email: "manager2@pharmacycentral.vn" });
   const contextCache = new Map();
   const call = async (session, audience, path, { method = "GET", body } = {}) => {
     const key = `${session.id}/${audience}`;
     const cached = contextCache.get(key);
     if (!cached || Date.now() - cached.at > 20_000) {
       const { contexts } = await session.call("/api/auth/context");
-  const manager = await signIn({ email: "manager@pharmacycentral.vn" });
-  const buyer = await signIn({ email: "manager2@pharmacycentral.vn" });
       contextCache.set(key, { at: Date.now(), value: contexts[audience] });
     }
     return session.call(path, {
