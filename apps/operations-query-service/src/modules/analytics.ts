@@ -30,6 +30,17 @@ export const salesDocumentsAnswerSchema = z.object({
   ),
 });
 
+/**
+ * A line of a paid invoice: the product, the description taken at the sale, the quantity in the sold unit and its price.
+ * A line that names no product is the delivery fee (or another charge), so it is revenue but not goods revenue.
+ */
+export const paidInvoiceLineSchema = z.object({
+  productId: uuid.nullable(),
+  description: z.string(),
+  quantity: z.number().nonnegative(),
+  unitPrice: z.number().nonnegative(),
+});
+
 /** `GET /internal/analytics/paid-invoices` of payment-service: only `Paid` invoices, never refunded or pending ones. */
 export const paidInvoicesAnswerSchema = z.object({
   invoices: z.array(
@@ -38,6 +49,7 @@ export const paidInvoicesAnswerSchema = z.object({
       prescriptionId: uuid.nullable(),
       amount: z.number().nonnegative(),
       createdAt: isoDateTime,
+      lines: z.array(paidInvoiceLineSchema),
     }),
   ),
 });
@@ -85,12 +97,30 @@ export const basePricesAnswerSchema = z.array(
 /** `GET /sites` of catalog-service. */
 export const sitesAnswerSchema = z.array(z.object({ id: uuid, name: z.string() }));
 
+/**
+ * `GET /internal/analytics/products` of catalog-service: every product, active or not, with the grouping the catalog
+ * holds today. The grouping is not a snapshot of the sale, so a renamed category or a changed prescription flag moves
+ * the history with it.
+ */
+export const productClassificationsAnswerSchema = z.object({
+  products: z.array(
+    z.object({
+      productId: uuid,
+      productName: z.string(),
+      category: z.string().nullable(),
+      prescriptionRequired: z.boolean(),
+    }),
+  ),
+});
+
 export type SalesDocument = z.output<typeof salesDocumentsAnswerSchema>["documents"][number];
 export type PaidInvoice = z.output<typeof paidInvoicesAnswerSchema>["invoices"][number];
 export type DispenseCost = z.output<typeof dispenseCostsAnswerSchema>["rows"][number];
 export type StockHealthRow = z.output<typeof stockHealthAnswerSchema>["rows"][number];
 export type BasePrice = z.output<typeof basePricesAnswerSchema>[number];
 export type SiteName = z.output<typeof sitesAnswerSchema>[number];
+export type SaleLine = z.output<typeof paidInvoiceLineSchema>;
+export type ProductClassification = z.output<typeof productClassificationsAnswerSchema>["products"][number];
 
 /** The query of the route. `from` is inclusive, `to` exclusive; both are ISO date-times with an offset. */
 export const analyticsQuerySchema = z
@@ -254,6 +284,187 @@ export const grossProfitOf = (
 /** Revenue per sale, whole dong; null when there is no sale to average. */
 export const averageOrderValue = ({ revenue, orderCount }: SalesTotals): number | null =>
   orderCount === 0 ? null : Math.round(revenue / orderCount);
+
+/** How many products the top list carries. */
+export const TOP_PRODUCT_LIMIT = 10;
+
+/** One site's sales of the period. `siteName` is null only for a sale whose site is unknown. */
+export type SalesSiteRow = {
+  siteId: string | null;
+  siteName: string | null;
+  revenue: number;
+  orderCount: number;
+  averageOrderValue: number | null;
+};
+
+/** One product's goods revenue, and its share of the goods revenue of the period. */
+export type ProductRevenueRow = {
+  productId: string;
+  productName: string;
+  revenue: number;
+  share: number | null;
+};
+
+/** One catalog category of the period. `category` is null for a product the catalog gives no category. */
+export type CategoryRevenueRow = {
+  category: string | null;
+  revenue: number;
+  share: number | null;
+};
+
+/** The prescription split: a product that requires a prescription, one that does not, or one the catalog no longer lists. */
+export type PrescriptionGroup = "prescription" | "otc" | "unknown";
+
+export type PrescriptionRevenueRow = {
+  group: PrescriptionGroup;
+  revenue: number;
+  share: number | null;
+};
+
+/**
+ * The sales of the period broken down by site, product, catalog category and prescription flag. Figures come from the
+ * invoice lines of the same sales the KPIs count, so the site rows add up to the revenue tile while the product tables
+ * count goods alone: the delivery fee is revenue but belongs to no product.
+ */
+export type SalesBreakdown = {
+  goodsRevenue: number;
+  bySite: SalesSiteRow[];
+  topProducts: ProductRevenueRow[];
+  byCategory: CategoryRevenueRow[];
+  byPrescription: PrescriptionRevenueRow[];
+};
+
+/**
+ * The lines of each sale, gathered from every `Paid` invoice of its document. A document with two paid invoices has the
+ * lines of both, the way `joinSales` sums their amounts.
+ */
+export const indexSaleLines = (invoices: PaidInvoice[]): Map<string, SaleLine[]> => {
+  const linesByDocument = new Map<string, SaleLine[]>();
+  for (const invoice of invoices) {
+    const documentId = invoice.orderId ?? invoice.prescriptionId;
+    if (documentId === null) continue;
+    const lines = linesByDocument.get(documentId);
+    if (lines === undefined) linesByDocument.set(documentId, [...invoice.lines]);
+    else lines.push(...invoice.lines);
+  }
+  return linesByDocument;
+};
+
+/** Whether a sale belongs to the period, site filter and channel, the same bounds `totalSales` applies. */
+const saleInScope = (sale: Sale, period: Period, filter: SiteFilter, channel: AnalyticsChannel): boolean => {
+  const createdAt = sale.createdAt.getTime();
+  if (createdAt < period.from.getTime() || createdAt >= period.to.getTime()) return false;
+  if (!siteVisible(sale.siteId, filter)) return false;
+  return channel === "all" || channel === sale.channel;
+};
+
+/** The revenue of one invoice line, in whole dong. */
+const lineRevenue = (line: SaleLine): number => Math.round(line.quantity * line.unitPrice);
+
+/** Highest revenue first; ties by label, so a list is stable from one request to the next. */
+const byRevenueThenLabel = <Row extends { revenue: number }>(
+  labelOf: (row: Row) => string,
+): ((a: Row, b: Row) => number) => {
+  return (a, b) => b.revenue - a.revenue || labelOf(a).localeCompare(labelOf(b));
+};
+
+/**
+ * The site, product, category and prescription breakdown of the sales in `period`, under the site and channel filters.
+ * A product takes its name and grouping from the catalog; a product the catalog no longer lists keeps the description
+ * of its invoice line and counts as `unknown` in the prescription split.
+ */
+export const salesBreakdownOf = (input: {
+  sales: readonly Sale[];
+  linesByDocument: ReadonlyMap<string, readonly SaleLine[]>;
+  products: readonly ProductClassification[];
+  sites: readonly SiteName[];
+  period: Period;
+  filter: SiteFilter;
+  channel: AnalyticsChannel;
+}): SalesBreakdown => {
+  const products = new Map(input.products.map((product) => [product.productId, product]));
+  const siteNames = new Map(input.sites.map((site) => [site.id, site.name]));
+  const bySite = new Map<string | null, { revenue: number; orderCount: number }>();
+  const byProduct = new Map<string, { revenue: number; description: string | null }>();
+  const byCategory = new Map<string, { category: string | null; revenue: number }>();
+  const byPrescription: Record<PrescriptionGroup, number> = { prescription: 0, otc: 0, unknown: 0 };
+  let goodsRevenue = 0;
+
+  for (const sale of input.sales) {
+    if (!saleInScope(sale, input.period, input.filter, input.channel)) continue;
+    const site = bySite.get(sale.siteId) ?? { revenue: 0, orderCount: 0 };
+    site.revenue += sale.revenue;
+    site.orderCount += 1;
+    bySite.set(sale.siteId, site);
+
+    for (const line of input.linesByDocument.get(sale.documentId) ?? []) {
+      // A line with no product is the delivery fee or another charge: revenue, but not goods revenue.
+      if (line.productId === null) continue;
+      const revenue = lineRevenue(line);
+      goodsRevenue += revenue;
+
+      const product = byProduct.get(line.productId) ?? { revenue: 0, description: null };
+      product.revenue += revenue;
+      if (line.description.length > 0) product.description = line.description;
+      byProduct.set(line.productId, product);
+
+      const classification = products.get(line.productId);
+      const category = classification?.category?.trim() || null;
+      // Categories are free text, so two spellings of one category count together; the first one seen is shown.
+      const categoryKey = category === null ? "" : category.toLowerCase();
+      const group = byCategory.get(categoryKey) ?? { category, revenue: 0 };
+      group.revenue += revenue;
+      byCategory.set(categoryKey, group);
+
+      const prescriptionGroup: PrescriptionGroup =
+        classification === undefined ? "unknown" : classification.prescriptionRequired ? "prescription" : "otc";
+      byPrescription[prescriptionGroup] += revenue;
+    }
+  }
+
+  const share = (revenue: number): number | null => (goodsRevenue > 0 ? revenue / goodsRevenue : null);
+
+  const siteRows: SalesSiteRow[] = [...bySite.entries()]
+    .map(([siteId, totals]) => ({
+      siteId,
+      siteName: siteId === null ? null : (siteNames.get(siteId) ?? siteId),
+      revenue: totals.revenue,
+      orderCount: totals.orderCount,
+      averageOrderValue: totals.orderCount === 0 ? null : Math.round(totals.revenue / totals.orderCount),
+    }))
+    .sort(byRevenueThenLabel((row) => row.siteName ?? ""));
+
+  const topProducts: ProductRevenueRow[] = [...byProduct.entries()]
+    .map(([productId, row]) => ({
+      productId,
+      productName: products.get(productId)?.productName ?? row.description ?? productId.slice(0, 8),
+      revenue: row.revenue,
+      share: share(row.revenue),
+    }))
+    .sort(byRevenueThenLabel((row) => row.productName))
+    .slice(0, TOP_PRODUCT_LIMIT);
+
+  const categoryRows: CategoryRevenueRow[] = [...byCategory.values()]
+    .map((row) => ({ category: row.category, revenue: row.revenue, share: share(row.revenue) }))
+    .sort(byRevenueThenLabel((row) => row.category ?? ""));
+
+  const prescriptionRows: PrescriptionRevenueRow[] = (["prescription", "otc"] as const).map((group) => ({
+    group,
+    revenue: byPrescription[group],
+    share: share(byPrescription[group]),
+  }));
+  if (byPrescription.unknown > 0) {
+    prescriptionRows.push({ group: "unknown", revenue: byPrescription.unknown, share: share(byPrescription.unknown) });
+  }
+
+  return {
+    goodsRevenue,
+    bySite: siteRows,
+    topProducts,
+    byCategory: categoryRows,
+    byPrescription: prescriptionRows,
+  };
+};
 
 const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0);
 
@@ -434,13 +645,15 @@ export type AnalyticsInput = {
   stockRows: StockHealthRow[];
   basePrices: BasePrice[];
   sites: SiteName[];
+  products: ProductClassification[];
 };
 
 /**
  * The answer of `GET /dashboard/analytics`. The channel filter applies to the sales KPIs only; `channels` lists both
  * channels for the current period under the site filter, and inventory health ignores the channel because stock belongs
  * to a site. Gross profit covers the sales whose goods all have a purchase cost recorded on a goods receipt; see
- * `grossProfitOf`.
+ * `grossProfitOf`. `breakdown` divides the same period's sales by site, product, category and prescription flag; unlike
+ * the revenue tile it counts goods alone, so the delivery fee is left out of its product figures.
  */
 export const buildDashboardAnalytics = (input: AnalyticsInput): DashboardAnalytics => {
   const filter: SiteFilter = { siteId: input.siteId, scope: input.scope };
@@ -453,6 +666,15 @@ export const buildDashboardAnalytics = (input: AnalyticsInput): DashboardAnalyti
   const priorProfit = grossProfitOf(sales, costs, previous, filter, input.channel);
   const stockRows = input.stockRows.filter((row) => siteVisible(row.siteId, filter));
   const periodDays = (input.period.to.getTime() - input.period.from.getTime()) / DAY_MS;
+  const breakdown = salesBreakdownOf({
+    sales,
+    linesByDocument: indexSaleLines(input.invoices),
+    products: input.products,
+    sites: input.sites,
+    period: input.period,
+    filter,
+    channel: input.channel,
+  });
   return {
     currency: "VND" as const,
     generatedAt: input.now.toISOString(),
@@ -476,6 +698,7 @@ export const buildDashboardAnalytics = (input: AnalyticsInput): DashboardAnalyti
       const totals = totalSales(sales, input.period, filter, channel);
       return { channel, revenue: totals.revenue, orderCount: totals.orderCount };
     }),
+    breakdown,
     inventory: inventoryHealthOf(stockRows, {
       now: input.now,
       periodDays,
@@ -505,5 +728,6 @@ export type DashboardAnalytics = {
     };
   };
   channels: Array<{ channel: SaleChannel; revenue: number; orderCount: number }>;
+  breakdown: SalesBreakdown;
   inventory: InventoryHealth;
 };

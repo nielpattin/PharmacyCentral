@@ -5,6 +5,7 @@ import { AnalyticsReadError, OperationsRepository } from "./operations-repositor
 
 const SITE = "00000000-0000-4000-8000-0000000000a1";
 const ORDER = "00000000-0000-4000-8000-0000000000d1";
+const PRODUCT = "00000000-0000-4000-8000-0000000000f1";
 const NOW = new Date("2026-10-28T00:00:00.000Z");
 const QUERY = {
   from: new Date("2026-10-08T00:00:00.000Z"),
@@ -21,7 +22,18 @@ const defaultAnswers: Record<string, () => Response> = {
     json({ documents: [{ id: ORDER, kind: "order", siteId: SITE, createdAt: "2026-10-09T10:00:00.000Z" }] }),
   "payment.test/internal/analytics/paid-invoices": () =>
     json({
-      invoices: [{ orderId: ORDER, prescriptionId: null, amount: 100_000, createdAt: "2026-10-09T10:05:00.000Z" }],
+      invoices: [
+        {
+          orderId: ORDER,
+          prescriptionId: null,
+          amount: 100_000,
+          createdAt: "2026-10-09T10:05:00.000Z",
+          lines: [
+            { productId: PRODUCT, description: "Paracetamol", quantity: 2, unitPrice: 45_000 },
+            { productId: null, description: "Phí giao hàng", quantity: 1, unitPrice: 10_000 },
+          ],
+        },
+      ],
     }),
   "inventory.test/internal/analytics/dispense-costs": () =>
     json({
@@ -32,6 +44,10 @@ const defaultAnswers: Record<string, () => Response> = {
     json({ from: QUERY.from, to: QUERY.to, asOf: NOW, deadStockDays: 90, rows: [] }),
   "catalog.test/pricing/base-prices": () => json([]),
   "catalog.test/sites": () => json([{ id: SITE, name: "Chi nhánh A" }]),
+  "catalog.test/internal/analytics/products": () =>
+    json({
+      products: [{ productId: PRODUCT, productName: "Paracetamol", category: "Medicine", prescriptionRequired: false }],
+    }),
 };
 
 describe("OperationsRepository.dashboardAnalytics", () => {
@@ -69,6 +85,17 @@ describe("OperationsRepository.dashboardAnalytics", () => {
     expect(answer.kpis.revenue).toStrictEqual({ current: 100_000, previous: 0 });
     expect(answer.kpis.orderCount.current).toBe(1);
     expect(answer.kpis.grossProfit).toMatchObject({ current: 70_000, available: true, reason: null });
+    expect(answer.breakdown.goodsRevenue).toBe(90_000);
+    expect(answer.breakdown.bySite).toStrictEqual([
+      { siteId: SITE, siteName: "Chi nhánh A", revenue: 100_000, orderCount: 1, averageOrderValue: 100_000 },
+    ]);
+    expect(answer.breakdown.topProducts).toStrictEqual([
+      { productId: PRODUCT, productName: "Paracetamol", revenue: 90_000, share: 1 },
+    ]);
+    expect(answer.breakdown.byPrescription).toStrictEqual([
+      { group: "prescription", revenue: 0, share: 0 },
+      { group: "otc", revenue: 90_000, share: 1 },
+    ]);
 
     const costs = requestTo("inventory.test", "/internal/analytics/dispense-costs");
     // The cost read starts with the previous period, like the sales it is joined to, and is not site-bound.
@@ -93,6 +120,9 @@ describe("OperationsRepository.dashboardAnalytics", () => {
 
     expect(requestTo("catalog.test", "/pricing/base-prices")?.url.searchParams.get("day")).toBe("2026-10-28");
     expect(requestTo("catalog.test", "/sites")?.headers.get("x-internal-identity-context")).toBe("signed-for-catalog");
+    const products = requestTo("catalog.test", "/internal/analytics/products");
+    expect(products?.headers.get("x-internal-service-secret")).toBe("test-internal-secret");
+    expect(products?.headers.get("x-actor-site-ids")).toBeNull();
   });
 
   it("throws when a read fails, never an answer that leaves that service out", async () => {

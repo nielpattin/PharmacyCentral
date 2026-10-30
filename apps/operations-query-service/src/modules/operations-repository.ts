@@ -11,6 +11,7 @@ import {
   dispenseCostsAnswerSchema,
   paidInvoicesAnswerSchema,
   previousPeriodOf,
+  productClassificationsAnswerSchema,
   salesDocumentsAnswerSchema,
   sitesAnswerSchema,
   stockHealthAnswerSchema,
@@ -381,7 +382,7 @@ export class OperationsRepository {
     const costWindow = new URLSearchParams({ since: previous.from.toISOString() });
     const stockWindow = new URLSearchParams({ from: period.from.toISOString(), to: period.to.toISOString() });
     const today = now.toISOString().slice(0, 10);
-    const [documents, invoices, costs, stock, prices, sites] = await Promise.all([
+    const [documents, invoices, costs, stock, prices, sites, products] = await Promise.all([
       this.readAnswer(
         this.options.salesUrl,
         `/internal/analytics/sales-documents?${salesWindow.toString()}`,
@@ -418,6 +419,12 @@ export class OperationsRepository {
         { "x-internal-identity-context": catalogIdentity() },
         sitesAnswerSchema,
       ),
+      this.readAnswer(
+        this.options.catalogUrl,
+        "/internal/analytics/products",
+        internalServiceHeaders(),
+        productClassificationsAnswerSchema,
+      ),
     ]);
     return buildDashboardAnalytics({
       now,
@@ -431,6 +438,7 @@ export class OperationsRepository {
       stockRows: stock.rows,
       basePrices: prices,
       sites,
+      products: products.products,
     });
   }
 

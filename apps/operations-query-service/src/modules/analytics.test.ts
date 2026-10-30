@@ -8,11 +8,13 @@ import {
   DEAD_STOCK_ITEM_LIMIT,
   grossProfitOf,
   indexDispenseCosts,
+  indexSaleLines,
   inventoryHealthOf,
   isDeadStock,
   joinSales,
   lineValue,
   previousPeriodOf,
+  salesBreakdownOf,
   stockoutRateOf,
   totalSales,
   turnoverOf,
@@ -20,6 +22,8 @@ import {
   type BasePrice,
   type DispenseCost,
   type PaidInvoice,
+  type ProductClassification,
+  type SaleLine,
   type SalesDocument,
   type SiteName,
   type StockHealthRow,
@@ -34,6 +38,7 @@ const SITE_B = uuidOf(0xb1);
 const P1 = uuidOf(0xc1);
 const P2 = uuidOf(0xc2);
 const P3 = uuidOf(0xc3);
+const P4 = uuidOf(0xc4);
 const NOW = new Date("2026-10-28T00:00:00.000Z");
 const PERIOD = { from: new Date("2026-10-08T00:00:00.000Z"), to: new Date("2026-10-15T00:00:00.000Z") };
 
@@ -41,6 +46,11 @@ const PRICES: BasePrice[] = [
   { productId: P1, productName: "Paracetamol", unitPrice: 1000 },
   { productId: P2, productName: "Amoxicillin", unitPrice: 2500 },
   { productId: P3, productName: "Vitamin C", unitPrice: null },
+];
+const PRODUCTS: ProductClassification[] = [
+  { productId: P1, productName: "Paracetamol", category: "Medicine", prescriptionRequired: false },
+  { productId: P2, productName: "Amoxicillin", category: "Medicine", prescriptionRequired: true },
+  { productId: P3, productName: "Vitamin C", category: null, prescriptionRequired: false },
 ];
 const SITES: SiteName[] = [{ id: SITE_A, name: "Chi nhánh A" }];
 
@@ -51,11 +61,24 @@ const document = (
   createdAt: string,
 ): SalesDocument => ({ id: uuidOf(n), kind, siteId, createdAt });
 
-const invoiceOf = (n: number, kind: "order" | "prescription", amount: number): PaidInvoice => ({
+const invoiceOf = (
+  n: number,
+  kind: "order" | "prescription",
+  amount: number,
+  lines: PaidInvoice["lines"] = [],
+): PaidInvoice => ({
   orderId: kind === "order" ? uuidOf(n) : null,
   prescriptionId: kind === "prescription" ? uuidOf(n) : null,
   amount,
   createdAt: "2026-10-09T00:00:00.000Z",
+  lines,
+});
+
+const line = (productId: string | null, quantity: number, unitPrice: number, description: string): SaleLine => ({
+  productId,
+  description,
+  quantity,
+  unitPrice,
 });
 
 const stock = (overrides: Partial<StockHealthRow> = {}): StockHealthRow => ({
@@ -108,6 +131,7 @@ const salesInput = (overrides: Partial<AnalyticsInput> = {}): AnalyticsInput => 
   stockRows: [],
   basePrices: PRICES,
   sites: SITES,
+  products: PRODUCTS,
   ...overrides,
 });
 
@@ -220,6 +244,153 @@ describe("sales KPIs", () => {
       revenue: 390_000,
       orderCount: 5,
     });
+  });
+});
+
+/**
+ * The breakdown fixture. Documents 1 to 4 are sales of the current period at two sites, with one sale whose site is
+ * unknown; 7 is a sale of the previous period. Document 1 carries a delivery fee line, and P4 is not in the catalog, so
+ * it falls back to the description of its line and counts as an unknown prescription group.
+ */
+const breakdownInput = (overrides: Partial<AnalyticsInput> = {}): AnalyticsInput =>
+  salesInput({
+    documents: [
+      document(1, "order", SITE_A, "2026-10-09T10:00:00.000Z"),
+      document(2, "prescription", SITE_A, "2026-10-10T10:00:00.000Z"),
+      document(3, "order", SITE_B, "2026-10-12T10:00:00.000Z"),
+      document(4, "order", null, "2026-10-11T10:00:00.000Z"),
+      document(7, "order", SITE_A, "2026-10-03T10:00:00.000Z"),
+    ],
+    invoices: [
+      invoiceOf(1, "order", 100, [line(P1, 2, 30, "Paracetamol"), line(null, 1, 20, "Phí giao hàng")]),
+      invoiceOf(2, "prescription", 50, [line(P2, 1, 50, "Amoxicillin")]),
+      invoiceOf(3, "order", 80, [
+        line(P1, 1, 30, "Paracetamol"),
+        line(P3, 4, 10, "Vitamin C"),
+        line(P4, 1, 10, "Hàng mới"),
+      ]),
+      invoiceOf(4, "order", 30, [line(P1, 1, 30, "Paracetamol")]),
+      invoiceOf(7, "order", 80, [line(P2, 1, 80, "Amoxicillin")]),
+    ],
+    sites: [
+      { id: SITE_A, name: "Chi nhánh A" },
+      { id: SITE_B, name: "Chi nhánh B" },
+    ],
+    ...overrides,
+  });
+
+describe("sales breakdown", () => {
+  it("adds the site rows up to the revenue tile, delivery fee included", () => {
+    const answer = buildDashboardAnalytics(breakdownInput());
+    expect(answer.kpis.revenue.current).toBe(260);
+    expect(answer.breakdown.bySite.map((row) => [row.siteName, row.revenue, row.orderCount])).toStrictEqual([
+      ["Chi nhánh A", 150, 2],
+      ["Chi nhánh B", 80, 1],
+      [null, 30, 1],
+    ]);
+    expect(answer.breakdown.bySite.map((row) => row.averageOrderValue)).toStrictEqual([75, 80, 30]);
+  });
+
+  it("counts goods alone for the product tables, so the delivery fee is not attributed to a product", () => {
+    const breakdown = buildDashboardAnalytics(breakdownInput()).breakdown;
+    expect(breakdown.goodsRevenue).toBe(220);
+    expect(breakdown.topProducts.map((row) => [row.productName, row.revenue])).toStrictEqual([
+      ["Paracetamol", 120],
+      ["Amoxicillin", 50],
+      ["Vitamin C", 40],
+      ["Hàng mới", 10],
+    ]);
+    expect(breakdown.topProducts[0]?.share).toBeCloseTo(120 / 220);
+  });
+
+  it("groups by the catalog category, merging an uncategorized product with one the catalog no longer lists", () => {
+    const breakdown = buildDashboardAnalytics(breakdownInput()).breakdown;
+    expect(breakdown.byCategory.map((row) => [row.category, row.revenue])).toStrictEqual([
+      ["Medicine", 170],
+      [null, 50],
+    ]);
+  });
+
+  it("merges two spellings of one category, trimmed and ignoring case", () => {
+    const input = breakdownInput();
+    const breakdown = salesBreakdownOf({
+      sales: joinSales(input.documents, input.invoices),
+      linesByDocument: indexSaleLines(input.invoices),
+      products: [
+        { productId: P1, productName: "Paracetamol", category: "Medicine", prescriptionRequired: false },
+        { productId: P2, productName: "Amoxicillin", category: " medicine ", prescriptionRequired: true },
+        PRODUCTS[2] as ProductClassification,
+      ],
+      sites: input.sites,
+      period: input.period,
+      filter: { siteId: null, scope: undefined },
+      channel: "all",
+    });
+    expect(breakdown.byCategory.map((row) => [row.category, row.revenue])).toStrictEqual([
+      ["Medicine", 170],
+      [null, 50],
+    ]);
+  });
+
+  it("splits goods revenue by the current prescription flag, adding an unknown row only when a sold product is not listed", () => {
+    const breakdown = buildDashboardAnalytics(breakdownInput()).breakdown;
+    expect(breakdown.byPrescription).toStrictEqual([
+      { group: "prescription", revenue: 50, share: 50 / 220 },
+      { group: "otc", revenue: 160, share: 160 / 220 },
+      { group: "unknown", revenue: 10, share: 10 / 220 },
+    ]);
+  });
+
+  it("applies the channel filter to every breakdown table", () => {
+    const online = buildDashboardAnalytics(breakdownInput({ channel: "online" })).breakdown;
+    expect(online.bySite.map((row) => [row.siteName, row.revenue])).toStrictEqual([
+      ["Chi nhánh A", 100],
+      ["Chi nhánh B", 80],
+      [null, 30],
+    ]);
+    expect(online.goodsRevenue).toBe(170);
+    expect(online.byPrescription[0]).toStrictEqual({ group: "prescription", revenue: 0, share: 0 });
+
+    const counter = buildDashboardAnalytics(breakdownInput({ channel: "counter" })).breakdown;
+    expect(counter.goodsRevenue).toBe(50);
+    expect(counter.bySite.map((row) => row.revenue)).toStrictEqual([50]);
+    expect(counter.topProducts.map((row) => row.productName)).toStrictEqual(["Amoxicillin"]);
+  });
+
+  it("leaves out a site outside the caller's scope, and a sale with no site", () => {
+    const scoped = buildDashboardAnalytics(breakdownInput({ scope: [SITE_A] })).breakdown;
+    expect(scoped.bySite.map((row) => row.siteName)).toStrictEqual(["Chi nhánh A"]);
+    expect(scoped.goodsRevenue).toBe(110);
+    expect(scoped.topProducts.map((row) => [row.productName, row.revenue])).toStrictEqual([
+      ["Paracetamol", 60],
+      ["Amoxicillin", 50],
+    ]);
+  });
+
+  it("answers empty tables and unanswered shares for a period with no sale", () => {
+    const empty = buildDashboardAnalytics(
+      breakdownInput({
+        documents: [document(7, "order", SITE_A, "2026-10-03T10:00:00.000Z")],
+      }),
+    ).breakdown;
+    expect(empty).toStrictEqual({
+      goodsRevenue: 0,
+      bySite: [],
+      topProducts: [],
+      byCategory: [],
+      byPrescription: [
+        { group: "prescription", revenue: 0, share: null },
+        { group: "otc", revenue: 0, share: null },
+      ],
+    });
+  });
+
+  it("gathers the lines of every paid invoice of one document", () => {
+    const lines = indexSaleLines([
+      invoiceOf(1, "order", 10, [line(P1, 1, 10, "Paracetamol")]),
+      invoiceOf(1, "order", 20, [line(P2, 2, 10, "Amoxicillin")]),
+    ]);
+    expect(lines.get(uuidOf(1))?.map((row) => row.productId)).toStrictEqual([P1, P2]);
   });
 });
 
