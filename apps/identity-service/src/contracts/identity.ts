@@ -21,14 +21,15 @@ export const loginRequestSchema = z.object({
   audience: z.enum(["employee"]).optional(),
 });
 
+/** A phone of digits and dial punctuation, 8 to 20 characters (BR-USER-010). */
+export const phoneNumberSchema = z
+  .string()
+  .trim()
+  .regex(/^[0-9+()\s-]{8,20}$/, "Số điện thoại chỉ gồm chữ số và các ký tự + ( ) -");
+
 export const updateProfileRequestSchema = z.object({
   displayName: z.string().trim().min(1).max(200).optional(),
-  phoneNumber: z
-    .string()
-    .trim()
-    .regex(/^[0-9+()\s-]{8,20}$/, "Số điện thoại chỉ gồm chữ số và các ký tự + ( ) -")
-    .nullable()
-    .optional(),
+  phoneNumber: phoneNumberSchema.nullable().optional(),
 });
 
 export const sessionUserSchema = z.object({

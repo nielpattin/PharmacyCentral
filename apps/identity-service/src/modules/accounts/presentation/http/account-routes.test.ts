@@ -768,6 +768,55 @@ describe("administrator routes", () => {
     });
   });
 
+  it("refuses a new employee without a valid phone before the service runs", async () => {
+    const createEmployee = vi.fn(async () => ({ ...admin(false), id: targetId, phoneNumber: "0901234567" }));
+    const url = await start({ currentSession: async () => ({ account: admin(false), session: {} }), createEmployee });
+    const body = {
+      email: "new@example.vn",
+      password: "a-long-enough-password",
+      displayName: "Mới",
+      roles: ["Pharmacist"],
+      siteIds: [targetId],
+    };
+    const post = (extra: Record<string, unknown>) =>
+      fetch(`${url}/admin/users`, {
+        method: "POST",
+        headers: { ...session, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, ...extra }),
+      });
+
+    expect((await post({})).status).toBe(400);
+    expect((await post({ phoneNumber: "" })).status).toBe(400);
+    expect((await post({ phoneNumber: "abc" })).status).toBe(400);
+    expect(createEmployee).not.toHaveBeenCalled();
+    const created = await post({ phoneNumber: "0901234567" });
+    expect(created.status).toBe(201);
+    expect(((await created.json()) as { phoneNumber: string }).phoneNumber).toBe("0901234567");
+  });
+
+  it("passes the acting administrator and a valid name and phone to a profile correction", async () => {
+    const updateEmployeeProfile = vi.fn(async () => ({ ...admin(false), id: targetId, phoneNumber: "0912345678" }));
+    const url = await start({
+      currentSession: async () => ({ account: admin(false), session: {} }),
+      updateEmployeeProfile,
+    });
+    const put = (body: Record<string, unknown>) =>
+      fetch(`${url}/admin/users/${targetId}/profile`, {
+        method: "PUT",
+        headers: { ...session, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    expect((await put({ displayName: "Mới" })).status).toBe(400);
+    expect((await put({ displayName: "Mới", phoneNumber: "abc" })).status).toBe(400);
+    expect(updateEmployeeProfile).not.toHaveBeenCalled();
+    expect((await put({ displayName: "Mới", phoneNumber: "0912345678" })).status).toBe(200);
+    expect(updateEmployeeProfile).toHaveBeenCalledWith(adminId, targetId, {
+      displayName: "Mới",
+      phoneNumber: "0912345678",
+    });
+  });
+
   it("filters the list by status and refuses an unknown status", async () => {
     const listUsers = vi.fn(async () => []);
     const url = await start({ currentSession: async () => ({ account: admin(false), session: {} }), listUsers });

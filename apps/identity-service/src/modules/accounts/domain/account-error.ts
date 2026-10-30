@@ -20,6 +20,13 @@ export class AccountError extends Error {
 export const accountErrors = {
   emailTaken: () =>
     new AccountError(409, "conflict", "An account with this email already exists", "Email này đã có tài khoản."),
+  phoneRequired: () =>
+    new AccountError(
+      400,
+      "phone_required",
+      "A phone number is required for an employee",
+      "Nhân viên phải có số điện thoại liên hệ.",
+    ),
   unknownRole: () => new AccountError(400, "request_failed", "Unknown employee role", "Vai trò không hợp lệ."),
   roleRequired: () =>
     new AccountError(400, "role_required", "At least one role is required", "Chọn ít nhất một vai trò."),

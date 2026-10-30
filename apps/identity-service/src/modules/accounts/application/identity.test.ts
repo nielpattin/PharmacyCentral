@@ -508,7 +508,7 @@ describe("administrator changes", () => {
     const harness = createHarness();
     const admin = await addAdmin(harness);
     const site = "00000000-0000-4000-8000-0000000000b1";
-    const base = { password, displayName: "Mới" };
+    const base = { password, displayName: "Mới", phoneNumber: "0901234567" };
 
     await expectRefusal(
       harness.service.createEmployee(admin.id, { ...base, email: "new@example.com", roles: [], siteIds: [site] }),
@@ -523,6 +523,17 @@ describe("administrator changes", () => {
         siteIds: [],
       }),
       "site_required",
+      400,
+    );
+    await expectRefusal(
+      harness.service.createEmployee(admin.id, {
+        ...base,
+        phoneNumber: "  ",
+        email: "new@example.com",
+        roles: ["Pharmacist"],
+        siteIds: [site],
+      }),
+      "phone_required",
       400,
     );
     await addAccount(harness, { email: "taken@example.com" });
@@ -548,11 +559,17 @@ describe("administrator changes", () => {
       email: "new@example.com",
       password: "a-secret-password-1",
       displayName: "Mới",
+      phoneNumber: " 0901234567 ",
       roles: ["Pharmacist"],
       siteIds: [site],
     });
 
-    expect(created).toMatchObject({ mustChangePassword: true, isActive: true, roles: ["Pharmacist"] });
+    expect(created).toMatchObject({
+      mustChangePassword: true,
+      isActive: true,
+      roles: ["Pharmacist"],
+      phoneNumber: "0901234567",
+    });
     expect(harness.entries).toEqual([
       {
         action: "identity.user.created",
@@ -563,6 +580,81 @@ describe("administrator changes", () => {
       },
     ]);
     expect(JSON.stringify(harness.entries)).not.toContain("a-secret-password-1");
+  });
+
+  it("lets an employee replace the phone but never remove it, while a customer may clear it", async () => {
+    const harness = createHarness();
+    const employee = await addAccount(harness, { phoneNumber: "0901234567" });
+    const customer = await addAccount(harness, {
+      actorType: "customer",
+      roles: [],
+      siteIds: [],
+      phoneNumber: "0907654321",
+    });
+
+    await expectRefusal(harness.service.updateProfile(employee.id, { phoneNumber: null }), "phone_required", 400);
+    await expectRefusal(harness.service.updateProfile(employee.id, { phoneNumber: "  " }), "phone_required", 400);
+    await expect(harness.service.updateProfile(employee.id, { phoneNumber: "0912345678" })).resolves.toMatchObject({
+      phoneNumber: "0912345678",
+    });
+    await expect(harness.service.updateProfile(employee.id, { displayName: "Tên mới" })).resolves.toMatchObject({
+      phoneNumber: "0912345678",
+    });
+    await expect(harness.service.updateProfile(customer.id, { phoneNumber: null })).resolves.toMatchObject({
+      phoneNumber: undefined,
+    });
+  });
+
+  it("lets an administrator correct another employee name and phone, and audits only the changed fields", async () => {
+    const harness = createHarness();
+    const admin = await addAdmin(harness);
+    const employee = await addAccount(harness, { displayName: "Cũ", phoneNumber: "0901234567" });
+
+    const updated = await harness.service.updateEmployeeProfile(admin.id, employee.id, {
+      displayName: " Mới ",
+      phoneNumber: "0912345678",
+    });
+    expect(updated).toMatchObject({ displayName: "Mới", phoneNumber: "0912345678" });
+    expect(harness.entries).toEqual([
+      {
+        action: "identity.user.profile-updated",
+        entityType: "user",
+        entityId: employee.id,
+        actorId: admin.id,
+        details: { fields: "displayName,phoneNumber" },
+      },
+    ]);
+    expect(JSON.stringify(harness.entries)).not.toContain("0912345678");
+
+    await harness.service.updateEmployeeProfile(admin.id, employee.id, {
+      displayName: "Mới",
+      phoneNumber: "0912345678",
+    });
+    expect(harness.entries).toHaveLength(1);
+  });
+
+  it("refuses an administrator editing their own profile, an empty phone, and a customer id", async () => {
+    const harness = createHarness();
+    const admin = await addAdmin(harness);
+    const employee = await addAccount(harness);
+    const customer = await addAccount(harness, { actorType: "customer", roles: [], siteIds: [] });
+
+    await expectRefusal(
+      harness.service.updateEmployeeProfile(admin.id, admin.id, { displayName: "X", phoneNumber: "0901234567" }),
+      "self_change_forbidden",
+      403,
+    );
+    await expectRefusal(
+      harness.service.updateEmployeeProfile(admin.id, employee.id, { displayName: "X", phoneNumber: "  " }),
+      "phone_required",
+      400,
+    );
+    await expectRefusal(
+      harness.service.updateEmployeeProfile(admin.id, customer.id, { displayName: "X", phoneNumber: "0901234567" }),
+      "employee_not_found",
+      404,
+    );
+    expect(harness.entries).toEqual([]);
   });
 
   it("answers 404 for a customer id on every administrator route", async () => {

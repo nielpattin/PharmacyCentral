@@ -267,6 +267,8 @@ export class AccountService {
     if (input.displayName !== undefined) account.displayName = input.displayName;
     if (input.phoneNumber !== undefined) {
       const phoneNumber = input.phoneNumber?.trim() ?? "";
+      // An employee is reached by colleagues and administrators, so the phone can be replaced but not removed.
+      if (phoneNumber.length === 0 && account.actorType === "employee") throw accountErrors.phoneRequired();
       account.phoneNumber = phoneNumber.length > 0 ? phoneNumber : undefined;
     }
     await this.unitOfWork.run(async (scope) => {
@@ -331,9 +333,18 @@ export class AccountService {
 
   public async createEmployee(
     actorId: string,
-    input: { email: string; password: string; displayName: string; roles: string[]; siteIds: string[] },
+    input: {
+      email: string;
+      password: string;
+      displayName: string;
+      phoneNumber: string;
+      roles: string[];
+      siteIds: string[];
+    },
   ): Promise<Account> {
     const email = assertEmail(input.email);
+    const phoneNumber = input.phoneNumber.trim();
+    if (phoneNumber.length === 0) throw accountErrors.phoneRequired();
     const roles = [...new Set(input.roles)];
     const siteIds = [...new Set(input.siteIds)];
     assertAccessGrant(roles, siteIds);
@@ -350,6 +361,7 @@ export class AccountService {
         mustChangePassword: true,
         email,
         displayName: input.displayName.trim(),
+        phoneNumber,
         passwordHash,
         emailVerifiedAt: new Date(),
         roles,
@@ -388,6 +400,40 @@ export class AccountService {
       await this.auditAdminChange(scope, actorId, "identity.user.access-updated", account.id, {
         roles: account.roles.join(","),
         sites: account.siteIds.length,
+      });
+      return account;
+    });
+  }
+
+  /**
+   * An administrator corrects the name and phone of another employee, for example when the person changed number or can
+   * no longer sign in. The own account goes through `updateProfile`. The entry names the fields that changed, never
+   * the phone itself.
+   */
+  public async updateEmployeeProfile(
+    actorId: string,
+    accountId: string,
+    input: { displayName: string; phoneNumber: string },
+  ): Promise<Account> {
+    const account = await this.requireEmployee(accountId);
+    if (account.id === actorId) {
+      throw accountErrors.selfChange("Hãy sửa hồ sơ của bạn ở trang Cài đặt tài khoản.");
+    }
+    const displayName = input.displayName.trim();
+    const phoneNumber = input.phoneNumber.trim();
+    if (phoneNumber.length === 0) throw accountErrors.phoneRequired();
+    const changed = [
+      ...(displayName !== account.displayName ? ["displayName"] : []),
+      ...(phoneNumber !== (account.phoneNumber ?? "") ? ["phoneNumber"] : []),
+    ];
+    if (changed.length === 0) return account;
+
+    return this.unitOfWork.run(async (scope) => {
+      account.displayName = displayName;
+      account.phoneNumber = phoneNumber;
+      await scope.accounts.save(account);
+      await this.auditAdminChange(scope, actorId, "identity.user.profile-updated", account.id, {
+        fields: changed.join(","),
       });
       return account;
     });

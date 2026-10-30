@@ -13,6 +13,7 @@ const admin = {
   actorType: "employee",
   email: "admin@pharmacycentral.vn",
   displayName: "Nguyễn Quốc Bảo",
+  phoneNumber: "0902000001",
   roles: ["Platform Admin"],
   siteCodes: [],
 };

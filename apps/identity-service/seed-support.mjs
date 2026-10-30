@@ -38,7 +38,7 @@ const hashPassword = async (password) => {
 
 /**
  * Creates or updates exactly the given accounts, by id, in one transaction. Roles and site access are reset to the
- * given ones, so a role or site added by hand never lingers. No other account is touched.
+ * given ones, so a role or site added by hand never lingers. An employee must name a `phoneNumber`; a customer may. No other account is touched.
  * `siteIdsByCode` maps the site codes an account names to catalog site ids.
  */
 export const seedAccounts = async ({ accounts, password, siteIdsByCode = new Map() }) => {
@@ -48,9 +48,12 @@ export const seedAccounts = async ({ accounts, password, siteIdsByCode = new Map
     await client.query("BEGIN");
     const passwordHash = await hashPassword(password);
     for (const account of accounts) {
+      if (account.actorType === "employee" && !account.phoneNumber) {
+        throw new Error(`Employee ${account.email} needs a phoneNumber in the seed.`);
+      }
       await client.query(
-        `INSERT INTO users (id, actor_type, email, display_name, password_hash, email_verified_at, is_active, must_change_password) VALUES ($1, $2, $3, $4, $5, now(), true, false) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, actor_type = EXCLUDED.actor_type, display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash, email_verified_at = EXCLUDED.email_verified_at, is_active = true, must_change_password = false`,
-        [account.id, account.actorType, account.email, account.displayName, passwordHash],
+        `INSERT INTO users (id, actor_type, email, display_name, phone_number, password_hash, email_verified_at, is_active, must_change_password) VALUES ($1, $2, $3, $4, $5, $6, now(), true, false) ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, actor_type = EXCLUDED.actor_type, display_name = EXCLUDED.display_name, phone_number = COALESCE(EXCLUDED.phone_number, users.phone_number), password_hash = EXCLUDED.password_hash, email_verified_at = EXCLUDED.email_verified_at, is_active = true, must_change_password = false`,
+        [account.id, account.actorType, account.email, account.displayName, account.phoneNumber ?? null, passwordHash],
       );
       await client.query("DELETE FROM user_roles WHERE user_id = $1", [account.id]);
       await client.query("DELETE FROM user_site_scopes WHERE user_id = $1", [account.id]);

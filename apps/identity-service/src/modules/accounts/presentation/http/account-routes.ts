@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import {
   loginRequestSchema,
+  phoneNumberSchema,
   registerRequestSchema,
   updateProfileRequestSchema,
 } from "../../../../contracts/identity.ts";
@@ -36,9 +37,11 @@ const adminUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(12).max(200),
   displayName: z.string().trim().min(1).max(200),
+  phoneNumber: phoneNumberSchema,
   roles: z.array(z.string()).max(8),
   siteIds: z.array(z.string().uuid()).max(500),
 });
+const userProfileSchema = z.object({ displayName: z.string().trim().min(1).max(200), phoneNumber: phoneNumberSchema });
 const userAccessSchema = z.object({ roles: z.array(z.string()).max(8), siteIds: z.array(z.string().uuid()).max(500) });
 const adminUserListSchema = z.object({ status: z.enum(["active", "deactivated"]).optional() });
 const userIdSchema = z.object({ id: z.string().uuid() });
@@ -499,6 +502,27 @@ export const createAdminRouter = (service: AccountService): Router => {
         parsed.data.roles,
         parsed.data.siteIds,
       );
+      response.json(toPublicAccount(updated));
+    } catch (error) {
+      writeServiceError(response, error, 400);
+    }
+  });
+
+  router.put("/users/:id/profile", async (request, response) => {
+    const id = userIdSchema.safeParse(request.params);
+    const parsed = userProfileSchema.safeParse(request.body);
+    if (!id.success || !parsed.success) {
+      response.status(400).json({
+        title: "Invalid request",
+        status: 400,
+        code: "invalid_request",
+        detail: "Dữ liệu gửi lên không hợp lệ.",
+      });
+      return;
+    }
+
+    try {
+      const updated = await service.updateEmployeeProfile(response.locals.adminId as string, id.data.id, parsed.data);
       response.json(toPublicAccount(updated));
     } catch (error) {
       writeServiceError(response, error, 400);
