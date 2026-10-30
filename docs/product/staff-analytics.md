@@ -52,6 +52,7 @@ Platform Admin (read only) and Pharmacy Manager (`sectionRoles.analytics`; the e
 - Accepted when:
   - **Doanh thu theo cơ sở** lists every site with a sale in the period: revenue, orders and average order value, highest revenue first. Revenue is the invoice amounts, so the rows add up to the revenue tile.
   - **Sản phẩm bán chạy** lists the ten products with the highest goods revenue and each one's share of goods revenue. The note shows the goods revenue total.
+  - **Phân nhóm ABC** lists three rows, A, B and C, each with the number of products, goods revenue and share of goods revenue. A holds the products that complete 80% of goods revenue, B the next 15% and C the rest; the product that crosses a cut-off stays in the class it completes, so A is at least 80% and A+B at least 95%. Products with no goods revenue enter no class, and a period with no goods shows three empty rows with "—" shares. The channel filter applies.
   - **Doanh thu theo nhóm hàng** lists the catalog category of each sold product and its share of goods revenue. A product with no category is "Chưa phân nhóm". Categories are matched ignoring case and surrounding spaces.
   - **Thuốc kê đơn và không kê đơn** lists both rows (at 0 when the period sold none), and an "Chưa xác định" row only when a sold product is no longer in the catalog.
   - The delivery fee is revenue but belongs to no product: it is in the site rows and the revenue tile, not in the product tables, whose shares are of goods revenue. The page says so.
@@ -73,7 +74,7 @@ Controls (US1), sales KPI tiles and channel table (US2), the breakdown tables (U
 
 ## Rules and designs
 
-- [BR-REPORT-008 to 014](../business-rules.md), BR-FIN-002, BR-FIN-003, BR-AUTH-004; [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md).
+- [BR-REPORT-008 to 015](../business-rules.md), BR-FIN-002, BR-FIN-003, BR-AUTH-004; [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md).
 
 ## Decisions
 
@@ -90,6 +91,7 @@ Controls (US1), sales KPI tiles and channel table (US2), the breakdown tables (U
 | 9 | How many products in the top list? | `[standard]` Ten. | Enough to see the shape of the period without a full product report. |
 | 10 | Which sites appear? | `[standard]` Every site with a sale in the period; a sale with no site is one unnamed row, visible to Platform Admin only. | Site scope (BR-AUTH-004) keeps an unnamed sale away from a site-scoped manager. |
 | 11 | Rank the top list by revenue or units? | `[standard]` Revenue. | A product sells in several units (viên, hộp, chai), so a unit total would add quantities that are not comparable; revenue is the one figure every line carries. |
+| 12 | What are the ABC cut-offs? | `[standard]` 80% and 95% of cumulative goods revenue in the period; the crossing product stays in the class it completes. | The classic ABC shape; using the period's own revenue keeps the classes tied to the chosen filter. |
 
 ## Gaps against the code (2026-10-30)
 

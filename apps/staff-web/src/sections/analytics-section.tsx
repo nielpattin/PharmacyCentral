@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import {
   Alert,
+  Badge,
   Button,
   DataTable,
   type DataColumn,
@@ -29,6 +30,7 @@ import { deadStockDraft, type ActionPlanDraft } from "./action-plans/drafts.ts";
 import { fillText } from "./procurement/bulk-summary.ts";
 import { labelOrShortId } from "./inventory/format.ts";
 import type {
+  AbcRevenueRow,
   AnalyticsChannel,
   AnalyticsResponse,
   CategoryRevenueRow,
@@ -214,6 +216,7 @@ export const AnalyticsSection = (): React.JSX.Element => {
   }));
   const siteRevenueRows: SalesSiteRow[] = data?.breakdown?.bySite ?? [];
   const topProductRows: ProductRevenueRow[] = data?.breakdown?.topProducts ?? [];
+  const abcRows: AbcRevenueRow[] = data?.breakdown?.abc ?? [];
   const categoryRevenueRows: CategoryRevenueRow[] = data?.breakdown?.byCategory ?? [];
   const prescriptionRevenueRows: PrescriptionRevenueRow[] = data?.breakdown?.byPrescription ?? [];
   const goodsRevenue = data?.breakdown?.goodsRevenue;
@@ -447,6 +450,47 @@ export const AnalyticsSection = (): React.JSX.Element => {
           {translateText("Goods revenue")}: {money(goodsRevenue)} ·{" "}
           {translateText(
             "Goods only: the delivery fee is not attributed to a product, so each share is of goods revenue.",
+          )}
+        </p>
+      </section>
+
+      <section className="grid gap-2">
+        <Heading>ABC classification</Heading>
+        <DataTable<AbcRevenueRow>
+          storageKey="staff:analytics:abc"
+          labels={dataTableLabels()}
+          loading={loading}
+          rows={abcRows}
+          getKey={(row) => row.abcClass}
+          empty={translateText("No records found")}
+          columns={[
+            {
+              key: "abcClass",
+              label: translateText("Class"),
+              render: (row) => (
+                <Badge variant={row.abcClass === "A" ? "success" : row.abcClass === "B" ? "warning" : "secondary"}>
+                  {row.abcClass}
+                </Badge>
+              ),
+            },
+            {
+              key: "productCount",
+              label: translateText("Products"),
+              align: "right",
+              render: (row) => count(row.productCount),
+            },
+            { key: "revenue", label: translateText("Revenue"), align: "right", render: (row) => money(row.revenue) },
+            {
+              key: "share",
+              label: translateText("Share"),
+              align: "right",
+              render: (row) => formatRate(row.share, locale),
+            },
+          ]}
+        />
+        <p className="text-xs text-muted">
+          {translateText(
+            "A until 80% of goods revenue, B until 95%, C the rest. The product that crosses a cut-off stays in the class it completes.",
           )}
         </p>
       </section>

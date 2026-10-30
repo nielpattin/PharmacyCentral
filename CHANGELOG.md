@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**operations-query-service, staff-web, docs**
+
+- Analytics now classifies the period's products by the **ABC rule**: A holds the products that complete 80% of goods revenue, B the next 15% and C the rest, with the product that crosses a cut-off in the class it completes. A new table shows each class's product count, goods revenue and share; a product with no goods revenue enters no class. Spec US4, BR-REPORT-015, design 0007.
+
 **inventory-service, staff-web, deploy, docs**
 
 - Transfers now opens with **suggested transfers**: `GET /api/inventory/transfer-suggestions` reads released, unexpired stock and the 30-day sales ledger, pairs a site with more than 45 days of cover with a site under 14 days, fills the destination to 30 days, and never moves stock the destination cannot sell before it expires. The list is read-only; a row opens the existing create-transfer form prefilled with the product, both sites and the quantity, and approval is unchanged. Warehouse Staff and Pharmacy Manager read it within their sites (Platform Admin reads), at the edge and in the service. Spec: `docs/product/staff-inventory-operations.md` (US8), BR-TRF-012, design 0007.

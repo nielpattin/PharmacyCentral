@@ -110,11 +110,12 @@ Definitions (also BR-REPORT-008 to 011):
 
 #### Sales breakdown
 
-`breakdown` divides the same period's sales by site, product, category and prescription flag (BR-REPORT-012 to 014).
+`breakdown` divides the same period's sales by site, product, category and prescription flag, and classifies the products by the ABC rule (BR-REPORT-012 to 015).
 
 - **By site:** one row per site with a sale in the period, revenue from the invoice amounts (so the rows add up to the revenue tile), order count and average order value. Sorted by revenue, highest first; a sale whose document names no site is one unnamed row, visible to a network-wide reader only.
 - **Goods revenue:** the sum of `quantity × unitPrice` over the invoice lines that name a product, in whole dong. A delivery fee line has no product, so it is revenue but belongs to no product. The product tables count goods alone and say so; their shares are of goods revenue, not of the revenue tile.
 - **Top products:** the ten products with the highest goods revenue in the period; ties by name. A product the catalog no longer lists keeps the description on its invoice line.
+- **ABC classification:** every product with goods revenue, ranked the same way, split where the cumulative share completes 80% (A) and 95% (B), with the rest in C. The product that crosses a cut-off stays in the class it completes, so A covers at least 80% and A+B at least 95%. Each row reports the product count, revenue and share of goods revenue; a product with no goods revenue enters no class (BR-REPORT-015).
 - **By category:** the catalog `category`, trimmed and merged case-insensitively; a product without one is `null` and the page shows "Chưa phân nhóm". Sorted by revenue.
 - **By prescription flag:** `prescription`, `otc`, and `unknown` only when a sold product is not in the catalog. The first two rows are always present, at 0 when the period sold none.
 - **What it does not do:** the grouping is the catalog as it stands now. The system snapshots neither the category nor the prescription flag on the sale, so editing either moves past sales with it. Closing that gap needs a snapshot column on the invoice line or the order line.

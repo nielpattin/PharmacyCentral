@@ -44,6 +44,10 @@ export const analyticsLiterals: Record<string, string> = {
   "Goods revenue": "Doanh thu hàng hóa",
   "Goods only: the delivery fee is not attributed to a product, so each share is of goods revenue.":
     "Chỉ tính hàng hóa: phí giao hàng không gán cho sản phẩm nào, nên tỷ trọng tính trên doanh thu hàng hóa.",
+  "ABC classification": "Phân nhóm ABC",
+  Class: "Nhóm",
+  "A until 80% of goods revenue, B until 95%, C the rest. The product that crosses a cut-off stays in the class it completes.":
+    "A đến 80% doanh thu hàng hóa, B đến 95%, C phần còn lại. Sản phẩm vượt mốc vẫn ở nhóm mà nó hoàn tất.",
   "Revenue by product group": "Doanh thu theo nhóm hàng",
   Uncategorized: "Chưa phân nhóm",
   "Grouped by the category the catalog holds today, so a changed category also moves past sales.":

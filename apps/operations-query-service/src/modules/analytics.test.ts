@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ABC_A_CUMULATIVE_SHARE,
+  ABC_B_CUMULATIVE_SHARE,
+  abcOf,
   analyticsQuerySchema,
   averageOrderValue,
   buildDashboardAnalytics,
@@ -377,6 +380,11 @@ describe("sales breakdown", () => {
       goodsRevenue: 0,
       bySite: [],
       topProducts: [],
+      abc: [
+        { abcClass: "A", productCount: 0, revenue: 0, share: null },
+        { abcClass: "B", productCount: 0, revenue: 0, share: null },
+        { abcClass: "C", productCount: 0, revenue: 0, share: null },
+      ],
       byCategory: [],
       byPrescription: [
         { group: "prescription", revenue: 0, share: null },
@@ -391,6 +399,78 @@ describe("sales breakdown", () => {
       invoiceOf(1, "order", 20, [line(P2, 2, 10, "Amoxicillin")]),
     ]);
     expect(lines.get(uuidOf(1))?.map((row) => row.productId)).toStrictEqual([P1, P2]);
+  });
+});
+
+describe("ABC classification", () => {
+  it("cuts at 80% and 95% of cumulative goods revenue", () => {
+    const rows = abcOf([
+      { productId: P1, revenue: 800_000 },
+      { productId: P2, revenue: 150_000 },
+      { productId: P3, revenue: 50_000 },
+    ]);
+
+    expect(rows).toStrictEqual([
+      { abcClass: "A", productCount: 1, revenue: 800_000, share: 0.8 },
+      { abcClass: "B", productCount: 1, revenue: 150_000, share: 0.15 },
+      { abcClass: "C", productCount: 1, revenue: 50_000, share: 0.05 },
+    ]);
+    expect(ABC_A_CUMULATIVE_SHARE).toBe(0.8);
+    expect(ABC_B_CUMULATIVE_SHARE).toBe(0.95);
+  });
+
+  it("keeps the product that crosses a cut-off in the class it completes", () => {
+    // 85% already passes A's cut-off, so the first product is A and the next 10% is B.
+    const rows = abcOf([
+      { productId: P1, revenue: 850_000 },
+      { productId: P2, revenue: 100_000 },
+      { productId: P3, revenue: 50_000 },
+    ]);
+
+    expect(rows.map((row) => [row.abcClass, row.productCount, row.revenue])).toStrictEqual([
+      ["A", 1, 850_000],
+      ["B", 1, 100_000],
+      ["C", 1, 50_000],
+    ]);
+  });
+
+  it("puts tied products in A when their combined share is still under the first cut-off", () => {
+    const rows = abcOf([
+      { productId: P1, revenue: 50_000 },
+      { productId: P2, revenue: 50_000 },
+    ]);
+
+    expect(rows[0]).toStrictEqual({ abcClass: "A", productCount: 2, revenue: 100_000, share: 1 });
+    expect(rows[1]?.productCount).toBe(0);
+    expect(rows[2]?.productCount).toBe(0);
+  });
+
+  it("leaves products with no goods revenue out and answers no share when nothing sold", () => {
+    const rows = abcOf([
+      { productId: P1, revenue: 0 },
+      { productId: P2, revenue: 0 },
+    ]);
+
+    expect(rows).toStrictEqual([
+      { abcClass: "A", productCount: 0, revenue: 0, share: null },
+      { abcClass: "B", productCount: 0, revenue: 0, share: null },
+      { abcClass: "C", productCount: 0, revenue: 0, share: null },
+    ]);
+  });
+
+  it("classifies the products of a period from their goods revenue", () => {
+    const breakdown = buildDashboardAnalytics(
+      breakdownInput({
+        documents: [document(1, "order", SITE_A, "2026-10-09T10:00:00.000Z")],
+        invoices: [invoiceOf(1, "order", 350, [line(P1, 3, 100, "Paracetamol"), line(P2, 1, 50, "Amoxicillin")])],
+      }),
+    ).breakdown;
+
+    expect(breakdown.abc.map((row) => [row.abcClass, row.productCount, row.revenue])).toStrictEqual([
+      ["A", 1, 300],
+      ["B", 1, 50],
+      ["C", 0, 0],
+    ]);
   });
 });
 

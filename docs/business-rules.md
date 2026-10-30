@@ -800,6 +800,10 @@ Doanh thu hàng hóa của một dòng hóa đơn `Paid` là số lượng nhân
 
 Nhóm hàng của một sản phẩm là `category` hiện tại của catalog, bỏ khoảng trắng hai đầu và gộp không phân biệt hoa thường; sản phẩm không có `category` vào nhóm "chưa phân nhóm". Loại thuốc theo `prescriptionRequired` hiện tại: kê đơn, không kê đơn; sản phẩm không còn trong catalog vào nhóm "chưa xác định", chỉ hiện khi có doanh thu. Cả hai bảng tính trên doanh thu hàng hóa (BR-REPORT-013), không tính phí giao hàng. Vì catalog không lưu ảnh chụp danh mục hay cờ kê đơn tại thời điểm bán, đổi một trong hai sẽ đổi cả số liệu quá khứ; đây là giới hạn đã biết của báo cáo.
 
+### BR-REPORT-015. Phân nhóm ABC theo doanh thu hàng hóa của kỳ
+
+Sản phẩm có doanh thu hàng hóa dương trong kỳ được xếp hạng giảm dần (hòa thì theo `productId`), rồi cộng dồn tỷ trọng: sản phẩm làm tổng vượt 80% lần đầu thuộc nhóm A, sản phẩm làm tổng vượt 95% thuộc nhóm B, phần còn lại thuộc nhóm C. Sản phẩm vượt mốc vẫn ở nhóm mà nó hoàn tất, nên A luôn chiếm ít nhất 80% và A+B ít nhất 95% doanh thu hàng hóa. Sản phẩm không có doanh thu hàng hóa không vào nhóm nào; kỳ không bán hàng hóa trả ba nhóm rỗng với tỷ trọng null. Phân nhóm dùng đúng doanh thu hàng hóa của BR-REPORT-013 và cùng bộ lọc kỳ, cơ sở, kênh.
+
 ### BR-FIN-001. Tài chính là đọc, không ghi sổ kế toán
 
 Operations-query-service tổng hợp từ sự kiện và số liệu tồn. Không ghi sổ kế toán bên ngoài.

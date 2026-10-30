@@ -305,6 +305,53 @@ export type ProductRevenueRow = {
   share: number | null;
 };
 
+/** The ABC cut-offs on cumulative goods revenue: A until 80%, B until 95%, C the rest. */
+export const ABC_A_CUMULATIVE_SHARE = 0.8;
+export const ABC_B_CUMULATIVE_SHARE = 0.95;
+export const ABC_CLASSES = ["A", "B", "C"] as const;
+export type AbcClass = (typeof ABC_CLASSES)[number];
+
+export type AbcRevenueRow = {
+  abcClass: AbcClass;
+  productCount: number;
+  revenue: number;
+  share: number | null;
+};
+
+/**
+ * The ABC classification of the period's products by goods revenue. Products are ranked highest revenue first; the
+ * product that pushes the running share past a cut-off stays in the class it completes, so A covers at least 80% of
+ * goods revenue. Products with no goods revenue are left out, and ties sort by product id so a class is stable.
+ */
+export const abcOf = (rows: readonly { productId: string; revenue: number }[]): AbcRevenueRow[] => {
+  const ranked = rows
+    .filter((row) => row.revenue > 0)
+    .sort((left, right) => right.revenue - left.revenue || left.productId.localeCompare(right.productId));
+  const total = ranked.reduce((running, row) => running + row.revenue, 0);
+  const classes = new Map<AbcClass, { productCount: number; revenue: number }>(
+    ABC_CLASSES.map((abcClass) => [abcClass, { productCount: 0, revenue: 0 }]),
+  );
+  let running = 0;
+  for (const row of ranked) {
+    const before = total === 0 ? 1 : running / total;
+    const abcClass: AbcClass = before < ABC_A_CUMULATIVE_SHARE ? "A" : before < ABC_B_CUMULATIVE_SHARE ? "B" : "C";
+    const totals = classes.get(abcClass);
+    if (totals === undefined) continue;
+    totals.productCount += 1;
+    totals.revenue += row.revenue;
+    running += row.revenue;
+  }
+  return ABC_CLASSES.map((abcClass) => {
+    const totals = classes.get(abcClass) ?? { productCount: 0, revenue: 0 };
+    return {
+      abcClass,
+      productCount: totals.productCount,
+      revenue: totals.revenue,
+      share: total > 0 ? totals.revenue / total : null,
+    };
+  });
+};
+
 /** One catalog category of the period. `category` is null for a product the catalog gives no category. */
 export type CategoryRevenueRow = {
   category: string | null;
@@ -330,6 +377,7 @@ export type SalesBreakdown = {
   goodsRevenue: number;
   bySite: SalesSiteRow[];
   topProducts: ProductRevenueRow[];
+  abc: AbcRevenueRow[];
   byCategory: CategoryRevenueRow[];
   byPrescription: PrescriptionRevenueRow[];
 };
@@ -434,13 +482,13 @@ export const salesBreakdownOf = (input: {
     }))
     .sort(byRevenueThenLabel((row) => row.siteName ?? ""));
 
-  const topProducts: ProductRevenueRow[] = [...byProduct.entries()]
-    .map(([productId, row]) => ({
-      productId,
-      productName: products.get(productId)?.productName ?? row.description ?? productId.slice(0, 8),
-      revenue: row.revenue,
-      share: share(row.revenue),
-    }))
+  const productRows = [...byProduct.entries()].map(([productId, row]) => ({
+    productId,
+    productName: products.get(productId)?.productName ?? row.description ?? productId.slice(0, 8),
+    revenue: row.revenue,
+  }));
+  const topProducts: ProductRevenueRow[] = productRows
+    .map((row) => ({ ...row, share: share(row.revenue) }))
     .sort(byRevenueThenLabel((row) => row.productName))
     .slice(0, TOP_PRODUCT_LIMIT);
 
@@ -461,6 +509,7 @@ export const salesBreakdownOf = (input: {
     goodsRevenue,
     bySite: siteRows,
     topProducts,
+    abc: abcOf(productRows),
     byCategory: categoryRows,
     byPrescription: prescriptionRows,
   };

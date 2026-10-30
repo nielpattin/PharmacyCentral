@@ -37,6 +37,16 @@ export type ProductRevenueRow = {
   share: Figure;
 };
 
+export type AbcClass = "A" | "B" | "C";
+
+export type AbcRevenueRow = {
+  abcClass: AbcClass;
+  productCount: Figure;
+  revenue: Figure;
+  /** The share (0 to 1) of goods revenue; null when the period sold no goods. */
+  share: Figure;
+};
+
 export type CategoryRevenueRow = {
   /** The catalog category, or null for a product with none. */
   category: string | null;
@@ -77,6 +87,7 @@ export type AnalyticsResponse = {
     goodsRevenue: Figure;
     bySite: SalesSiteRow[];
     topProducts: ProductRevenueRow[];
+    abc: AbcRevenueRow[];
     byCategory: CategoryRevenueRow[];
     byPrescription: PrescriptionRevenueRow[];
   };
