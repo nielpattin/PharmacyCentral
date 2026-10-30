@@ -25,7 +25,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 
 - Source: `[observed]` for the columns; `[standard]` for the status column (US6).
 - Accepted when:
-  - The Users tab lists employee accounts only, with **Name**, **Email** (hidden below `md`), **Roles** (Vietnamese labels, hidden below `lg`, "—" when empty) and **Trạng thái**: "Đang hoạt động" or "Vô hiệu hóa". The status is text, not colour alone (WCAG 2.2 AA). (gap G1)
+  - The Users tab lists employee accounts only, with **Name**, **Email** (hidden below `md`), **Phone** (hidden below `lg`, "—" for an account made before the phone was required), **Roles** (Vietnamese labels, hidden below `lg`, "—" when empty) and **Trạng thái**: "Đang hoạt động" or "Vô hiệu hóa". The status is text, not colour alone (WCAG 2.2 AA). (gap G1)
   - A **Trạng thái** filter offers all, active and deactivated accounts. Deactivated accounts stay in the list. (gap G1)
   - Search by name or email is case-insensitive and substring, kept in the URL, and can be saved as view `governance-users`.
   - "Chưa có nhân viên nào." shows when there are no accounts; "Không có nhân viên nào khớp với tìm kiếm." when a search matches nothing.
@@ -36,7 +36,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 
 - Source: `[observed]` for the form; `[standard]` for the site rule (D3) and the password length (D5).
 - Accepted when:
-  - **Tạo người dùng** (or `n`) opens "Tạo tài khoản nhân viên" with **Email**, **Tên hiển thị**, **Mật khẩu** (hidden, hint "Độ dài tối thiểu: 12"), **Vai trò** (at least one) and **Phạm vi cơ sở**.
+  - **Tạo người dùng** (or `n`) opens "Tạo tài khoản nhân viên" with **Email**, **Tên hiển thị**, **Số điện thoại** (required, 8 to 20 digits and `+ ( ) -`, [BR-USER-010](../business-rules.md)), **Mật khẩu tạm thời** (hidden, hint "Độ dài tối thiểu: 12"; the employee replaces it at the first sign-in, US4), **Vai trò** (at least one) and **Phạm vi cơ sở**.
   - A password under 12 characters is refused in the form and by the server (12 to 200 characters, [BR-USER-002](../business-rules.md)).
   - An account that is not Platform Admin needs at least one site. The form shows "Chọn ít nhất một site." and the server answers `400 site_required`. A Platform Admin may have none ([BR-USER-007](../business-rules.md)).
   - An email already in use is refused with "Email này đã có tài khoản."
@@ -53,6 +53,15 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
   - Removing the Platform Admin role from the last active Platform Admin is refused.
   - Only employee accounts can be changed; any other id answers `404`.
   - The change is audited as `identity.user.access-updated` (US8).
+
+### US3b. As a Platform Admin, I correct another employee's name and phone, so that contact details stay right when the person cannot do it
+
+- Source: `[standard]` HR data is kept by the administrator when the owner cannot reach the system (job change, a lost phone, a person who has left). Phone rule: [BR-USER-002, 010](../business-rules.md).
+- Accepted when:
+  - **Sửa hồ sơ**, in the **Thao tác khác** menu of every row except the administrator's own, opens "Sửa hồ sơ nhân viên" with **Tên hiển thị** and **Số điện thoại** filled in. Both are required, and the phone is 8 to 20 digits and `+ ( ) -`. **Lưu hồ sơ** calls `PUT /api/admin/users/{id}/profile` and shows "Đã cập nhật hồ sơ nhân viên.".
+  - It works on a deactivated account too, so an account made before the phone was required can be completed.
+  - A Platform Admin cannot correct their own profile here (`403 self_change_forbidden`); they use [Account settings](staff-account.md). Any id that is not an employee answers `404`.
+  - Nothing is audited when no value changed. Otherwise the change is audited as `identity.user.profile-updated` with `fields` (`displayName`, `phoneNumber` or both), and never the phone itself (US8).
 
 ### US4. As a Platform Admin, I reset an employee's password, so that they can sign in again
 
@@ -97,10 +106,10 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 
 - Source: `[observed]` for the events; `[standard]` for the same-transaction rule (D10, D12).
 - Accepted when:
-  - Entries are `identity.user.created` (fields `roles` and `sites`, the count of sites), `identity.user.access-updated` (same fields), `identity.user.password-reset`, `identity.user.sessions-revoked`, `identity.user.deactivated` and `identity.user.activated` (no details). An employee's own sign-in, sign-out, password change and profile change write `identity.auth.login`, `identity.auth.logout`, `identity.account.password-changed` and `identity.account.profile-updated`.
+  - Entries are `identity.user.created` (fields `roles` and `sites`, the count of sites), `identity.user.access-updated` (same fields), `identity.user.profile-updated` (field `fields`, the names of the changed fields), `identity.user.password-reset`, `identity.user.sessions-revoked`, `identity.user.deactivated` and `identity.user.activated` (no details). An employee's own sign-in, sign-out, password change and profile change write `identity.auth.login`, `identity.auth.logout`, `identity.account.password-changed` and `identity.account.profile-updated`.
   - No entry holds a password, a token or free text ([user guide, Audit log](../user-guide.md#audit-log)).
   - The entry and the change commit in one transaction. If the entry cannot be written, the change is refused with `503`. (gap G6)
-  - On the Audit tab the actions read as "Create user", "Update user access", "Reset user password", "Revoke user sessions", "Deactivate user" and "Activate user", with the entity "User" and the actor's name (labels in `audit-query.ts`, translated like the other labels).
+  - On the Audit tab the actions read as "Create user", "Update user access", "Update user profile", "Reset user password", "Revoke user sessions", "Deactivate user" and "Activate user", with the entity "User" and the actor's name (labels in `audit-query.ts`, translated like the other labels).
 
 ### US9. As a Platform Admin, I search and filter the audit log, so that I can find who changed what
 
@@ -125,7 +134,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 ## Contents and behavior
 
 - **Governance tab bar:** **Users** and **Audit** (`SubTabs`), each with its own URL. Create and edit forms are side drawers opened from Users, not tabs.
-- **Users:** the **Tạo người dùng** button; the load-error alert; the table (US1) with search, saved views and CSV export `employees.csv`; per row **Sửa phân quyền**, and a **Thao tác khác** menu with **Đặt lại mật khẩu**, **Đăng xuất các phiên** and, with US6, **Vô hiệu hóa** or **Kích hoạt lại**, plus **Lịch sử** (US7).
+- **Users:** the **Tạo người dùng** button; the load-error alert; the table (US1) with search, saved views and CSV export `employees.csv`; per row **Sửa phân quyền**, and a **Thao tác khác** menu with **Sửa hồ sơ** (US3b), **Đặt lại mật khẩu**, **Đăng xuất các phiên** and, with US6, **Vô hiệu hóa** or **Kích hoạt lại**, plus **Lịch sử** (US7).
 - **Audit:** the filters and **Xóa bộ lọc**; the load-error alert; the paged table with search, saved views (`governance-audit`) and **Xuất CSV**.
 - **Who may see it:** Platform Admin only. The staff-permissions entry `governance.user.write` allows only Platform Admin ([`staff-permissions.ts`](../../apps/staff-web/src/permissions/staff-permissions.ts)).
 

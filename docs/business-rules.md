@@ -809,10 +809,10 @@ Lọc theo `actorId`, site, `action` (chứa chuỗi), `entityType`, `entityId`,
 
 Các route `/api/admin/*` (tạo nhân viên, đổi role và site, đặt lại mật khẩu, thu hồi phiên, vô hiệu hóa và kích hoạt lại) thuộc Platform Admin. Quản trị viên không tự đổi quyền, tự đặt lại mật khẩu, tự thu hồi phiên hay tự vô hiệu hóa tài khoản của mình tại các route này: 403 `self_change_forbidden`.
 
-### BR-USER-002. Tạo nhân viên yêu cầu email, tên và mật khẩu từ 12 ký tự
+### BR-USER-002. Tạo nhân viên yêu cầu email, tên, số điện thoại và mật khẩu từ 12 ký tự
 
 - Email hợp lệ, được chuẩn hóa về chữ thường. Email đã tồn tại bị từ chối ("An account with this email already exists").
-- `displayName` bắt buộc (1–200 ký tự). `password` 12–200 ký tự.
+- `displayName` bắt buộc (1–200 ký tự). `phoneNumber` bắt buộc và theo định dạng của BR-USER-010 (thiếu hoặc sai định dạng: 400 `invalid_request`). `password` 12–200 ký tự, là mật khẩu tạm thời.
 - `roles` tối đa 8 phần tử; `siteIds` tối đa 500 UUID.
 - `roles` phải có ít nhất một role (400 `role_required`). Trừ Platform Admin, role nào cũng cần ít nhất một site (400 `site_required`).
 - Tài khoản mới phải đổi mật khẩu trước khi làm việc (BR-USER-013).
@@ -853,6 +853,10 @@ Tài khoản được tạo với `roles = [Platform Admin]` và `siteIds = []`.
 ### BR-USER-010. Số điện thoại hồ sơ có định dạng cho phép
 
 `phoneNumber` gồm chữ số và các ký tự `+ ( ) -` và khoảng trắng, độ dài 8–20.
+
+- Khách hàng có thể để trống hoặc xóa số điện thoại.
+- Platform Admin sửa tên và số điện thoại của nhân viên khác qua `PUT /api/admin/users/{id}/profile` (cả hai bắt buộc, không tự sửa mình: 403 `self_change_forbidden`); bản ghi kiểm toán `identity.user.profile-updated` chỉ ghi tên các trường đã đổi.
+- Nhân viên luôn có số điện thoại: `PATCH /api/auth/me` cho đổi sang số khác nhưng từ chối số rỗng hoặc `null` (400 `phone_required`).
 
 ### BR-USER-011. Tra cứu khách chỉ cho Pharmacist và Platform Admin
 

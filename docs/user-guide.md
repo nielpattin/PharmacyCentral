@@ -54,19 +54,23 @@ Shortcuts other than `Ctrl`/`Cmd` + `S` and `Esc` are ignored while you type in 
 
 Browsing and searching work without an account. Checkout, orders, prescription intake, the account pages and the shopping assistant require a signed-in customer; the assistant button is shown to everyone, and a signed-out visitor who opens it is asked to sign in first.
 
+### Your account (Staff Web)
+
+Open the profile menu in the top bar and choose **Account settings**. The page shows your email, status, roles and sites, which only an administrator can change. You can edit your display name and phone number, and change your password. After a password change every session of the account ends, so you sign in again with the new password.
+
 ### Demo credentials
 
 Two seeds create these accounts. The default seed (A, `pnpm run seed:default`) creates only the Platform Admin, with the password from `ADMIN_PASSWORD` in `.env`. The demo seed (B, `pnpm run seed:demo`, run after A) creates every other account, with the password from `DEMO_ACCOUNT_PASSWORD`. Each account holds only the role shown.
 
-| Role | Email | Site access |
-| --- | --- | --- |
-| Platform Admin (seed A) | `admin@pharmacycentral.vn` | All sites (no site list needed) |
-| Pharmacy Manager | `manager@pharmacycentral.vn` | `SITE-HQ`, `SITE-WH`, `SITE-HUB`, `SITE-RTL` |
-| Pharmacy Manager (second, for approvals) | `manager2@pharmacycentral.vn` | `SITE-HQ`, `SITE-WH`, `SITE-HUB`, `SITE-RTL` |
-| Pharmacist | `pharmacist@pharmacycentral.vn` | `SITE-RTL` |
-| Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH`, `SITE-HUB`, `SITE-RTL` |
-| Customer (Customer Web only) | `khachhang@pharmacycentral.vn` | None; customer account |
-| Customer (sample shoppers, Customer Web only) | `nguyen.lan@example.com`, `tran.minh.khoa@example.com`, `le.thanh.huong@example.com`, `pham.quoc.viet@example.com`, `vo.ngoc.mai@example.com`, `dang.hoang.nam@example.com` | None; customer accounts with their own orders |
+| Role | Email | Phone | Site access |
+| --- | --- | --- | --- |
+| Platform Admin (seed A) | `admin@pharmacycentral.vn` | 0902000001 | All sites (no site list needed) |
+| Pharmacy Manager | `manager@pharmacycentral.vn` | 0902000002 | `SITE-HQ`, `SITE-WH`, `SITE-HUB`, `SITE-RTL` |
+| Pharmacy Manager (second, for approvals) | `manager2@pharmacycentral.vn` | 0902000005 | `SITE-HQ`, `SITE-WH`, `SITE-HUB`, `SITE-RTL` |
+| Pharmacist | `pharmacist@pharmacycentral.vn` | 0902000003 | `SITE-RTL` |
+| Warehouse Staff | `warehouse@pharmacycentral.vn` | 0902000004 | `SITE-WH`, `SITE-HUB`, `SITE-RTL` |
+| Customer (Customer Web only) | `khachhang@pharmacycentral.vn` | - | None; customer account |
+| Customer (sample shoppers, Customer Web only) | `nguyen.lan@example.com`, `tran.minh.khoa@example.com`, `le.thanh.huong@example.com`, `pham.quoc.viet@example.com`, `vo.ngoc.mai@example.com`, `dang.hoang.nam@example.com` | - | None; customer accounts with their own orders |
 
 Site access uses the site codes from `data/import-samples/sites.csv`. The demo seed creates the sites before it creates the accounts, so each account gets its site access in one pass, and it stops if a site is missing. Each run resets the roles and site access of the accounts it seeds to the table above.
 
@@ -288,10 +292,13 @@ The log keeps no passwords, API keys or free-text notes. Details hold only a few
 
 ## Users and access
 
-**Users** (Platform Admin) is the Users tab of **Governance**, next to **Audit**. It lists employee accounts only (customers sign up on the shop site and are not listed) with name, email and roles. Search by name or email, and keep a search as a saved view.
+**Users** (Platform Admin) is the Users tab of **Governance**, next to **Audit**. It lists employee accounts only (customers sign up on the shop site and are not listed) with name, email, phone and roles. Search by name, email or phone, and keep a search as a saved view.
+
+**Adding a new staff member.** A Platform Admin chooses **Create user** and fills in the email, the display name, the phone number, a temporary password, the roles and the sites. The phone is required: colleagues and administrators reach the person through it. The Platform Admin gives the temporary password to the new employee. At the first sign-in the employee must replace it before any page opens, and from then on keeps the name and phone current on **Account settings**. When someone leaves, deactivate the account; it is never deleted, so audit entries and approvals keep pointing at it.
 
 Per row:
 
+- **Edit profile** (in the **More actions** menu, for every account except your own) corrects another employee's display name and phone, for example after they change number or leave. Both are required.
 - **Edit access** opens a drawer with the account's roles and site access as checkboxes. Choose at least one role, and a site for every role except Platform Admin, then **Save access**.
 - The **More actions** menu (three dots) holds **Reset password** (a new password of at least 12 characters) and **Revoke sessions** (signs the account out everywhere, for example after a security incident; asks to confirm).
 

@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Added
+
+**staff-web, docs**
+
+- An **Account settings** page at `/account`, opened from the profile menu, where every employee reads the email, status, roles and sites of the account, edits the display name and phone number, and changes the password. It uses the existing `PATCH /api/auth/me` and `POST /api/auth/change-password`; The phone number is required on this page. Spec: `docs/product/staff-account.md`.
+- A Platform Admin must give a phone number when creating an employee in Users (`POST /api/admin/users` now requires `phoneNumber`, `400 invalid_request` otherwise). `PATCH /api/auth/me` no longer lets an employee clear their phone (`400 phone_required`); a customer still may. Users lists the phone and searches by it, and the password field is now labelled as the temporary password the employee replaces at the first sign-in.
+- Users has an **Edit profile** action: a Platform Admin corrects another employee's display name and phone through the new `PUT /api/admin/users/{id}/profile`, audited as `identity.user.profile-updated` (changed field names only). Users also exports the phone in `employees.csv`.
+- Seeds A and B give every staff account a phone number (`0902000001` to `0902000005`), and `seedAccounts` refuses an employee without one. Re-running a seed fills the phone of accounts that exist already; an account without a seed phone keeps its stored one.
+
 ### Changed
 
 **deploy, identity-service, catalog-service, inventory-service, sales-service, payment-service, staff-web, tools, docs**

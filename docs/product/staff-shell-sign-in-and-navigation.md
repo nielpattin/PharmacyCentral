@@ -83,7 +83,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 
 **Sign-in gate.** On load the shell calls `/api/auth/csrf`, then `/api/auth/me`, and shows "Checking session..." meanwhile. An account whose `actorType` is not `employee` is refused. The form posts to `/api/auth/login`; the server's message shows in a danger alert. Google is a customer sign-in only (Decision 5).
 
-**Shell and sidebar.** Sidebar on the left with five groups in this order: Operations, Master data, Data import, Warehouse, Governance. A group with no visible item is hidden. Top bar: mobile menu, keyboard shortcuts, and a profile menu (email, translated roles) with **Account settings** (disabled), **Switch language** and **Sign out**. Page header with the title, a breadcrumb (group > item > tab) and **Refresh**, which invalidates every query.
+**Shell and sidebar.** Sidebar on the left with five groups in this order: Operations, Master data, Data import, Warehouse, Governance. A group with no visible item is hidden. Top bar: mobile menu, keyboard shortcuts, and a profile menu (email, translated roles) with **Account settings** (opens `/account`, see [Account settings](staff-account.md)), **Switch language** and **Sign out**. Page header with the title, a breadcrumb (group > item > tab) and **Refresh**, which invalidates every query.
 
 ### Role-by-section access
 
@@ -141,7 +141,7 @@ The target access for each role, per D1 to D4. Other staff specs link to this ta
 ## Out of scope
 
 - Google sign-in for staff (Decision 5). Staff account creation and first-administrator setup (this shell does not call `setup-admin`). Multi-factor sign-in, sign-in by link and a site switcher (Decision 13).
-- Password change by the signed-in user (**Account settings** is disabled). An administrator resets a password in Users ([BR-USER-001](../business-rules.md)). Every password form and hint states 12 characters (D5, [BR-USER-005](../business-rules.md)).
+- Password change by the signed-in user is on the [Account settings](staff-account.md) page, not in the sidebar. An administrator resets a password in Users ([BR-USER-001](../business-rules.md)). Every password form and hint states 12 characters (D5, [BR-USER-005](../business-rules.md)).
 
 ## Rules and designs
 
