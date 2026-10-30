@@ -51,7 +51,8 @@ Internal routes (ops-query to owner services):
 | Route | Service | Answer |
 | --- | --- | --- |
 | `GET /internal/analytics/sales-documents?from&to` | sales | `{ documents: [{ id, kind: "order" \| "prescription", siteId, createdAt }] }` created in `[from, to)`. `kind: "order"` is an online order (`siteId` = `selectedStoreId`), `"prescription"` is a counter sale. Site-scoped by header. |
-| `GET /internal/analytics/paid-invoices?since` | payment | `{ invoices: [{ orderId \| null, prescriptionId \| null, amount, createdAt }] }` for invoices with status `Paid` created at or after `since`. Hard cap 50 000 rows; more answers 422 `analytics_range_too_large`. |
+| `GET /internal/analytics/paid-invoices?since` | payment | `{ invoices: [{ orderId \| null, prescriptionId \| null, amount, createdAt, lines: [{ productId \| null, description, quantity, unitPrice }] }] }` for invoices with status `Paid` created at or after `since`. A line with no product is the delivery fee or another charge. Hard cap 50 000 invoices and 100 000 lines; more answers 422 `analytics_range_too_large`. |
+| `GET /internal/analytics/products` | catalog | `{ products: [{ productId, productName, category \| null, prescriptionRequired }] }` for every product, active or not, in SKU order. The grouping is the catalog today, not a snapshot of the sale. Service secret only. |
 | `GET /internal/analytics/stock-health?from&to` | inventory | `{ from, to, asOf, deadStockDays: 90, rows: [{ siteId, productId, onHand, reserved, dispensed, netChange, lastMovementAt, expired, expiring30, expiring60, expiring90 }] }`, one row per (site, product) that has a balance row or a ledger entry; quantities are base units. Site-scoped by header. |
 | `GET /internal/analytics/dispense-costs?since` | inventory | `{ since, rows: [{ referenceType: "Order" \| "Prescription", referenceId, quantity, costedQuantity, cost }] }`: for each sale with a `Dispense` ledger entry at or after `since`, the base units handed over, the part taken from batches whose receipts recorded a cost, and the cost of that part in VND. Not site-scoped (the document that it joins to is). More than 50 000 rows answers 422 `analytics_range_too_large`. |
 
@@ -105,6 +106,17 @@ Definitions (also BR-REPORT-008 to 011):
 - **Expiry buckets:** on-hand quantity of batches that expire already (`expired`), in 0 to 30 days (`within30`), 31 to 60 (`within60`) and 61 to 90 days (`within90`) from today.
 - **Gross profit:** revenue less cost of goods, over the sales whose goods are all costed. A sale is *costed* when its dispense row exists, `quantity > 0` and `costedQuantity = quantity`. A partly costed or uncosted sale adds neither its revenue nor a guessed cost. `coverage` is the revenue of costed sales over the revenue of all sales of the period. With sales but none costed, gross profit is `null` (`reason: "no_cost_data"`); with no sale at all it is a true 0 and `coverage` is `null` (BR-REPORT-009).
 - **Channel** filters the sales KPIs only. Stock belongs to a site, not to a channel, so inventory health ignores it, and the page says so.
+
+#### Sales breakdown
+
+`breakdown` divides the same period's sales by site, product, category and prescription flag (BR-REPORT-012 to 014).
+
+- **By site:** one row per site with a sale in the period, revenue from the invoice amounts (so the rows add up to the revenue tile), order count and average order value. Sorted by revenue, highest first; a sale whose document names no site is one unnamed row, visible to a network-wide reader only.
+- **Goods revenue:** the sum of `quantity × unitPrice` over the invoice lines that name a product, in whole dong. A delivery fee line has no product, so it is revenue but belongs to no product. The product tables count goods alone and say so; their shares are of goods revenue, not of the revenue tile.
+- **Top products:** the ten products with the highest goods revenue in the period; ties by name. A product the catalog no longer lists keeps the description on its invoice line.
+- **By category:** the catalog `category`, trimmed and merged case-insensitively; a product without one is `null` and the page shows "Chưa phân nhóm". Sorted by revenue.
+- **By prescription flag:** `prescription`, `otc`, and `unknown` only when a sold product is not in the catalog. The first two rows are always present, at 0 when the period sold none.
+- **What it does not do:** the grouping is the catalog as it stands now. The system snapshots neither the category nor the prescription flag on the sale, so editing either moves past sales with it. Closing that gap needs a snapshot column on the invoice line or the order line.
 
 #### `GET /api/procurement/replenishment-suggestions`
 
@@ -190,7 +202,7 @@ The new routes inherit the services' request tracing and metrics. No new metric.
 
 ## Testing
 
-Unit tests for the pure computations (velocity, lead time, reorder quantity, turnover, buckets, join), route tests for role, scope and validation of every new route, and a browser pass over each screen at 1920x1080.
+Unit tests for the pure computations (velocity, lead time, reorder quantity, turnover, buckets, join, site/product/category/prescription breakdown), route tests for role, scope and validation of every new route, a repository test that reads the lines of paid invoices, and a browser pass over each screen at 1920x1080.
 
 ## Open questions
 

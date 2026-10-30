@@ -3,13 +3,14 @@
 - **Status:** Draft
 - **App and route:** staff-web, `/analytics` (sidebar "Phân tích")
 - **Owner:** @nielpattin
-- **Last reviewed:** 2026-10-28
+- **Last reviewed:** 2026-10-30
 
 Tags: `[owner]` a recorded owner decision; `[observed]` read from the code; `[standard]` a decision from industry practice. See [README](README.md).
 
 ## Purpose
 
 - `[owner]` 2026-10-28: managers and Platform Admin need a period view: revenue, order count, average order value and gross profit against the previous period, by site and channel, with the health of stock beside it.
+- `[standard]` 2026-10-30: the period also has to say where the revenue came from, so the page divides it across sites, products, categories and the prescription split.
 - `[standard]` The [dashboard](staff-dashboard-and-reporting.md) answers "what needs action now" with counts. This page answers "how did the period go", so the two stay separate. It reads only and changes no record.
 
 ## Users and entry points
@@ -45,9 +46,21 @@ Platform Admin (read only) and Pharmacy Manager (`sectionRoles.analytics`; the e
   - A figure that cannot be answered shows "—"; a failed read shows the red alert and "—" in every tile, never 0.
   - Products with no published price add nothing to a value, and their number is shown.
 
+### US4. As a manager, I read where the period's revenue came from
+
+- Source: `[standard]` 2026-10-30; definitions BR-REPORT-012 to 014.
+- Accepted when:
+  - **Doanh thu theo cơ sở** lists every site with a sale in the period: revenue, orders and average order value, highest revenue first. Revenue is the invoice amounts, so the rows add up to the revenue tile.
+  - **Sản phẩm bán chạy** lists the ten products with the highest goods revenue and each one's share of goods revenue. The note shows the goods revenue total.
+  - **Doanh thu theo nhóm hàng** lists the catalog category of each sold product and its share of goods revenue. A product with no category is "Chưa phân nhóm". Categories are matched ignoring case and surrounding spaces.
+  - **Thuốc kê đơn và không kê đơn** lists both rows (at 0 when the period sold none), and an "Chưa xác định" row only when a sold product is no longer in the catalog.
+  - The delivery fee is revenue but belongs to no product: it is in the site rows and the revenue tile, not in the product tables, whose shares are of goods revenue. The page says so.
+  - The period, site and channel filters apply to every table. An empty period shows empty tables and "—" shares. A failed read fails the page, never a partial answer.
+  - Test: pay an online order with a delivery fee and one product, and a counter prescription with a prescription-only product. The site rows sum to the revenue tile, the delivery fee appears in no product row, the prescription-only product lands in "Thuốc kê đơn", and the two shares sum to 100% of goods revenue.
+
 ## Contents and behavior
 
-Controls (US1), sales KPI tiles and channel table (US2), inventory health tiles and tables (US3). Each of the three reads is a separate service call behind one request, `GET /api/dashboard/analytics` ([API guide](../api-guide.md#query-projections)); one failed read fails the page rather than showing a partial answer.
+Controls (US1), sales KPI tiles and channel table (US2), the breakdown tables (US4), inventory health tiles and tables (US3). Each read is a separate service call behind one request, `GET /api/dashboard/analytics` ([API guide](../api-guide.md#query-projections)); one failed read fails the page rather than showing a partial answer.
 
 ## States
 
@@ -60,7 +73,7 @@ Controls (US1), sales KPI tiles and channel table (US2), inventory health tiles 
 
 ## Rules and designs
 
-- [BR-REPORT-008 to 011](../business-rules.md), BR-FIN-002, BR-FIN-003, BR-AUTH-004; [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md).
+- [BR-REPORT-008 to 014](../business-rules.md), BR-FIN-002, BR-FIN-003, BR-AUTH-004; [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md).
 
 ## Decisions
 
@@ -71,7 +84,13 @@ Controls (US1), sales KPI tiles and channel table (US2), inventory health tiles 
 | 3 | Stockout rate over the period? | `[standard]` The state now. | The system keeps no daily stock snapshots. |
 | 4 | Dead stock window | `[standard]` 90 days without a ledger movement. Owner may change. | A common retail threshold; it is stock policy. |
 | 5 | Stock value basis | `[standard]` Today's published selling price, as in Finance. | The catalog keeps no purchase cost. |
+| 6 | What is site revenue? | `[standard]` The invoice amounts of the site's sales, the delivery fee included, so the rows add up to the revenue tile. | One number for "how much did this site take"; goods revenue is a separate, product-only figure. |
+| 7 | Where does the delivery fee go in the product tables? | `[standard]` Nowhere: it has no product, and guessing an allocation would be a made-up figure. | BR-FIN-003: no guessed money. The page states the basis of every share. |
+| 8 | Which product grouping is shown? | `[standard]` The catalog's category as it stands today, and the current `prescriptionRequired` flag. Owner may change to a fixed category list. | The system does not snapshot either on the sale; the limit is stated on the page. |
+| 9 | How many products in the top list? | `[standard]` Ten. | Enough to see the shape of the period without a full product report. |
+| 10 | Which sites appear? | `[standard]` Every site with a sale in the period; a sale with no site is one unnamed row, visible to Platform Admin only. | Site scope (BR-AUTH-004) keeps an unnamed sale away from a site-scoped manager. |
+| 11 | Rank the top list by revenue or units? | `[standard]` Revenue. | A product sells in several units (viên, hộp, chai), so a unit total would add quantities that are not comparable; revenue is the one figure every line carries. |
 
-## Gaps against the code (2026-10-28)
+## Gaps against the code (2026-10-30)
 
 None.

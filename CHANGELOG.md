@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**staff-web, operations-query-service, payment-service, catalog-service, docs**
+
+- Analytics now breaks the period's revenue down by site, top product and product group, with the prescription/OTC split beside them. `GET /api/dashboard/analytics` answers a `breakdown` (`bySite`, `topProducts`, `byCategory`, `byPrescription` and `goodsRevenue`); `GET /internal/analytics/paid-invoices` carries the lines of every invoice, and the new service-only `GET /internal/analytics/products` answers every product's current category and prescription flag, including products no longer active. The site rows include the delivery fee and add up to the revenue tile; the product tables count goods only and their shares are of goods revenue. Spec: `docs/product/staff-analytics.md` (US4), BR-REPORT-012 to 014.
+
 **staff-web, docs**
 
 - An **Account settings** page at `/account`, opened from the profile menu, where every employee reads the email, status, roles and sites of the account, edits the display name and phone number, and changes the password. It uses the existing `PATCH /api/auth/me` and `POST /api/auth/change-password`; The phone number is required on this page. Spec: `docs/product/staff-account.md`.

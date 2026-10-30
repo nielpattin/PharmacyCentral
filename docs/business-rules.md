@@ -777,6 +777,18 @@ Vòng quay tồn kho là số lượng đã xuất bán (`Dispense`) trong kỳ 
 
 Số lượng tồn (>0) của lô đã hết hạn, hết hạn trong 0–30 ngày, 31–60 ngày và 61–90 ngày kể từ hôm nay (theo ngày UTC). Các nhóm không chồng nhau. Trang Phân tích chỉ mở cho Platform Admin và Pharmacy Manager (BR-AUTH-002).
 
+### BR-REPORT-012. Doanh thu theo cơ sở là tổng hóa đơn của các giao dịch bán tại cơ sở
+
+Mỗi cơ sở có ít nhất một giao dịch bán trong kỳ có một dòng: doanh thu là tổng tiền các hóa đơn `Paid` của các giao dịch đó (gồm phí giao hàng), số đơn là số giao dịch bán, giá trị đơn trung bình là doanh thu chia số đơn. Các dòng sắp theo doanh thu giảm dần. Bộ lọc kênh áp dụng. Giao dịch mà chứng từ không nêu cơ sở là một dòng không tên, chỉ người đọc toàn chuỗi thấy (BR-AUTH-004). Tổng các dòng bằng ô doanh thu của trang.
+
+### BR-REPORT-013. Doanh thu hàng hóa của một dòng hóa đơn là số lượng nhân đơn giá, chỉ dòng có sản phẩm
+
+Doanh thu hàng hóa của một dòng hóa đơn `Paid` là số lượng nhân đơn giá, làm tròn đến đồng. Dòng không có `productId` (phí giao hàng hoặc khoản thu khác) là doanh thu nhưng không thuộc sản phẩm nào. Doanh thu của một sản phẩm là tổng các dòng của sản phẩm đó trong kỳ. Bảng sản phẩm bán chạy lấy 10 sản phẩm có doanh thu cao nhất, hòa thì xếp theo tên. Tỷ trọng của một sản phẩm là doanh thu của nó chia tổng doanh thu hàng hóa của kỳ. Sản phẩm không còn trong catalog lấy mô tả trên dòng hóa đơn làm tên.
+
+### BR-REPORT-014. Nhóm hàng và loại thuốc theo dữ liệu catalog hiện tại
+
+Nhóm hàng của một sản phẩm là `category` hiện tại của catalog, bỏ khoảng trắng hai đầu và gộp không phân biệt hoa thường; sản phẩm không có `category` vào nhóm "chưa phân nhóm". Loại thuốc theo `prescriptionRequired` hiện tại: kê đơn, không kê đơn; sản phẩm không còn trong catalog vào nhóm "chưa xác định", chỉ hiện khi có doanh thu. Cả hai bảng tính trên doanh thu hàng hóa (BR-REPORT-013), không tính phí giao hàng. Vì catalog không lưu ảnh chụp danh mục hay cờ kê đơn tại thời điểm bán, đổi một trong hai sẽ đổi cả số liệu quá khứ; đây là giới hạn đã biết của báo cáo.
+
 ### BR-FIN-001. Tài chính là đọc, không ghi sổ kế toán
 
 Operations-query-service tổng hợp từ sự kiện và số liệu tồn. Không ghi sổ kế toán bên ngoài.
