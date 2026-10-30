@@ -4,6 +4,7 @@ import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { tabGate } from "../permissions/staff-permissions.ts";
 import { BalancesTab, BatchesTab } from "./inventory/balances-batches.tsx";
 import { AdjustmentsTab } from "./inventory/adjustments.tsx";
+import { DisposalsTab } from "./inventory/disposals.tsx";
 import { MovementsTab } from "./inventory/movements.tsx";
 import { ReplenishmentTab } from "./inventory/replenishment.tsx";
 import { ReturnsTab } from "./inventory/returns.tsx";
@@ -18,7 +19,7 @@ import {
 } from "./inventory/tabs.ts";
 
 /**
- * Stock balances, batches, movements, transfers, replenishment, returns, adjustments and stocktake. Two rows pick the
+ * Stock balances, batches, movements, transfers, replenishment, returns, adjustments, stocktake and disposal records. Two rows pick the
  * view: the group (Stock, Supply, Control), then a tab inside it. The active tab lives in the URL (`?tab=`); each
  * list's search and status filter are URL-held too. A route may mount this section for a role that reads only some tabs
  * (the replenishment route also serves Pharmacists), so only the tabs that role may use are listed, and a row with a
@@ -66,6 +67,7 @@ export const InventorySection = ({ initialTab = "Balances" }: { initialTab?: Inv
       {tab === "Returns" ? <ReturnsTab /> : null}
       {tab === "Adjustments" ? <AdjustmentsTab /> : null}
       {tab === "Stocktake" ? <StocktakeTab /> : null}
+      {tab === "Disposals" ? <DisposalsTab /> : null}
     </div>
   );
 };

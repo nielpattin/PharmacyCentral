@@ -13,6 +13,7 @@ export const INVENTORY_TABS = [
   "Returns",
   "Adjustments",
   "Stocktake",
+  "Disposals",
 ] as const;
 
 export type InventoryTab = (typeof INVENTORY_TABS)[number];
@@ -24,7 +25,7 @@ export const isInventoryTab = (value: string): value is InventoryTab =>
 export const INVENTORY_GROUPS: ReadonlyArray<{ id: string; tabs: readonly InventoryTab[] }> = [
   { id: "Stock", tabs: ["Balances", "Batches", "Movements"] },
   { id: "Supply", tabs: ["Transfers", "Replenishment", "Returns"] },
-  { id: "Control", tabs: ["Adjustments", "Stocktake"] },
+  { id: "Control", tabs: ["Adjustments", "Stocktake", "Disposals"] },
 ];
 
 /** The action behind each tab. A tab the signed-in role cannot use is not shown; `undefined` is open to all staff. */
@@ -37,6 +38,7 @@ export const INVENTORY_TAB_ACTIONS: Record<InventoryTab, StaffAction | undefined
   Returns: "inventory.returns.view",
   Adjustments: "inventory.adjustments.view",
   Stocktake: "inventory.stocktake.view",
+  Disposals: "inventory.disposals.view",
 };
 
 export type VisibleGroup = { id: string; tabs: InventoryTab[] };

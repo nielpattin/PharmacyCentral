@@ -238,6 +238,7 @@ Only released batches that have not passed their expiry date count as sellable. 
 | Supply | Returns | Returns and removals with reasons: Return to supplier, Damaged stock, Expired stock, Inventory removal |
 | Control | Adjustments | **Submit stock adjustment**; a Pharmacy Manager approves or rejects pending adjustments |
 | Control | Stocktake | Stocktake sessions, **Create stocktake**, **Record count** for counted quantities (a drawer), and **Post adjustments** for pending sessions |
+| Control | Disposals | Disposal records (biên bản tiêu hủy) for expired, damaged or recalled batches; **Create disposal record** opens a drawer, a Pharmacy Manager approves or rejects, and an approved record offers **Print slip** |
 
 Press **N** on a list to open its create drawer.
 
@@ -249,7 +250,9 @@ Press **N** on a list to open its create drawer.
 
 **Adjustments** workflow: Warehouse Staff submit an adjustment with its type, quantity and reason; a Pharmacy Manager other than its submitter approves or rejects it with optional approval notes.
 
-Pharmacists and Platform Admin see Inventory read-only; movements, adjustments and stocktake counts are Warehouse Staff actions.
+**Disposals** workflow: a Pharmacist or Warehouse Staff member opens **Create disposal record**, picks the site, a reason (expired, damaged, recalled or other), optional notes, and one or more batches with the quantity to destroy; the drawer lists the site's stock in expiry order and defaults each ticked batch to its available quantity. The record stays **Pending approval** and stock does not move. A Pharmacy Manager other than its creator approves or rejects it. Approval takes each batch off the shelf in one transaction and writes a **Disposal** movement; rejection leaves stock as it was. An approved row has **Print slip**, an A4 document with the reason, the batches, the total and signature blocks for the creator, a witness and the approver.
+
+Pharmacists read balances and batches and can propose disposal records; Platform Admin reads everything and writes nothing here. Movements, adjustments, disposal approvals and stocktake counts are Warehouse Staff or Pharmacy Manager actions as listed above.
 
 ## Online orders
 
@@ -291,7 +294,7 @@ External accounting ledger posting is outside the scope of these screens.
 
 ## Audit log
 
-**Audit** (Platform Admin) is the Audit tab of **Governance**. It records who changed what: every write a person makes in Sales (orders, prescriptions, consultations), Catalog (products, units, prices, sites, storage locations, suppliers, search synonyms, AI credentials), Inventory (batches, quality decisions, adjustments, movements, transfers, stocktakes, returns, replenishment), Procurement (purchase orders, goods receipts) and Identity (staff sign-in and sign-out, password and profile changes, and an administrator creating a user, changing access, resetting a password or revoking sessions).
+**Audit** (Platform Admin) is the Audit tab of **Governance**. It records who changed what: every write a person makes in Sales (orders, prescriptions, consultations), Catalog (products, units, prices, sites, storage locations, suppliers, search synonyms, AI credentials), Inventory (batches, quality decisions, adjustments, disposals, movements, transfers, stocktakes, returns, replenishment), Procurement (purchase orders, goods receipts) and Identity (staff sign-in and sign-out, password and profile changes, and an administrator creating a user, changing access, resetting a password or revoking sessions).
 
 Filter by entity type (grouped by area), actor and date range, or search by action, entity ID or actor ID. Each record shows the action in words (for example "Duyệt điều chuyển"), the entity, the actor, the site, the time and the details. The actor column reads "System" for changes nobody made by hand, such as an online order that expired unpaid.
 

@@ -1,9 +1,9 @@
 # Inventory operations (balances, transfers, replenishment, stocktake, adjustments, returns)
 
 - **Status:** Current
-- **App and route:** staff-web, `/inventory` (tabs Balances, Batches, Movements, Transfers, Replenishment, Returns, Adjustments, Stocktake), `/transfers`, `/replenishment`, `/stocktake`, `/adjustments`, `/returns`. Each route mounts the inventory workspace (`sections/inventory-section.tsx`) on its own first tab.
+- **App and route:** staff-web, `/inventory` (tabs Balances, Batches, Movements, Transfers, Replenishment, Returns, Adjustments, Stocktake, Disposals), `/transfers`, `/replenishment`, `/stocktake`, `/adjustments`, `/returns`. Each route mounts the inventory workspace (`sections/inventory-section.tsx`) on its own first tab.
 - **Owner:** @nielpattin
-- **Last reviewed:** 2026-10-26
+- **Last reviewed:** 2026-10-30
 
 Tags: `[observed]` a code or doc fact checked on 2026-10-26; `[standard]` a decision from industry practice. `Gn` marks a difference between this spec and the code, listed in [Gaps against the code](#gaps-against-the-code-2026-10-26). Business rule ids (`BR-*`) are in [business-rules.md](../business-rules.md), which describes the code as it is; where the target below differs, the gap table says so.
 
@@ -20,12 +20,12 @@ Tags: `[observed]` a code or doc fact checked on 2026-10-26; `[standard]` a deci
 
 | Role | On this page |
 | --- | --- |
-| Platform Admin | Reads Balances, Batches, Movements, Transfers, Replenishment, Stocktakes, Adjustments, Returns and removals at every site. No action: a batch, transfer, replenishment decision, stocktake, adjustment or return write is refused (BR-AUTH-010). |
-| Pharmacy Manager | Reads Balances, Batches and Movements at assigned sites. Approves transfers, adjustments, returns and removals; posts stocktakes; requests replenishment. |
-| Pharmacist | Reads Balances and Batches at assigned sites (needed to dispense in FEFO order, BR-INV-007). Requests replenishment for own counter and cancels own requests. |
-| Warehouse Staff | Creates, ships and receives transfers; counts stock; proposes adjustments; records returns and removals; approves and fulfils replenishment. |
+| Platform Admin | Reads Balances, Batches, Movements, Transfers, Replenishment, Stocktakes, Adjustments, Disposals, Returns and removals at every site. No action: a batch, transfer, replenishment decision, stocktake, adjustment, disposal or return write is refused (BR-AUTH-010). |
+| Pharmacy Manager | Reads Balances, Batches and Movements at assigned sites. Approves transfers, adjustments, disposals, returns and removals; posts stocktakes; requests replenishment. |
+| Pharmacist | Reads Balances and Batches at assigned sites (needed to dispense in FEFO order, BR-INV-007). Proposes disposal records for batches at the counter. Requests replenishment for own counter and cancels own requests. |
+| Warehouse Staff | Creates, ships and receives transfers; counts stock; proposes adjustments and disposal records; records returns and removals; approves and fulfils replenishment. |
 
-- `[standard]` Sidebar, target: Warehouse Staff see Transfers, Replenishment, Stocktake, Inventory, Adjustments, Returns and removals. Pharmacy Manager sees Inventory, Transfers, Replenishment, Stocktake, Adjustments and Returns and removals. Pharmacist sees Inventory (read-only tabs) and Replenishment. Platform Admin sees all.
+- `[standard]` Sidebar, target: Warehouse Staff see Transfers, Replenishment, Stocktake, Inventory, Adjustments, Returns and removals. Pharmacy Manager sees Inventory, Transfers, Replenishment, Stocktake, Adjustments and Returns and removals. Pharmacist sees Inventory (balances and batches, plus the Disposals tab to propose a record) and Replenishment. Platform Admin sees all.
 - `[standard]` Every list, count and site selector shows only the sites assigned to the signed-in staff member. Platform Admin sees all sites (BR-AUTH-004).
 - `[standard]` A 401 on any request ends the session as the shared rule in [staff-shell-sign-in-and-navigation.md](staff-shell-sign-in-and-navigation.md) describes.
 
@@ -111,6 +111,17 @@ Tags: `[observed]` a code or doc fact checked on 2026-10-26; `[standard]` a deci
   - With nothing to move, the table says so in its empty state; a failed read shows the error, never an empty list.
   - The section states the rule it applied (45 days kept, 14 days trigger, 30 days target, expiry cap), so a reader can explain a missing row.
 
+### US9. As a Pharmacist, Pharmacy Manager or Warehouse Staff member, I record the destruction of expired, damaged or recalled batches, and a Pharmacy Manager approves it, so that the stock leaves the shelf with a signed document
+
+- Source: `[standard]` Medicine destruction records. `[observed]` BR-DIS-001 to BR-DIS-006, BR-AUTH-009.
+- Accepted when:
+  - **Inventory → Control → Disposals** lists records newest first with the created time, reason, batch numbers, total quantity and status. The status filter offers all, pending, approved and rejected; search matches the reason, the note or a batch number.
+  - **Lập biên bản tiêu hủy** is offered to a Pharmacist and Warehouse Staff. The drawer picks one site in the caller's scope, a reason (`Hết hạn`, `Hư hỏng`, `Thu hồi`, `Khác`), optional notes, and one or more balances: the list is the site's stock in expiry order, shows product, batch, location, expiry and available, and defaults a ticked line to its whole available quantity. A quantity above available is refused before the request.
+  - A new record is `Chờ duyệt` and stock does not change. The creator sees no approve or reject action on their own record.
+  - A Pharmacy Manager approves or rejects a pending record, never one they created. Approval subtracts each line in one transaction and writes a `Disposal` movement; rejection changes no stock. A record that is no longer pending cannot be decided again.
+  - An approved row offers **In biên bản**: an A4 print view with the site, reason, note, product, batch, location and quantity per line, the total, and signature blocks for the creator, a witness and the approver.
+  - The action column is absent when no visible row offers an action; a failed read shows the error, never an empty list.
+
 ## Contents and behavior
 
 `[observed]` for the current layout. The target differences are in the gap table.
@@ -125,6 +136,7 @@ Tags: `[observed]` a code or doc fact checked on 2026-10-26; `[standard]` a deci
 | Stocktake (`/stocktake`) | Notes or batch number; status filter (Pending, InProgress, Completed, Cancelled) | **Tạo phiên kiểm kê**; **Ghi nhận số đếm kiểm kê** | Chờ xử lý → Đang kiểm → Hoàn tất; Hủy khi còn mở | Post: up or down by each variance |
 | Adjustments (`/adjustments`) | Reason, notes or batch number; status filter (Pending, Approved, Rejected) | **Gửi điều chỉnh tồn kho** | Chờ xử lý → Đã duyệt or Từ chối | Approve: ± quantity |
 | Returns and removals (`/returns`) | Site filter; status filter (Pending, Approved, Rejected) | **Ghi nhận trả hàng hoặc loại hàng khỏi kho** | Chờ xử lý → Đã duyệt or Từ chối | Approve: down by each line quantity |
+| Disposals (`/inventory`, Control tab) | Reason, notes or batch number; status filter (PendingApproval, Approved, Rejected) | **Lập biên bản tiêu hủy** | Chờ duyệt → Đã duyệt or Từ chối | Approve: down by each line quantity; **In biên bản** when approved |
 
 **Status labels** (staff only; these records have no customer view, so there is no customer label):
 
@@ -134,6 +146,7 @@ Tags: `[observed]` a code or doc fact checked on 2026-10-26; `[standard]` a deci
 | Replenishment | Pending / Approved / Fulfilled / Rejected / Cancelled | `Chờ xử lý` / `Đã duyệt` / `Đã thực hiện` / `Từ chối` / `Đã hủy` |
 | Stocktake | Pending / InProgress / Completed / Cancelled | `Chờ xử lý` / `Đang kiểm` / `Hoàn tất` / `Đã hủy` |
 | Adjustment, return | Pending / Approved / Rejected | `Chờ xử lý` / `Đã duyệt` / `Từ chối` |
+| Disposal | PendingApproval / Approved / Rejected | `Chờ duyệt` / `Đã duyệt` / `Từ chối` |
 | Batch quality | Released / PendingQc / Rejected | `Đã đạt` / `Chờ kiểm tra` / `Từ chối` |
 
 **Who may act (target).** `[standard]` The server enforces this matrix; the UI only hides what the server would refuse. "Not the creator" means the approver is a different person from the one who created or counted the record.
@@ -155,6 +168,8 @@ Tags: `[observed]` a code or doc fact checked on 2026-10-26; `[standard]` a deci
 | Approve or reject adjustment | Pharmacy Manager; not the proposer | Roles and the proposer check match the target. A reject without a note is accepted (G17). |
 | Record return or removal | Warehouse Staff | Warehouse Staff; final at once (G16) |
 | Approve return or removal | Pharmacy Manager; not the recorder | Not possible (G16) |
+| Propose disposal | Pharmacist, Warehouse Staff at the site | Matches the target. |
+| Approve or reject disposal | Pharmacy Manager; not the proposer | Matches the target. |
 
 **Other behavior.** `[observed]` Every write that changes stock or an approval asks for confirmation that names the effect, for example "Duyệt điều chuyển này?" and "Đăng điều chỉnh kiểm kê?", whose body says the change "cannot be undone from this screen". `[observed]` Pressing **N** opens the create drawer where one exists. `[standard]` Drawers and confirmations are operable by keyboard, focus returns to the control that opened them, and status is shown as text, not colour alone (WCAG 2.2 AA). `[standard]` Documents are never edited after creation: a mistake is cancelled and recorded again. Nothing is hard-deleted.
 

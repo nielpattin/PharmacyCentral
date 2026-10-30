@@ -639,6 +639,113 @@ describe("inventory API", () => {
     expect(adjustmentInput?.quantity).toBe(2);
   });
 
+  it("creates a disposal proposal with its lines and keeps the actor", async () => {
+    const createDisposal = vi
+      .fn<(input: Parameters<InventoryRepository["createDisposal"]>[0]) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.adjustment, status: "PendingApproval", lines: [] });
+    const repository = { createDisposal } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/inventory/disposals`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-Actor-Id": ids.actor,
+        "x-actor-roles": "Pharmacist",
+      },
+      body: JSON.stringify({
+        siteId: ids.sourceSite,
+        reason: "Expired",
+        note: "Past the expiry date",
+        lines: [
+          { productBatchId: ids.batchA, storageLocationId: ids.sourceLocation, quantity: 3 },
+          { productBatchId: ids.batchB, storageLocationId: ids.sourceLocation, quantity: 1 },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const input = createDisposal.mock.calls[0]?.[0];
+    expect(input?.createdBy).toBe(ids.actor);
+    expect(input?.reason).toBe("Expired");
+    expect(input?.lines).toEqual([
+      { productBatchId: ids.batchA, storageLocationId: ids.sourceLocation, quantity: 3 },
+      { productBatchId: ids.batchB, storageLocationId: ids.sourceLocation, quantity: 1 },
+    ]);
+  });
+
+  it("refuses a disposal proposal without lines, with a repeated batch, or from a manager", async () => {
+    const createDisposal = vi
+      .fn<(input: Parameters<InventoryRepository["createDisposal"]>[0]) => Promise<unknown>>()
+      .mockResolvedValue({ id: ids.adjustment, status: "PendingApproval" });
+    const repository = { createDisposal } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+    const body = {
+      siteId: ids.sourceSite,
+      reason: "Expired",
+      lines: [{ productBatchId: ids.batchA, storageLocationId: ids.sourceLocation, quantity: 1 }],
+    };
+    const post = (payload: unknown, roles: string) =>
+      fetch(`${testServer.url}/inventory/disposals`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "x-actor-roles": roles },
+        body: JSON.stringify(payload),
+      });
+
+    expect((await post({ ...body, lines: [] }, "Pharmacist")).status).toBe(400);
+    expect((await post({ ...body, lines: [body.lines[0], body.lines[0]] }, "Warehouse Staff")).status).toBe(400);
+    expect((await post(body, "Pharmacy Manager")).status).toBe(403);
+    expect(createDisposal).not.toHaveBeenCalled();
+  });
+
+  it("approves or rejects a disposal record as a manager who did not create it", async () => {
+    const transitionDisposal = vi
+      .fn<
+        (id: string, action: "approve" | "reject", actorId: string, decisionNotes?: string | null) => Promise<unknown>
+      >()
+      .mockResolvedValue({ id: ids.adjustment, status: "Approved" });
+    const repository = {
+      transitionDisposal,
+      getDisposal: vi.fn().mockResolvedValue({ id: ids.adjustment, siteId: ids.sourceSite, createdBy: ids.other }),
+    } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+    const post = (path: string, roles = "Pharmacy Manager") =>
+      fetch(`${testServer.url}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "x-actor-roles": roles },
+        body: JSON.stringify({ decisionNotes: "Witnessed" }),
+      });
+
+    expect((await post(`/inventory/disposals/${ids.adjustment}/approve`)).status).toBe(200);
+    expect((await post(`/inventory/disposals/${ids.adjustment}/reject`)).status).toBe(200);
+    expect((await post(`/inventory/disposals/${ids.adjustment}/approve`, "Pharmacist")).status).toBe(403);
+    expect(transitionDisposal).toHaveBeenCalledWith(ids.adjustment, "approve", ids.actor, "Witnessed");
+    expect(transitionDisposal).toHaveBeenCalledWith(ids.adjustment, "reject", ids.actor, "Witnessed");
+  });
+
+  it("refuses a manager approving a disposal record they created", async () => {
+    const transitionDisposal = vi.fn();
+    const repository = {
+      transitionDisposal,
+      getDisposal: vi.fn().mockResolvedValue({ id: ids.adjustment, siteId: ids.sourceSite, createdBy: ids.actor }),
+    } as unknown as InventoryRepository;
+    const testServer = await createTestServer(repository);
+    server = testServer.server;
+
+    const response = await fetch(`${testServer.url}/inventory/disposals/${ids.adjustment}/approve`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, "x-actor-roles": "Pharmacy Manager" },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "self_approval_forbidden" });
+    expect(transitionDisposal).not.toHaveBeenCalled();
+  });
+
   it("sends the next-page cursor in a header only while another page follows, and reads the cursor back", async () => {
     const nextCursor = encodePageCursor({ sortValue: "2026-03-01T10:00:00.000000Z", id: ids.transfer });
     const listTransfers = vi

@@ -57,6 +57,32 @@ const adjustmentSchema = z.object({
   reason: z.string().trim().min(1).max(500),
   notes: z.string().trim().max(1000).nullable().optional(),
 });
+const disposalLineSchema = z.object({
+  productBatchId: z.string().uuid(),
+  storageLocationId: z.string().uuid(),
+  quantity: z.number().positive(),
+});
+const disposalSchema = z
+  .object({
+    siteId: z.string().uuid(),
+    reason: z.enum(["Expired", "Damaged", "Recalled", "Other"]),
+    note: z.string().trim().max(2000).nullable().optional(),
+    lines: z.array(disposalLineSchema).min(1).max(50),
+  })
+  .superRefine((value, context) => {
+    const seen = new Set<string>();
+    for (const [index, line] of value.lines.entries()) {
+      const key = `${line.productBatchId}:${line.storageLocationId}`;
+      if (seen.has(key))
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["lines", index],
+          message: "A batch at a storage location appears once",
+        });
+      seen.add(key);
+    }
+  });
+const disposalDecisionSchema = z.object({ decisionNotes: z.string().trim().max(1000).nullable().optional() });
 const replenishmentLineSchema = z.object({
   productId: z.string().uuid(),
   productBatchId: z.string().uuid(),
@@ -284,6 +310,59 @@ export const createInventoryRouter = (
       return decided
         ? response.json(decided)
         : response.status(404).json({ title: "Adjustment not found", status: 404 });
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.get("/inventory/disposals", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"])) return;
+    const page = readPageRequest(request.query, statusListPage);
+    if (!page) return invalidCursor(response);
+    try {
+      return sendPage(response, await repository.listDisposals(statusListFilters(request), page));
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.post("/inventory/disposals", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacist", "Warehouse Staff"])) return;
+    const parsed = disposalSchema.safeParse(request.body);
+    if (!parsed.success) return invalid(response);
+    if (refuseOutOfSiteScope(request, response, [parsed.data.siteId])) return;
+    try {
+      return response.status(201).json(
+        await repository.createDisposal({
+          ...parsed.data,
+          createdBy: request.header("X-Actor-Id") ?? "00000000-0000-0000-0000-000000000000",
+        }),
+      );
+    } catch (error) {
+      return next(error);
+    }
+  });
+  router.post("/inventory/disposals/:id/:action", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    if (!allowRoles(request, response, ["Pharmacy Manager"])) return;
+    const id = idParam.safeParse(request.params);
+    const action = z.enum(["approve", "reject"]).safeParse(request.params.action);
+    const decision = disposalDecisionSchema.safeParse(request.body);
+    if (!id.success || !action.success || !decision.success) return invalid(response);
+    try {
+      const record = await repository.getDisposal(id.data.id);
+      if (!record) return response.status(404).json({ title: "Disposal record not found", status: 404 });
+      if (refuseOutOfSiteScope(request, response, [record.siteId])) return;
+      if (refuseSelfApproval(request, response, record.createdBy)) return;
+      const decided = await repository.transitionDisposal(
+        id.data.id,
+        action.data,
+        request.header("X-Actor-Id") ?? "00000000-0000-0000-0000-000000000000",
+        decision.data.decisionNotes,
+      );
+      return decided
+        ? response.json(decided)
+        : response.status(404).json({ title: "Disposal record not found", status: 404 });
     } catch (error) {
       return next(error);
     }

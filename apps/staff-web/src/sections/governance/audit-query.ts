@@ -35,6 +35,7 @@ export const AUDIT_ENTITY_GROUPS: ReadonlyArray<{ label: string; types: readonly
     types: [
       { value: "batch", label: "Batch" },
       { value: "adjustment", label: "Adjustment" },
+      { value: "disposal", label: "Disposal record" },
       { value: "movement", label: "Movement" },
       { value: "transfer", label: "Transfer" },
       { value: "stocktake", label: "Stocktake" },

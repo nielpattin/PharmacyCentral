@@ -123,6 +123,10 @@ export const staffActions = {
     roles: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
     reason: "Only a Pharmacy Manager or Warehouse Staff can view adjustments.",
   },
+  "inventory.disposals.view": {
+    roles: ["Platform Admin", "Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
+    reason: "Only a Pharmacist, Pharmacy Manager or Warehouse Staff can view disposal records.",
+  },
   "inventory.transfers.view": {
     roles: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
     reason: "Only a Pharmacy Manager or Warehouse Staff can view transfers.",
@@ -146,6 +150,15 @@ export const staffActions = {
     roles: manager,
     separationOfDuties: true,
     reason: "Only a Pharmacy Manager can approve or reject adjustments.",
+  },
+  "inventory.disposal.create": {
+    roles: ["Pharmacist", "Warehouse Staff"],
+    reason: "Only a Pharmacist or Warehouse Staff can create a disposal record.",
+  },
+  "inventory.disposal.decide": {
+    roles: manager,
+    separationOfDuties: true,
+    reason: "Only a Pharmacy Manager can approve or reject disposal records.",
   },
   "inventory.transfer.create": { roles: warehouse, reason: "Only Warehouse Staff can create transfers." },
   "inventory.transfer.approve": {

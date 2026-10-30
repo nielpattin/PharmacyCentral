@@ -6,6 +6,8 @@ import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   goodsReceiptLines,
   idempotencyRecords,
+  disposalLines,
+  disposalRecords,
   inventoryBalances,
   productBatches,
   replenishmentRequestLines,
@@ -36,6 +38,9 @@ export class StockDispenseError extends Error {}
 
 export type StockDispenseLine = { productId: string; productBatchId: string; quantity: number };
 
+export type DisposalReason = "Expired" | "Damaged" | "Recalled" | "Other";
+
+export type DisposalLineInput = { productBatchId: string; storageLocationId: string; quantity: number };
 export type StockDispense = {
   /** Idempotency key: the same dispense sent twice moves stock once and answers the first result again. */
   dispenseId: string;
@@ -118,6 +123,22 @@ const adjustmentText = (text: string): SQL | undefined => {
     ilike(stockAdjustments.reason, pattern),
     ilike(stockAdjustments.notes, pattern),
     sql`${stockAdjustments.productBatchId} in (select ${productBatches.id} from ${productBatches} where ${ilike(productBatches.batchNumber, pattern)})`,
+  );
+};
+
+const disposalFilters = (filters: StatusListFilters): Array<SQL | undefined> => [
+  filters.siteIds ? inArray(disposalRecords.siteId, filters.siteIds) : undefined,
+  ...statusConditions(disposalRecords.status, filters),
+  filters.q ? disposalText(filters.q) : undefined,
+];
+
+/** Disposals carry no number: `q` matches their reason, their note, or the number of a batch they name. */
+const disposalText = (text: string): SQL | undefined => {
+  const pattern = containsPattern(text);
+  return or(
+    ilike(disposalRecords.reason, pattern),
+    ilike(disposalRecords.note, pattern),
+    sql`exists (select 1 from ${disposalLines} inner join ${productBatches} on ${productBatches.id} = ${disposalLines.productBatchId} where ${disposalLines.disposalId} = ${disposalRecords.id} and ${ilike(productBatches.batchNumber, pattern)})`,
   );
 };
 
@@ -686,6 +707,223 @@ export class InventoryRepository {
     const [batch] = await this.database.db.insert(productBatches).values(input).returning();
     if (!batch) throw new Error("Batch insert did not return a row");
     return batch;
+  }
+
+  public async listDisposals(filters: StatusListFilters = {}, page: PageRequest = everything) {
+    const conditions = presentConditions([
+      ...disposalFilters(filters),
+      afterCursor({
+        sortColumn: disposalRecords.createdAt,
+        idColumn: disposalRecords.id,
+        direction: "desc",
+        kind: "timestamp",
+        cursor: page.cursor,
+      }),
+    ]);
+    const query = this.database.db
+      .select({
+        record: disposalRecords,
+        id: disposalRecords.id,
+        sortValue: timestampSortValue(disposalRecords.createdAt),
+      })
+      .from(disposalRecords)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(disposalRecords.createdAt), desc(disposalRecords.id));
+    const fetched = page.limit === undefined ? await query : await query.limit(page.limit + 1);
+    const { items, nextCursor } = splitPage(fetched, page.limit);
+    const ids = items.map(({ record }) => record.id);
+    const lines = ids.length
+      ? await this.database.db
+          .select({ line: disposalLines, batchNumber: productBatches.batchNumber })
+          .from(disposalLines)
+          .innerJoin(productBatches, eq(productBatches.id, disposalLines.productBatchId))
+          .where(inArray(disposalLines.disposalId, ids))
+          .orderBy(asc(productBatches.batchNumber))
+      : [];
+    return {
+      rows: items.map(({ record }) => ({
+        ...record,
+        lines: lines
+          .filter(({ line }) => line.disposalId === record.id)
+          .map(({ line, batchNumber }) => ({ ...line, batchNumber })),
+      })),
+      nextCursor,
+    };
+  }
+
+  public async getDisposal(id: string) {
+    const [record] = await this.database.db.select().from(disposalRecords).where(eq(disposalRecords.id, id)).limit(1);
+    if (!record) return undefined;
+    const lines = await this.database.db
+      .select({ line: disposalLines, batchNumber: productBatches.batchNumber })
+      .from(disposalLines)
+      .innerJoin(productBatches, eq(productBatches.id, disposalLines.productBatchId))
+      .where(eq(disposalLines.disposalId, id))
+      .orderBy(asc(productBatches.batchNumber));
+    return { ...record, lines: lines.map(({ line, batchNumber }) => ({ ...line, batchNumber })) };
+  }
+
+  /**
+   * Proposes a disposal. Stock does not move yet: the balances are checked so a proposal never names more than the
+   * shelf holds, while the approval re-checks them because stock can leave in between.
+   */
+  public async createDisposal(input: {
+    siteId: string;
+    reason: DisposalReason;
+    note?: string | null | undefined;
+    lines: DisposalLineInput[];
+    createdBy: string;
+  }) {
+    return this.database.db.transaction(async (transaction) => {
+      const batchIds = [...new Set(input.lines.map((line) => line.productBatchId))];
+      const batches = await transaction.select().from(productBatches).where(inArray(productBatches.id, batchIds));
+      const batchById = new Map(batches.map((batch) => [batch.id, batch]));
+      const validated: Array<{ line: DisposalLineInput; productId: string }> = [];
+      for (const line of input.lines) {
+        const batch = batchById.get(line.productBatchId);
+        if (!batch)
+          throw new BusinessRuleError(`Disposal line names a batch that does not exist: ${line.productBatchId}`);
+        const balance = (
+          await transaction
+            .select()
+            .from(inventoryBalances)
+            .where(
+              and(
+                eq(inventoryBalances.productBatchId, line.productBatchId),
+                eq(inventoryBalances.siteId, input.siteId),
+                eq(inventoryBalances.storageLocationId, line.storageLocationId),
+              ),
+            )
+            .limit(1)
+        )[0];
+        const available = balance === undefined ? 0 : Number(balance.quantityOnHand) - Number(balance.quantityReserved);
+        if (line.quantity > available)
+          throw new BusinessRuleError(
+            `Disposal quantity ${line.quantity} exceeds the ${available} available of batch ${batch.batchNumber}`,
+          );
+        validated.push({ line, productId: batch.productId });
+      }
+      const [record] = await transaction
+        .insert(disposalRecords)
+        .values({
+          siteId: input.siteId,
+          reason: input.reason,
+          note: input.note ?? null,
+          createdBy: input.createdBy,
+        })
+        .returning();
+      if (!record) throw new Error("Disposal insert did not return a row");
+      const lines = await transaction
+        .insert(disposalLines)
+        .values(
+          validated.map(({ line, productId }) => ({
+            disposalId: record.id,
+            productId,
+            productBatchId: line.productBatchId,
+            storageLocationId: line.storageLocationId,
+            quantity: String(line.quantity),
+          })),
+        )
+        .returning();
+      return { ...record, lines };
+    });
+  }
+
+  /**
+   * A Pharmacy Manager decides a proposal. Approval moves each named batch off the shelf with a Disposal ledger entry;
+   * rejection changes nothing. The whole decision is one transaction, so a stale quantity refuses the approval whole.
+   */
+  public async transitionDisposal(
+    id: string,
+    action: "approve" | "reject",
+    actorId: string,
+    decisionNotes?: string | null,
+  ) {
+    return this.database.db.transaction(async (transaction) => {
+      const record = (
+        await transaction.select().from(disposalRecords).where(eq(disposalRecords.id, id)).limit(1).for("update")
+      )[0];
+      if (!record) return undefined;
+      if (record.status !== "PendingApproval")
+        throw new BusinessRuleError(`Disposal record is already ${record.status}`);
+      const decidedAt = new Date();
+      if (action === "reject") {
+        const [rejected] = await transaction
+          .update(disposalRecords)
+          .set({
+            status: "Rejected",
+            decidedBy: actorId,
+            decisionNotes: decisionNotes ?? null,
+            decidedAt,
+            updatedAt: decidedAt,
+          })
+          .where(eq(disposalRecords.id, id))
+          .returning();
+        return rejected;
+      }
+      const lines = await transaction.select().from(disposalLines).where(eq(disposalLines.disposalId, id));
+      if (lines.length === 0) throw new BusinessRuleError("Disposal record has no lines");
+      for (const line of lines) {
+        const balance = (
+          await transaction
+            .select()
+            .from(inventoryBalances)
+            .where(
+              and(
+                eq(inventoryBalances.productBatchId, line.productBatchId),
+                eq(inventoryBalances.siteId, record.siteId),
+                eq(inventoryBalances.storageLocationId, line.storageLocationId),
+              ),
+            )
+            .limit(1)
+            .for("update")
+        )[0];
+        const previousOnHand = Number(balance?.quantityOnHand ?? 0);
+        const quantity = Number(line.quantity);
+        const previousReserved = Number(balance?.quantityReserved ?? 0);
+        if (!balance || previousOnHand - previousReserved < quantity)
+          throw new BusinessRuleError(`Disposal quantity exceeds the stock available for batch ${line.productBatchId}`);
+        const nextOnHand = previousOnHand - quantity;
+        const updated = await transaction
+          .update(inventoryBalances)
+          .set({
+            quantityOnHand: String(nextOnHand),
+            version: sql`${inventoryBalances.version} + 1`,
+            updatedAt: decidedAt,
+          })
+          .where(and(eq(inventoryBalances.id, balance.id), eq(inventoryBalances.version, balance.version)))
+          .returning();
+        if (!updated[0]) throw new BusinessRuleError("Disposal stock was changed by another request");
+        await transaction.insert(stockLedgerEntries).values({
+          productId: line.productId,
+          productBatchId: line.productBatchId,
+          siteId: record.siteId,
+          storageLocationId: line.storageLocationId,
+          quantityDelta: String(-quantity),
+          quantityAfter: String(nextOnHand),
+          movementType: "Disposal",
+          referenceType: "Disposal",
+          referenceId: record.id,
+          reason: record.reason,
+          notes: record.note,
+          createdBy: actorId,
+        });
+      }
+      for (const productId of new Set(lines.map((line) => line.productId)))
+        await recordSiteAvailability(transaction, productId, record.siteId);
+      const [approved] = await transaction
+        .update(disposalRecords)
+        .set({
+          status: "Approved",
+          decidedBy: actorId,
+          decisionNotes: decisionNotes ?? null,
+          decidedAt,
+          updatedAt: decidedAt,
+        })
+        .where(eq(disposalRecords.id, id))
+        .returning();
+      return approved;
+    });
   }
 
   /**

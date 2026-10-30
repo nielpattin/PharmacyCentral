@@ -132,6 +132,20 @@ describe("trusted request role restatement", () => {
     expect((await callAs(["Warehouse Staff"], stocktakePath, "POST")).status).toBe(403);
   });
 
+  it("admits a Pharmacist or Warehouse Staff to propose a disposal, every staff role to read one, and only a manager to decide", async () => {
+    const disposals = "/inventory/disposals";
+    const decision = `${disposals}/00000000-0000-4000-8000-000000000070/approve`;
+    expect((await callAs(["Pharmacist"], disposals, "GET")).status).toBe(200);
+    expect((await callAs(["Warehouse Staff"], disposals, "GET")).status).toBe(200);
+    expect((await callAs(["Pharmacy Manager"], disposals, "GET")).status).toBe(200);
+    expect((await callAs(["Pharmacist"], disposals, "POST")).status).toBe(200);
+    expect((await callAs(["Warehouse Staff"], disposals, "POST")).status).toBe(200);
+    expect((await callAs(["Pharmacy Manager"], disposals, "POST")).status).toBe(403);
+    expect((await callAs(["Pharmacy Manager"], decision, "POST")).status).toBe(200);
+    expect((await callAs(["Pharmacist"], decision, "POST")).status).toBe(403);
+    expect((await callAs(["Warehouse Staff"], decision, "POST")).status).toBe(403);
+  });
+
   it("admits a Pharmacy Manager to replenishment suggestions and drafts, lets Platform Admin read them, and refuses the rest", async () => {
     const suggestions = "/procurement/replenishment-suggestions";
     expect((await callAs(["Pharmacy Manager"], suggestions, "GET")).status).toBe(200);

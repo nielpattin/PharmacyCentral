@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**inventory-service, staff-web, deploy, docs**
+
+- Inventory gains **Disposals** (biên bản tiêu hủy): a Pharmacist or Warehouse Staff member records the expired, damaged or recalled batches a site is destroying, with a reason, notes and a quantity per batch, and a Pharmacy Manager who did not create it approves or rejects it. New `disposal_records` and `disposal_lines` tables (inventory migration `0015`), `GET`/`POST /api/inventory/disposals` and `POST /api/inventory/disposals/{id}/approve|reject`. A proposal leaves stock untouched; approval re-checks availability, subtracts each line in one transaction and writes a `Disposal` ledger entry per line. An approved record prints an A4 slip with the batches, the total and signature blocks. Spec US9, BR-DIS-001 to 006, design 0008.
+
 **sales-service, operations-query-service, staff-web, deploy, docs**
 
 - Analytics gains **Mục tiêu doanh số**: a Pharmacy Manager sets a monthly revenue goal per site (new `sales_targets` table, migration `0016`, `PUT /api/sales-targets`), and `GET /api/dashboard/sales-targets` reports each site's paid revenue of the month, all channels, against it with the share reached. The section has its own month picker, reuses the page's site filter, and hides the write action from roles that cannot use it; Platform Admin reads. The write publishes `sales.target.set.v1`. The route is added to the gateway, ALB and edge policy with a Pharmacy Manager rule. Spec US7, BR-REPORT-018, design 0007.

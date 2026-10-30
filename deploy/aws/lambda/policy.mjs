@@ -77,6 +77,7 @@ export const siteScopedListPrefixes = [
   "/api/inventory/replenishment",
   "/api/inventory/action-plans",
   "/api/inventory/adjustments",
+  "/api/inventory/disposals",
   "/api/dashboard/summary",
   "/api/dashboard/analytics",
   "/api/operations/dashboard",
@@ -251,6 +252,21 @@ export const employeeRoleRules = [
   { methods: "READ", path: "/api/inventory/adjustments", match: "prefix", roles: [PHARMACY_MANAGER, WAREHOUSE_STAFF] },
   { methods: ["POST"], path: "/api/inventory/adjustments/*/*", match: "exact", roles: [PHARMACY_MANAGER] },
   { methods: "WRITE", path: "/api/inventory/adjustments", match: "prefix", roles: [WAREHOUSE_STAFF] },
+  // Disposal records: a Pharmacist or Warehouse Staff proposes one at their site; a Pharmacy Manager approves or
+  // rejects it, never its creator. Approval takes the batches off the shelf.
+  {
+    methods: "READ",
+    path: "/api/inventory/disposals",
+    match: "prefix",
+    roles: [PHARMACIST, PHARMACY_MANAGER, WAREHOUSE_STAFF],
+  },
+  {
+    methods: ["POST"],
+    path: "/api/inventory/disposals",
+    match: "exact",
+    roles: [PHARMACIST, WAREHOUSE_STAFF],
+  },
+  { methods: ["POST"], path: "/api/inventory/disposals/*/*", match: "exact", roles: [PHARMACY_MANAGER] },
   // Transfers: Warehouse Staff create, ship and receive; a Pharmacy Manager approves, never the creator; the creator or a
   // Pharmacy Manager cancels. Stocktakes: Warehouse Staff count; a Pharmacy Manager posts, never the counter.
   // Returns and removals: Warehouse Staff create; a Pharmacy Manager approves or rejects.

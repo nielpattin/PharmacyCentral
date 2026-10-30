@@ -217,6 +217,8 @@ In containers, each service executes its compiled `node dist/migrate.js` on star
 
 Identity `0003_must_change_password` adds `users.must_change_password` (default `false`). Inventory `0012_batch_creator_stocktake_counter` adds nullable `product_batches.created_by` and `stocktake_lines.counted_by`. A row without a creator is not refused by the separation-of-duties checks (BR-AUTH-009).
 
+Inventory `0015_disposal_records` adds `disposal_records` and `disposal_lines` for the Disposals tab (biên bản tiêu hủy). An approval subtracts stock and writes a `Disposal` ledger entry; a proposal writes neither. No backfill is needed: existing negative adjustments stay adjustments, and the new tables start empty.
+
 Sales `0014_early_robin_chapel` adds nullable `orders.paid_at` and `prescriptions.paid_at`: the first time a paid invoice settled the document, kept after a refund. The payment events fill it from then on. A database that already holds paid invoices needs one backfill after the migration, or every customer reads as new on Analytics:
 
 ```bash

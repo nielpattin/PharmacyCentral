@@ -20,6 +20,8 @@ export const INVENTORY_AUDIT_RULES: readonly AuditRule[] = [
   post("/inventory/batches/:id/quality", "batch", "inventory.batch.quality-reviewed", ["decision"]),
   post("/inventory/adjustments", "adjustment", "inventory.adjustment.created"),
   post("/inventory/adjustments/:id/:action", "adjustment", { prefix: "inventory.adjustment", param: "action" }),
+  post("/inventory/disposals", "disposal", "inventory.disposal.created", ["reason"]),
+  post("/inventory/disposals/:id/:action", "disposal", { prefix: "inventory.disposal", param: "action" }),
   post("/inventory/movements", "movement", "inventory.movement.recorded"),
   post("/inventory/transfers", "transfer", "inventory.transfer.created"),
   post("/inventory/transfers/:id/:action", "transfer", { prefix: "inventory.transfer", param: "action" }),

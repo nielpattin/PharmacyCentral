@@ -82,6 +82,51 @@ export const stockAdjustments = pgTable(
   (table) => [index("stock_adjustments_created_id_idx").on(table.createdAt, table.id)],
 );
 
+/**
+ * A disposal record names the batches a site is destroying, why, and who decided it. Stock moves only when a Pharmacy
+ * Manager approves it, through one Disposal ledger entry per line.
+ */
+export const disposalRecords = pgTable(
+  "disposal_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    siteId: uuid("site_id").notNull(),
+    reason: varchar("reason", { length: 20 }).notNull(),
+    note: text("note"),
+    status: varchar("status", { length: 20 }).notNull().default("PendingApproval"),
+    createdBy: uuid("created_by").notNull(),
+    decidedBy: uuid("decided_by"),
+    decisionNotes: text("decision_notes"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("disposal_records_site_created_idx").on(table.siteId, table.createdAt),
+    index("disposal_records_created_id_idx").on(table.createdAt, table.id),
+  ],
+);
+
+export const disposalLines = pgTable(
+  "disposal_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    disposalId: uuid("disposal_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    productBatchId: uuid("product_batch_id").notNull(),
+    storageLocationId: uuid("storage_location_id").notNull(),
+    quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("disposal_lines_batch_location_unique").on(
+      table.disposalId,
+      table.productBatchId,
+      table.storageLocationId,
+    ),
+    index("disposal_lines_disposal_idx").on(table.disposalId),
+  ],
+);
+
 export const stockLedgerEntries = pgTable(
   "stock_ledger_entries",
   {

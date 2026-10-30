@@ -85,3 +85,31 @@ describe("INVENTORY_AUDIT_RULES for action plans", () => {
     expect(entry).not.toHaveProperty("details");
   });
 });
+
+describe("INVENTORY_AUDIT_RULES for disposal records", () => {
+  it("records the proposal with its reason and the decision with the action only", () => {
+    const created = resolveAuditEntries(
+      INVENTORY_AUDIT_RULES,
+      requestOf("POST", "/inventory/disposals", {
+        body: { siteId: ids.site, reason: "Expired", note: "Ghi chú riêng", lines: [] },
+      }),
+      { id: ids.plan, siteId: ids.site },
+    );
+    const approved = resolveAuditEntries(
+      INVENTORY_AUDIT_RULES,
+      requestOf("POST", "/inventory/disposals/:id/:action", {
+        params: { id: ids.plan, action: "approve" },
+        body: { decisionNotes: "Ghi chú duyệt" },
+      }),
+      { id: ids.plan, siteId: ids.site },
+    );
+
+    expect(created).toMatchObject([
+      { action: "inventory.disposal.created", entityType: "disposal", details: { reason: "Expired" } },
+    ]);
+    expect(approved).toMatchObject([
+      { action: "inventory.disposal.approve", entityType: "disposal", entityId: ids.plan },
+    ]);
+    expect(JSON.stringify([created, approved])).not.toContain("Ghi chú");
+  });
+});

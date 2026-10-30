@@ -17,7 +17,7 @@ Tài liệu này tập trung vào **quy tắc nghiệp vụ đã được triể
 - Quầy bán thuốc, giữ hàng, cấp phát và thanh toán tại quầy.
 - Đơn hàng online, giao hàng và phí giao hàng.
 - Tiếp nhận đơn thuốc từ ảnh hoặc QR, và yêu cầu nhờ dược sĩ tư vấn.
-- Điều chuyển, trả hàng/loại khỏi tồn, kiểm kê, điều chỉnh tồn và bổ sung hàng từ quầy.
+- Điều chuyển, trả hàng/loại khỏi tồn, kiểm kê, điều chỉnh tồn, biên bản tiêu hủy và bổ sung hàng từ quầy.
 - Dashboard, tài chính và audit.
 - Chatbot tư vấn, thông tin xác thực AI và từ đồng nghĩa tìm kiếm.
 - Sự kiện giữa các service (outbox và consumer).
@@ -714,6 +714,38 @@ Khi duyệt:
 ### BR-ADJ-008. Từ chối điều chỉnh không đổi tồn
 
 Từ chối chỉ đặt `Rejected`, ghi người duyệt và ghi chú.
+
+## 15.1. Quy tắc biên bản tiêu hủy
+
+### BR-DIS-001. Biên bản tiêu hủy gắn một site và ít nhất một lô
+
+Mỗi biên bản có `siteId`, `reason` (`Expired`, `Damaged`, `Recalled`, `Other`), `note` tùy chọn và ít nhất một dòng. Mỗi dòng có `productBatchId`, `storageLocationId` và `quantity > 0`; một cặp batch + storage location chỉ xuất hiện một lần trong biên bản.
+
+### BR-DIS-002. Chỉ đề xuất trong phạm vi tồn khả dụng
+
+Khi lập biên bản, từng dòng phải có tồn khả dụng (`quantityOnHand - quantityReserved`, BR-INV-006) tại site và storage location đó ít nhất bằng `quantity`; nếu không, trả `409` với thông báo vượt tồn. Biên bản mới ở `PendingApproval` và chưa làm thay đổi tồn.
+
+### BR-DIS-003. Người lập và người duyệt
+
+Dược sĩ hoặc Nhân viên kho lập biên bản tại site mình phụ trách. Chỉ Quản lý nhà thuốc được duyệt hoặc từ chối, và không được duyệt biên bản do chính mình lập (BR-AUTH-009). Platform Admin chỉ đọc.
+
+### BR-DIS-004. Duyệt biên bản trừ tồn trong một transaction
+
+Khi duyệt, từng dòng được kiểm tra lại tồn khả dụng; nếu bất kỳ dòng nào không còn đủ, toàn bộ lần duyệt bị từ chối và không đổi tồn. Mỗi dòng hợp lệ:
+
+- trừ `quantityOnHand` đúng số lượng, không để âm hoặc thấp hơn `quantityReserved` (BR-INV-003, BR-INV-004);
+- ghi một movement `Disposal` với `quantityDelta` âm, `quantityAfter` sau khi trừ, `referenceType = Disposal`, `referenceId` là id biên bản, lý do và ghi chú của biên bản;
+- làm mới availability của sản phẩm tại site trong cùng transaction (BR-INV-010).
+
+Sau đó biên bản chuyển `Approved`, ghi người duyệt, thời điểm duyệt và ghi chú duyệt.
+
+### BR-DIS-005. Từ chối biên bản không đổi tồn
+
+Từ chối chỉ đặt `Rejected`, ghi người duyệt, thời điểm và ghi chú; không ghi movement.
+
+### BR-DIS-006. Chỉ biên bản chờ duyệt mới được quyết định
+
+Duyệt hoặc từ chối một biên bản không ở `PendingApproval` bị từ chối với `409`. Mỗi biên bản in được phiếu tiêu hủy sau khi duyệt, có lý do, danh sách lô, số lượng và ô ký tên.
 
 ## 16. Quy tắc bổ sung hàng từ quầy
 

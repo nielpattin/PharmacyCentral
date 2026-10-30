@@ -68,6 +68,7 @@ export const DEFAULT_SITE_SCOPED_PREFIXES: readonly string[] = [
   "/inventory/replenishment",
   "/inventory/action-plans",
   "/inventory/adjustments",
+  "/inventory/disposals",
   "/dashboard/summary",
   "/operations/dashboard",
   "/finance/summary",
@@ -240,6 +241,14 @@ const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["READ"], path: "/inventory/adjustments", roles: ["Pharmacy Manager", "Warehouse Staff"] },
   { methods: ["POST"], path: "/inventory/adjustments/*/*", exact: true, roles: ["Pharmacy Manager"] },
   { methods: ["WRITE"], path: "/inventory/adjustments", roles: ["Warehouse Staff"] },
+  { methods: ["READ"], path: "/inventory/disposals", roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"] },
+  {
+    methods: ["POST"],
+    path: "/inventory/disposals",
+    exact: true,
+    roles: ["Pharmacist", "Warehouse Staff"],
+  },
+  { methods: ["POST"], path: "/inventory/disposals/*/*", exact: true, roles: ["Pharmacy Manager"] },
   { methods: ["READ"], path: "/inventory/transfers", roles: ["Pharmacy Manager", "Warehouse Staff"] },
   {
     methods: ["READ"],

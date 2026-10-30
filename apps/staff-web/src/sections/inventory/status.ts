@@ -29,6 +29,7 @@ export const TRANSFER_STATUSES = [
   "Received",
   "Cancelled",
 ] as const;
+export const DISPOSAL_STATUSES = ["PendingApproval", "Approved", "Rejected"] as const;
 export const STOCKTAKE_STATUSES = ["Pending", "InProgress", "Completed", "Cancelled"] as const;
 export const REPLENISHMENT_STATUSES = ["Pending", "Approved", "Fulfilled", "Rejected", "Cancelled"] as const;
 

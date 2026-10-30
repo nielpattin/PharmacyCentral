@@ -11,12 +11,13 @@ import { EntityDrawer } from "./entity-drawer.tsx";
  * A create or edit form in a side drawer. Leaving with unsaved input asks first, both from the drawer's close control
  * and from in-app navigation. Ctrl/Cmd+S submits the form. The submit button sits in the footer and points at the form
  * by id. The drawer may stay mounted after it closes, to play its exit animation: pass `open`, and the unsaved-changes
- * guard and the shortcut act only while it is open.
+ * guard and the shortcut act only while it is open. `width` widens the sheet for a form with a table in it.
  */
 export const FormDrawer = ({
   open = true,
   title,
   subtitle,
+  width = "lg",
   formId,
   submitLabel,
   isDirty,
@@ -27,6 +28,7 @@ export const FormDrawer = ({
   open?: boolean | undefined;
   title: string;
   subtitle?: string | undefined;
+  width?: "md" | "lg" | "xl" | undefined;
   formId: string;
   submitLabel: string;
   isDirty: boolean;
@@ -57,7 +59,7 @@ export const FormDrawer = ({
       onClose={() => void requestClose()}
       title={translateText(title)}
       {...(subtitle ? { subtitle: translateText(subtitle) } : {})}
-      width="lg"
+      width={width}
       details={
         <form
           id={formId}
