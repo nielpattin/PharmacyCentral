@@ -698,6 +698,27 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     }
   });
 
+  // The first payment ever seen for the customers who bought in the period. The period and site scope choose the
+  // customers; the payment date looks at their whole history, so a buyer from before the period counts as returning.
+  router.get("/internal/analytics/customer-first-paid", async (request, response, next) => {
+    if (!repository) return unavailable(response);
+    const period = salesDocumentsQuerySchema.safeParse({
+      from: queryString(request.query.from),
+      to: queryString(request.query.to),
+    });
+    if (!period.success) return invalid(response);
+    try {
+      const customers = await repository.listCustomerFirstPaid({
+        from: new Date(period.data.from),
+        to: new Date(period.data.to),
+        siteIds: actorSiteIds(request),
+      });
+      return response.json({ customers });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   return router;
 };
 

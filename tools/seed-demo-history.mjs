@@ -662,10 +662,12 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
     sql(
       "sales_service",
       `${shiftTable(shifts)}
-       update orders o set created_at = o.created_at - s.d, updated_at = o.updated_at - s.d from s where o.id = s.id;
+       update orders o set created_at = o.created_at - s.d, updated_at = o.updated_at - s.d,
+         paid_at = case when o.paid_at is null then null else o.paid_at - s.d end from s where o.id = s.id;
        update order_delivery_snapshots x set created_at = x.created_at - s.d from s where x.order_id = s.id;
        update prescriptions p set created_at = p.created_at - s.d, updated_at = p.updated_at - s.d,
-         dispensed_at = p.dispensed_at - s.d from s where p.id = s.id;`,
+         dispensed_at = p.dispensed_at - s.d,
+         paid_at = case when p.paid_at is null then null else p.paid_at - s.d end from s where p.id = s.id;`,
     );
     const ofInvoice = "(i.order_id = s.id or i.prescription_id = s.id)";
     sql(

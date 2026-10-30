@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { InternalIdentityContext } from "../contracts/common.ts";
-import { salesDocumentsResponseSchema } from "../contracts/sales.ts";
+import { customerFirstPaidResponseSchema, salesDocumentsResponseSchema } from "../contracts/sales.ts";
 import { createTrustedRequestMiddleware, signInternalIdentityContext } from "../middleware/trusted-request.ts";
 import type { SalesRepository } from "./sales-repository.ts";
 import { createSalesRouter } from "./sales-routes.ts";
@@ -34,20 +34,23 @@ const identityHeader = (overrides: Partial<InternalIdentityContext>): string =>
     identitySecret,
   );
 
-describe("GET /internal/analytics/sales-documents", () => {
+describe("internal analytics routes", () => {
   let server: Server | undefined;
   let url: string;
   const listSalesDocuments = vi.fn();
+  const listCustomerFirstPaid = vi.fn();
 
   beforeEach(async () => {
     listSalesDocuments.mockReset();
+    listCustomerFirstPaid.mockReset();
+    listCustomerFirstPaid.mockResolvedValue([{ customerId, firstPaidAt: "2026-09-15T00:00:00.000Z" }]);
     listSalesDocuments.mockResolvedValue([
       { id: documentId, kind: "order", siteId: siteA, customerId, createdAt: "2026-10-15T12:00:00.000Z" },
     ]);
     const app = express();
     app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret, expectedAudience: "sales-service" }));
     app.use(
-      createSalesRouter({ listSalesDocuments } as unknown as SalesRepository, {
+      createSalesRouter({ listSalesDocuments, listCustomerFirstPaid } as unknown as SalesRepository, {
         catalogServiceUrl: "http://catalog.test",
         inventoryServiceUrl: "http://inventory.test",
         identityServiceUrl: "http://identity.test",
@@ -84,6 +87,28 @@ describe("GET /internal/analytics/sales-documents", () => {
       to: new Date("2026-11-01T00:00:00.000Z"),
       siteIds: [siteA],
     });
+  });
+
+  it("answers the first payment ever for the customers of the forwarded scope", async () => {
+    const response = await fetch(`${url}/internal/analytics/customer-first-paid?${period}`, {
+      headers: { "x-internal-service-secret": serviceSecret, "x-actor-site-ids": siteA },
+    });
+
+    expect(response.status).toBe(200);
+    const body = customerFirstPaidResponseSchema.parse(await response.json());
+    expect(body.customers).toStrictEqual([{ customerId, firstPaidAt: "2026-09-15T00:00:00.000Z" }]);
+    expect(listCustomerFirstPaid).toHaveBeenCalledWith({
+      from: new Date("2026-10-01T00:00:00.000Z"),
+      to: new Date("2026-11-01T00:00:00.000Z"),
+      siteIds: [siteA],
+    });
+  });
+
+  it("refuses the first-paid read without the service secret too", async () => {
+    const response = await fetch(`${url}/internal/analytics/customer-first-paid?${period}`);
+
+    expect(response.status).toBe(401);
+    expect(listCustomerFirstPaid).not.toHaveBeenCalled();
   });
 
   it("does not let a siteId query step outside the forwarded scope", async () => {

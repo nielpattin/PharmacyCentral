@@ -67,6 +67,8 @@ export const orders = pgTable(
     deliveryFee: numeric("delivery_fee", { precision: 18, scale: 2 }).notNull().default("0"),
     currency: varchar("currency", { length: 3 }).notNull().default("VND"),
     paymentStatus: varchar("payment_status", { length: 20 }).notNull().default("Pending"),
+    /** When a payment first settled this order; kept after a refund, so a buyer stays a known customer. */
+    paidAt: timestamp("paid_at", { withTimezone: true }),
     /** How the shopper chose to pay; an order that names none is treated as paid by QR when it expires. */
     paymentMethod: varchar("payment_method", { length: 30 }),
     /** `held` while inventory-service may hold stock for the order, then `released` or `consumed`; `none` before holds existed. */
@@ -76,6 +78,10 @@ export const orders = pgTable(
   },
   (table) => [
     index("orders_customer_created_idx").on(table.customerId, table.createdAt),
+    // The customer split of Analytics groups the first payment of each customer; unpaid rows never enter it.
+    index("orders_customer_paid_idx")
+      .on(table.customerId, table.paidAt)
+      .where(sql`${table.paidAt} is not null`),
     index("orders_store_status_idx").on(table.selectedStoreId, table.status),
     // The staff order list pages newest first on `(created_at, id)`.
     index("orders_created_id_idx").on(table.createdAt.desc(), table.id.desc()),
@@ -154,6 +160,8 @@ export const prescriptions = pgTable(
     cancelledBy: uuid("cancelled_by"),
     dispensedBy: uuid("dispensed_by"),
     dispensedAt: timestamp("dispensed_at", { withTimezone: true }),
+    /** When a counter invoice first settled this prescription; kept after a refund, so a buyer stays a customer. */
+    paidAt: timestamp("paid_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -161,6 +169,9 @@ export const prescriptions = pgTable(
     uniqueIndex("prescriptions_number_unique").on(table.prescriptionNumber),
     index("prescriptions_site_status_idx").on(table.siteId, table.status, table.createdAt),
     index("prescriptions_customer_created_idx").on(table.customerId, table.createdAt),
+    index("prescriptions_customer_paid_idx")
+      .on(table.customerId, table.paidAt)
+      .where(sql`${table.paidAt} is not null`),
     // The prescription and counter lists page newest first on `(created_at, id)`.
     index("prescriptions_created_id_idx").on(table.createdAt.desc(), table.id.desc()),
   ],

@@ -36,6 +36,10 @@ const delivery = (body: string, acquired?: number) =>
     properties: { headers: acquired === undefined ? {} : { "x-acquired-count": acquired } },
   }) as unknown as ConsumeMessage;
 const paid = JSON.stringify({ eventType: "payment.invoice.paid.v1", payload: { orderId: "order-1" } });
+const prescriptionPaid = JSON.stringify({
+  eventType: "payment.invoice.paid.v1",
+  payload: { orderId: null, prescriptionId: "prescription-1" },
+});
 
 /**
  * A payment event that cannot be applied must neither vanish nor loop: it is retried a few times, then rejected so the
@@ -43,6 +47,7 @@ const paid = JSON.stringify({ eventType: "payment.invoice.paid.v1", payload: { o
  */
 describe("SalesPaymentEventConsumer", () => {
   const applyPaymentStatus = vi.fn();
+  const applyPrescriptionPaidAt = vi.fn();
   let consumer: SalesPaymentEventConsumer;
 
   beforeEach(async () => {
@@ -50,8 +55,9 @@ describe("SalesPaymentEventConsumer", () => {
     broker.ack.mockClear();
     broker.nack.mockClear();
     applyPaymentStatus.mockReset();
+    applyPrescriptionPaidAt.mockReset();
     consumer = new SalesPaymentEventConsumer(
-      { applyPaymentStatus } as unknown as SalesRepository,
+      { applyPaymentStatus, applyPrescriptionPaidAt } as unknown as SalesRepository,
       { cancelRefunded: async () => undefined } as unknown as OrderStock,
       createLogger({ level: "silent" }),
       "amqp://broker.test",
@@ -100,5 +106,16 @@ describe("SalesPaymentEventConsumer", () => {
 
     await vi.waitFor(() => expect(broker.ack).toHaveBeenCalledWith(message));
     expect(applyPaymentStatus).toHaveBeenCalledWith("order-1", "Paid");
+  });
+
+  it("records the first payment of a counter prescription and acknowledges it", async () => {
+    applyPrescriptionPaidAt.mockResolvedValue(undefined);
+    const message = delivery(prescriptionPaid);
+
+    broker.deliver?.(message);
+
+    await vi.waitFor(() => expect(broker.ack).toHaveBeenCalledWith(message));
+    expect(applyPrescriptionPaidAt).toHaveBeenCalledWith("prescription-1");
+    expect(applyPaymentStatus).not.toHaveBeenCalled();
   });
 });

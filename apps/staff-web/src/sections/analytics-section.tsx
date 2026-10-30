@@ -358,11 +358,21 @@ export const AnalyticsSection = (): React.JSX.Element => {
 
       <section className="grid gap-2">
         <Heading>Customers</Heading>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <StatTile
             label={translateText("Identified customers")}
             value={count(customers?.identifiedCustomerCount)}
             hint={`${translateText("Purchases per customer")}: ${count(customers?.purchasesPerCustomer)}`}
+          />
+          <StatTile
+            label={translateText("New customers")}
+            value={count(customers?.newCustomerCount)}
+            hint={translateText("First paid purchase in the period")}
+          />
+          <StatTile
+            label={translateText("Returning customers")}
+            value={count(customers?.returningCustomerCount)}
+            hint={translateText("Bought before the period")}
           />
           <StatTile
             label={translateText("One-time buyers")}
@@ -381,7 +391,9 @@ export const AnalyticsSection = (): React.JSX.Element => {
           />
         </div>
         <p className="text-xs text-muted">
-          {translateText("Only a customer account on the sale counts; a walk-in counter sale has none.")}
+          {translateText(
+            "Only a customer account on the sale counts; a walk-in counter sale has none. New customers count by their first paid purchase across the whole system.",
+          )}
         </p>
       </section>
 

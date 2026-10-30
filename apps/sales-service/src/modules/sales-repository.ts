@@ -13,9 +13,10 @@ import {
   notInArray,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 
-import type { SalesDocument } from "../contracts/sales.ts";
+import type { CustomerFirstPaid, SalesDocument } from "../contracts/sales.ts";
 import type { SalesDatabase } from "../shared/infrastructure/database.ts";
 import {
   afterCursor,
@@ -431,6 +432,8 @@ export class SalesRepository {
       .update(orders)
       .set({
         paymentStatus: status,
+        // A refund keeps the first payment: the buyer existed before it, and the customer split must not forget them.
+        ...(status === "Paid" ? { paidAt: sql`coalesce(${orders.paidAt}, now())` } : {}),
         ...(confirming ? { status: transitionOrder("Pending", "Confirmed") } : {}),
         updatedAt: new Date(),
       })
@@ -439,6 +442,16 @@ export class SalesRepository {
     if (order && confirming)
       await this.appendEvent("sales.order.status-changed.v1", order.id, { orderId: order.id, status: order.status });
     return order;
+  }
+
+  /** Marks when a counter prescription was first paid; a refund does not clear the date. */
+  public async applyPrescriptionPaidAt(id: string) {
+    const [prescription] = await this.database.db
+      .update(prescriptions)
+      .set({ paidAt: sql`coalesce(${prescriptions.paidAt}, now())`, updatedAt: new Date() })
+      .where(eq(prescriptions.id, id))
+      .returning();
+    return prescription;
   }
 
   public async listDeliveryAddresses(customerId: string) {
@@ -964,6 +977,50 @@ export class SalesRepository {
         createdAt: row.createdAt.toISOString(),
       })),
     ];
+  }
+
+  /**
+   * The first payment ever seen for every customer who bought in the period, across orders and prescriptions. The
+   * period names the customer set; the payment date is the customer's whole history. A customer whose first payment
+   * is inside the period is new, an earlier one returning. The site filter narrows the customers to the period sales
+   * of those sites, never the history that decides the date.
+   */
+  public async listCustomerFirstPaid(input: {
+    from: Date;
+    to: Date;
+    siteIds?: string[] | undefined;
+  }): Promise<CustomerFirstPaid[]> {
+    const siteFilter = (column: SQL): SQL => {
+      if (!input.siteIds) return sql``;
+      if (input.siteIds.length === 0) return sql`and false`;
+      return sql`and ${column} in (${sql.join(
+        input.siteIds.map((siteId) => sql`${siteId}`),
+        sql`, `,
+      )})`;
+    };
+    const result = await this.database.db.execute<{ customerId: string; firstPaidAt: Date | string }>(sql`
+      select paid.customer_id as "customerId", min(paid.paid_at) as "firstPaidAt"
+      from (
+        select customer_id, paid_at from orders where paid_at is not null
+        union all
+        select customer_id, paid_at from prescriptions where paid_at is not null
+      ) paid
+      where exists (
+        select 1 from orders o
+        where o.customer_id = paid.customer_id
+          and o.created_at >= ${input.from} and o.created_at < ${input.to} ${siteFilter(sql`o.selected_store_id`)}
+      ) or exists (
+        select 1 from prescriptions p
+        where p.customer_id = paid.customer_id
+          and p.created_at >= ${input.from} and p.created_at < ${input.to} ${siteFilter(sql`p.site_id`)}
+      )
+      group by paid.customer_id
+      order by paid.customer_id
+    `);
+    return result.rows.map((row) => ({
+      customerId: row.customerId,
+      firstPaidAt: (row.firstPaidAt instanceof Date ? row.firstPaidAt : new Date(row.firstPaidAt)).toISOString(),
+    }));
   }
 
   private async findCart(database: SalesDatabase["db"], customerId: string) {

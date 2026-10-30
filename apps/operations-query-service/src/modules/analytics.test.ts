@@ -133,6 +133,7 @@ const salesInput = (overrides: Partial<AnalyticsInput> = {}): AnalyticsInput => 
     invoiceOf(8, "prescription", 40_000),
     invoiceOf(9, "order", 70_000),
   ],
+  customerFirstPaid: [],
   dispenseCosts: [],
   stockRows: [],
   basePrices: PRICES,
@@ -500,6 +501,10 @@ describe("customer insights", () => {
       PERIOD,
       filter,
       "all",
+      new Map([
+        ["C1", new Date("2026-09-01T00:00:00.000Z")],
+        ["C2", new Date("2026-10-10T00:00:00.000Z")],
+      ]),
     );
 
     expect(answer).toStrictEqual({
@@ -509,6 +514,8 @@ describe("customer insights", () => {
       identifiedRevenue: 180,
       identifiedShare: 0.9,
       purchasesPerCustomer: 1.5,
+      newCustomerCount: 1,
+      returningCustomerCount: 1,
     });
   });
 
@@ -520,6 +527,8 @@ describe("customer insights", () => {
       identifiedRevenue: 0,
       identifiedShare: null,
       purchasesPerCustomer: null,
+      newCustomerCount: 0,
+      returningCustomerCount: 0,
     });
   });
 
@@ -530,6 +539,8 @@ describe("customer insights", () => {
     expect(answer.identifiedRevenue).toBe(0);
     expect(answer.identifiedShare).toBe(0);
     expect(answer.purchasesPerCustomer).toBeNull();
+    expect(answer.newCustomerCount).toBe(0);
+    expect(answer.returningCustomerCount).toBe(0);
   });
 
   it("applies the site, channel and period filters", () => {
@@ -550,6 +561,25 @@ describe("customer insights", () => {
     expect(answer.identifiedRevenue).toBe(150);
     expect(answer.identifiedShare).toBe(1);
     expect(answer.purchasesPerCustomer).toBe(2);
+    expect(answer.newCustomerCount).toBe(1);
+    expect(answer.returningCustomerCount).toBe(0);
+  });
+
+  it("splits new from returning by the first payment ever, including one after the period", () => {
+    const answer = customerInsightsOf(
+      [sale("1", "C1", 10), sale("2", "C2", 10), sale("3", "C3", 10)],
+      PERIOD,
+      filter,
+      "all",
+      new Map([
+        ["C1", new Date("2026-09-01T00:00:00.000Z")],
+        ["C2", new Date("2026-10-09T00:00:00.000Z")],
+        ["C3", new Date("2026-11-01T00:00:00.000Z")],
+      ]),
+    );
+
+    expect(answer.newCustomerCount).toBe(2);
+    expect(answer.returningCustomerCount).toBe(1);
   });
 });
 

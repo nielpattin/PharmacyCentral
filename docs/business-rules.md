@@ -808,6 +808,10 @@ Sản phẩm có doanh thu hàng hóa dương trong kỳ được xếp hạng g
 
 Một giao dịch bán là của khách đã nhận diện khi **chứng từ bán** (đơn online hoặc đơn thuốc quầy) có `customerId`; khách vãng lai tại quầy không có. Không dùng `customerId` trên hóa đơn: hóa đơn quầy lưu nhân viên tạo hóa đơn vào trường đó, nên nó không phải danh tính người mua. Số khách đã nhận diện là số khách khác nhau trong các giao dịch bán đã trả tiền của kỳ, cơ sở và kênh đã chọn. Khách mua 1 lần có đúng một giao dịch như vậy trong kỳ; khách mua lặp lại có từ hai. Doanh thu từ khách đã nhận diện là tổng doanh thu các giao dịch đó; tỷ trọng là doanh thu đó chia tổng doanh thu bán của kỳ (null khi kỳ không có doanh thu). Số lần mua mỗi khách là số giao dịch đã nhận diện chia số khách đã nhận diện (null khi không có khách nào).
 
+### BR-REPORT-017. Khách mới và khách quay lại
+
+Khách đã nhận diện của kỳ được chia theo **lần mua đã trả tiền đầu tiên** của họ trên toàn hệ thống: khách mới khi lần đó nằm trong kỳ, khách quay lại khi lần đó trước kỳ. Mốc đầu tiên là `paidAt` trên chứng từ bán, đặt khi hóa đơn đầu tiên của chứng từ được trả và **không bị xóa khi hoàn tiền**, vì việc mua đầu tiên vẫn đã xảy ra. Bộ lọc cơ sở chọn khách của kỳ, không đổi mốc lịch sử: khách đã mua ở cơ sở khác trước kỳ vẫn là khách quay lại. Khi chứng từ chưa có mốc (dữ liệu trước khi có cột mà chưa chạy backfill), khách tính là mới. Hai con số cộng lại bằng số khách đã nhận diện của BR-REPORT-016.
+
 ### BR-FIN-001. Tài chính là đọc, không ghi sổ kế toán
 
 Operations-query-service tổng hợp từ sự kiện và số liệu tồn. Không ghi sổ kế toán bên ngoài.

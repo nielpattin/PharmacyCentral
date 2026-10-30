@@ -266,6 +266,7 @@ export class PaymentRepository {
         payload: JSON.stringify({
           invoiceId: id,
           orderId: invoice.orderId,
+          prescriptionId: invoice.prescriptionId,
           provider: "counter",
           actorId: actorId ?? null,
           amount: Number(invoice.amount),
@@ -348,6 +349,7 @@ export class PaymentRepository {
           payload: JSON.stringify({
             invoiceId: invoice.id,
             orderId: invoice.orderId,
+            prescriptionId: invoice.prescriptionId,
             provider: input.provider,
             providerTransactionId: input.providerTransactionId,
             amount: input.amount,

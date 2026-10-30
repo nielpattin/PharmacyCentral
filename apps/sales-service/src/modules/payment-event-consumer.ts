@@ -123,7 +123,7 @@ export class SalesPaymentEventConsumer {
     message: ConsumeMessage,
     setOutcome: (outcome: ConsumerOutcome) => void,
   ): Promise<void> {
-    let event: { eventType?: string; payload?: { orderId?: unknown } };
+    let event: { eventType?: string; payload?: { orderId?: unknown; prescriptionId?: unknown } };
     try {
       event = JSON.parse(message.content.toString()) as typeof event;
     } catch {
@@ -133,10 +133,9 @@ export class SalesPaymentEventConsumer {
     }
     try {
       const orderId = event.payload?.orderId;
-      if (
-        typeof orderId === "string" &&
-        (event.eventType === "payment.invoice.paid.v1" || event.eventType === "payment.invoice.refunded.v1")
-      ) {
+      const prescriptionId = event.payload?.prescriptionId;
+      const paid = event.eventType === "payment.invoice.paid.v1";
+      if (typeof orderId === "string" && (paid || event.eventType === "payment.invoice.refunded.v1")) {
         const refunded = event.eventType === "payment.invoice.refunded.v1";
         const order = await this.repository.applyPaymentStatus(orderId, refunded ? "Refunded" : "Paid");
         // An order that was not handed over will not happen once its money went back: cancel it and free its stock.
@@ -145,6 +144,8 @@ export class SalesPaymentEventConsumer {
         if (order && !refunded && order.status === "Cancelled")
           this.logger.error({ orderId }, "a cancelled order was paid and needs a refund");
       }
+      // A counter prescription has no payment status on its own; the first paid date is what the customer split reads.
+      if (paid && typeof prescriptionId === "string") await this.repository.applyPrescriptionPaidAt(prescriptionId);
       channel.ack(message);
     } catch (error) {
       const attempt = Number(message.properties.headers?.["x-acquired-count"] ?? 0) + 1;

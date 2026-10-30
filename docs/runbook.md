@@ -217,6 +217,14 @@ In containers, each service executes its compiled `node dist/migrate.js` on star
 
 Identity `0003_must_change_password` adds `users.must_change_password` (default `false`). Inventory `0012_batch_creator_stocktake_counter` adds nullable `product_batches.created_by` and `stocktake_lines.counted_by`. A row without a creator is not refused by the separation-of-duties checks (BR-AUTH-009).
 
+Sales `0014_early_robin_chapel` adds nullable `orders.paid_at` and `prescriptions.paid_at`: the first time a paid invoice settled the document, kept after a refund. The payment events fill it from then on. A database that already holds paid invoices needs one backfill after the migration, or every customer reads as new on Analytics:
+
+```bash
+pnpm run backfill:paid-at
+```
+
+It reads the paid and refunded invoices from `payment_service`, writes the earliest payment date per document, and prints how many sales rows now carry one. It needs the compose Postgres (`docker compose exec postgres psql`), like `seed:demo`, and is safe to run again.
+
 ### Database roles
 
 Every service connects as its own Postgres role, named after its database (`sales_service`, `payment_service`, and so on). The role owns that database and has no `CONNECT` privilege on the others, so a leaked `DATABASE_URL` exposes one service's data, not all of them. `POSTGRES_USER` is the admin account; only role setup and the chaos tooling use it.

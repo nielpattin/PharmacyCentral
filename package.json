@@ -27,6 +27,7 @@
     "test": "nx run-many -t test --all",
     "typecheck": "nx run-many -t typecheck --all",
     "db:migrate": "node --env-file=.env tools/migrate-all.mjs",
+    "backfill:paid-at": "node --env-file=.env tools/backfill-paid-at.mjs",
     "diagrams:serve": "node --env-file=.env tools/likec4.mjs serve docs/diagrams",
     "diagrams:validate": "node tools/likec4.mjs validate --json --no-layout docs/diagrams",
     "diagrams:export": "node tools/likec4.mjs export png -o docs/diagrams/png docs/diagrams",

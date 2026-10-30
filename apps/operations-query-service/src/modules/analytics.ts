@@ -55,6 +55,14 @@ export const paidInvoicesAnswerSchema = z.object({
   ),
 });
 
+/**
+ * `GET /internal/analytics/customer-first-paid` of sales-service: one row per customer who bought in the period, with
+ * the first payment ever seen for them. A date before the period makes the customer returning, a date inside it new.
+ */
+export const customerFirstPaidAnswerSchema = z.object({
+  customers: z.array(z.object({ customerId: uuid, firstPaidAt: isoDateTime })),
+});
+
 /** `GET /internal/analytics/stock-health` of inventory-service: quantities in base units, one row per (site, product). */
 export const stockHealthAnswerSchema = z.object({
   rows: z.array(
@@ -116,6 +124,7 @@ export const productClassificationsAnswerSchema = z.object({
 
 export type SalesDocument = z.output<typeof salesDocumentsAnswerSchema>["documents"][number];
 export type PaidInvoice = z.output<typeof paidInvoicesAnswerSchema>["invoices"][number];
+export type CustomerFirstPaid = z.output<typeof customerFirstPaidAnswerSchema>["customers"][number];
 export type DispenseCost = z.output<typeof dispenseCostsAnswerSchema>["rows"][number];
 export type StockHealthRow = z.output<typeof stockHealthAnswerSchema>["rows"][number];
 export type BasePrice = z.output<typeof basePricesAnswerSchema>[number];
@@ -424,6 +433,10 @@ export type CustomerInsights = {
   identifiedShare: number | null;
   /** Paid sales of identified customers over those customers; null when none is identified. */
   purchasesPerCustomer: number | null;
+  /** Identified customers whose first paid sale ever falls inside the period. */
+  newCustomerCount: number;
+  /** Identified customers with a paid sale before the period. */
+  returningCustomerCount: number;
 };
 
 export const customerInsightsOf = (
@@ -431,6 +444,7 @@ export const customerInsightsOf = (
   period: Period,
   filter: SiteFilter,
   channel: AnalyticsChannel,
+  firstPaidAt: ReadonlyMap<string, Date> = new Map(),
 ): CustomerInsights => {
   const purchases = new Map<string, number>();
   let revenue = 0;
@@ -449,6 +463,12 @@ export const customerInsightsOf = (
     if (count > 1) repeatCustomerCount += 1;
   }
   const identifiedCustomerCount = purchases.size;
+  let newCustomerCount = 0;
+  for (const customerId of purchases.keys()) {
+    const first = firstPaidAt.get(customerId);
+    // A missing first-paid date means this period carries the first known payment, so the buyer counts as new.
+    if (first === undefined || first >= period.from) newCustomerCount += 1;
+  }
   return {
     identifiedCustomerCount,
     oneTimeCustomerCount: identifiedCustomerCount - repeatCustomerCount,
@@ -456,6 +476,8 @@ export const customerInsightsOf = (
     identifiedRevenue,
     identifiedShare: revenue > 0 ? identifiedRevenue / revenue : null,
     purchasesPerCustomer: identifiedCustomerCount > 0 ? identifiedSales / identifiedCustomerCount : null,
+    newCustomerCount,
+    returningCustomerCount: identifiedCustomerCount - newCustomerCount,
   };
 };
 
@@ -743,6 +765,7 @@ export type AnalyticsInput = {
   channel: AnalyticsChannel;
   documents: SalesDocument[];
   invoices: PaidInvoice[];
+  customerFirstPaid: CustomerFirstPaid[];
   dispenseCosts: DispenseCost[];
   stockRows: StockHealthRow[];
   basePrices: BasePrice[];
@@ -761,6 +784,7 @@ export const buildDashboardAnalytics = (input: AnalyticsInput): DashboardAnalyti
   const filter: SiteFilter = { siteId: input.siteId, scope: input.scope };
   const previous = previousPeriodOf(input.period);
   const sales = joinSales(input.documents, input.invoices);
+  const firstPaidAt = new Map(input.customerFirstPaid.map((row) => [row.customerId, new Date(row.firstPaidAt)]));
   const current = totalSales(sales, input.period, filter, input.channel);
   const prior = totalSales(sales, previous, filter, input.channel);
   const costs = indexDispenseCosts(input.dispenseCosts);
@@ -800,7 +824,7 @@ export const buildDashboardAnalytics = (input: AnalyticsInput): DashboardAnalyti
       const totals = totalSales(sales, input.period, filter, channel);
       return { channel, revenue: totals.revenue, orderCount: totals.orderCount };
     }),
-    customers: customerInsightsOf(sales, input.period, filter, input.channel),
+    customers: customerInsightsOf(sales, input.period, filter, input.channel, firstPaidAt),
     breakdown,
     inventory: inventoryHealthOf(stockRows, {
       now: input.now,

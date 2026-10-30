@@ -200,6 +200,20 @@ export const salesDocumentSchema = z.object({
 
 export const salesDocumentsResponseSchema = z.object({ documents: z.array(salesDocumentSchema) });
 
+/**
+ * A customer who bought in the period and the first payment ever seen for them. It is the new-versus-returning split
+ * of `GET /internal/analytics/customer-first-paid`: a date inside the period is a new customer, an earlier date a
+ * returning one. Refunds keep the date, because the first purchase still happened.
+ */
+export const customerFirstPaidSchema = z.object({
+  customerId: z.string().uuid(),
+  firstPaidAt: z.string().datetime({ offset: true }),
+});
+
+export const customerFirstPaidResponseSchema = z.object({ customers: z.array(customerFirstPaidSchema) });
+
+export type CustomerFirstPaid = z.infer<typeof customerFirstPaidSchema>;
+
 export type OrderChangedEvent = z.infer<typeof orderChangedEventSchema>;
 export type CartLine = z.infer<typeof cartLineSchema>;
 export type DeliveryPoint = z.infer<typeof deliveryPointSchema>;

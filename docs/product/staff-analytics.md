@@ -69,9 +69,19 @@ Platform Admin (read only) and Pharmacy Manager (`sectionRoles.analytics`; the e
   - With no identified customer the counts show 0, the frequency and share show "—"; a failed read fails the page, never a partial answer.
   - Test: two paid orders of one customer and one of another in the period, plus one walk-in counter sale: 2 identified customers, 1 one-time, 1 repeat, 1.5 purchases per customer, and the share excludes the walk-in sale.
 
+### US6. As a manager, I tell new customers from returning ones
+
+- Source: `[standard]` 2026-10-30; definitions BR-REPORT-017.
+- Accepted when:
+  - **Khách hàng** also shows **Khách mới** and **Khách quay lại**; the two counts add up to the identified customers.
+  - New means the customer's first paid purchase **ever** falls inside the period; returning means it falls before it. A refund keeps the first purchase date, so a refunded first sale still makes the customer returning next time.
+  - The period, site and channel choose the customers; the site filter never moves the first-purchase date. A customer who bought at another site before the period is returning.
+  - Without a first-purchase date (data from before the column, before the backfill) the customer counts as new rather than failing the page.
+  - Test: one customer paid an order before the period and one inside, another customer's first paid order is inside: 1 returning, 1 new, and the two add up to 2 identified.
+
 ## Contents and behavior
 
-Controls (US1), sales KPI tiles and channel table (US2), the customer tiles (US5), the breakdown tables (US4), inventory health tiles and tables (US3). Each read is a separate service call behind one request, `GET /api/dashboard/analytics` ([API guide](../api-guide.md#query-projections)); one failed read fails the page rather than showing a partial answer.
+Controls (US1), sales KPI tiles and channel table (US2), the customer tiles (US5 and US6), the breakdown tables (US4), inventory health tiles and tables (US3). Each read is a separate service call behind one request, `GET /api/dashboard/analytics` ([API guide](../api-guide.md#query-projections)); one failed read fails the page rather than showing a partial answer.
 
 ## States
 
@@ -84,7 +94,7 @@ Controls (US1), sales KPI tiles and channel table (US2), the customer tiles (US5
 
 ## Rules and designs
 
-- [BR-REPORT-008 to 016](../business-rules.md), BR-FIN-002, BR-FIN-003, BR-AUTH-004; [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md).
+- [BR-REPORT-008 to 017](../business-rules.md), BR-FIN-002, BR-FIN-003, BR-AUTH-004; [design 0007](../design/0007-period-analytics-replenishment-and-action-plans.md).
 
 ## Decisions
 
@@ -103,6 +113,7 @@ Controls (US1), sales KPI tiles and channel table (US2), the customer tiles (US5
 | 11 | Rank the top list by revenue or units? | `[standard]` Revenue. | A product sells in several units (viên, hộp, chai), so a unit total would add quantities that are not comparable; revenue is the one figure every line carries. |
 | 12 | What are the ABC cut-offs? | `[standard]` 80% and 95% of cumulative goods revenue in the period; the crossing product stays in the class it completes. | The classic ABC shape; using the period's own revenue keeps the classes tied to the chosen filter. |
 | 13 | Which customer field identifies the buyer? | `[standard]` The `customerId` on the sales document, never the one on the invoice. | A counter invoice stores the staff member who created it, so an invoice-based count would treat the pharmacist as the buyer. A walk-in sale stays unidentified. |
+| 14 | What makes a customer new? | `[standard]` Their first paid purchase on the whole system falls inside the period. The site filter chooses the customers, not the date. | A customer who bought at another site last month is not new at this one; only the first purchase ever says so. |
 
 ## Gaps against the code (2026-10-30)
 

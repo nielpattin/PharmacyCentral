@@ -8,6 +8,7 @@ import type { z } from "zod";
 import {
   basePricesAnswerSchema,
   buildDashboardAnalytics,
+  customerFirstPaidAnswerSchema,
   dispenseCostsAnswerSchema,
   paidInvoicesAnswerSchema,
   previousPeriodOf,
@@ -378,11 +379,12 @@ export class OperationsRepository {
     const previous = previousPeriodOf(period);
     const siteHeaders = siteIds ? { [ACTOR_SITE_IDS_HEADER]: siteIds.join(",") } : {};
     const salesWindow = new URLSearchParams({ from: previous.from.toISOString(), to: period.to.toISOString() });
+    const customerWindow = new URLSearchParams({ from: period.from.toISOString(), to: period.to.toISOString() });
     const invoiceWindow = new URLSearchParams({ since: previous.from.toISOString() });
     const costWindow = new URLSearchParams({ since: previous.from.toISOString() });
     const stockWindow = new URLSearchParams({ from: period.from.toISOString(), to: period.to.toISOString() });
     const today = now.toISOString().slice(0, 10);
-    const [documents, invoices, costs, stock, prices, sites, products] = await Promise.all([
+    const [documents, invoices, customerFirstPaid, costs, stock, prices, sites, products] = await Promise.all([
       this.readAnswer(
         this.options.salesUrl,
         `/internal/analytics/sales-documents?${salesWindow.toString()}`,
@@ -394,6 +396,12 @@ export class OperationsRepository {
         `/internal/analytics/paid-invoices?${invoiceWindow.toString()}`,
         internalServiceHeaders(),
         paidInvoicesAnswerSchema,
+      ),
+      this.readAnswer(
+        this.options.salesUrl,
+        `/internal/analytics/customer-first-paid?${customerWindow.toString()}`,
+        { ...internalServiceHeaders(), ...siteHeaders },
+        customerFirstPaidAnswerSchema,
       ),
       this.readAnswer(
         this.options.inventoryUrl,
@@ -434,6 +442,7 @@ export class OperationsRepository {
       channel: query.channel,
       documents: documents.documents,
       invoices: invoices.invoices,
+      customerFirstPaid: customerFirstPaid.customers,
       dispenseCosts: costs.rows,
       stockRows: stock.rows,
       basePrices: prices,

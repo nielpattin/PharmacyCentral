@@ -71,6 +71,10 @@ export type CustomerInsights = {
   identifiedShare: Figure;
   /** Paid sales of identified customers over those customers; null when none is identified. */
   purchasesPerCustomer: Figure;
+  /** Identified customers whose first paid sale ever is inside the period. */
+  newCustomerCount: Figure;
+  /** Identified customers with a paid sale before the period. */
+  returningCustomerCount: Figure;
 };
 
 export type AnalyticsResponse = {

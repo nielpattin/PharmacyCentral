@@ -1,0 +1,2 @@
+CREATE INDEX "orders_customer_paid_idx" ON "orders" USING btree ("customer_id","paid_at") WHERE "orders"."paid_at" is not null;--> statement-breakpoint
+CREATE INDEX "prescriptions_customer_paid_idx" ON "prescriptions" USING btree ("customer_id","paid_at") WHERE "prescriptions"."paid_at" is not null;

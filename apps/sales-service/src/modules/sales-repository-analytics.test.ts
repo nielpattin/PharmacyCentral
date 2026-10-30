@@ -18,6 +18,7 @@ const siteC = uuid(0x5c);
 const location = uuid(0x1000);
 const actor = uuid(0xac70);
 const customer = uuid(0xc057);
+const returningCustomer = uuid(0xc058);
 const instant = (text: string) => sql`${text}::timestamptz`;
 
 const from = new Date("2026-10-01T00:00:00.000Z");
@@ -38,6 +39,7 @@ describe("SalesRepository sales documents", () => {
     inSiteB: uuid(3),
     atTo: uuid(4),
     justBeforeFrom: uuid(5),
+    newCustomer: uuid(6),
   };
   const prescriptionIds = { inSiteA: uuid(0x21), inSiteB: uuid(0x22), inSiteC: uuid(0x23), atTo: uuid(0x24) };
 
@@ -83,6 +85,16 @@ describe("SalesRepository sales documents", () => {
         selectedStoreId: siteA,
         subtotal: "500000",
         createdAt: instant("2026-09-30T23:59:59.999999Z"),
+        paidAt: instant("2026-09-15T00:00:00.000000Z"),
+      },
+      {
+        id: orderIds.newCustomer,
+        customerId: returningCustomer,
+        fulfillmentType: "pickup",
+        selectedStoreId: siteA,
+        subtotal: "600000",
+        createdAt: instant("2026-10-25T08:00:00.000000Z"),
+        paidAt: instant("2026-10-26T00:00:00.000000Z"),
       },
     ]);
     await db.insert(schema.prescriptions).values([
@@ -139,6 +151,7 @@ describe("SalesRepository sales documents", () => {
         orderIds.atFrom,
         orderIds.inSiteA,
         orderIds.inSiteB,
+        orderIds.newCustomer,
         prescriptionIds.inSiteA,
         prescriptionIds.inSiteB,
         prescriptionIds.inSiteC,
@@ -155,12 +168,26 @@ describe("SalesRepository sales documents", () => {
   });
 
   it("narrows both orders and prescriptions to the sites in the scope", async () => {
-    await expect(idsOf([siteA])).resolves.toEqual([orderIds.atFrom, orderIds.inSiteA, prescriptionIds.inSiteA].sort());
+    await expect(idsOf([siteA])).resolves.toEqual(
+      [orderIds.atFrom, orderIds.inSiteA, orderIds.newCustomer, prescriptionIds.inSiteA].sort(),
+    );
     await expect(idsOf([siteB])).resolves.toEqual([orderIds.inSiteB, prescriptionIds.inSiteB].sort());
   });
 
   it("answers nothing for an empty site scope", async () => {
     await expect(idsOf([])).resolves.toEqual([]);
+  });
+
+  it("answers the first payment ever for each customer who bought in the period, ignoring the site of that payment", async () => {
+    await expect(repository.listCustomerFirstPaid({ from, to })).resolves.toStrictEqual([
+      { customerId: customer, firstPaidAt: "2026-09-15T00:00:00.000Z" },
+      { customerId: returningCustomer, firstPaidAt: "2026-10-26T00:00:00.000Z" },
+    ]);
+    await expect(repository.listCustomerFirstPaid({ from, to, siteIds: [siteA] })).resolves.toStrictEqual([
+      { customerId: customer, firstPaidAt: "2026-09-15T00:00:00.000Z" },
+      { customerId: returningCustomer, firstPaidAt: "2026-10-26T00:00:00.000Z" },
+    ]);
+    await expect(repository.listCustomerFirstPaid({ from, to, siteIds: [] })).resolves.toStrictEqual([]);
   });
 
   it("labels an online order kind order with its selected store, and a counter sale kind prescription", async () => {

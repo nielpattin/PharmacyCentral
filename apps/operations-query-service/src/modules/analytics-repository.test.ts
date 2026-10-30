@@ -22,6 +22,7 @@ const defaultAnswers: Record<string, () => Response> = {
     json({
       documents: [{ id: ORDER, kind: "order", siteId: SITE, customerId: null, createdAt: "2026-10-09T10:00:00.000Z" }],
     }),
+  "sales.test/internal/analytics/customer-first-paid": () => json({ customers: [] }),
   "payment.test/internal/analytics/paid-invoices": () =>
     json({
       invoices: [
@@ -110,6 +111,11 @@ describe("OperationsRepository.dashboardAnalytics", () => {
     expect(sales?.url.searchParams.get("to")).toBe("2026-10-15T00:00:00.000Z");
     expect(sales?.headers.get("x-actor-site-ids")).toBe(SITE);
     expect(sales?.headers.get("x-internal-service-secret")).toBe("test-internal-secret");
+
+    const customerFirstPaid = requestTo("sales.test", "/internal/analytics/customer-first-paid");
+    expect(customerFirstPaid?.url.searchParams.get("from")).toBe("2026-10-08T00:00:00.000Z");
+    expect(customerFirstPaid?.url.searchParams.get("to")).toBe("2026-10-15T00:00:00.000Z");
+    expect(customerFirstPaid?.headers.get("x-actor-site-ids")).toBe(SITE);
 
     const invoices = requestTo("payment.test", "/internal/analytics/paid-invoices");
     expect(invoices?.url.searchParams.get("since")).toBe("2026-10-01T00:00:00.000Z");
