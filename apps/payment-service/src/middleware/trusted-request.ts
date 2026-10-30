@@ -221,16 +221,16 @@ const routeMatches = (route: Route, path: string, method: string): boolean => {
   }
   const actual = stripApiPrefix(path).split("/");
   const expected = route.path.split("/");
-/**
- * A role the rule names passes. A route with no rule, or a rule that names no role, admits any employee. Platform Admin
- * is read-only: it reads every route, and writes only where a rule names it.
- */
   if (route.exact ? actual.length !== expected.length : actual.length < expected.length) return false;
   return expected.every((segment, index) =>
     segment === "*" ? (actual[index] ?? "") !== "" : actual[index] === segment,
   );
 };
 
+/**
+ * A role the rule names passes. A route with no rule, or a rule that names no role, admits any employee. Platform Admin
+ * is read-only: it reads every route, and writes only where a rule names it.
+ */
 const roleRefusal = (path: string, method: string, roles: readonly string[]): string | undefined => {
   const rule = ROLE_RULES.find((candidate) => routeMatches(candidate, path, method));
   if (rule === undefined || rule.roles.length === 0) return undefined;

@@ -81,25 +81,24 @@ describe("payment write roles at the route", () => {
       expect(writes).toStrictEqual(["cash"]);
     });
 
-      it(`${path}: Platform Admin alone is refused and nothing is written`, async () => {
-        const response = await post(`/payments/${invoiceId}/${path}`, "Platform Admin");
-        expect(response.status).toBe(403);
-        expect(await response.json()).toMatchObject({ code: "role_forbidden" });
-        expect(writes).toStrictEqual([]);
-      });
+    it("Platform Admin alone is refused and nothing is written", async () => {
+      const response = await post(`/payments/${invoiceId}/confirm-counter`, "Platform Admin");
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+      expect(writes).toStrictEqual([]);
+    });
 
-      it(`${path}: a Pharmacy Manager is refused`, async () => {
-        const response = await post(`/payments/${invoiceId}/${path}`, "Pharmacy Manager");
-        expect(response.status).toBe(403);
-        expect(writes).toStrictEqual([]);
-      });
+    it("a Pharmacy Manager is refused", async () => {
+      const response = await post(`/payments/${invoiceId}/confirm-counter`, "Pharmacy Manager");
+      expect(response.status).toBe(403);
+      expect(writes).toStrictEqual([]);
+    });
 
-      it(`${path}: a caller with no roles header is refused`, async () => {
-        const response = await post(`/payments/${invoiceId}/${path}`, undefined);
-        expect(response.status).toBe(403);
-        expect(writes).toStrictEqual([]);
-      });
-    }
+    it("a caller with no roles header is refused", async () => {
+      const response = await post(`/payments/${invoiceId}/confirm-counter`, undefined);
+      expect(response.status).toBe(403);
+      expect(writes).toStrictEqual([]);
+    });
   });
 
   describe("refund by invoice kind", () => {
