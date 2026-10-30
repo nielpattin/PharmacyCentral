@@ -157,10 +157,12 @@ describe("planReadScope", () => {
 describe("planPatchAccess", () => {
   const plan = { ownerId };
 
-  it("lets a manager or Platform Admin reassign the plan and name no other field", () => {
-    expect(planPatchAccess(manager, plan, ["ownerId"])).toBe("reassign");
-    expect(planPatchAccess(admin, plan, ["ownerId"])).toBe("reassign");
-    for (const fields of [["status"], ["title"], ["detail"], ["dueDate"], ["ownerId", "dueDate"]] as const) {
+  it("lets a manager or Platform Admin change the owner, due date and title, and no other field", () => {
+    for (const fields of [["ownerId"], ["title"], ["dueDate"], ["ownerId", "dueDate", "title"]] as const) {
+      expect(planPatchAccess(manager, plan, fields)).toBe("reassign");
+      expect(planPatchAccess(admin, plan, fields)).toBe("reassign");
+    }
+    for (const fields of [["status"], ["detail"], ["ownerId", "status"], ["title", "detail"]] as const) {
       expect(planPatchAccess(manager, plan, fields)).toBe("refuse");
       expect(planPatchAccess(admin, plan, fields)).toBe("refuse");
     }

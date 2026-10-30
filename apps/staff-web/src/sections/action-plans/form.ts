@@ -1,4 +1,5 @@
 import type { JsonRecord } from "../../staff-api.ts";
+import type { ActionPlan } from "./contract.ts";
 import { DETAIL_MAX_LENGTH, TITLE_MAX_LENGTH, type ActionPlanDraft } from "./drafts.ts";
 import { defaultDueDate, isIsoDate } from "./plan-state.ts";
 
@@ -48,6 +49,30 @@ export const samePlanForm = (left: PlanFormValues, right: PlanFormValues): boole
   left.detail === right.detail &&
   left.ownerId === right.ownerId &&
   left.dueDate === right.dueDate;
+
+/** The values of an existing plan, which a reassignment starts from. */
+export const planFormValues = (plan: ActionPlan): PlanFormValues => ({
+  title: plan.title,
+  detail: plan.detail ?? "",
+  ownerId: plan.ownerId,
+  dueDate: plan.dueDate,
+});
+
+/**
+ * The problems with a reassignment. The detail is not part of it, and a due date the plan already has stays valid
+ * even when it has passed: only a due date the manager picks must not lie in the past.
+ */
+export const reassignIssues = (values: PlanFormValues, plan: ActionPlan, today: string): PlanFormIssue[] =>
+  validatePlanForm({ ...values, detail: "" }, today).filter(
+    (issue) => !(issue === "due_past" && values.dueDate === plan.dueDate),
+  );
+
+/** The PATCH body of a reassignment: only the owner, due date and title the manager changed. */
+export const reassignBody = (plan: ActionPlan, values: PlanFormValues): JsonRecord => ({
+  ...(values.ownerId !== plan.ownerId ? { ownerId: values.ownerId } : {}),
+  ...(values.dueDate !== plan.dueDate ? { dueDate: values.dueDate } : {}),
+  ...(values.title.trim() !== plan.title ? { title: values.title.trim() } : {}),
+});
 
 /** The POST body. The source comes from the draft; the form supplies the text, owner and due date. */
 export const createPlanBody = (draft: ActionPlanDraft, values: PlanFormValues): JsonRecord => ({

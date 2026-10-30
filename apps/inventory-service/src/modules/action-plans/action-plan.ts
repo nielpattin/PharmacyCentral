@@ -101,11 +101,13 @@ export const planReadScope = (actor: PlanActor): PlanReadScope | undefined => {
 
 /**
  * What the caller may change on one plan (BR-PLAN-001): `status` for the plan's owner moving their own plan, `reassign`
- * for a Pharmacy Manager or Platform Admin naming a new owner and nothing else, `all` for a service acting for itself,
- * `refuse` for everyone else and for any caller who names a field outside their right. The title, detail and due date
- * are set by the system and are not edited; a manager assigns, the owner works the plan.
+ * for a Pharmacy Manager or Platform Admin changing the owner, due date and title and no other field, `all` for a
+ * service acting for itself, `refuse` for everyone else and for any caller who names a field outside their right. The
+ * status and detail belong to the owner and the system; a manager assigns, the owner works the plan.
  */
 export type PlanPatchAccess = "all" | "status" | "reassign" | "refuse";
+
+const REASSIGN_FIELDS: readonly ActionPlanPatchField[] = ["ownerId", "dueDate", "title"];
 
 export const planPatchAccess = (
   actor: PlanActor,
@@ -116,7 +118,7 @@ export const planPatchAccess = (
   if (fields.length === 0) return "refuse";
   if (actor.id !== undefined && actor.id === plan.ownerId && fields.every((field) => field === "status"))
     return "status";
-  if (managesPlans(actor) && fields.every((field) => field === "ownerId")) return "reassign";
+  if (managesPlans(actor) && fields.every((field) => REASSIGN_FIELDS.includes(field))) return "reassign";
   return "refuse";
 };
 

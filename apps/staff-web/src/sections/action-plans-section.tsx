@@ -224,7 +224,7 @@ const ActionPlansList = (): React.JSX.Element => {
     <div className="grid gap-3">
       <p className="text-sm text-muted">
         {translateText(
-          "The system creates a plan for every alert and gives it to a Pharmacist of the site. A manager only reassigns it; the owner works the status. Every plan appears in this list.",
+          "The system creates a plan for every alert and gives it to a Pharmacist of the site. A manager reassigns it and can move its due date or title; the owner works the status. Every plan appears in this list.",
         )}
       </p>
       {plans.error && isSiteAccessRefusal(plans.error) ? <NoSiteNotice /> : null}

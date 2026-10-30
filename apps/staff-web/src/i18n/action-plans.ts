@@ -4,8 +4,8 @@ export const actionPlansLiterals: Record<string, string> = {
   "Your account has no assigned site, so there are no action plans to show. Ask an administrator to assign a site.":
     "Tài khoản của bạn chưa được gán cơ sở nào nên chưa có kế hoạch để hiển thị. Hãy nhờ quản trị viên gán cơ sở.",
   "Action plans": "Kế hoạch hành động",
-  "The system creates a plan for every alert and gives it to a Pharmacist of the site. A manager only reassigns it; the owner works the status. Every plan appears in this list.":
-    "Hệ thống tự tạo kế hoạch cho mỗi cảnh báo và giao cho một dược sĩ của cơ sở. Quản lý chỉ giao lại người phụ trách; người phụ trách tự đổi trạng thái. Mọi kế hoạch đều hiện trong danh sách này.",
+  "The system creates a plan for every alert and gives it to a Pharmacist of the site. A manager reassigns it and can move its due date or title; the owner works the status. Every plan appears in this list.":
+    "Hệ thống tự tạo kế hoạch cho mỗi cảnh báo và giao cho một dược sĩ của cơ sở. Quản lý giao lại người phụ trách và có thể đổi hạn hoặc tiêu đề; người phụ trách tự đổi trạng thái. Mọi kế hoạch đều hiện trong danh sách này.",
   Owner: "Chủ sở hữu",
   "All owners": "Tất cả chủ sở hữu",
   Open: "Mở",

@@ -58,8 +58,8 @@ Sign in at `/tai-khoan` as `khachhang@pharmacycentral.vn`.
 
 1. **Bảng điều khiển**: shop figures for today.
 2. **Phân tích**: pick the last 30 or 60 days. Revenue, orders and average order value against the previous period, the counter and online split, and gross profit with the share of revenue it covers (about two thirds, because opening stock carries no cost). Below: stock turnover, days of inventory, stock value (with the count of products missing a price), expiry buckets, and dead stock.
-3. **Kế hoạch hành động**: the manager reassigns only (**Giao lại**), never changes the status. Pick a plan and give it to another pharmacist.
-4. **Đặt hàng**: the tab "Gợi ý đặt hàng" suggests quantities from sales speed, stock and supplier lead time. Create draft orders in bulk. Approve `PO-DEMO-002`, created by the admin, as the second person.
+3. **Kế hoạch hành động**: the manager reassigns (**Giao lại**: owner, due date, title), never changes the status. Pick a plan and give it to another pharmacist.
+4. **Đặt hàng**: the tab "Gợi ý đặt hàng" suggests quantities from sales speed, stock and supplier lead time. Create draft orders in bulk. Approve `PO-DEMO-002`, created by the second manager, as the second person.
 5. **Điều chuyển**: approve `TR-DEMO-001`. `TR-DEMO-002` is shipped and `TR-DEMO-003` received.
 6. **Điều chỉnh tồn kho**: approve or reject the pending adjustment "Hộp bị ẩm khi kiểm kệ".
 7. **Tài chính** and **Báo cáo**: payments, invoices and report rows across the 60 days.

@@ -52,7 +52,7 @@ Quy tắc được lấy từ code trong `apps/*-service/src` (contracts, routes
 
 | Role | Ý nghĩa nghiệp vụ |
 | --- | --- |
-| Platform Admin | Quản trị nền tảng: người dùng, role, site access, audit, cấu hình AI. Đi qua mọi quy tắc role, trừ các ngoại lệ của BR-AUTH-010 |
+| Platform Admin | Quản trị nền tảng: người dùng, role, site access, audit, cấu hình AI, trang System, tạo và xóa site, đổi chủ sở hữu, hạn và tiêu đề của kế hoạch hành động. Xem được (chỉ đọc) mọi màn hình vận hành; không ghi gì thuộc ba role còn lại (BR-AUTH-010) |
 | Pharmacy Manager | Dữ liệu nền, giá, đơn mua, tài chính; duyệt điều chỉnh, điều chuyển, kiểm kê; xem (chỉ đọc) các dữ liệu quầy; duyệt và hoàn tiền đơn online |
 | Pharmacist | Làm việc tại quầy: tạo và cấp phát đơn thuốc, thanh toán tại quầy, trả lời tư vấn, tra cứu khách, kiểm định batch, gửi yêu cầu bổ sung hàng, biên tập từ đồng nghĩa |
 | Warehouse Staff | Nhận hàng, điều chuyển, trả hàng/loại khỏi tồn, kiểm kê (đếm), đề xuất điều chỉnh, duyệt và thực hiện bổ sung hàng, nhập số dư đầu kỳ |
@@ -137,10 +137,9 @@ Người tạo vẫn được hủy điều chuyển và yêu cầu bổ sung c�
 
 Platform Admin không làm thay Pharmacist, Pharmacy Manager hay Warehouse Staff. Ở biên và ở từng service, Platform Admin:
 
-- Tạo hoặc hủy đơn thuốc, cấp phát, trả lời tư vấn.
-- Ghi `/api/counter-transactions` và tạo hóa đơn cho đơn thuốc (`POST /api/payments/prescriptions/*`).
-- Xác nhận tiền mặt và xác nhận tại quầy (`cash-paid`, `confirm-counter`), và hoàn tiền hóa đơn tại quầy (BR-PAY-003).
-- Duyệt nhóm từ đồng nghĩa (`POST /api/products/search-synonyms/*/approve`).
+- Đọc được mọi đường dẫn nhân viên (dashboard, phân tích, tài chính, báo cáo, đơn online, đơn thuốc, hóa đơn, tồn kho, lô, biến động, nhận hàng, đơn mua, gợi ý bổ sung, điều chuyển, kiểm kê, trả hàng, điều chỉnh, kiểm định, danh mục, giá, nhà cung cấp, kho, site, từ đồng nghĩa) và không bị giới hạn theo site (BR-AUTH-003).
+- Ghi được đúng các việc không role nào khác làm: quản lý người dùng, role và site access (`/api/admin`), audit, cấu hình AI (BR-AUTH-007), trang System, tạo và xóa site, và đổi chủ sở hữu, hạn và tiêu đề của kế hoạch hành động (BR-PLAN-002).
+- Bị từ chối mọi ghi còn lại với 403 `role_forbidden`: sửa danh mục, giá, nhà cung cấp, kho, sửa site, nhập dữ liệu, đơn mua và nhận hàng, mọi ghi tồn kho, duyệt hay từ chối bổ sung hàng, kiểm định lô, chuyển trạng thái và hoàn tiền đơn online, thao tác quầy, biên tập hay duyệt từ đồng nghĩa, đổi trạng thái kế hoạch hành động.
 
 Quy tắc nằm ở `isEmployeeRoleAllowed` (biên) và `roleRefusal` (mỗi service), và được chép giữ nguyên giữa hai nơi (ADR 0017, ADR 0019). Tài khoản vừa có Platform Admin vừa có role khác vẫn dùng được quyền của role khác.
 
@@ -269,7 +268,7 @@ Hệ thống tự tạo một kế hoạch cho mỗi cảnh báo (`replenishment
 
 ### BR-PLAN-002. Ai xem và sửa kế hoạch
 
-Quản lý và Platform Admin xem kế hoạch trong các site của mình (kế hoạch không có site chỉ Platform Admin xem) và sửa mọi trường; nhân viên khác chỉ xem kế hoạch mình sở hữu. Chủ sở hữu chỉ đổi được trạng thái. Chuyển sang `done` ghi thời điểm hoàn thành; chuyển khỏi `done` xóa thời điểm đó và bị từ chối nếu đã có kế hoạch sống cho cùng cảnh báo.
+Quản lý xem kế hoạch trong các site của mình, Platform Admin xem mọi kế hoạch (kể cả kế hoạch không có site); cả hai được đổi chủ sở hữu, hạn (không ở quá khứ) và tiêu đề, không đổi trạng thái hay mô tả. Nhân viên khác chỉ xem kế hoạch mình sở hữu. Chủ sở hữu chỉ đổi được trạng thái. Chuyển sang `done` ghi thời điểm hoàn thành; chuyển khỏi `done` xóa thời điểm đó và bị từ chối nếu đã có kế hoạch sống cho cùng cảnh báo.
 
 ### BR-RECV-001. Phiếu nhận hàng có số phiếu và ít nhất một dòng
 

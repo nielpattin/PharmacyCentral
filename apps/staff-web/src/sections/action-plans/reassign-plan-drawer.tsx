@@ -1,28 +1,34 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Field as UiField, Select, useToast } from "@pharmacy/ui";
+import { useToast } from "@pharmacy/ui";
 import { useState } from "react";
 
 import { FormDrawer } from "../../components/form-drawer.tsx";
 import { translateText } from "../../i18n.ts";
 import { writeJson } from "../../staff-api.ts";
 import { ACTION_PLANS_KEY, actionPlanPath, type ActionPlan } from "./contract.ts";
+import { planFormValues, reassignBody, reassignIssues, samePlanForm } from "./form.ts";
 import { ownerOptionsFor } from "./owners.ts";
+import { PlanFields } from "./plan-fields.tsx";
+import { todayIsoDate } from "./plan-state.ts";
 import { planWriteProblem } from "./problems.ts";
 import { useStaffDirectory } from "./queries.ts";
 
 /**
- * Gives one plan to another employee of its site (BR-PLAN-001). A manager assigns and changes nothing else: the title,
- * detail and due date come from the system, and the owner works the status. Only `ownerId` is sent.
+ * Lets a manager or Platform Admin give one plan to another employee of its site, move its due date and retitle it
+ * (BR-PLAN-002). The status and the detail stay with the owner. Only the fields that changed are sent.
  */
 export const ReassignPlanDrawer = ({ plan, onClose }: { plan: ActionPlan; onClose: () => void }): React.JSX.Element => {
   const queryClient = useQueryClient();
   const toast = useToast();
   const directory = useStaffDirectory(true);
-  const [ownerId, setOwnerId] = useState(plan.ownerId);
+  const today = todayIsoDate();
+  const [initial] = useState(() => planFormValues(plan));
+  const [values, setValues] = useState(initial);
   const [attempted, setAttempted] = useState(false);
+  const issues = reassignIssues(values, plan, today);
 
   const save = useMutation({
-    mutationFn: () => writeJson<unknown>(actionPlanPath(plan.id), "PATCH", { ownerId }),
+    mutationFn: () => writeJson<unknown>(actionPlanPath(plan.id), "PATCH", reassignBody(plan, values)),
     onSuccess: async () => {
       toast.success(translateText("Action plan saved."));
       await queryClient.invalidateQueries({ queryKey: ACTION_PLANS_KEY });
@@ -33,8 +39,8 @@ export const ReassignPlanDrawer = ({ plan, onClose }: { plan: ActionPlan; onClos
 
   const submit = (): void => {
     setAttempted(true);
-    if (ownerId === "") return;
-    if (ownerId === plan.ownerId) {
+    if (issues.length > 0) return;
+    if (samePlanForm(values, initial)) {
       onClose();
       return;
     }
@@ -47,25 +53,18 @@ export const ReassignPlanDrawer = ({ plan, onClose }: { plan: ActionPlan; onClos
       subtitle={plan.title}
       formId="action-plan-reassign-form"
       submitLabel="Save changes"
-      isDirty={ownerId !== plan.ownerId}
+      isDirty={!samePlanForm(values, initial)}
       onSubmit={submit}
       onClose={onClose}
     >
-      <div className="grid content-start gap-1.5 sm:col-span-2">
-        <UiField label={translateText("Owner")}>
-          <Select value={ownerId} required onChange={(event) => setOwnerId(event.target.value)}>
-            <option value="">{translateText("Select...")}</option>
-            {ownerOptionsFor(directory.data ?? [], plan.siteId, plan.ownerId).map((owner) => (
-              <option key={owner.value} value={owner.value}>
-                {owner.label}
-              </option>
-            ))}
-          </Select>
-        </UiField>
-        {attempted && ownerId === "" ? (
-          <span className="text-xs text-danger-ink">{translateText("Choose an owner.")}</span>
-        ) : null}
-      </div>
+      <PlanFields
+        values={values}
+        onChange={setValues}
+        issues={attempted ? issues : []}
+        owners={ownerOptionsFor(directory.data ?? [], plan.siteId, plan.ownerId)}
+        today={today}
+        detail={false}
+      />
     </FormDrawer>
   );
 };

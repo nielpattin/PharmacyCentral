@@ -275,14 +275,34 @@ describe("PATCH /inventory/action-plans/:id", () => {
     });
   });
 
-  it("refuses a manager and Platform Admin the status, title, detail and due date, alone or with an owner", async () => {
-    const { body: plan } = await createPlan({ sourceRef: `replenishment:${siteA}:${idOf(0x10a)}` });
+  it("lets a manager and Platform Admin change the owner, due date and title together", async () => {
+    for (const actor of [actors.manager, actors.admin]) {
+      const { body: plan } = await createPlan({
+        sourceRef: `replenishment:${siteA}:${idOf(actor === actors.manager ? 0x10a : 0x10b)}`,
+      });
+      const response = await call("PATCH", `/inventory/action-plans/${plan.id}`, actor, {
+        title: "Đổi tên việc",
+        dueDate: LATER,
+        ownerId: actors.warehouse.id,
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        title: "Đổi tên việc",
+        dueDate: LATER,
+        ownerId: actors.warehouse.id,
+        status: "open",
+      });
+    }
+  });
+
+  it("refuses a manager and Platform Admin the status and the detail, alone or with an allowed field", async () => {
+    const { body: plan } = await createPlan({ sourceRef: `replenishment:${siteA}:${idOf(0x10c)}` });
     for (const actor of [actors.manager, actors.admin]) {
       for (const body of [
         { status: "done" },
         { detail: null },
-        { dueDate: LATER },
-        { ownerId: actors.warehouse.id, dueDate: LATER },
+        { status: "done", ownerId: actors.warehouse.id },
+        { title: "Đổi tên việc", detail: "x" },
       ]) {
         expect((await call("PATCH", `/inventory/action-plans/${plan.id}`, actor, body)).status).toBe(403);
       }

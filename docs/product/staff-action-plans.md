@@ -14,7 +14,7 @@ Tags: `[owner]` a recorded owner decision; `[observed]` read from the code; `[st
 
 ## Users and entry points
 
-- The system creates the plans. Platform Admin and Pharmacy Manager can also create one by hand, and see every plan of their sites. A manager only reassigns the owner: the title, detail and due date come from the system and the status belongs to the owner. `[owner]` 2026-10-29
+- The system creates the plans. A Pharmacy Manager can also create one by hand and sees every plan of their sites; Platform Admin reads every plan and only reassigns it. A manager or Platform Admin changes the owner, due date (not in the past) and title; the detail comes from the system and the status belongs to the owner. `[owner]` 2026-10-29
 - Pharmacist and Warehouse Staff see only the plans they own and may move those between open, in progress and done. A Pharmacist never creates a plan, and the system gives plans to Pharmacists first.
 - Manual override, kept on all four entry points because each is the only way to make a plan the system skipped (a plan done in the last 7 days, a site with no Pharmacist or Manager) or to choose the owner at creation. **Tạo kế hoạch** prefills a plan from: a reorder suggestion row (Procurement), a dead stock row (Analytics), an expired or soon expiring batch with stock (Inventory, Balances), a valuation line with a missing price (Finance summary). Only a Pharmacy Manager sees that action; Platform Admin does not.
 
@@ -43,7 +43,7 @@ Tags: `[owner]` a recorded owner decision; `[observed]` read from the code; `[st
 
 - Source: `[owner]` 2026-10-28.
 - Accepted when:
-  - The owner changes the status between open (Mở), in progress (Đang thực hiện) and done (Hoàn thành) and nothing else. A manager (or Platform Admin) at the plan's site changes only the owner, through **Giao lại**; the status control, title, detail and due date are not offered to them, and the service refuses them. A manager who owns the plan (the fallback owner) moves its status like any owner. `[owner]` 2026-10-29
+  - The owner changes the status between open (Mở), in progress (Đang thực hiện) and done (Hoàn thành) and nothing else. A manager at the plan's site, or a Platform Admin, changes the owner, due date and title, through **Giao lại**; the status control and the detail are not offered to them, and the service refuses them. A manager who owns the plan (the fallback owner) moves its status like any owner. `[owner]` 2026-10-29
   - Done records the completion time; moving a plan back out of done clears it, and is refused when a live plan for the same alert exists.
   - Another employee who is not the owner or a manager is refused.
 
@@ -51,14 +51,14 @@ Tags: `[owner]` a recorded owner decision; `[observed]` read from the code; `[st
 
 - Source: `[owner]` 2026-10-28.
 - Accepted when:
-  - Choosing a plan's title opens a read-only drawer for every role that sees the plan: the full title, the description the system wrote (**Mô tả**), the **Việc cần làm** for its source, site, owner, due date with the overdue mark, and the status. A **Đi tới** button opens the page where the work happens (Bổ sung hàng, Tồn kho, or Giá bán), shown only when the viewer's role may open that page. A manager also gets **Giao lại** there. `[owner]` 2026-10-29
+  - Choosing a plan's title opens a read-only drawer for every role that sees the plan: the full title, the description the system wrote (**Mô tả**), the **Việc cần làm** for its source, site, owner, due date with the overdue mark, and the status. A **Đi tới** button opens the page where the work happens (Bổ sung hàng, Tồn kho, or Giá bán), shown only when the viewer's role may open that page. A manager, and a Platform Admin, also get **Giao lại** there. `[owner]` 2026-10-29
   - The list shows title, source, site, owner, due date, status and last update, newest first, with filters by owner and by status and a search box; the filters are in the URL.
   - An open or in progress plan past its due date is marked overdue.
   - A manager sees plans of their sites; Platform Admin sees every plan; Pharmacist and Warehouse Staff see their own plans only, and have no owner filter.
 
 ## Contents and behavior
 
-One list ([API guide](../api-guide.md)), a create drawer shared by the four entry points, a reassign drawer for managers (the owner field only), and a status control per row for the owner. A table row shows only the actions the user may take; with none, the Actions column is not shown. Plans are not events: no other service reads them.
+One list ([API guide](../api-guide.md)), a create drawer shared by the four entry points, a reassign drawer for managers and Platform Admin (owner, due date and title), and a status control per row for the owner. A table row shows only the actions the user may take; with none, the Actions column is not shown. Plans are not events: no other service reads them.
 
 ## States
 

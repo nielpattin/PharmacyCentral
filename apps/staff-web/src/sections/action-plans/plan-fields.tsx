@@ -7,7 +7,8 @@ import type { OwnerOption } from "./owners.ts";
 
 /**
  * The fields both plan drawers share: title, owner, due date and detail. `issues` are shown beside their field; the
- * caller passes none until the staff member has tried to save, so a new form does not open red.
+ * caller passes none until the staff member has tried to save, so a new form does not open red. A reassignment leaves
+ * the detail to the owner and passes `detail={false}`.
  */
 export const PlanFields = ({
   values,
@@ -15,12 +16,14 @@ export const PlanFields = ({
   issues,
   owners,
   today,
+  detail = true,
 }: {
   values: PlanFormValues;
   onChange: (next: PlanFormValues) => void;
   issues: readonly PlanFormIssue[];
   owners: readonly OwnerOption[];
   today: string;
+  detail?: boolean;
 }): React.JSX.Element => {
   const setField = (field: keyof PlanFormValues, value: string): void => onChange({ ...values, [field]: value });
   const issueText = (...names: PlanFormIssue[]): React.JSX.Element | null => {
@@ -61,12 +64,14 @@ export const PlanFields = ({
         </UiField>
         {issueText("due_required", "due_past")}
       </div>
-      <div className="grid content-start gap-1.5 sm:col-span-2">
-        <UiField label={translateText("Detail")}>
-          <Textarea rows={3} value={values.detail} onChange={(event) => setField("detail", event.target.value)} />
-        </UiField>
-        {issueText("detail_length")}
-      </div>
+      {detail ? (
+        <div className="grid content-start gap-1.5 sm:col-span-2">
+          <UiField label={translateText("Detail")}>
+            <Textarea rows={3} value={values.detail} onChange={(event) => setField("detail", event.target.value)} />
+          </UiField>
+          {issueText("detail_length")}
+        </div>
+      ) : null}
     </>
   );
 };

@@ -172,7 +172,7 @@ export const createActionPlanRouter = (
     }
   });
 
-  // The owner moves the status of her own plan; a manager reassigns it, inside her sites, and changes nothing else.
+  // The owner moves the status of her own plan; a manager changes its owner, due date and title, inside her sites, and nothing else.
   router.patch("/inventory/action-plans/:id", async (request, response, next) => {
     if (!repository) return sendProblem(response, DATABASE_UNAVAILABLE);
     const id = idSchema.safeParse(request.params);

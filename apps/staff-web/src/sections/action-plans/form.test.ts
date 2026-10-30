@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { ActionPlanDraft } from "./drafts.ts";
-import { createFormValues, createPlanBody, samePlanForm, validatePlanForm, type PlanFormValues } from "./form.ts";
+import {
+  createFormValues,
+  createPlanBody,
+  reassignBody,
+  reassignIssues,
+  samePlanForm,
+  validatePlanForm,
+  type PlanFormValues,
+} from "./form.ts";
 
 const TODAY = "2026-10-28";
 
@@ -93,5 +101,39 @@ describe("samePlanForm", () => {
   it("compares every field", () => {
     expect(samePlanForm(valid, { ...valid })).toBe(true);
     expect(samePlanForm(valid, { ...valid, dueDate: "2026-11-01" })).toBe(false);
+  });
+});
+
+describe("reassignment", () => {
+  const plan = {
+    id: "p1",
+    sourceType: "expiry",
+    sourceRef: "r1",
+    title: "Clear LOT-1",
+    detail: null,
+    siteId: null,
+    productId: null,
+    ownerId: "owner-1",
+    dueDate: "2026-01-01",
+    status: "open",
+    createdBy: "system",
+    createdAt: "",
+    updatedAt: "",
+    completedAt: null,
+  } as const;
+  const values: PlanFormValues = { title: "Clear LOT-1", detail: "", ownerId: "owner-1", dueDate: "2026-01-01" };
+
+  it("sends only the owner, due date and title that changed", () => {
+    expect(reassignBody(plan, values)).toEqual({});
+    expect(reassignBody(plan, { ...values, ownerId: "owner-2" })).toEqual({ ownerId: "owner-2" });
+    expect(reassignBody(plan, { ...values, title: " New title ", dueDate: "2026-02-01" })).toEqual({
+      title: "New title",
+      dueDate: "2026-02-01",
+    });
+  });
+
+  it("keeps an overdue due date valid until the manager picks a new one in the past", () => {
+    expect(reassignIssues(values, plan, TODAY)).toEqual([]);
+    expect(reassignIssues({ ...values, dueDate: "2025-12-31" }, plan, TODAY)).toEqual(["due_past"]);
   });
 });

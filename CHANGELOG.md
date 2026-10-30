@@ -32,6 +32,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Sales-service refuses, with a stable `code`, a staff move the order's money or fulfillment forbids (BR-ORD-005): `pickup_not_delivered`, `delivery_not_collected`, `payment_confirms_order`, `paid_order_needs_refund`, `cash_not_recorded`; an illegal status move answers `409 invalid_transition` instead of 500. A `Ready` order can be cancelled, and refunding it cancels it.
 - Finance Invoices no longer offers a Pharmacy Manager a refund of a counter invoice, which only a Pharmacist may refund.
 
+**inventory-service, staff-web**
+
+- A Pharmacy Manager or Platform Admin changes an action plan's owner, due date (not in the past) and title from **Giao lại**, as BR-PLAN-002 says; the status and the detail stay with the owner.
+
 **deploy**
 
 - The local Typesense container no longer crashes at start (exit 139) on Docker Desktop with WSL2. Compose and the AWS task definition (`deploy/aws/data.tf`) now pin `typesense/typesense:31.0.rc23` by digest instead of 30.2, whose bundled brpc segfaults when the host kernel has no `/proc/self/io` (upstream typesense/typesense#2998). See the Troubleshooting table in `docs/runbook.md`.
