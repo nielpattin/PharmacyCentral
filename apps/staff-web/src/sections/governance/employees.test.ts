@@ -24,6 +24,7 @@ describe("toEmployeeAccount", () => {
       actorType: "employee",
       email: "an@pharmacycentral.vn",
       displayName: "Nguyễn An",
+      phoneNumber: "",
       isActive: true,
       roles: ["Pharmacist"],
       siteIds: ["site-1"],
@@ -58,6 +59,7 @@ describe("employeeLabel", () => {
         actorType: "employee",
         email: "",
         displayName: "",
+        phoneNumber: "",
         isActive: true,
         roles: [],
         siteIds: [],
@@ -68,6 +70,12 @@ describe("employeeLabel", () => {
 
 describe("filterEmployees", () => {
   const rows = [withName, withoutName];
+
+  it("finds an employee by phone", () => {
+    expect(filterEmployees([{ ...withName, phoneNumber: "0902000003" }, withoutName], "0902000003")).toEqual([
+      { ...withName, phoneNumber: "0902000003" },
+    ]);
+  });
 
   it("keeps every row for a blank query", () => {
     expect(filterEmployees(rows, "   ")).toBe(rows);

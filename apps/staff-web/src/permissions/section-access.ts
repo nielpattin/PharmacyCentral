@@ -40,6 +40,7 @@ export const sectionRoles: Record<Section, readonly string[]> = {
   audit: ["Platform Admin"],
   aiIntegrations: ["Platform Admin"],
   system: ["Platform Admin"],
+  account: ["Platform Admin", "Pharmacy Manager", "Pharmacist", "Warehouse Staff"],
 };
 
 export const canAccessSection = (section: Section, roles: readonly string[]): boolean =>

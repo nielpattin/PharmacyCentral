@@ -1,4 +1,4 @@
-import { CheckboxGroup } from "@pharmacy/ui";
+import { CheckboxGroup, useToast } from "@pharmacy/ui";
 import { useForm, useStore } from "@tanstack/react-form";
 
 import { Field } from "../../components/forms.tsx";
@@ -6,6 +6,7 @@ import { FormDrawer } from "../../components/form-drawer.tsx";
 import { referenceOptions, useStaffReferences } from "../../hooks/useStaffReferences.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { translateText } from "../../i18n.ts";
+import { phoneProblem } from "../account/account-form.ts";
 import { requireRole } from "./employees.ts";
 import { employeesQueryKey, useRoles } from "./queries.ts";
 
@@ -15,24 +16,35 @@ const initialValues = {
   email: "",
   password: "",
   displayName: "",
+  phoneNumber: "",
   roles: [] as string[],
   siteIds: [] as string[],
 };
 
-/** Creates an employee account in a side drawer. The password is typed hidden and must be at least 12 characters. */
+/**
+ * Creates an employee account in a side drawer. The phone is required: colleagues and administrators reach a person
+ * through it. The password is the temporary one the person replaces at the first sign-in (BR-USER-013).
+ */
 export const CreateUserDrawer = ({ onClose }: { onClose: () => void }): React.JSX.Element => {
   const roles = useRoles();
   const references = useStaffReferences();
   const run = useStaffAction();
+  const toast = useToast();
   const form = useForm({
     defaultValues: initialValues,
     onSubmit: async ({ value }) => {
+      const problem = phoneProblem(value.phoneNumber);
+      if (problem) {
+        toast.error(translateText(problem));
+        return;
+      }
       const created = await run({
         path: "/api/admin/users",
         body: {
           email: value.email,
           password: value.password,
           displayName: value.displayName,
+          phoneNumber: value.phoneNumber.trim(),
           roles: value.roles,
           siteIds: value.siteIds,
         },
@@ -70,15 +82,28 @@ export const CreateUserDrawer = ({ onClose }: { onClose: () => void }): React.JS
       <form.Field name="displayName">
         {(field) => <Field label="Display name" required value={field.state.value} onChange={field.handleChange} />}
       </form.Field>
+      <form.Field name="phoneNumber">
+        {(field) => (
+          <Field
+            label="Phone number"
+            type="tel"
+            autoComplete="off"
+            required
+            hint="Digits and + ( ) - only, 8 to 20 characters."
+            value={field.state.value}
+            onChange={field.handleChange}
+          />
+        )}
+      </form.Field>
       <form.Field name="password">
         {(field) => (
           <Field
-            label="Password"
+            label="Temporary password"
             type="password"
             autoComplete="new-password"
             minLength={PASSWORD_MIN_LENGTH}
             required
-            hint={`${translateText("Minimum length")}: ${PASSWORD_MIN_LENGTH}`}
+            hint={`${translateText("Minimum length")}: ${PASSWORD_MIN_LENGTH}. ${translateText("The employee must replace it at the first sign-in.")}`}
             value={field.state.value}
             onChange={field.handleChange}
           />

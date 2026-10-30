@@ -9,7 +9,7 @@ type FieldProps = {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  type?: "text" | "email" | "password" | "date" | "number" | "datetime-local";
+  type?: "text" | "email" | "tel" | "password" | "date" | "number" | "datetime-local";
   required?: boolean;
   minLength?: number;
   autoComplete?: string;

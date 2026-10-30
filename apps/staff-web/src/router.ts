@@ -37,7 +37,8 @@ export type Section =
   | "users"
   | "audit"
   | "aiIntegrations"
-  | "system";
+  | "system"
+  | "account";
 
 export const sectionPaths = {
   dashboard: "/",
@@ -73,6 +74,7 @@ export const sectionPaths = {
   audit: "/audit",
   aiIntegrations: "/ai-integrations",
   system: "/system",
+  account: "/account",
 } as const satisfies Record<Section, string>;
 
 export const governanceTabPaths = {
@@ -116,6 +118,7 @@ const sectionsByPath: Record<string, Section> = {
   "/audit": "audit",
   "/ai-integrations": "aiIntegrations",
   "/system": "system",
+  "/account": "account",
 };
 
 export const pathForSection = (section: Section): StaffPath => sectionPaths[section];
@@ -176,6 +179,7 @@ const usersRoute = sectionRoute("/users");
 const auditRoute = sectionRoute("/audit");
 const aiIntegrationsRoute = sectionRoute("/ai-integrations");
 const systemRoute = sectionRoute("/system");
+const accountRoute = sectionRoute("/account");
 
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
@@ -211,6 +215,7 @@ const routeTree = rootRoute.addChildren([
   auditRoute,
   aiIntegrationsRoute,
   systemRoute,
+  accountRoute,
 ]);
 
 export const router = createRouter({ routeTree, scrollRestoration: true });

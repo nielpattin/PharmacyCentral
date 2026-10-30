@@ -7,6 +7,8 @@ export type EmployeeAccount = {
   actorType: string;
   email: string;
   displayName: string;
+  /** Every employee has one (BR-USER-002); an account created before that rule may still show an empty one. */
+  phoneNumber: string;
   /** A deactivated account cannot sign in; it keeps its roles, sites and history. */
   isActive: boolean;
   roles: string[];
@@ -23,6 +25,7 @@ export const toEmployeeAccount = (row: JsonRecord): EmployeeAccount => ({
   actorType: typeof row.actorType === "string" ? row.actorType : "",
   email: typeof row.email === "string" ? row.email : "",
   displayName: typeof row.displayName === "string" ? row.displayName : "",
+  phoneNumber: typeof row.phoneNumber === "string" ? row.phoneNumber : "",
   isActive: row.isActive !== false,
   roles: stringList(row.roles),
   siteIds: stringList(row.siteIds),
@@ -35,13 +38,15 @@ export const isEmployeeRow = (row: JsonRecord): boolean => toEmployeeAccount(row
 export const employeeLabel = (account: EmployeeAccount): string =>
   account.displayName || account.email || shortId(account.id);
 
-/** Case-insensitive match of the search text against the display name and the email. A blank query keeps every row. */
+/** Case-insensitive match of the search text against the display name, the email and the phone. A blank query keeps every row. */
 export const filterEmployees = (rows: JsonRecord[], query: string): JsonRecord[] => {
   const needle = query.trim().toLocaleLowerCase();
   if (needle === "") return rows;
   return rows.filter((row) => {
     const account = toEmployeeAccount(row);
-    return [account.displayName, account.email].some((value) => value.toLocaleLowerCase().includes(needle));
+    return [account.displayName, account.email, account.phoneNumber].some((value) =>
+      value.toLocaleLowerCase().includes(needle),
+    );
   });
 };
 

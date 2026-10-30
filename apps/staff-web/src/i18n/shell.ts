@@ -59,4 +59,25 @@ export const shellLiterals: Record<string, string> = {
   "Change password": "Đổi mật khẩu",
   "Unable to change the password.": "Không đổi được mật khẩu.",
   "Password changed. Sign in again with the new password.": "Đã đổi mật khẩu. Hãy đăng nhập lại bằng mật khẩu mới.",
+  Profile: "Hồ sơ",
+  "Phone number": "Số điện thoại",
+  "Used by colleagues and administrators to reach you.": "Để đồng nghiệp và quản trị viên liên hệ với bạn.",
+  "Digits and + ( ) - only, 8 to 20 characters.": "Chỉ gồm chữ số và + ( ) -, từ 8 đến 20 ký tự.",
+  "Temporary password": "Mật khẩu tạm thời",
+  "The employee must replace it at the first sign-in.": "Nhân viên phải đổi mật khẩu này ở lần đăng nhập đầu tiên.",
+  "Phone number is required.": "Số điện thoại không được để trống.",
+  "No site assigned": "Chưa được gán cơ sở",
+  "Loading account...": "Đang tải tài khoản...",
+  "Account information saved.": "Đã lưu thông tin tài khoản.",
+  "Confirm new password": "Xác nhận mật khẩu mới",
+  "Display name is required.": "Tên hiển thị không được để trống.",
+  "The phone number may only hold digits and the characters + ( ) -":
+    "Số điện thoại chỉ gồm chữ số và các ký tự + ( ) -",
+  "The new password needs at least 12 characters.": "Mật khẩu mới cần tối thiểu 12 ký tự.",
+  "The new password may not exceed 200 characters.": "Mật khẩu mới không được dài quá 200 ký tự.",
+  "The new password and its confirmation do not match.": "Mật khẩu mới chưa khớp với phần xác nhận.",
+  "Your name and phone number appear in staff lists and on the records you handle. The email is your sign-in name, and an administrator manages your roles and sites.":
+    "Tên và số điện thoại của bạn hiển thị trong danh sách nhân viên và trên các hồ sơ bạn xử lý. Email là tên đăng nhập, còn vai trò và cơ sở do quản trị viên quản lý.",
+  "Changing the password ends every session of this account, on every browser. Sign in again with the new password.":
+    "Đổi mật khẩu sẽ kết thúc mọi phiên đăng nhập của tài khoản này trên mọi trình duyệt. Hãy đăng nhập lại bằng mật khẩu mới.",
 };

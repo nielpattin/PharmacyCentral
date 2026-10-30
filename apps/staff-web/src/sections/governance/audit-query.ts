@@ -95,6 +95,7 @@ const AUDIT_VERBS: Readonly<Record<string, string>> = {
   "image-updated": "Update image",
   "quality-reviewed": "Review quality",
   "access-updated": "Update access",
+  "profile-updated": "Update profile",
   "password-reset": "Reset password",
   "sessions-revoked": "Revoke sessions",
 };
@@ -108,6 +109,7 @@ const AUDIT_PHRASES: Readonly<Record<string, string>> = {
   "Change status|order": "Change order status",
   "Review quality|batch": "Review batch quality",
   "Update access|user": "Update user access",
+  "Update profile|user": "Update user profile",
   "Reset password|user": "Reset user password",
   "Revoke sessions|user": "Revoke user sessions",
   "Update image|product": "Update product image",

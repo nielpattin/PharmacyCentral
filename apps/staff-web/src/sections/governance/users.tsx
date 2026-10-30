@@ -1,4 +1,4 @@
-import { ActionMenu, Alert, Button, RowActions, Select, StatusCell } from "@pharmacy/ui";
+import { ActionMenu, Alert, Button, RowActions, Select, StatusCell, type ActionMenuItem } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { useSession } from "../../auth.ts";
@@ -15,6 +15,7 @@ import { translateText } from "../../i18n.ts";
 import { text } from "../../staff-api.ts";
 import { CreateUserDrawer } from "./create-user.tsx";
 import { EditAccessDrawer } from "./edit-access.tsx";
+import { EditProfileDrawer } from "./edit-profile.tsx";
 import { filterEmployees, toEmployeeAccount, type EmployeeAccount } from "./employees.ts";
 import { employeesQueryKey, useEmployees } from "./queries.ts";
 
@@ -37,12 +38,16 @@ export const UsersTab = (): React.JSX.Element => {
   const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | undefined>(undefined);
+  const [editingProfileId, setEditingProfileId] = useState<string | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
   useFocusSearchHotkey(rootRef);
   useHotkey("n", () => setCreating(true), { label: "Create new" });
 
   const rows = filterEmployees(employees.data ?? [], values.q);
   const editing = (employees.data ?? []).map(toEmployeeAccount).find((account) => account.id === editingId);
+  const editingProfile = (employees.data ?? [])
+    .map(toEmployeeAccount)
+    .find((account) => account.id === editingProfileId);
 
   const resetPassword = async (account: EmployeeAccount): Promise<void> => {
     const password = await prompt({
@@ -101,6 +106,13 @@ export const UsersTab = (): React.JSX.Element => {
     { key: "displayName", label: "Name" },
     { key: "email", hideBelow: "md", label: "Email", truncate: 32 },
     {
+      key: "phoneNumber",
+      hideBelow: "lg",
+      label: "Phone",
+      render: (row) => toEmployeeAccount(row).phoneNumber || "—",
+      text: (row) => toEmployeeAccount(row).phoneNumber,
+    },
+    {
       key: "roles",
       hideBelow: "lg",
       label: "Roles",
@@ -136,31 +148,42 @@ export const UsersTab = (): React.JSX.Element => {
             <ActionMenu
               label={translateText("More actions")}
               items={
-                account.isActive
-                  ? [
-                      {
-                        id: "reset",
-                        label: translateText("Reset password"),
-                        onSelect: () => void resetPassword(account),
-                      },
-                      {
-                        id: "revoke",
-                        label: translateText("Revoke sessions"),
-                        tone: "danger",
-                        onSelect: () => void revokeSessions(account),
-                      },
-                      ...(account.id === session.userId
-                        ? []
-                        : [
-                            {
-                              id: "deactivate",
-                              label: translateText("Deactivate"),
-                              tone: "danger" as const,
-                              onSelect: () => void deactivate(account),
-                            },
-                          ]),
-                    ]
-                  : [{ id: "activate", label: translateText("Reactivate"), onSelect: () => void activate(account) }]
+                [
+                  ...(account.id === session.userId
+                    ? []
+                    : [
+                        {
+                          id: "profile",
+                          label: translateText("Edit profile"),
+                          onSelect: () => setEditingProfileId(account.id),
+                        },
+                      ]),
+                  ...(account.isActive
+                    ? [
+                        {
+                          id: "reset",
+                          label: translateText("Reset password"),
+                          onSelect: () => void resetPassword(account),
+                        },
+                        {
+                          id: "revoke",
+                          label: translateText("Revoke sessions"),
+                          tone: "danger" as const,
+                          onSelect: () => void revokeSessions(account),
+                        },
+                        ...(account.id === session.userId
+                          ? []
+                          : [
+                              {
+                                id: "deactivate",
+                                label: translateText("Deactivate"),
+                                tone: "danger" as const,
+                                onSelect: () => void deactivate(account),
+                              },
+                            ]),
+                      ]
+                    : [{ id: "activate", label: translateText("Reactivate"), onSelect: () => void activate(account) }]),
+                ] satisfies ActionMenuItem[]
               }
             />
           </RowActions>
@@ -183,7 +206,7 @@ export const UsersTab = (): React.JSX.Element => {
         getKey={(row, index) => text(row.id, String(index))}
         loading={employees.isPending}
         empty={values.q.trim() ? "No employees match this search." : "No employees found."}
-        search={{ value: draft, onChange: setDraft, placeholder: translateText("Search name or email") }}
+        search={{ value: draft, onChange: setDraft, placeholder: translateText("Search name, email or phone") }}
         toolbarStart={
           <Select
             aria-label={translateText("Status")}
@@ -198,9 +221,16 @@ export const UsersTab = (): React.JSX.Element => {
         }
         toolbarExtra={<SavedViewsMenu pageKey="governance-users" defaults={USERS_DEFAULTS} />}
         storageKey="staff:governance:users"
-        exportCsv={{ filename: "employees.csv", columns: ["displayName", "email", "roles"] }}
+        exportCsv={{ filename: "employees.csv", columns: ["displayName", "email", "phoneNumber", "roles"] }}
       />
       {creating ? <CreateUserDrawer onClose={() => setCreating(false)} /> : null}
+      {editingProfile ? (
+        <EditProfileDrawer
+          key={editingProfile.id}
+          account={editingProfile}
+          onClose={() => setEditingProfileId(undefined)}
+        />
+      ) : null}
       {editing ? <EditAccessDrawer key={editing.id} account={editing} onClose={() => setEditingId(undefined)} /> : null}
     </div>
   );

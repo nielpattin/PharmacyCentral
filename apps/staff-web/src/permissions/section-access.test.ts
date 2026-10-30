@@ -7,6 +7,7 @@ import { canAccessSection, sectionRoles } from "./section-access.ts";
 // back from `sectionRoles`, so a wrong entry in the map fails here.
 const opens: Record<"Pharmacist" | "Pharmacy Manager" | "Warehouse Staff", readonly Section[]> = {
   Pharmacist: [
+    "account",
     "pharmacistOverview",
     "actionPlans",
     "prescriptions",
@@ -17,6 +18,7 @@ const opens: Record<"Pharmacist" | "Pharmacy Manager" | "Warehouse Staff", reado
     "quality",
   ],
   "Pharmacy Manager": [
+    "account",
     "dashboard",
     "analytics",
     "actionPlans",
@@ -45,6 +47,7 @@ const opens: Record<"Pharmacist" | "Pharmacy Manager" | "Warehouse Staff", reado
     "quality",
   ],
   "Warehouse Staff": [
+    "account",
     "dashboard",
     "actionPlans",
     "transfers",

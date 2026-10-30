@@ -1,6 +1,6 @@
 import { Link as RouterLink, Navigate, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import {
   BadgeDollarSign,
@@ -53,6 +53,7 @@ import { StaffNotFoundPage } from "./pages/NotFoundPage.tsx";
 import { toggleLanguage, translateText, useLanguage } from "./i18n.ts";
 import { datasets } from "./import-datasets.ts";
 import { AiIntegrationsSection } from "./sections/ai-integrations-section.tsx";
+import { AccountSection } from "./sections/account-section.tsx";
 import { ActionPlansSection } from "./sections/action-plans-section.tsx";
 import { AnalyticsSection } from "./sections/analytics-section.tsx";
 import { CatalogSection } from "./sections/catalog-section.tsx";
@@ -217,6 +218,7 @@ const StaffApp = (): React.JSX.Element => {
   const [sidebarCollapsed, setSidebarCollapsed] = useStoredState(sidebarCollapsedStorageKey, z.boolean(), false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [actionsTarget, setActionsTarget] = useState<HTMLElement | null>(null);
+  const profileMenuRef = useRef<HTMLDetailsElement>(null);
   const search = useSearch({ strict: false }) as Record<string, unknown>;
   const authenticated = session.authenticated;
 
@@ -373,7 +375,10 @@ const StaffApp = (): React.JSX.Element => {
       ? tabSection
       : activeSection;
   const activeGroup = visibleNavGroups.find((group) => group.items.some((item) => item.key === navSection));
-  const activeLabel = activeGroup?.items.find((item) => item.key === navSection)?.label ?? "Dashboard";
+  // The account page is opened from the profile menu, so it has no sidebar item and no group.
+  const activeLabel =
+    activeGroup?.items.find((item) => item.key === navSection)?.label ??
+    (navSection === "account" ? "Account settings" : "Dashboard");
   const tabValue = INVENTORY_SECTIONS.has(activeSection) ? inventoryTab : searchTab;
   const currentTab = tabValue && tabValue !== activeLabel ? tabValue : undefined;
   const breadcrumbItems: BreadcrumbItem[] = [
@@ -450,6 +455,8 @@ const StaffApp = (): React.JSX.Element => {
         return <AnalyticsSection key={activeSection} />;
       case "actionPlans":
         return <ActionPlansSection key={activeSection} />;
+      case "account":
+        return <AccountSection key={activeSection} onPasswordChanged={() => endSession(PASSWORD_CHANGED_MESSAGE)} />;
     }
   };
 
@@ -550,7 +557,7 @@ const StaffApp = (): React.JSX.Element => {
             >
               <Keyboard size={17} strokeWidth={2} aria-hidden="true" />
             </button>
-            <details className="profile-menu">
+            <details ref={profileMenuRef} className="profile-menu">
               <summary className="profile-trigger">
                 <span className="profile-copy">
                   <strong>{email || translateText("Staff account")}</strong>
@@ -562,7 +569,14 @@ const StaffApp = (): React.JSX.Element => {
               </summary>
               <div className="profile-dropdown">
                 <div className="profile-menu-label">{email || translateText("Employee account")}</div>
-                <button type="button" className="profile-menu-item" disabled>
+                <button
+                  type="button"
+                  className="profile-menu-item"
+                  onClick={() => {
+                    profileMenuRef.current?.removeAttribute("open");
+                    void navigate({ to: pathForSection("account") });
+                  }}
+                >
                   <Settings size={15} strokeWidth={2} /> {translateText("Account settings")}
                 </button>
                 <button type="button" className="profile-menu-item" onClick={() => toggleLanguage()}>
