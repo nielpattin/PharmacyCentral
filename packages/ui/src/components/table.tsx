@@ -22,7 +22,7 @@ export const TableBody = (props: React.HTMLAttributes<HTMLTableSectionElement>):
 
 export const TableRow = forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(
   ({ className, ...props }, ref) => (
-    <tr ref={ref} className={cn("border-b border-line last:border-0", className)} {...props} />
+    <tr ref={ref} data-weight="row" className={cn("border-b border-line last:border-0", className)} {...props} />
   ),
 );
 

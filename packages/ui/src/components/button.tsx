@@ -31,5 +31,12 @@ const buttonVariants = cva(
 export type ButtonProps = React.ComponentProps<"button"> & VariantProps<typeof buttonVariants>;
 
 export const Button = ({ className, variant, size, type = "button", ...props }: ButtonProps): React.JSX.Element => (
-  <button type={type} className={cn(buttonVariants({ variant, size }), className)} {...props} />
+  <button
+    type={type}
+    data-weight="press"
+    data-variant={variant ?? "primary"}
+    data-size={size ?? "md"}
+    className={cn(buttonVariants({ variant, size }), className)}
+    {...props}
+  />
 );

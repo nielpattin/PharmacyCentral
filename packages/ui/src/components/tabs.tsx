@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
 import { cn } from "../cn.ts";
-import { SEGMENT_TRACK, segmentClass } from "../segmented.ts";
+import { placeThumb } from "../segment-thumb.ts";
+import { SEGMENT_THUMB, SEGMENT_TRACK, segmentClass } from "../segmented.ts";
 import { nextTabIndex } from "../tabs-nav.ts";
 
 export type TabItem = { id: string; label: ReactNode };
@@ -31,6 +32,7 @@ export const Tabs = ({ items, value, onValueChange, idBase, className, ...props 
     <div
       role="tablist"
       aria-label={props["aria-label"]}
+      ref={(element) => placeThumb(element)}
       className={cn(SEGMENT_TRACK, "overflow-x-auto [scrollbar-width:none]", className)}
       onKeyDown={(event) => {
         const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
@@ -44,12 +46,14 @@ export const Tabs = ({ items, value, onValueChange, idBase, className, ...props 
         buttons[next]?.focus();
       }}
     >
+      <span aria-hidden="true" data-weight="thumb" className={SEGMENT_THUMB} />
       {items.map((item) => {
         const selected = item.id === value;
         return (
           <button
             key={item.id}
             type="button"
+            data-weight="press"
             role="tab"
             id={idBase === undefined ? undefined : tabId(idBase, item.id)}
             aria-selected={selected}

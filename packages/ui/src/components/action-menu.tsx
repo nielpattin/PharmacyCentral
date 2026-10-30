@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import { cn } from "../cn.ts";
 import { nextMenuIndex } from "../menu-nav.ts";
+import { usePresence } from "../presence.ts";
 import { Button } from "./button.tsx";
 
 export type ActionMenuItem = {
@@ -46,6 +47,7 @@ export const ActionMenu = ({ label, items, className }: ActionMenuProps): React.
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null);
   const menuId = useId();
+  const presence = usePresence(anchor !== null);
   const close = (): void => setAnchor(null);
 
   return (
@@ -67,17 +69,22 @@ export const ActionMenu = ({ label, items, className }: ActionMenuProps): React.
           <circle cx="13" cy="8" r="1.4" />
         </svg>
       </Button>
-      {anchor === null
+      {!presence.mounted
         ? null
         : createPortal(
             <div
               id={menuId}
               role="menu"
+              data-weight="panel"
+              data-state={presence.state}
+              inert={anchor === null}
+              onAnimationEnd={presence.onAnimationEnd}
               aria-label={label}
               tabIndex={-1}
               className={MENU_CLASS}
               ref={(element) => {
-                if (element === null) return;
+                presence.ref(element);
+                if (element === null || anchor === null) return;
                 // Place under the button, right edges aligned; flip above it when the window ends first.
                 const { width, height } = element.getBoundingClientRect();
                 const left = Math.max(EDGE, Math.min(anchor.right - width, window.innerWidth - width - EDGE));
@@ -127,6 +134,7 @@ export const ActionMenu = ({ label, items, className }: ActionMenuProps): React.
                   key={item.id}
                   type="button"
                   role="menuitem"
+                  data-weight="item"
                   disabled={item.disabled}
                   className={cn(ITEM_CLASS, ITEM_TONE[item.tone ?? "default"])}
                   onClick={() => {

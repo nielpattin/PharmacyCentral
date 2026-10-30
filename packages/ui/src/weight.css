@@ -1,0 +1,329 @@
+/* Physical weight: the motion layer that makes controls feel like objects with mass.
+   Opt-in: an app imports this file after theme.css. Components only carry `data-weight` and `data-state` markers, so an
+   app that does not import it keeps its instant, flat controls (and `usePresence` unmounts at once instead of waiting
+   for an exit animation that does not exist).
+
+   The rules:
+   1. Asymmetric timing. A press goes down fast (the finger is the force); the release is a spring that overshoots and
+      settles over half a second (the mass). A transition takes the timing of the state it moves TO, so the `:active`
+      rule carries the press timing and the resting rule carries the release timing.
+   2. Pressed means lower. The control sinks 2px, shrinks to 0.94, and a filled button loses its lift shadow and gains
+      an inset one, as if pushed into the page. Hovering lifts it 1px.
+   3. Things arrive and leave on the same path. Panels fade and travel a few pixels in, then back out when closed; the
+      bigger the panel, the longer it takes (menu 200ms, dialog 420ms spring, sheet 380ms).
+   4. Selection moves. The raised pill under a chosen tab slides to the next one on a spring.
+   5. Movement honours `prefers-reduced-motion`. Colour changes stay, because they carry state without moving anything. */
+
+:root {
+  --weight-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --weight-ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  /* Spring with about 15% overshoot. Browsers without linear() get a gentler cubic-bezier overshoot. */
+  --weight-spring: cubic-bezier(0.34, 1.7, 0.64, 1);
+  --weight-press: 100ms;
+  --weight-hover: 220ms;
+  --weight-release: 520ms;
+  --weight-menu: 200ms;
+  --weight-dialog: 420ms;
+  --weight-sheet: 380ms;
+  --weight-toast: 420ms;
+  --weight-exit: 200ms;
+  --weight-scale-down: 0.94;
+  --weight-sink: 2px;
+}
+
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --weight-spring: linear(
+      0,
+      0.18 5%,
+      0.55 11%,
+      0.9 17%,
+      1.08 22%,
+      1.15 27%,
+      1.12 33%,
+      1.05 40%,
+      1.01 48%,
+      0.99 58%,
+      1.002 72%,
+      1
+    );
+  }
+}
+
+/* ─── Press targets: buttons, segments, close buttons ─── */
+
+[data-weight="press"] {
+  transition:
+    background-color var(--weight-hover) var(--weight-ease-out),
+    color var(--weight-hover) var(--weight-ease-out),
+    border-color var(--weight-hover) var(--weight-ease-out),
+    opacity var(--weight-hover) var(--weight-ease-out),
+    box-shadow var(--weight-release) var(--weight-ease-out);
+}
+
+/* Items in a menu: a lighter touch, colour only. The pressed row darkens a step before the action runs. */
+[data-weight="item"] {
+  transition:
+    background-color var(--weight-hover) var(--weight-ease-out),
+    color var(--weight-hover) var(--weight-ease-out);
+}
+
+[data-weight="item"]:active:not(:disabled) {
+  background-color: var(--color-line);
+  transition-duration: var(--weight-press);
+}
+
+/* Filled and plated buttons carry a lift shadow built from Tailwind's own `--tw-shadow`, so the focus ring (which
+   reads the same stack) keeps working. Two layers in every state, so the shadow interpolates instead of snapping. */
+[data-weight="press"][data-variant="primary"],
+[data-weight="press"][data-variant="danger"],
+[data-weight="press"][data-variant="secondary"],
+[data-weight="press"][data-variant="outline"] {
+  --weight-shadow-color: oklch(0.2 0.02 260 / 0.16);
+  --weight-shadow-inset: oklch(1 0 0 / 0);
+  --tw-shadow: 0 1px 0 var(--weight-shadow-color), inset 0 1px 0 var(--weight-shadow-inset);
+  box-shadow:
+    var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow, 0 0 #0000),
+    var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
+[data-weight="press"][data-variant="primary"] {
+  --weight-shadow-color: oklch(0.3 0.12 256 / 0.45);
+  --weight-shadow-inset: oklch(1 0 0 / 0.18);
+}
+
+[data-weight="press"][data-variant="danger"] {
+  --weight-shadow-color: oklch(0.34 0.14 30 / 0.45);
+  --weight-shadow-inset: oklch(1 0 0 / 0.18);
+}
+
+[data-weight="press"][data-variant="primary"]:hover:not(:disabled),
+[data-weight="press"][data-variant="danger"]:hover:not(:disabled),
+[data-weight="press"][data-variant="secondary"]:hover:not(:disabled),
+[data-weight="press"][data-variant="outline"]:hover:not(:disabled) {
+  --tw-shadow: 0 3px 7px -1px var(--weight-shadow-color), inset 0 1px 0 var(--weight-shadow-inset);
+}
+
+[data-weight="press"][data-variant="primary"]:active:not(:disabled),
+[data-weight="press"][data-variant="danger"]:active:not(:disabled),
+[data-weight="press"][data-variant="secondary"]:active:not(:disabled),
+[data-weight="press"][data-variant="outline"]:active:not(:disabled) {
+  --tw-shadow: 0 0 0 transparent, inset 0 3px 5px oklch(0 0 0 / 0.28);
+}
+
+[data-weight="press"]:active:not(:disabled) {
+  transition-duration: var(--weight-press);
+}
+
+/* ─── Rows, fields, the sliding tab pill ─── */
+
+tbody > [data-weight="row"] {
+  transition: background-color var(--weight-hover) var(--weight-ease-out);
+}
+
+tbody > [data-weight="row"]:hover {
+  background-color: color-mix(in oklch, var(--color-surface-soft) 70%, transparent);
+}
+
+[data-weight="field"] {
+  transition:
+    border-color var(--weight-hover) var(--weight-ease-out),
+    box-shadow var(--weight-hover) var(--weight-ease-out);
+}
+
+/* The pill is placed instantly the first time (no data-ready yet) and slides on every change after that. */
+[data-ready] > [data-weight="thumb"] {
+  transition:
+    translate var(--weight-release) var(--weight-spring),
+    width var(--weight-release) var(--weight-spring);
+}
+
+/* A closing panel stops taking clicks while it plays its exit. */
+[data-state="closed"] {
+  pointer-events: none;
+}
+
+/* ─── Movement (skipped for reduced motion) ─── */
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-weight="press"] {
+    transition:
+      background-color var(--weight-hover) var(--weight-ease-out),
+      color var(--weight-hover) var(--weight-ease-out),
+      border-color var(--weight-hover) var(--weight-ease-out),
+      opacity var(--weight-hover) var(--weight-ease-out),
+      box-shadow var(--weight-release) var(--weight-ease-out),
+      transform var(--weight-release) var(--weight-spring);
+  }
+
+  /* Hover lifts a plated or filled button off the page; a ghost button stays flat. */
+  [data-weight="press"][data-variant="primary"]:hover:not(:disabled),
+  [data-weight="press"][data-variant="danger"]:hover:not(:disabled),
+  [data-weight="press"][data-variant="secondary"]:hover:not(:disabled),
+  [data-weight="press"][data-variant="outline"]:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  [data-weight="press"]:active:not(:disabled) {
+    transform: translateY(var(--weight-sink)) scale(var(--weight-scale-down));
+    transition-duration: var(--weight-press);
+    transition-timing-function: var(--weight-ease-out);
+  }
+
+  /* Icon-only buttons are small; a deeper scale reads at their size. */
+  [data-weight="press"][data-size="icon"]:active:not(:disabled),
+  [data-weight="press"][data-size="icon-sm"]:active:not(:disabled) {
+    transform: translateY(var(--weight-sink)) scale(0.88);
+  }
+
+  /* Segments sink with the pill; the pill itself stays put, so the press reads as pushing the label. */
+  [role="tab"][data-weight="press"]:active:not(:disabled),
+  [role="radio"][data-weight="press"]:active:not(:disabled) {
+    transform: translateY(1px) scale(0.95);
+  }
+
+  /* Floating panels (popover, action menu) grow out of the button that opened them and shrink back into it. */
+  [data-weight="panel"] {
+    transform-origin: top right;
+    animation: weight-panel-in var(--weight-menu) var(--weight-ease-out) both;
+  }
+
+  [data-weight="panel"][data-state="closed"] {
+    animation: weight-panel-out var(--weight-exit) var(--weight-ease-in) both;
+  }
+
+  [data-weight="backdrop"] {
+    animation: weight-fade-in var(--weight-dialog) var(--weight-ease-out) both;
+  }
+
+  [data-weight="backdrop"][data-state="closed"] {
+    animation: weight-fade-out var(--weight-exit) var(--weight-ease-in) both;
+  }
+
+  [data-weight="dialog"] {
+    animation: weight-dialog-in var(--weight-dialog) var(--weight-spring) both;
+  }
+
+  [data-weight="dialog"][data-state="closed"] {
+    animation: weight-dialog-out var(--weight-exit) var(--weight-ease-in) both;
+  }
+
+  /* Overrides the lighter `motion-safe:animate-sheet-in` the Sheet already carries. */
+  [data-weight="sheet"] {
+    animation: weight-sheet-in var(--weight-sheet) var(--weight-ease-out) both;
+  }
+
+  [data-weight="sheet"][data-state="closed"] {
+    animation: weight-sheet-out var(--weight-exit) var(--weight-ease-in) both;
+  }
+
+  [data-weight="toast"] {
+    animation: weight-toast-in var(--weight-toast) var(--weight-spring) both;
+  }
+
+  [data-weight="toast"][data-state="closed"] {
+    animation: weight-toast-out var(--weight-exit) var(--weight-ease-in) both;
+  }
+}
+
+@keyframes weight-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes weight-panel-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+
+@keyframes weight-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes weight-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes weight-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes weight-dialog-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
+@keyframes weight-sheet-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes weight-sheet-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes weight-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes weight-toast-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}

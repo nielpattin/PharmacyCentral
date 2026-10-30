@@ -1,7 +1,8 @@
 import { createContext, useContext } from "react";
 
 import { cn } from "../cn.ts";
-import { SEGMENT_TRACK, segmentClass } from "../segmented.ts";
+import { placeThumb } from "../segment-thumb.ts";
+import { SEGMENT_THUMB, SEGMENT_TRACK, segmentClass } from "../segmented.ts";
 
 // Single-select segmented control; its look lives in segmented.ts, shared with Tabs. Items are radios: arrow keys move and select, Home and End jump to the ends.
 
@@ -59,7 +60,14 @@ export const ToggleGroup = <T extends string>({
 
   return (
     <ToggleGroupContext.Provider value={{ value, onSelect: (next) => onValueChange(next as T) }}>
-      <div role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className={cn(SEGMENT_TRACK, className)}>
+      <div
+        role="radiogroup"
+        aria-label={label}
+        ref={(element) => placeThumb(element)}
+        onKeyDown={onKeyDown}
+        className={cn(SEGMENT_TRACK, className)}
+      >
+        <span aria-hidden="true" data-weight="thumb" className={SEGMENT_THUMB} />
         {children}
       </div>
     </ToggleGroupContext.Provider>
@@ -87,6 +95,7 @@ export const ToggleGroupItem = <T extends string>({
   return (
     <button
       type="button"
+      data-weight="press"
       role="radio"
       aria-checked={selected}
       tabIndex={selected ? 0 : -1}

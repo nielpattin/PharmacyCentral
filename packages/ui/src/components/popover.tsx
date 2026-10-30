@@ -1,6 +1,7 @@
 import { useId, useState, type ReactNode } from "react";
 
 import { cn } from "../cn.ts";
+import { usePresence } from "../presence.ts";
 import { Button, type ButtonProps } from "./button.tsx";
 
 export type PopoverProps = {
@@ -33,6 +34,7 @@ export const Popover = ({
 }: PopoverProps): React.JSX.Element => {
   const [open, setOpen] = useState(false);
   const panelId = useId();
+  const presence = usePresence(open);
   const close = (): void => setOpen(false);
   return (
     <div
@@ -57,14 +59,19 @@ export const Popover = ({
       >
         {buttonLabel}
       </Button>
-      {open ? (
+      {presence.mounted ? (
         <div
           id={panelId}
           role="group"
+          data-weight="panel"
+          data-state={presence.state}
+          inert={!open}
+          onAnimationEnd={presence.onAnimationEnd}
           aria-label={panelLabel}
           // tabIndex makes a click on non-interactive panel text keep focus inside, so it does not count as leaving.
           tabIndex={-1}
           ref={(element) => {
+            presence.ref(element);
             if (element !== null && element.getBoundingClientRect().left < 8) {
               element.style.right = "auto";
               element.style.left = "0";

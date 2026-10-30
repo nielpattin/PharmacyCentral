@@ -18,6 +18,7 @@ export const Disclosure = ({ closedLabel, openLabel, className, children }: Disc
     <div className={className}>
       <button
         type="button"
+        data-weight="press"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((current) => !current)}

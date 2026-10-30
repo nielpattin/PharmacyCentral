@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore } from "react";
 
 import { cn } from "../cn.ts";
-import { createToastStore, type ToastStore, type ToastTone } from "../toast-store.ts";
+import { createToastStore, type ToastItem, type ToastStore, type ToastTone } from "../toast-store.ts";
 
 export type ToastApi = {
   success: (message: string) => void;
@@ -15,6 +15,8 @@ export type ToastLabels = {
   /** Accessible name of each toast's dismiss button. */
   dismiss?: string | undefined;
 };
+
+type ToastRow = { toast: ToastItem; closing: boolean };
 
 const ToastContext = createContext<ToastApi | null>(null);
 
@@ -69,6 +71,24 @@ const ToastRegion = ({
   dismissLabel: string;
 }): React.JSX.Element => {
   const toasts = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const [view, setView] = useState<{ source: readonly ToastItem[]; rows: readonly ToastRow[] }>({
+    source: toasts,
+    rows: toasts.map((toast) => ({ toast, closing: false })),
+  });
+  if (view.source !== toasts) {
+    // A toast that left the store stays in place, marked closing, until its exit animation ends.
+    const live = new Set(toasts.map((toast) => toast.id));
+    const known = new Set(view.rows.map((row) => row.toast.id));
+    setView({
+      source: toasts,
+      rows: [
+        ...view.rows.map((row) => (live.has(row.toast.id) ? row : { toast: row.toast, closing: true })),
+        ...toasts.filter((toast) => !known.has(toast.id)).map((toast) => ({ toast, closing: false })),
+      ],
+    });
+  }
+  const remove = (id: number): void =>
+    setView((current) => ({ ...current, rows: current.rows.filter((row) => row.toast.id !== id) }));
   // Stable ref callback: its cleanup runs only when the provider unmounts, and clears the timers.
   const attachRegion = useCallback(
     (region: HTMLDivElement | null) => (region === null ? undefined : () => store.dispose()),
@@ -92,9 +112,20 @@ const ToastRegion = ({
           if (!(next instanceof Node) || !event.currentTarget.contains(next)) store.setPaused(false);
         }}
       >
-        {toasts.map((toast) => (
+        {view.rows.map(({ toast, closing }) => (
           <li
             key={toast.id}
+            data-weight="toast"
+            data-state={closing ? "closed" : "open"}
+            ref={(element) => {
+              // No exit animation (reduced motion, or the app does not load weight.css): leave at once.
+              if (closing && element !== null && getComputedStyle(element).animationName === "none") remove(toast.id);
+            }}
+            onAnimationEnd={(event) => {
+              if (closing && event.target === event.currentTarget && event.animationName.endsWith("-out")) {
+                remove(toast.id);
+              }
+            }}
             className={cn(
               "flex items-start gap-3 rounded-md border border-line border-l-4 bg-surface px-4 py-3 text-sm text-ink shadow-lg",
               TONE_BORDER[toast.tone],
@@ -103,6 +134,7 @@ const ToastRegion = ({
             <p className="min-w-0 flex-1 break-words">{toast.message}</p>
             <button
               type="button"
+              data-weight="press"
               aria-label={dismissLabel}
               onClick={() => store.dismiss(toast.id)}
               className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted outline-none hover:bg-surface-soft hover:text-ink focus-visible:ring-2 focus-visible:ring-primary/50"
