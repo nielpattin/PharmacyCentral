@@ -7,6 +7,8 @@ export type EmployeeAccount = {
   actorType: string;
   email: string;
   displayName: string;
+  /** A deactivated account cannot sign in; it keeps its roles, sites and history. */
+  isActive: boolean;
   roles: string[];
   siteIds: string[];
 };
@@ -21,6 +23,7 @@ export const toEmployeeAccount = (row: JsonRecord): EmployeeAccount => ({
   actorType: typeof row.actorType === "string" ? row.actorType : "",
   email: typeof row.email === "string" ? row.email : "",
   displayName: typeof row.displayName === "string" ? row.displayName : "",
+  isActive: row.isActive !== false,
   roles: stringList(row.roles),
   siteIds: stringList(row.siteIds),
 });

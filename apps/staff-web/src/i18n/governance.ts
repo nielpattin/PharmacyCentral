@@ -77,6 +77,15 @@ export const governanceLiterals: Record<string, string> = {
   "Payment status, reconciliation, and operational reports.": "Trạng thái thanh toán, đối soát và báo cáo vận hành.",
   "Reset password": "Đặt lại mật khẩu",
   "Revoke sessions": "Đăng xuất các phiên",
+  Deactivate: "Vô hiệu hóa",
+  Reactivate: "Kích hoạt lại",
+  Active: "Đang hoạt động",
+  Deactivated: "Vô hiệu hóa",
+  "Deactivate account?": "Vô hiệu hóa tài khoản?",
+  "The employee can no longer sign in and every active session ends. Roles, sites and history are kept.":
+    "Nhân viên không đăng nhập được và mọi phiên hiện tại kết thúc. Vai trò, site và lịch sử được giữ lại.",
+  "Account deactivated.": "Đã vô hiệu hóa tài khoản.",
+  "Account reactivated.": "Đã kích hoạt lại tài khoản.",
   "Loading system overview...": "Đang tải tổng quan hệ thống...",
   System: "Hệ thống",
   "Service health, queues and the search index. The overview refreshes every 15 seconds.":

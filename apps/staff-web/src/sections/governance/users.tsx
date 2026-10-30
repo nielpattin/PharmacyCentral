@@ -1,6 +1,7 @@
-import { ActionMenu, Alert, Button, RowActions } from "@pharmacy/ui";
+import { ActionMenu, Alert, Button, RowActions, Select, StatusCell } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
+import { useSession } from "../../auth.ts";
 import { useConfirm, usePrompt } from "../../components/confirm.tsx";
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { PageActions } from "../../components/page-actions.tsx";
@@ -15,17 +16,24 @@ import { text } from "../../staff-api.ts";
 import { CreateUserDrawer } from "./create-user.tsx";
 import { EditAccessDrawer } from "./edit-access.tsx";
 import { filterEmployees, toEmployeeAccount, type EmployeeAccount } from "./employees.ts";
-import { useEmployees } from "./queries.ts";
+import { employeesQueryKey, useEmployees } from "./queries.ts";
 
-const USERS_DEFAULTS = { q: "" } as const;
+const USERS_DEFAULTS = { q: "", status: "all" } as const;
 
-/** Employee accounts: search, access, password reset, and session revocation. */
+const STATUS_FILTERS = ["all", "active", "deactivated"] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+const statusFilter = (value: string): StatusFilter => STATUS_FILTERS.find((item) => item === value) ?? "all";
+
+/** Employee accounts: search, access, password reset, session revocation, deactivation and reactivation. */
 export const UsersTab = (): React.JSX.Element => {
-  const employees = useEmployees();
+  const session = useSession();
+  const { values, setValues } = useListUrlState(USERS_DEFAULTS);
+  const status = statusFilter(values.status);
+  const employees = useEmployees(status === "all" ? undefined : status);
   const run = useStaffAction();
   const confirm = useConfirm();
   const prompt = usePrompt();
-  const { values, setValues } = useListUrlState(USERS_DEFAULTS);
   const [draft, setDraft] = useSearchDraft(values.q, (q) => setValues({ q }));
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | undefined>(undefined);
@@ -65,6 +73,30 @@ export const UsersTab = (): React.JSX.Element => {
     await run({ path: `/api/admin/users/${account.id}/revoke-sessions`, success: "Sessions revoked." });
   };
 
+  const deactivate = async (account: EmployeeAccount): Promise<void> => {
+    const accepted = await confirm({
+      title: "Deactivate account?",
+      description:
+        "The employee can no longer sign in and every active session ends. Roles, sites and history are kept.",
+      confirmLabel: "Deactivate",
+      tone: "danger",
+    });
+    if (!accepted) return;
+    await run({
+      path: `/api/admin/users/${account.id}/deactivate`,
+      invalidate: [employeesQueryKey],
+      success: "Account deactivated.",
+    });
+  };
+
+  const activate = async (account: EmployeeAccount): Promise<void> => {
+    await run({
+      path: `/api/admin/users/${account.id}/activate`,
+      invalidate: [employeesQueryKey],
+      success: "Account reactivated.",
+    });
+  };
+
   const columns: Column[] = [
     { key: "displayName", label: "Name" },
     { key: "email", hideBelow: "md", label: "Email", truncate: 32 },
@@ -77,6 +109,17 @@ export const UsersTab = (): React.JSX.Element => {
         return roles.length === 0 ? "—" : roles.map((role) => translateText(role)).join(", ");
       },
       text: (row) => toEmployeeAccount(row).roles.join(", "),
+    },
+    {
+      key: "isActive",
+      label: "Status",
+      render: (row) =>
+        toEmployeeAccount(row).isActive ? (
+          <StatusCell tone="success">{translateText("Active")}</StatusCell>
+        ) : (
+          <StatusCell tone="neutral">{translateText("Deactivated")}</StatusCell>
+        ),
+      text: (row) => (toEmployeeAccount(row).isActive ? "Active" : "Deactivated"),
     },
     {
       key: "actions",
@@ -92,15 +135,33 @@ export const UsersTab = (): React.JSX.Element => {
             </Button>
             <ActionMenu
               label={translateText("More actions")}
-              items={[
-                { id: "reset", label: translateText("Reset password"), onSelect: () => void resetPassword(account) },
-                {
-                  id: "revoke",
-                  label: translateText("Revoke sessions"),
-                  tone: "danger",
-                  onSelect: () => void revokeSessions(account),
-                },
-              ]}
+              items={
+                account.isActive
+                  ? [
+                      {
+                        id: "reset",
+                        label: translateText("Reset password"),
+                        onSelect: () => void resetPassword(account),
+                      },
+                      {
+                        id: "revoke",
+                        label: translateText("Revoke sessions"),
+                        tone: "danger",
+                        onSelect: () => void revokeSessions(account),
+                      },
+                      ...(account.id === session.userId
+                        ? []
+                        : [
+                            {
+                              id: "deactivate",
+                              label: translateText("Deactivate"),
+                              tone: "danger" as const,
+                              onSelect: () => void deactivate(account),
+                            },
+                          ]),
+                    ]
+                  : [{ id: "activate", label: translateText("Reactivate"), onSelect: () => void activate(account) }]
+              }
             />
           </RowActions>
         );
@@ -123,6 +184,18 @@ export const UsersTab = (): React.JSX.Element => {
         loading={employees.isPending}
         empty={values.q.trim() ? "No employees match this search." : "No employees found."}
         search={{ value: draft, onChange: setDraft, placeholder: translateText("Search name or email") }}
+        toolbarStart={
+          <Select
+            aria-label={translateText("Status")}
+            className="w-auto min-w-44"
+            value={status}
+            onChange={(event) => setValues({ status: event.target.value })}
+          >
+            <option value="all">{translateText("All statuses")}</option>
+            <option value="active">{translateText("Active")}</option>
+            <option value="deactivated">{translateText("Deactivated")}</option>
+          </Select>
+        }
         toolbarExtra={<SavedViewsMenu pageKey="governance-users" defaults={USERS_DEFAULTS} />}
         storageKey="staff:governance:users"
         exportCsv={{ filename: "employees.csv", columns: ["displayName", "email", "roles"] }}

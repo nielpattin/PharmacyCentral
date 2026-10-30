@@ -24,9 +24,15 @@ describe("toEmployeeAccount", () => {
       actorType: "employee",
       email: "an@pharmacycentral.vn",
       displayName: "Nguyễn An",
+      isActive: true,
       roles: ["Pharmacist"],
       siteIds: ["site-1"],
     });
+  });
+
+  it("reads an account as active unless the service says it is deactivated", () => {
+    expect(toEmployeeAccount({ ...withName, isActive: false }).isActive).toBe(false);
+    expect(toEmployeeAccount({ ...withName, isActive: true }).isActive).toBe(true);
   });
 
   it("reads a list that is not a list as empty", () => {
@@ -47,7 +53,15 @@ describe("employeeLabel", () => {
     expect(employeeLabel(toEmployeeAccount(withName))).toBe("Nguyễn An");
     expect(employeeLabel(toEmployeeAccount(withoutName))).toBe("warehouse@pharmacycentral.vn");
     expect(
-      employeeLabel({ id: "22222222-bbbb", actorType: "employee", email: "", displayName: "", roles: [], siteIds: [] }),
+      employeeLabel({
+        id: "22222222-bbbb",
+        actorType: "employee",
+        email: "",
+        displayName: "",
+        isActive: true,
+        roles: [],
+        siteIds: [],
+      }),
     ).toBe("22222222");
   });
 });
