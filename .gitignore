@@ -108,6 +108,7 @@ coverage/
 *.tfstate
 *.tfstate.*
 deploy/aws/demo.auto.tfvars.json
+deploy/aws/terraform.tfvars
 .aws/
 docs/*
 !docs/
