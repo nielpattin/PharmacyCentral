@@ -19,7 +19,7 @@ Tài liệu này tập trung vào **quy tắc nghiệp vụ đã được triể
 - Tiếp nhận đơn thuốc từ ảnh hoặc QR, và yêu cầu nhờ dược sĩ tư vấn.
 - Điều chuyển, trả hàng/loại khỏi tồn, kiểm kê, điều chỉnh tồn, biên bản tiêu hủy và bổ sung hàng từ quầy.
 - Dashboard, tài chính và audit.
-- Chatbot tư vấn, thông tin xác thực AI và từ đồng nghĩa tìm kiếm.
+- Chatbot tư vấn, thông tin xác thực AI, từ đồng nghĩa và xếp hạng tìm kiếm sản phẩm.
 - Sự kiện giữa các service (outbox và consumer).
 
 Tài liệu này **không phải API guide** và **không thay thế code**. Khi có khác biệt, code hiện tại là nguồn kiểm chứng cuối cùng. Mục 26 liệt kê các chỗ code hiện chưa chặn một quy tắc nghiệp vụ.
@@ -252,7 +252,40 @@ Người duyệt là Pharmacy Manager, và không phải người tạo đơn (B
 
 ### BR-PROC-007. Gợi ý bổ sung hàng tính từ tốc độ bán, tồn, tồn tối thiểu và thời gian giao hàng
 
-Với một site, tốc độ bán ngày là tổng số lượng có `Dispense` trong sổ kho của site trong cửa sổ chọn (mặc định 30 ngày) chia số ngày. Tồn tối thiểu là 10 đơn vị cơ sở (ngưỡng của BR-REPORT-002), hoặc tốc độ bán nhân số ngày tồn an toàn (mặc định 7) nếu lớn hơn. Thời gian giao hàng là trung vị số ngày từ lúc tạo đơn mua đến phiếu nhận đầu tiên của nhà cung cấp trong 12 tháng gần nhất; chưa có lịch sử thì dùng số ngày mặc định người dùng nhập (mặc định 7) và dòng gợi ý ghi rõ đó là mặc định. Điểm đặt lại là tốc độ bán nhân thời gian giao hàng cộng tồn tối thiểu; tồn mục tiêu là tốc độ bán nhân (thời gian giao hàng cộng số ngày bao phủ, mặc định 14) cộng tồn tối thiểu. Sản phẩm được gợi ý khi `khả dụng + đang về <= điểm đặt lại` (đang về là phần chưa nhận của đơn mua Draft, Approved hoặc PartiallyReceived tại site) và có bán trong cửa sổ hoặc đang dưới tồn tối thiểu. Số lượng gợi ý là `ceil(tồn mục tiêu - khả dụng - đang về)`, tối thiểu 1. Nhà cung cấp của sản phẩm là nhà cung cấp của phiếu nhận gần nhất tại site, rồi ở mọi site; không có thì dòng đó phải được chọn nhà cung cấp trước khi tạo đơn. Hệ thống chưa có trường tồn tối thiểu theo sản phẩm hay thời gian giao hàng theo nhà cung cấp.
+Với một site và một sản phẩm, gọi $W$ là số ngày của cửa sổ, $Q_{\text{Dispense}}$ là tổng số lượng có movement `Dispense` trong sổ kho của site trong cửa sổ, $A$ là tồn khả dụng, $I$ là lượng đang về, $L$ là thời gian giao hàng, $C$ là số ngày bao phủ và $K$ là số ngày tồn an toàn:
+
+$$v = \frac{Q_{\text{Dispense}}}{W}, \qquad S_{\min} = \max\left(10,\ v \cdot K\right)$$
+
+$$\text{ROP} = v \cdot L + S_{\min}, \qquad S_{\text{target}} = v \cdot (L + C) + S_{\min}$$
+
+$$Q_{\text{đặt}} = \max\left(1,\ \left\lceil S_{\text{target}} - A - I \right\rceil\right)$$
+
+Dòng gợi ý chỉ xuất hiện khi cả ba điều kiện sau đúng:
+
+$$A + I \le \text{ROP} \quad \land \quad \left(Q_{\text{Dispense}} > 0 \ \lor\ A \le S_{\min}\right) \quad \land \quad S_{\text{target}} - A - I > 0$$
+
+| Ký hiệu | Tham số | Mặc định | Khoảng nhận | Ý nghĩa |
+| --- | --- | --- | --- | --- |
+| $W$ | `windowDays` | 30 | 7–180 | Độ dài cửa sổ tính tốc độ bán |
+| $C$ | `coverDays` | 14 | 1–90 | Số ngày bao phủ mà tồn mục tiêu phải phục vụ được |
+| $K$ | `safetyDays` | 7 | 0–60 | Số ngày tồn an toàn nhân với tốc độ bán |
+| — | `defaultLeadTimeDays` | 7 | 1–90 | Thời gian giao hàng dùng khi nhà cung cấp chưa có mẫu lịch sử |
+| $10$ | — | — | — | Ngưỡng tồn thấp của BR-REPORT-002, đồng thời là sàn của $S_{\min}$ |
+| $Q_{\text{Dispense}}$ | — | — | — | Tổng số lượng xuất bán (`Dispense`) tại site trong cửa sổ |
+| $A$ | — | — | — | `on hand - reserved` của sản phẩm tại site |
+| $I$ | — | — | — | `ordered - received` (không âm) của đơn mua Draft, Approved hoặc PartiallyReceived tại site |
+
+Thời gian giao hàng $L$ là trung vị số ngày từ lúc tạo đơn mua đến phiếu nhận đầu tiên của nhà cung cấp, chỉ lấy các đơn có phiếu nhận đầu tiên trong 12 tháng gần nhất và không trước lúc tạo đơn; trung vị được làm tròn lên ngày nguyên. Nhà cung cấp chưa có mẫu nào thì $L$ là `defaultLeadTimeDays` và dòng gợi ý ghi rõ `leadTimeSource = "default"`.
+
+Các trường hợp biên:
+
+- Các phép so sánh và phép `ceil` chạy trên giá trị đã làm tròn 6 chữ số thập phân, nên một số lượng vốn nguyên đơn vị cơ sở không bị đẩy lên thêm 1 vì sai số dấu phẩy động.
+- $S_{\min}$ không bao giờ thấp hơn 10 đơn vị cơ sở, kể cả khi sản phẩm không bán trong cửa sổ; hệ thống chưa có trường tồn tối thiểu theo sản phẩm.
+- Sản phẩm được xét là sản phẩm có dòng tồn tại site hoặc có `Dispense` trong cửa sổ; đơn mua nháp cũng được tính là đang về, nên phần đã đặt nháp không bị đặt lại lần hai.
+- Điều kiện thứ ba loại dòng mà $A + I$ đã chạm hoặc vượt tồn mục tiêu: không còn gì để đặt thì không có gợi ý.
+- Số ngày che phủ của dòng là $A / v$, để trống khi $v = 0$.
+- Nhà cung cấp của dòng gợi ý là nhà cung cấp của phiếu nhận gần nhất của sản phẩm tại site, rồi ở mọi site; không có lịch sử nhận hàng thì dòng đó phải được chọn nhà cung cấp trước khi tạo đơn.
+- Tham số là số nguyên trên query; giá trị ngoài khoảng ở bảng trên trả 400. Hệ thống chưa có thời gian giao hàng ghi theo nhà cung cấp ngoài lịch sử nhận hàng.
 
 ### BR-PROC-008. Tạo đơn nháp hàng loạt từ gợi ý chỉ tạo Draft
 
@@ -616,13 +649,39 @@ Hành động khác bị từ chối ("Invalid transfer transition").
 
 ### BR-TRF-012. Gợi ý điều chuyển giữa các site
 
-`GET /api/inventory/transfer-suggestions` chỉ đọc, không ghi. Nó trả về những lần chuyển hàng mà chuỗi nên làm, tính từ tồn bán được và lượng xuất kho:
+`GET /api/inventory/transfer-suggestions` chỉ đọc, không ghi. Nó trả về những lần chuyển hàng mà chuỗi nên làm, tính từ tồn bán được và lượng xuất kho của từng cặp (sản phẩm, site).
 
-- Chỉ xét batch `Released`, chưa hết hạn và có `quantity_on_hand > 0`. `available = on hand - reserved`.
-- `velocity = lượng xuất kho trong cửa sổ / số ngày cửa sổ` (mặc định 30 ngày, nhận 7 đến 180), `cover = available / velocity`; `cover` là null khi site không bán trong cửa sổ.
-- Site nguồn có `surplus = available - velocity × 45` (bằng toàn bộ available khi không bán). Site đích có `cover < 14` và có bán trong cửa sổ; `need = velocity × 30 - available`.
-- Lượng đề xuất là `min(surplus, need, velocity đích × số ngày còn lại đến hạn sớm nhất của lô nguồn)`, làm tròn xuống đơn vị nguyên. Hàng hết hạn hôm nay không được chuyển.
-- Site đích cấp thiết nhất được phục vụ trước; một site nguồn có thể chia hàng cho nhiều site đích cho đến khi hết surplus.
+Chỉ xét batch `Released`, chưa hết hạn và có `quantity_on_hand > 0`, nên $A_s = \max\left(0,\ \text{on hand}_s - \text{reserved}_s\right)$ chỉ gồm hàng bán được. Với cửa sổ $W$ ngày (mặc định 30, nhận 7 đến 180):
+
+$$v_s = \frac{Q_{\text{Dispense},s}}{W}, \qquad \text{cover}_s = \begin{cases} \dfrac{A_s}{v_s} & \text{khi } v_s > 0 \\ \varnothing & \text{khi } v_s = 0 \end{cases}$$
+
+$$\text{Surplus}_s = \begin{cases} A_s & \text{khi } v_s = 0 \\ \max\left(0,\ A_s - 45\,v_s\right) & \text{khi } v_s > 0 \end{cases}$$
+
+$$\text{Need}_d = \begin{cases} \max\left(0,\ 30\,v_d - A_d\right) & \text{khi } \text{cover}_d < 14 \ \land\ v_d > 0 \\ 0 & \text{còn lại} \end{cases}$$
+
+$$Q_{s \to d} = \left\lfloor \min\left(\text{Surplus}_s,\ \text{Need}_d^{\text{còn lại}},\ v_d \cdot \Delta_{\exp}(s)\right) \right\rfloor$$
+
+| Ký hiệu | Giá trị | Ý nghĩa |
+| --- | --- | --- |
+| $W$ | `windowDays`, mặc định 30, nhận 7–180 | Số ngày của cửa sổ tính tốc độ bán |
+| $Q_{\text{Dispense},s}$ | — | Số lượng xuất kho tại site $s$ trong cửa sổ |
+| $A_s$ | — | Tồn bán được (`on hand - reserved`) của batch `Released`, chưa hết hạn |
+| $v_s$ | — | Tốc độ bán ngày của site $s$ |
+| $\text{cover}_s$ | — | Số ngày tồn bán được còn che phủ; trống khi site không bán trong cửa sổ |
+| $45$ | `keepCoverDays` | Số ngày tồn site nguồn tự giữ lại |
+| $14$ | `triggerCoverDays` | Dưới mốc này site đích mới được coi là thiếu hàng |
+| $30$ | `targetCoverDays` | Số ngày tồn mà lần điều chuyển phải bù cho site đích |
+| $\Delta_{\exp}(s)$ | — | Số ngày nguyên từ hôm nay (ngày UTC) đến hạn dùng sớm nhất trong các lô bán được đang giữ tồn của site nguồn |
+
+Cách ghép cặp và các trường hợp biên:
+
+- Site nguồn là site có $\text{Surplus}_s \ge 1$ và có hạn dùng sớm nhất; site đích là site có $\text{Need}_d \ge 1$.
+- Site đích cấp thiết nhất được phục vụ trước (cover thấp nhất, hòa thì theo `siteId`). Mỗi site đích lấy hàng từ các site nguồn theo thứ tự: site không bán trong cửa sổ trước, rồi cover cao nhất, rồi surplus lớn nhất, rồi `siteId`.
+- Sau mỗi lần ghép, $\text{Surplus}_s$ và $\text{Need}_d$ còn lại đều bị trừ đi $Q_{s \to d}$, nên một site nguồn chia hàng cho nhiều site đích cho đến khi hết surplus.
+- $\Delta_{\exp}(s) \le 0$ (lô hết hạn hôm nay hoặc đã hết hạn) thì cặp đó bị bỏ: hàng không kịp bán ở site đích. Lượng chuyển làm tròn xuống đơn vị cơ sở nguyên, và lượng làm tròn xuống 0 thì không tạo gợi ý.
+- Mỗi gợi ý ghi rõ `cappedByExpiry` khi hạn dùng của lô nguồn, chứ không phải nhu cầu của site đích, là thứ giới hạn số lượng.
+- Các phép trừ surplus, need và phép so sánh chạy trên giá trị đã làm tròn 6 chữ số thập phân để sai số dấu phẩy động không tạo ra một đơn vị lẻ.
+- Kết quả sắp theo cover của site đích tăng dần, rồi số lượng giảm dần, rồi `productId`, rồi `siteId` nguồn; lọc theo `destinationSiteId` khi người gọi truyền vào.
 - Cả hai đầu phải nằm trong phạm vi site của người gọi (BR-AUTH-004). Kết quả không tự tạo phiếu; người dùng mở form tạo điều chuyển với sản phẩm, hai site và số lượng đã điền, rồi chọn batch và location. Duyệt vẫn theo BR-TRF-005.
 
 ## 13. Quy tắc trả hàng và loại khỏi tồn kho
@@ -810,11 +869,60 @@ Một giao dịch bán là đơn hàng online hoặc đơn thuốc tại quầy 
 
 ### BR-REPORT-009. Lợi nhuận gộp chỉ tính trên các giao dịch bán có đủ giá nhập
 
-Lợi nhuận gộp của kỳ là doanh thu trừ giá vốn hàng bán, chỉ tính trên các giao dịch bán mà toàn bộ hàng xuất (`Dispense` trong sổ kho, theo đơn hoặc đơn thuốc) lấy từ các lô đã có giá nhập ghi trên dòng phiếu nhập kho. Giá nhập của một lô là trung bình có trọng số theo số lượng của các dòng phiếu nhập cùng sản phẩm và số lô có ghi giá. Giao dịch bán mới có giá nhập một phần, hoặc không có, không được cộng doanh thu hay giá vốn đoán vào lợi nhuận gộp (BR-FIN-002, BR-FIN-003). Trang hiển thị tỷ lệ doanh thu có giá nhập (`coverage`). Kỳ có giao dịch bán nhưng không giao dịch nào đủ giá nhập thì lợi nhuận gộp là "—" (lý do `no_cost_data`), không phải 0; kỳ không có giao dịch bán nào thì lợi nhuận gộp là 0 thật. Lô nhập từ số dư đầu kỳ không có dòng phiếu nhập nên chưa có giá nhập.
+Giá nhập đơn vị của một lô $b$ là trung bình có trọng số theo số lượng của các dòng phiếu nhập có ghi giá và khớp sản phẩm cùng số lô:
+
+$$\overline{c_b} = \frac{\sum\limits_{l \in L_b} c_l \cdot q_l}{\sum\limits_{l \in L_b} q_l}$$
+
+Giá vốn của một giao dịch bán $d$ là tổng số lượng xuất của từng movement `Dispense` nhân giá nhập đơn vị của lô đã xuất:
+
+$$\text{Giá vốn}(d) = \sum_{m \in M_d} \left| \Delta q_m \right| \cdot \overline{c_{b(m)}}$$
+
+$$\text{Lợi nhuận gộp} = \sum_{d \in K} \left( \text{Doanh thu}_d - \text{Giá vốn}(d) \right), \qquad \text{Coverage} = \frac{\sum\limits_{d \in K} \text{Doanh thu}_d}{\sum\limits_{d \in P} \text{Doanh thu}_d}$$
+
+| Ký hiệu | Ý nghĩa |
+| --- | --- |
+| $L_b$ | Các dòng phiếu nhập có `unitCost` khác null, `quantity > 0`, cùng `productId` và cùng `batchNumber` với lô; xét ở mọi site |
+| $c_l$, $q_l$ | Giá nhập trên dòng phiếu nhập (trước VAT, VND cho một đơn vị cơ sở) và số lượng nhận của dòng đó |
+| $M_d$ | Các movement `Dispense` có `referenceType` là `Order` hoặc `Prescription` và `referenceId` là $d$ |
+| $\Delta q_m$ | `quantityDelta` của movement (âm khi xuất), nên $\lvert \Delta q_m \rvert$ là số lượng xuất |
+| $P$ | Các giao dịch bán của kỳ dưới bộ lọc site và kênh (BR-REPORT-008) |
+| $K \subseteq P$ | Các giao dịch bán có **toàn bộ** hàng xuất lấy từ lô đã có giá nhập |
+| $\text{Doanh thu}_d$ | Tổng tiền các hóa đơn `Paid` của chứng từ $d$ |
+
+Các trường hợp biên:
+
+- Một giao dịch chỉ vào $K$ khi $\left| \text{số lượng xuất} - \text{số lượng xuất có giá} \right| \le 10^{-6}$; giao dịch có giá nhập một phần, hoặc không có, không được cộng doanh thu hay giá vốn đoán vào lợi nhuận gộp (BR-FIN-002, BR-FIN-003).
+- Kỳ không có giao dịch bán nào: lợi nhuận gộp là 0 thật và coverage để trống. Kỳ có giao dịch bán nhưng không giao dịch nào đủ giá nhập: lợi nhuận gộp hiển thị "—" (lý do `no_cost_data`), không phải 0.
+- Coverage là tỷ lệ doanh thu thuộc $K$ trên doanh thu của $P$, từ 0 đến 1, để trống khi doanh thu kỳ bằng 0.
+- Giá vốn của một giao dịch được làm tròn 2 chữ số thập phân, lợi nhuận gộp làm tròn đến đồng.
+- Lô nhập từ số dư đầu kỳ không có dòng phiếu nhập nên chưa có giá nhập, và mọi giao dịch xuất từ lô đó nằm ngoài $K$.
+- Lô được ghép với dòng phiếu nhập theo cặp (`productId`, `batchNumber`) chứ không theo id lô, và không lọc theo site; nhập cùng số lô ở site khác vẫn góp vào giá nhập đơn vị.
 
 ### BR-REPORT-010. Chỉ số sức khỏe tồn kho
 
-Vòng quay tồn kho là số lượng đã xuất bán (`Dispense`) trong kỳ chia tồn trung bình; tồn trung bình là (tồn đầu kỳ + tồn hiện tại) / 2, với tồn đầu kỳ bằng tồn hiện tại trừ biến động sổ kho trong kỳ. Số ngày tồn kho là số ngày của kỳ chia vòng quay. Hàng tồn lâu là tồn của sản phẩm tại một site mà lần biến động sổ kho gần nhất cách đây hơn 90 ngày hoặc chưa từng có. Tỷ lệ hết hàng là tỷ lệ cặp (site, sản phẩm) có dòng tồn hoặc dòng sổ kho mà số khả dụng (tồn trừ giữ chỗ) từ 0 trở xuống tại thời điểm xem, không phải tỷ lệ trong kỳ vì hệ thống không lưu ảnh chụp tồn theo ngày. Giá trị tồn tính theo giá bán cơ sở đang hiệu lực như báo cáo Tài chính; sản phẩm chưa có giá không cộng vào giá trị và được đếm riêng.
+Các chỉ số tính trên từng cặp (site, sản phẩm) $r$ có dòng tồn hoặc dòng sổ kho trong phạm vi site của người xem, với $D_r$ là số lượng `Dispense` trong kỳ, $\Delta N_r$ là biến động ròng của sổ kho trong kỳ và $S_r$ là tồn hiện tại:
+
+$$\overline{S} = \frac{S_{\text{đầu}} + S_{\text{cuối}}}{2}, \qquad S_{\text{đầu}} = \sum_r \left( S_r - \Delta N_r \right), \qquad S_{\text{cuối}} = \sum_r S_r$$
+
+$$\text{Vòng quay} = \frac{\sum\limits_r D_r}{\overline{S}}, \qquad \text{DSI} = \frac{\text{Số ngày của kỳ}}{\text{Vòng quay}}$$
+
+$$\text{Tỷ lệ hết hàng} = \frac{\left| \left\{ r : S_r - \text{reserved}_r \le 0 \right\} \right|}{\left| \left\{ r \right\} \right|}$$
+
+| Ký hiệu | Ý nghĩa |
+| --- | --- |
+| $r$ | Cặp (site, sản phẩm) có dòng tồn **hoặc** dòng sổ kho; đây là mẫu số của tỷ lệ hết hàng |
+| $D_r$ | Tổng số lượng xuất bán (`Dispense`) trong kỳ, cộng dồn trên mọi lô của cặp đó |
+| $\Delta N_r$ | Tổng `quantityDelta` của mọi movement trong kỳ, nên $S_r - \Delta N_r$ là tồn đầu kỳ |
+| $S_r$ | `on hand` hiện tại; `reserved` là số đang giữ chỗ |
+| $\text{Số ngày của kỳ}$ | Độ dài kỳ theo ngày; kỳ dài tối đa 366 ngày (BR-REPORT-008) |
+
+Các trường hợp biên:
+
+- Vòng quay để trống khi tồn trung bình $\overline{S} \le 0$; DSI để trống khi vòng quay trống hoặc $\le 0$, vì tồn khi đó không quay vòng trong kỳ.
+- Tỷ lệ hết hàng để trống khi không có cặp nào; mẫu số là toàn bộ cặp có dòng tồn hoặc dòng sổ kho, không chỉ cặp còn hàng.
+- Tỷ lệ hết hàng là ảnh chụp tại thời điểm xem (số khả dụng từ 0 trở xuống), không phải tỷ lệ trong kỳ, vì hệ thống không lưu ảnh chụp tồn theo ngày.
+- Hàng tồn lâu là tồn dương của một cặp mà lần biến động sổ kho gần nhất cách đây hơn 90 ngày hoặc chưa từng có biến động; ngưỡng này độc lập với kỳ đang xem.
+- Giá trị tồn tính theo giá bán cơ sở đang hiệu lực như báo cáo Tài chính; sản phẩm chưa có giá không cộng vào giá trị và được đếm riêng.
 
 ### BR-REPORT-011. Nhóm hạn dùng
 
@@ -834,7 +942,26 @@ Nhóm hàng của một sản phẩm là `category` hiện tại của catalog, 
 
 ### BR-REPORT-015. Phân nhóm ABC theo doanh thu hàng hóa của kỳ
 
-Sản phẩm có doanh thu hàng hóa dương trong kỳ được xếp hạng giảm dần (hòa thì theo `productId`), rồi cộng dồn tỷ trọng: sản phẩm làm tổng vượt 80% lần đầu thuộc nhóm A, sản phẩm làm tổng vượt 95% thuộc nhóm B, phần còn lại thuộc nhóm C. Sản phẩm vượt mốc vẫn ở nhóm mà nó hoàn tất, nên A luôn chiếm ít nhất 80% và A+B ít nhất 95% doanh thu hàng hóa. Sản phẩm không có doanh thu hàng hóa không vào nhóm nào; kỳ không bán hàng hóa trả ba nhóm rỗng với tỷ trọng null. Phân nhóm dùng đúng doanh thu hàng hóa của BR-REPORT-013 và cùng bộ lọc kỳ, cơ sở, kênh.
+Doanh thu hàng hóa của một sản phẩm $i$ là tổng doanh thu các dòng hóa đơn `Paid` có `productId` là $i$ (BR-REPORT-013), mỗi dòng làm tròn đến đồng trước khi cộng:
+
+$$R_i = \sum_{l \in \text{dòng của } i} \text{round}\left(q_l \cdot p_l\right), \qquad G = \sum_{i : R_i > 0} R_i$$
+
+Danh sách được xếp hạng giảm dần theo $R_i$ (hòa thì `productId` tăng dần). Với $s_{i-1} = \dfrac{1}{G}\sum\limits_{j < i} R_j$ là tỷ trọng tích lũy **trước** sản phẩm $i$:
+
+$$\text{Nhóm}(i) = \begin{cases} A & \text{khi } s_{i-1} < 0{,}80 \\ B & \text{khi } 0{,}80 \le s_{i-1} < 0{,}95 \\ C & \text{khi } s_{i-1} \ge 0{,}95 \end{cases}$$
+
+| Ngưỡng | Hằng số | Ý nghĩa |
+| --- | --- | --- |
+| 80% | `ABC_A_CUMULATIVE_SHARE` | Nhóm A gom các sản phẩm bán chạy nhất cho tới mốc này |
+| 95% | `ABC_B_CUMULATIVE_SHARE` | Nhóm B là phần từ 80% đến 95%; phần còn lại là nhóm C |
+| $G$ | — | Tổng doanh thu hàng hóa của kỳ, dùng làm mẫu số của mọi tỷ trọng |
+
+Các trường hợp biên:
+
+- Sản phẩm làm tổng vượt mốc vẫn ở nhóm mà nó hoàn tất, nên A luôn chiếm ít nhất 80% và A+B ít nhất 95% doanh thu hàng hóa.
+- Sản phẩm có doanh thu hàng hóa bằng 0 không vào nhóm nào; kỳ không bán hàng hóa ($G = 0$) trả ba nhóm rỗng với tỷ trọng null.
+- Tỷ trọng của một nhóm là doanh thu nhóm chia $G$, null khi $G = 0$.
+- Phân nhóm dùng đúng doanh thu hàng hóa của BR-REPORT-013 và cùng bộ lọc kỳ, cơ sở, kênh; dòng không có `productId` (phí giao hàng) không vào bảng này.
 
 ### BR-REPORT-016. Khách hàng đã nhận diện trong kỳ
 
@@ -1086,15 +1213,26 @@ Cửa hàng được chọn không tìm thấy: 404 `store_not_found`.
 
 ### BR-DLV-005. Công thức phí giao hàng
 
-Gọi `D` là khoảng cách tuyến đường (mét). Các tham số lấy từ biến môi trường `DELIVERY_FREE_DISTANCE_METERS`, `DELIVERY_FEE_BASE`, `DELIVERY_FEE_PER_KILOMETER`:
+Gọi $D$ là khoảng cách tuyến đường thực tế (mét) do OpenRouteService trả về (BR-DLV-001), $D_{\text{free}}$ là mốc miễn phí, $F_0$ là phí cơ bản, $P$ là đơn giá mỗi kilômét vượt và $D_{\max}$ là bán kính giao hàng:
 
-```text
-D <  DELIVERY_FREE_DISTANCE_METERS  =>  phí = 0
-D >= DELIVERY_FREE_DISTANCE_METERS  =>  phí = DELIVERY_FEE_BASE
-                                        + floor((D - DELIVERY_FREE_DISTANCE_METERS) / 1000) * DELIVERY_FEE_PER_KILOMETER
-```
+$$\text{Phí giao}(D) = \begin{cases} 0 & \text{khi } D < D_{\text{free}} \\ F_0 + \left\lfloor \dfrac{D - D_{\text{free}}}{1000} \right\rfloor \times P & \text{khi } D_{\text{free}} \le D < D_{\max} \end{cases}$$
 
-Phí tính bằng VND. Checkout tính lại phí và lưu snapshot; không dùng phí do trình duyệt gửi.
+| Ký hiệu | Nguồn | Ý nghĩa |
+| --- | --- | --- |
+| $D$ | OpenRouteService `driving-car` | Khoảng cách tuyến đường thực tế, mét; trình duyệt không phải nguồn sự thật |
+| $D_{\text{free}}$ | `DELIVERY_FREE_DISTANCE_METERS` | Tuyến ngắn hơn mốc này được miễn phí |
+| $F_0$ | `DELIVERY_FEE_BASE` | Phí của tuyến đã chạm mốc miễn phí nhưng chưa vượt thêm một kilômét tròn |
+| $P$ | `DELIVERY_FEE_PER_KILOMETER` | Cộng thêm cho mỗi kilômét tròn vượt mốc miễn phí |
+| $D_{\max}$ | `DELIVERY_MAX_DISTANCE_METERS` | Tuyến dài bằng hoặc hơn mốc này bị từ chối trước khi tính phí (BR-DLV-006) |
+
+Ba tham số phí được đọc từ biến môi trường lúc khởi động và ép về số nguyên bằng `Number.parseInt`; thiếu biến thì service không khởi động được. Phí là số nguyên VND, không làm tròn thêm.
+
+Các trường hợp biên:
+
+- $D = D_{\text{free}}$: phí bằng $F_0$. Kilômét vượt chỉ được tính khi đủ $1000$ mét, nên $D = D_{\text{free}} + 999$ vẫn là $F_0$, và $D = D_{\text{free}} + 1000$ mới là $F_0 + P$. Phí là hàm bậc thang, không chia lẻ theo mét.
+- $D \ge D_{\max}$: 422 `delivery_out_of_range` (BR-DLV-006) và hàm phí không được gọi, nên nhánh $D \ge D_{\max}$ không bao giờ sinh ra phí.
+- Đơn nhận tại cửa hàng: phí ghi 0, không gọi bộ tính phí.
+- Checkout tính lại phí và lưu snapshot trên đơn; không dùng phí do trình duyệt gửi. Kết quả tính phí được cache 300 giây (BR-DLV-007).
 
 ### BR-DLV-006. Vượt bán kính giao hàng thì từ chối
 
@@ -1148,15 +1286,38 @@ Kết quả chỉ là gợi ý để khách xem lại. Hệ thống không lưu 
 
 ### BR-MATCH-001. Ngưỡng tương đồng khi đối chiếu tên và hoạt chất
 
-- Tên thuốc: tương đồng tối thiểu 0.6.
-- Hoạt chất: tương đồng tối thiểu 0.7.
+Gọi $e_{\text{tên}}$ là điểm tương đồng tên (trigram `word_similarity` giữa tên dòng đã bỏ hàm lượng và tên sản phẩm đã bỏ dấu) và $e_{\text{hoạt chất}}$ là điểm tương đồng hoạt chất (lấy giá trị lớn nhất giữa `similarity` với `genericName` và `word_similarity` với `activeIngredient`, rồi lấy giá trị nhỏ nhất trên các hoạt chất mà dòng kê nêu). Một sản phẩm chỉ là ứng viên khi:
+
+$$e_{\text{tên}} \ge 0{,}6 \quad \lor \quad e_{\text{hoạt chất}} \ge 0{,}7$$
+
+Dòng kê chỉ nêu tên gốc (ví dụ "Paracetamol 500mg") cũng được đối chiếu với cột hoạt chất bằng chính tên đó. Truy vấn ứng viên lấy tối đa $\min(4 \times \text{limit},\ 40)$ sản phẩm đang hoạt động, xếp theo $\max\left(e_{\text{tên}}, e_{\text{hoạt chất}}\right)$ giảm dần rồi theo SKU. Ngưỡng dùng để đặt `pg_trgm.word_similarity_threshold` và `pg_trgm.similarity_threshold` trong truy vấn, còn phép so sánh số thực mới là nơi quyết định sản phẩm có được giữ.
+
+Hai ngưỡng được áp lại một lần nữa khi xếp hạng, sau khi điểm đã bị đặt về 0 vì lý do ở BR-MATCH-002 (từ ngắn không có mặt, hoặc sản phẩm chứa thêm hoạt chất), nên ứng viên vừa lọt truy vấn vẫn có thể bị loại.
 
 ### BR-MATCH-002. Hàm lượng và dạng bào chế điều chỉnh điểm xếp hạng
 
-- Hàm lượng giống dòng kê: +0.1; khác: -0.1.
-- Dạng bào chế giống: +0.05; khác: -0.05.
+Điểm của một ứng viên là điểm tương đồng tốt hơn trong hai điểm, cộng phần điều chỉnh của hàm lượng và dạng bào chế, rồi chặn về $[0, 1]$ và làm tròn 2 chữ số thập phân:
 
-Hàm lượng được quy về mg để so sánh (0.5 g bằng 500 mg).
+$$\text{Score} = \operatorname{round}_{2}\left( \operatorname{clamp}_{[0,1]}\left( \max\left(e_{\text{tên}}, e_{\text{hoạt chất}}\right) + \Delta_{\text{hàm lượng}} + \Delta_{\text{dạng bào chế}} \right) \right)$$
+
+$$\Delta_{\text{hàm lượng}} = \begin{cases} +0{,}1 & \text{khi hàm lượng giống} \\ -0{,}1 & \text{khi hàm lượng khác} \\ 0 & \text{khi một bên không nêu} \end{cases}, \qquad \Delta_{\text{dạng bào chế}} = \begin{cases} +0{,}05 & \text{khi dạng bào chế giống} \\ -0{,}05 & \text{khi dạng bào chế khác} \\ 0 & \text{khi một bên không nêu} \end{cases}$$
+
+| Ký hiệu | Ý nghĩa |
+| --- | --- |
+| $e_{\text{tên}}$, $e_{\text{hoạt chất}}$ | Điểm tương đồng của BR-MATCH-001, mỗi điểm bị đặt về 0 khi không qua được phép kiểm tra từ ngắn hoặc khi sản phẩm chứa thêm hoạt chất |
+| $\Delta_{\text{hàm lượng}}$ | $\pm 0{,}1$ theo kết quả so khớp hàm lượng; 0 khi một bên không nêu hàm lượng |
+| $\Delta_{\text{dạng bào chế}}$ | $\pm 0{,}05$ theo kết quả so khớp nhóm dạng bào chế; 0 khi một bên không nhận ra dạng |
+| $\operatorname{clamp}_{[0,1]}$ | Chặn điểm về khoảng 0 đến 1 trước khi làm tròn |
+
+Hàm lượng được quy về mg để so sánh: "0,5 g" bằng 500 mg, "mcg"/"µg"/"ug" chia 1000; ml, % và IU so trong chính đơn vị đó. Hàm lượng của sản phẩm được đọc từ cột hàm lượng, cột hoạt chất và cả tên sản phẩm, vì tên thường mang hàm lượng. Một bên chỉ khớp khi mọi hàm lượng của dòng kê đều có mặt bên sản phẩm với cùng đơn vị và chênh lệch nhỏ hơn $10^{-9}$.
+
+Các trường hợp biên:
+
+- Dạng bào chế được so theo nhóm dùng thuốc (tiêm, nhỏ mắt/tai/mũi, hít, dùng ngoài, đặt, uống lỏng, uống rắn), nên viên bao phim thay được viên nén nhưng viên nén không thay được siro. Khi sản phẩm không nêu dạng, đơn vị bán in trên dòng kê ("Viên", "Gói") được dùng để đoán nhóm.
+- Sản phẩm chứa nhiều hoạt chất hơn dòng kê là thuốc khác: $e_{\text{hoạt chất}}$ bị đặt về 0 và sản phẩm bị xếp sau. Từ 1–2 chữ cái trong tên dòng kê ("Vitamin C") phải xuất hiện nguyên văn hoặc kèm số ("D" trong "D3") trong văn bản sản phẩm, nếu không $e_{\text{tên}}$ bị đặt về 0.
+- Trước khi so điểm, sản phẩm đã biết khác hàm lượng, khác dạng bào chế hoặc khác thành phần bị đẩy xuống sau mọi sản phẩm không khác. Trong cùng nhóm, thứ tự theo điểm **chưa làm tròn** giảm dần, nên viên đúng hàm lượng luôn đứng trước một hàm lượng khác của cùng hoạt chất.
+- `matchType` là `name` khi $e_{\text{tên}} \ge e_{\text{hoạt chất}}$, ngược lại là `ingredient`.
+- Kết quả trả về theo đúng thứ tự các dòng đã gửi, mỗi dòng tối đa `limit` sản phẩm.
 
 ## 21. Chatbot tư vấn sản phẩm
 
@@ -1268,6 +1429,39 @@ Khi nhóm được duyệt, tập nhóm đã duyệt được đẩy sang Typese
 ### BR-SYN-007. Văn bản tìm kiếm được chuẩn hóa
 
 Văn bản được bỏ dấu, chuyển chữ thường và gộp khoảng trắng bằng `foldSearchText` trước khi so khớp.
+
+## 23.1. Quy tắc xếp hạng tìm kiếm sản phẩm
+
+### BR-SRCH-001. Tìm kiếm sản phẩm là hybrid giữa BM25 và cosine, trọng số vector 0.3
+
+Tìm kiếm sản phẩm (`GET /api/products` có `search`) chạy trên chỉ mục Typesense `catalog_products_v3`, với các trường từ khóa `sku`, `barcode`, `name_folded`, `active_ingredient_folded`, `generic_name_folded`, `indications_folded` và trọng số `4,4,4,3,3,1`. Nhánh vector chỉ được bật khi câu truy vấn có ít nhất 3 từ (`SEMANTIC_MIN_WORDS`) và có embedder đã cấu hình; câu ngắn hơn hoặc embedder lỗi thì chỉ tìm bằng từ khóa, không báo lỗi cho người dùng.
+
+Vector truy vấn do mô hình trả về được đưa về vector đơn vị trước khi so khớp, và vector của tài liệu cũng được chuẩn hóa như vậy lúc đánh chỉ mục, nên cosine similarity bằng tích vô hướng:
+
+$$\hat{\mathbf{v}} = \frac{\mathbf{v}}{\lVert \mathbf{v} \rVert_2}, \qquad \lVert \mathbf{v} \rVert_2 = \sqrt{\sum_k v_k^2}$$
+
+Chuẩn bằng 0 hoặc không hữu hạn thì không có vector truy vấn và lượt tìm đó quay về nhánh từ khóa.
+
+Điểm xếp hạng của một sản phẩm $d$ là rank fusion của Typesense giữa nhánh từ khóa và nhánh vector:
+
+$$\text{Score}(d) = (1 - \alpha)\,K(d) + \alpha\,S(d), \qquad \alpha = 0{,}3$$
+
+| Ký hiệu | Ý nghĩa |
+| --- | --- |
+| $\mathbf{v}$ | Vector của câu truy vấn do mô hình embedding trả về (384 chiều) |
+| $\hat{\mathbf{v}}$ | Vector đơn vị của câu truy vấn, dùng làm `embedding` trong `vector_query` |
+| $K(d)$ | Điểm hạng của nhánh từ khóa (BM25) đã chuẩn hóa về $[0,1]$ |
+| $S(d)$ | Điểm hạng của nhánh vector (cosine similarity $1 - \text{cosine distance}$) đã chuẩn hóa về $[0,1]$ |
+| $\alpha$ | `SEMANTIC_ALPHA` = 0.3, trọng số nhánh vector; 0.7 còn lại thuộc nhánh từ khóa |
+
+Các trường hợp biên:
+
+- $\alpha = 0{,}3$ là trọng số của nhánh vector, đúng mặc định của Typesense; code truyền tường minh để đổi trọng số phải đổi ở cả `catalog-service` và `search-service`.
+- `distance_threshold` bị Typesense bỏ qua ở chế độ hybrid, nên cắt khoảng cách được làm trên từng hit: hit được giữ khi `text_match > 0` hoặc cosine distance không vượt `maxVectorDistance`. Khoảng cách là $1 - \text{cosine similarity}$, nên ngưỡng 0.15 tương đương cosine similarity $\ge 0{,}85$.
+- `maxVectorDistance` là 0.15 cho mô hình E5 (câu truy vấn được thêm tiền tố `query: ` khi tên mô hình chứa `e5`) và 0.35 cho mọi mô hình khác, kể cả Gemini; đây là giá trị đã đo trên catalog mẫu, không phải hằng số chung cho mọi mô hình.
+- Số láng giềng vector được xếp hạng là $\max\left(100,\ \text{offset} + \text{limit} + 1\right)$.
+- Truy vấn rỗng là chế độ duyệt danh sách, không có điểm từ khóa: `catalog-service` đọc thẳng trang PostgreSQL sắp theo SKU, `search-service` hỏi Typesense với `q=*` và sắp theo SKU.
+- Embedder lỗi hoặc quá thời gian thì lượt tìm chỉ mất nhánh vector và vẫn trả kết quả từ khóa. Chỉ mục lỗi, quá thời gian hoặc thiếu collection thì `search-service` chuyển nguyên request sang `catalog-service`, và dịch vụ này tự quay về trang đọc PostgreSQL (khớp con chuỗi trên SKU, tên và barcode). Người dùng vẫn thấy sản phẩm, chỉ mất xếp hạng.
 
 ## 24. Sự kiện, outbox và consumer
 
