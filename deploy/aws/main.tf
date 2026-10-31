@@ -61,7 +61,12 @@ locals {
     }
     sales-service = {
       priority = 50
-      paths    = ["/carts*", "/orders*", "/delivery*", "/prescriptions*", "/counter-transactions*", "/sales-targets*"]
+      paths    = ["/carts*", "/orders*", "/delivery*", "/prescriptions*", "/counter-transactions*"]
+      service  = "sales-service"
+    }
+    sales-targets = {
+      priority = 55
+      paths    = ["/sales-targets*"]
       service  = "sales-service"
     }
     payments = {
@@ -88,7 +93,7 @@ locals {
 
   # Which backend services each service calls. Each becomes <NAME>_SERVICE_URL pointing at its Cloud Map name.
   service_dependencies = {
-    inventory-service        = ["catalog-service"]
+    inventory-service        = ["catalog-service", "identity-service"]
     sales-service            = ["catalog-service", "inventory-service", "identity-service"]
     payment-service          = ["catalog-service", "sales-service"]
     operations-query-service = ["catalog-service", "inventory-service", "sales-service"]
@@ -749,6 +754,14 @@ resource "aws_ecs_service" "service" {
 
   service_registries {
     registry_arn = aws_service_discovery_service.service[each.key].arn
+  }
+
+  # The scalable target owns the count (autoscaling.tf). Ignoring the attribute keeps every plan after a scale-out from
+  # resetting it to var.desired_count and fighting the policies; with autoscaling off, the count still applies on
+  # creation. With autoscaling on, change the count through autoscale_min_capacity/autoscale_max_capacity; otherwise
+  # re-create the service.
+  lifecycle {
+    ignore_changes = [desired_count]
   }
 
   depends_on = [aws_lb_listener_rule.service, aws_lb_listener_rule.search_products]

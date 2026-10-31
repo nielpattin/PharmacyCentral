@@ -1,5 +1,5 @@
-# Copy to terraform.tfvars (git-ignored) or pass with -var. Everything else comes from demo.auto.tfvars.json, which
-# tools/aws-env.mjs writes from the root .env (service settings and secrets, git-ignored).
+# Copy to terraform.tfvars or pass with -var. Everything else comes from demo.auto.tfvars.json, which tools/aws-env.mjs
+# writes from the root .env (service settings and secrets, git-ignored); it overrides terraform.tfvars.
 
 # The web apps are served at shop.<domain_name> (customer) and staff.<domain_name> (staff). Terraform creates their DNS
 # records in the Cloudflare zone below; export CLOUDFLARE_API_TOKEN (DNS Write on that zone) before plan and apply.
@@ -11,6 +11,14 @@ image_tag = "replace-with-image-tag"
 
 # First apply: false, so the database roles and migrations run before the services start.
 services_enabled = false
+
+# ECS Application Auto Scaling for the backend services (`autoscaling.tf`): target tracking on average CPU and memory,
+# between `autoscale_min_capacity` and `autoscale_max_capacity` tasks.
+autoscaling_enabled             = true
+autoscale_min_capacity          = 1
+autoscale_max_capacity          = 3
+autoscale_cpu_target_percent    = 50
+autoscale_memory_target_percent = 70
 
 # Off for the demo. Setting them to true starts the OpenTelemetry collector and the embedder.
 otel_collector_enabled = false

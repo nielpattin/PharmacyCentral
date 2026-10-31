@@ -72,13 +72,63 @@ variable "task_memory" {
 }
 
 variable "desired_count" {
-  description = "Number of tasks per backend service."
+  description = "Number of tasks per backend service at creation. Later changes are ignored: while autoscaling is on, the scalable target owns the count between autoscale_min_capacity and autoscale_max_capacity."
   type        = number
   default     = 1
 
   validation {
     condition     = var.desired_count >= 1
     error_message = "Services must keep at least one task running."
+  }
+}
+
+variable "autoscaling_enabled" {
+  description = "Enable ECS Application Auto Scaling for backend services under load."
+  type        = bool
+  default     = true
+}
+
+variable "autoscale_min_capacity" {
+  description = "Minimum task count for autoscaled services."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.autoscale_min_capacity >= 1
+    error_message = "Autoscaled services must keep at least one task running."
+  }
+}
+
+variable "autoscale_max_capacity" {
+  description = "Maximum task count for autoscaled services (bounded by the Fargate vCPU quota of the account)."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.autoscale_max_capacity >= 1
+    error_message = "The autoscaling maximum must allow at least one task."
+  }
+}
+
+variable "autoscale_cpu_target_percent" {
+  description = "Target average CPU utilization percent that triggers scale-out."
+  type        = number
+  default     = 50
+
+  validation {
+    condition     = var.autoscale_cpu_target_percent > 0 && var.autoscale_cpu_target_percent <= 100
+    error_message = "The CPU target must be a percentage in (0, 100]."
+  }
+}
+
+variable "autoscale_memory_target_percent" {
+  description = "Target average memory utilization percent for the second target tracking policy."
+  type        = number
+  default     = 70
+
+  validation {
+    condition     = var.autoscale_memory_target_percent > 0 && var.autoscale_memory_target_percent <= 100
+    error_message = "The memory target must be a percentage in (0, 100]."
   }
 }
 

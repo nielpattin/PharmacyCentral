@@ -44,6 +44,7 @@ export const options = {
 // number is unique per run, so reruns never collide with an earlier import.
 export function setup() {
   const admin = login(accounts.admin);
+  const warehouse = login(accounts.warehouse);
   const runId = Date.now().toString(36);
   const batchNumber = `K6-${runId}`;
   const stores = admin.get("/api/stores", { query: { limit: 50 }, name: "GET /stores" }).json();
@@ -84,7 +85,7 @@ export function setup() {
       }
     }
   }
-  const response = admin.post(
+  const response = warehouse.post(
     "/api/inventory/imports/opening-balances",
     { schemaVersion: 1, balances },
     { name: "POST /inventory/imports/opening-balances" },
