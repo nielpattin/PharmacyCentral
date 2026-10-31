@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**docs**
+
+- `docs/business-rules.md` states eight core formulas as LaTeX, each with its symbols, parameter ranges and edge cases checked against the code: the delivery fee (BR-DLV-005), replenishment suggestions (BR-PROC-007), transfer suggestions (BR-TRF-012), gross profit and cost coverage (BR-REPORT-009), turnover, days of inventory and stockout rate (BR-REPORT-010), the ABC classes (BR-REPORT-015) and the prescription match score (BR-MATCH-001, BR-MATCH-002). A new rule BR-SRCH-001 (section 23.1) documents product-search ranking: Typesense hybrid rank fusion of BM25 and cosine with the vector weight 0.3, unit-length vectors, and the 0.15/0.35 cosine-distance cut-off per embedding model.
+
 **operations-query-service, staff-web, docs**
 
 - Staff Web's Analytics is a five-tab workspace (**Tổng quan**, **Doanh thu**, **Khách hàng**, **Tồn kho**, **Mục tiêu**) that loads only the open tab. `GET /api/dashboard/analytics` now requires `section` (`overview`, `revenue`, `customers` or `inventory`) and answers a common envelope with just that one section instead of the full report; its answers are cached for 30 seconds per section and parameters with single-flight, reported by `X-Analytics-Cache: hit|miss|coalesced`. `GET /api/dashboard/sales-targets` stays the **Mục tiêu** tab's separate monthly read and is not cached, so a goal set through `PUT /api/sales-targets` shows at once. Documented in `docs/api-guide.md` and `docs/user-guide.md`.
