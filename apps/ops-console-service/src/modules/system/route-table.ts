@@ -113,6 +113,12 @@ export const ROUTE_TABLE: readonly RouteRow[] = [
     access: { kind: "roles", roles: ["Pharmacist", "Pharmacy Manager"] },
   },
   {
+    path: "/api/sales-targets*",
+    service: "sales-service",
+    access: { kind: "roles", roles: ["Pharmacy Manager"] },
+    note: "A Pharmacy Manager sets a site's monthly goal; Platform Admin reads the report but writes nothing.",
+  },
+  {
     path: "/api/payments*",
     service: "payment-service",
     access: { kind: "roles", roles: ["Pharmacist", "Pharmacy Manager"] },
