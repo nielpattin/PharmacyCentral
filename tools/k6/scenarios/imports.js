@@ -10,6 +10,11 @@
 //
 // Products reach the search index asynchronously, and inventory resolves each balance row's SKU through that search, so
 // the balance import waits until every new SKU is searchable (seed-demo.mjs does the same).
+//
+// Accounts follow the role rules: product imports are the Pharmacy Manager's (catalog ROLE_RULES.pharmacyManager) and
+// opening balances are Warehouse Staff's (inventory ROLE_RULES). Platform Admin reads
+// everything but is refused both writes with 403, so the manager does the catalog work and reads, and warehouse posts
+// the balances. Both are demo accounts that take DEMO_ACCOUNT_PASSWORD.
 import { check, sleep } from "k6";
 import { Counter, Trend } from "k6/metrics";
 
@@ -60,11 +65,11 @@ export const options = {
 
 // The first customer-facing store and one of its storage locations, where the opening stock lands.
 export function setup() {
-  const admin = login(accounts.admin);
-  const stores = admin.get("/api/stores", { query: { limit: 50 }, name: "GET /stores" }).json();
+  const manager = login(accounts.manager);
+  const stores = manager.get("/api/stores", { query: { limit: 50 }, name: "GET /stores" }).json();
   if (!Array.isArray(stores) || stores.length === 0) throw new Error("No customer-facing store to stock");
   const store = stores[0];
-  const locations = admin
+  const locations = manager
     .get("/api/storage-locations", { query: { siteId: store.id }, name: "GET /storage-locations" })
     .json()
     .filter((location) => location.siteId === store.id);
@@ -132,10 +137,10 @@ function balancePayload(skus, siteId, storageLocationId, batchTag, invalidIndex 
 
 // Catalog rows per SKU, from one search per SKU, keeping only the exact SKU searched for. Empty lists mean the SKU is
 // not searchable yet.
-function lookupSkus(admin, skus) {
+function lookupSkus(manager, skus) {
   const found = new Map(skus.map((sku) => [sku, []]));
   for (const sku of skus) {
-    const rows = admin
+    const rows = manager
       .get("/api/products", { query: { search: sku, limit: 100 }, name: "GET /products (sku lookup)" })
       .json();
     if (Array.isArray(rows)) found.get(sku).push(...rows.filter((row) => row.sku === sku));
@@ -143,20 +148,20 @@ function lookupSkus(admin, skus) {
   return found;
 }
 
-function awaitSearchable(admin, skus) {
+function awaitSearchable(manager, skus) {
   const started = Date.now();
   for (;;) {
-    const found = lookupSkus(admin, skus);
+    const found = lookupSkus(manager, skus);
     if (skus.every((sku) => found.get(sku).length >= 1)) return { elapsedMs: Date.now() - started, found };
     if (Date.now() - started >= SEARCH_WAIT_S * 1000) return { elapsedMs: undefined, found };
     sleep(2);
   }
 }
 
-function waitForAvailability(admin, siteId, productIds) {
+function waitForAvailability(manager, siteId, productIds) {
   const started = Date.now();
   for (;;) {
-    const rows = admin.get("/api/availability", { query: { siteId }, name: "GET /availability" }).json();
+    const rows = manager.get("/api/availability", { query: { siteId }, name: "GET /availability" }).json();
     const inStock = new Set(Array.isArray(rows) ? rows.filter((row) => row.inStock).map((row) => row.productId) : []);
     if (productIds.every((id) => inStock.has(id))) return Date.now() - started;
     if (Date.now() - started >= AVAILABILITY_WAIT_S * 1000) return undefined;
@@ -165,13 +170,14 @@ function waitForAvailability(admin, siteId, productIds) {
 }
 
 export default function (data) {
-  const admin = loginOncePerVu(accounts.admin);
+  const manager = loginOncePerVu(accounts.manager);
+  const warehouse = loginOncePerVu(accounts.warehouse);
   // Unique per VU and iteration, so iterations of a load run never reuse a SKU or batch number.
   const run = `${data.runId}-${__VU}-${__ITER}`;
   const skus = skusFor(run);
 
   // Products: import, wait until they are searchable, then re-run the same file.
-  const productFirst = admin.post("/api/products/imports", productPayload(skus), { name: "POST /products/imports" });
+  const productFirst = manager.post("/api/products/imports", productPayload(skus), { name: "POST /products/imports" });
   productImportMs.add(productFirst.timings.duration);
   check(productFirst, {
     "product import accepted (200)": (r) => r.status === 200 && r.json()?.status === "imported",
@@ -181,7 +187,7 @@ export default function (data) {
     },
   });
 
-  const searchable = awaitSearchable(admin, skus);
+  const searchable = awaitSearchable(manager, skus);
   if (searchable.elapsedMs !== undefined) searchableMs.add(searchable.elapsedMs);
   check(
     { searchable: searchable.elapsedMs },
@@ -192,7 +198,7 @@ export default function (data) {
   if (searchable.elapsedMs === undefined) return;
   const productIds = skus.map((sku) => searchable.found.get(sku)[0].id);
 
-  const productRerun = admin.post("/api/products/imports", productPayload(skus), { name: "POST /products/imports" });
+  const productRerun = manager.post("/api/products/imports", productPayload(skus), { name: "POST /products/imports" });
   productImportMs.add(productRerun.timings.duration);
   check(productRerun, {
     "product re-run is idempotent: same counts": (r) => {
@@ -202,14 +208,14 @@ export default function (data) {
       );
     },
   });
-  const afterRerun = lookupSkus(admin, skus);
+  const afterRerun = lookupSkus(manager, skus);
   check(afterRerun, {
     "product re-run creates no duplicate SKUs": (found) => skus.every((sku) => found.get(sku).length === 1),
   });
 
   // A bad row rejects the whole product payload. Its valid rows must not become searchable.
   const badSkus = skusFor(run, "E");
-  const productBad = admin.post("/api/products/imports", productPayload(badSkus, INVALID_ROW), {
+  const productBad = manager.post("/api/products/imports", productPayload(badSkus, INVALID_ROW), {
     name: "POST /products/imports (bad row)",
     expect: [400],
   });
@@ -220,7 +226,7 @@ export default function (data) {
       (r.json()?.errors ?? []).some((error) => error.path === `products.${INVALID_ROW}.name`),
   });
   // Search only: it reads the index, so this proves absence from the index, not from the database.
-  check(lookupSkus(admin, badSkus), {
+  check(lookupSkus(manager, badSkus), {
     "no valid row of the rejected product payload is in the catalog index": (found) =>
       badSkus.every((sku) => found.get(sku).length === 0),
   });
@@ -228,7 +234,7 @@ export default function (data) {
 
   // Opening balances: import, check availability catches up, then re-run the same file.
   const balances = balancePayload(skus, data.siteId, data.storageLocationId, run);
-  const balanceFirst = admin.post("/api/inventory/imports/opening-balances", balances, {
+  const balanceFirst = warehouse.post("/api/inventory/imports/opening-balances", balances, {
     name: "POST /inventory/imports/opening-balances",
   });
   openingBalanceImportMs.add(balanceFirst.timings.duration);
@@ -239,7 +245,7 @@ export default function (data) {
       return summary?.created === ROWS && summary?.unchanged === 0 && summary?.batchesCreated === ROWS;
     },
   });
-  const availabilityMs = waitForAvailability(admin, data.siteId, productIds);
+  const availabilityMs = waitForAvailability(manager, data.siteId, productIds);
   if (availabilityMs !== undefined) availabilityCatchUpMs.add(availabilityMs);
   check(
     { availabilityMs },
@@ -248,7 +254,7 @@ export default function (data) {
     },
   );
 
-  const balanceRerun = admin.post("/api/inventory/imports/opening-balances", balances, {
+  const balanceRerun = warehouse.post("/api/inventory/imports/opening-balances", balances, {
     name: "POST /inventory/imports/opening-balances",
   });
   openingBalanceImportMs.add(balanceRerun.timings.duration);
@@ -261,7 +267,7 @@ export default function (data) {
 
   // A bad balance row rejects the whole payload: none of its batches may be stored (checked in inventory, not search).
   const badBatchTag = `${run}-EB`;
-  const balanceBad = admin.post(
+  const balanceBad = warehouse.post(
     "/api/inventory/imports/opening-balances",
     balancePayload(skus, data.siteId, data.storageLocationId, badBatchTag, INVALID_ROW),
     { name: "POST /inventory/imports/opening-balances (bad row)", expect: [400] },
@@ -273,7 +279,7 @@ export default function (data) {
       (r.json()?.errors ?? []).some((error) => error.path === `balances.${INVALID_ROW}.quantityOnHand`),
   });
   businessRejections.add(1, { reason: "invalid_row" });
-  const stored = admin
+  const stored = manager
     .get("/api/inventory/balances", { query: { productId: productIds[0] }, name: "GET /inventory/balances" })
     .json();
   check(stored, {

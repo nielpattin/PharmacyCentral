@@ -40,7 +40,8 @@ export function createLoad({ note }) {
   }
 
   return {
-    start({ duration, vus }) {
+    /** `rate` (journeys per second) selects the browse load; otherwise `vus` VUs run the checkout load. */
+    start({ duration, vus, rate }) {
       if (child) throw new Error("the k6 load is already running");
       containerName = `chaos-k6-${process.pid}-${Date.now()}`;
       const args = [
@@ -56,11 +57,12 @@ export function createLoad({ note }) {
         "run",
         "--out",
         "experimental-prometheus-rw",
+        ...(process.env.CHAOS_BASE_URL ? ["-e", `LOAD_TARGET_URL=${process.env.CHAOS_BASE_URL}`] : []),
         "-e",
         `CHAOS_DURATION=${duration}`,
         "-e",
-        `CHAOS_VUS=${vus}`,
-        "/scripts/chaos/steady-checkout.js",
+        ...(rate === undefined ? [`CHAOS_VUS=${vus}`] : [`CHAOS_RATE=${rate}`]),
+        rate === undefined ? "/scripts/chaos/steady-checkout.js" : "/scripts/chaos/steady-browse.js",
       ];
       child = spawn("docker", args, { cwd: ROOT, windowsHide: true });
       child.stdout.setEncoding("utf8");
@@ -78,7 +80,7 @@ export function createLoad({ note }) {
         stderrTail = (stderrTail + chunk).slice(-4_000);
       });
       exited = new Promise((resolve) => child.on("close", (code) => resolve(code)));
-      note(`k6 load started: ${vus} VUs for ${duration}s`);
+      note(`k6 load started: ${rate === undefined ? `${vus} VUs` : `${rate} journeys/s`} for ${duration}s`);
     },
 
     /** Ends the load early. Idempotent; resolves once k6 has exited. */

@@ -5,8 +5,10 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
+    "auth:keygen": "node tools/auth-keygen.mjs",
     "build": "nx run-many -t build --all",
     "chaos": "node --env-file=.env tools/chaos/runner.mjs",
+    "chaos:aws": "node --env-file=.env tools/chaos/aws/runner.mjs",
     "dev": "nx run-many -t dev --all",
     "fmt": "oxfmt -c oxfmt.config.ts",
     "fmt:check": "oxfmt --check -c oxfmt.config.ts",

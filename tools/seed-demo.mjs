@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { datasets, csvRows } from "../apps/staff-web/src/import-datasets.ts";
 import { uploadProductImages } from "../apps/catalog-service/scripts/upload-product-images.mjs";
 import { seedHistory, seedWarehouseActivity } from "./seed-demo-history.mjs";
+import { pendingSynonymGroup, searchSynonymGroups } from "./lib/demo-synonyms.mjs";
 
 const requireEnv = (name) => {
   const value = process.env[name];
@@ -44,24 +45,16 @@ const inDays = (days) => isoDay(Date.now() + days * DAY_MS);
 const shiftToToday = (isoDate) =>
   isoDate ? isoDay(Date.parse(isoDate) + (Date.parse(inDays(0)) - Date.parse(SAMPLE_DATA_DAY))) : isoDate;
 
-const cookieHeader = (cookies) => [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
-
-const request = async (cookies, path, { method = "GET", body, headers = {} } = {}) => {
+const request = async (path, { method = "GET", body, headers = {} } = {}) => {
   const response = await fetch(new URL(path, baseUrl), {
     method,
     headers: {
       Accept: "application/json",
       ...(body ? { "Content-Type": "application/json" } : {}),
-      Cookie: cookieHeader(cookies),
       ...headers,
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  for (const line of response.headers.getSetCookie()) {
-    const [pair] = line.split(";");
-    const separator = pair.indexOf("=");
-    cookies.set(pair.slice(0, separator).trim(), pair.slice(separator + 1).trim());
-  }
   const text = await response.text();
   let json;
   try {
@@ -79,23 +72,19 @@ const request = async (cookies, path, { method = "GET", body, headers = {} } = {
   return json;
 };
 
-// Each account gets its own cookie jar and CSRF token. `headers` gives the current session headers for a request.
+// Each account logs in once and keeps its access token; `call` sends it as a bearer.
 const signIn = async ({ email }) => {
-  const cookies = new Map();
-  const call = (path, options) => request(cookies, path, options);
+  let accessToken;
+  const call = async (path, { headers, ...options } = {}) => {
+    return request(path, { ...options, headers: { Authorization: `Bearer ${accessToken}`, ...headers } });
+  };
   try {
-    await call("/api/auth/csrf");
-    const account = await call("/api/auth/login", {
+    const account = await request("/api/auth/login", {
       method: "POST",
       body: { email, password: email === adminEmail ? adminPassword : demoPassword },
     });
-    return {
-      id: account.id,
-      call,
-      get headers() {
-        return { Cookie: cookieHeader(cookies), "X-CSRF-TOKEN": cookies.get("pharmacy_csrf") ?? "" };
-      },
-    };
+    accessToken = account.accessToken;
+    return { id: account.id, call };
   } catch (error) {
     throw new Error(
       `Could not sign in as ${email} through ${baseUrl.origin}. Is the gateway reachable (pnpm run infra:up, and ` +
@@ -106,26 +95,6 @@ const signIn = async ({ email }) => {
   }
 };
 
-// Which service's internal identity context each dataset is imported under.
-const audienceByDataset = Object.freeze({
-  sites: "catalog-service",
-  storageLocations: "catalog-service",
-  suppliers: "catalog-service",
-  catalog: "catalog-service",
-  openingBalances: "inventory-service",
-});
-
-// Local search synonym groups. The manager proposes them and the pharmacist approves them, as four-eyes review requires.
-const searchSynonymGroups = [
-  ["tiêu chảy", "đi ngoài", "đi lỏng"],
-  ["sổ mũi", "chảy nước mũi"],
-  ["hạ sốt", "giảm sốt"],
-  ["đau họng", "rát họng"],
-  ["đầy hơi", "chướng bụng"],
-  ["ợ chua", "ợ nóng"],
-];
-// One more group is created and left waiting, so the approval queue of the staff Search synonyms page has a row.
-const pendingSynonymGroup = ["ho khan", "ho không đờm", "ho rát cổ"];
 // Same folding as foldSearchText in apps/catalog-service search-text.ts, so accent variants count as existing.
 const foldSearchTerm = (text) =>
   text.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ|Đ/g, "d").toLowerCase().replace(/\s+/g, " ").trim();
@@ -165,22 +134,14 @@ const uploadedImageUrls = new Set(
 // Manager imports master data and Warehouse Staff imports opening stock. The two accounts exist once the sites do.
 const importers = { sites: admin };
 
-const identityContext = async (session, audience) => {
-  const { contexts } = await session.call("/api/auth/context");
-  return contexts[audience];
-};
-
 // Platform Admin creates a site by hand, one at a time, because the import is the manager's.
 const createSites = async (sites) => {
-  const catalogContext = await identityContext(admin, "catalog-service");
-  const headers = { ...admin.headers, "x-internal-identity-context": catalogContext };
-  const known = new Set((await admin.call("/api/sites?limit=100", { headers })).map((row) => row.code));
+  const known = new Set((await admin.call("/api/sites?limit=100")).map((row) => row.code));
   const missing = sites.filter((site) => !known.has(site.code));
   for (const site of missing) {
     await admin.call("/api/sites", {
       method: "POST",
       body: site,
-      headers: { ...admin.headers, "x-internal-identity-context": await identityContext(admin, "catalog-service") },
     });
   }
   return { created: missing.length, existing: sites.length - missing.length };
@@ -226,10 +187,6 @@ for (const id of order) {
     result = await importer.call(dataset.endpoint, {
       method: "POST",
       body: payload,
-      headers: {
-        ...importer.headers,
-        "x-internal-identity-context": await identityContext(importer, audienceByDataset[id]),
-      },
     });
   } catch (error) {
     // Opening balances are for an empty location. Once stock has moved (the demo transfers do that), the same file
@@ -270,15 +227,8 @@ async function waitForSearchIndex(session, skus) {
   }
 }
 
-// Identity contexts expire, so read a fresh catalog-service context for each session before it calls the API.
-async function catalogHeaders(session) {
-  const { contexts } = await session.call("/api/auth/context");
-  return { ...session.headers, "x-internal-identity-context": contexts["catalog-service"] };
-}
-
 async function seedSearchSynonyms(proposer) {
-  const proposerHeaders = await catalogHeaders(proposer);
-  const { items } = await proposer.call("/api/products/search-synonyms", { headers: proposerHeaders });
+  const { items } = await proposer.call("/api/products/search-synonyms");
   const groupsByKey = new Map();
   for (const group of items) {
     const key = synonymKey(group.terms);
@@ -306,7 +256,6 @@ async function seedSearchSynonyms(proposer) {
     const group = await proposer.call("/api/products/search-synonyms", {
       method: "POST",
       body: { terms },
-      headers: proposerHeaders,
     });
     created += 1;
     toApprove.push(group);
@@ -316,7 +265,6 @@ async function seedSearchSynonyms(proposer) {
     await proposer.call("/api/products/search-synonyms", {
       method: "POST",
       body: { terms: pendingSynonymGroup },
-      headers: proposerHeaders,
     });
     created += 1;
   }
@@ -324,12 +272,10 @@ async function seedSearchSynonyms(proposer) {
   let approved = 0;
   if (toApprove.length > 0) {
     const pharmacist = await signIn({ email: pharmacistEmail });
-    const pharmacistHeaders = await catalogHeaders(pharmacist);
     for (const group of toApprove) {
       await pharmacist.call(`/api/products/search-synonyms/${group.id}/approve`, {
         method: "POST",
         body: { version: group.version },
-        headers: pharmacistHeaders,
       });
       approved += 1;
     }
@@ -346,26 +292,10 @@ async function seedActivity() {
   const warehouse = await signIn({ email: warehouseEmail });
   const pharmacist = await signIn({ email: pharmacistEmail });
   const customer = await signIn({ email: customerEmail });
-  const withContext = async (session, audience) => {
-    const { contexts: fresh } = await session.call("/api/auth/context");
-    return { ...session.headers, "x-internal-identity-context": fresh[audience] };
-  };
-  const inventory = (session) => withContext(session, "inventory-service");
-
-  const sites = new Map(
-    (await admin.call("/api/sites?limit=100", { headers: await withContext(admin, "catalog-service") })).map((row) => [
-      row.code,
-      row,
-    ]),
-  );
-  const catalogHeaders = await withContext(admin, "catalog-service");
-  const suppliers = new Map(
-    (await admin.call("/api/suppliers?limit=100", { headers: catalogHeaders })).map((row) => [row.code, row]),
-  );
-  const locations = new Map(
-    (await admin.call("/api/storage-locations?limit=100", { headers: catalogHeaders })).map((row) => [row.code, row]),
-  );
-  const balances = await admin.call("/api/inventory/balances?limit=500", { headers: await inventory(admin) });
+  const sites = new Map((await admin.call("/api/sites?limit=100")).map((row) => [row.code, row]));
+  const suppliers = new Map((await admin.call("/api/suppliers?limit=100")).map((row) => [row.code, row]));
+  const locations = new Map((await admin.call("/api/storage-locations?limit=100")).map((row) => [row.code, row]));
+  const balances = await admin.call("/api/inventory/balances?limit=500");
   const products = new Map();
   for (const row of await admin.call("/api/products?limit=100")) products.set(row.sku, row);
   const need = (value, what) => {
@@ -391,13 +321,10 @@ async function seedActivity() {
     };
   };
   const existing = async (path, number) => {
-    const rows = await admin.call(`${path}?q=${encodeURIComponent(number)}&limit=50`, {
-      headers: await inventory(admin),
-    });
+    const rows = await admin.call(`${path}?q=${encodeURIComponent(number)}&limit=50`, {});
     return rows.find((row) => Object.values(row).includes(number));
   };
-  const post = async (session, path, body) =>
-    session.call(path, { method: "POST", body, headers: await inventory(session) });
+  const post = async (session, path, body) => session.call(path, { method: "POST", body });
 
   // Transfers: one waiting for approval, one in transit, one received.
   const transfer = async (number, sku, quantity, steps, fromLocation = "WH-A") => {
@@ -427,7 +354,7 @@ async function seedActivity() {
 
   // Adjustments: one pending, one approved, one rejected.
   const adjust = async (reason, sku, type, quantity, decision) => {
-    const rows = await admin.call("/api/inventory/adjustments?limit=100", { headers: await inventory(admin) });
+    const rows = await admin.call("/api/inventory/adjustments?limit=100");
     if (rows.some((row) => row.reason === reason)) return;
     const row = stock(sku, "SITE-RTL", "RTL-FRONT");
     const created = await post(warehouse, "/api/inventory/adjustments", {
@@ -469,11 +396,10 @@ async function seedActivity() {
   await purchaseOrder("PO-DEMO-003", "THU-0034", 100, "cancel");
 
   // Online orders: pickup at the store, one in each of a few states.
-  const salesHeaders = async (session) => withContext(session, "sales-service");
-  const orders = await admin.call("/api/orders?limit=50", { headers: await salesHeaders(admin) });
+  const orders = await admin.call("/api/orders?limit=50");
   if (orders.length === 0) {
     const unitFor = async (sku) => {
-      const units = await admin.call(`/api/products/${products.get(sku).id}/units`, { headers: catalogHeaders });
+      const units = await admin.call(`/api/products/${products.get(sku).id}/units`);
       return need(units.find((unit) => unit.isDefaultSaleUnit) ?? units[0], `a sale unit for ${sku}`);
     };
     // Each order is placed the way checkout places it: the order, then its payment invoice under the same id. A QR
@@ -504,7 +430,7 @@ async function seedActivity() {
     /** Payment reaches the order through RabbitMQ, so wait until the order shows it before moving the order on. */
     const untilOrder = async (shopper, id, ready) => {
       for (let attempt = 0; attempt < 40; attempt += 1) {
-        const order = await shopper.call(`/api/orders/${id}`, { headers: await salesHeaders(shopper) });
+        const order = await shopper.call(`/api/orders/${id}`);
         if (ready(order)) return order;
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
@@ -527,7 +453,6 @@ async function seedActivity() {
           ),
           ...(deliverTo ? { delivery: { destination: deliverTo, addressNote: note } } : {}),
         },
-        headers: await salesHeaders(shopper),
       });
       const invoice = await shopper.call("/api/payments/invoices", {
         method: "POST",
@@ -544,7 +469,7 @@ async function seedActivity() {
             currency: created.currency,
           })),
         },
-        headers: { ...(await withContext(shopper, "payment-service")), "Idempotency-Key": created.id },
+        headers: { "Idempotency-Key": created.id },
       });
       // A QR payment confirms the order by itself, so it is paid first and the staff steps start after it.
       if (paid === "qr") {
@@ -556,7 +481,6 @@ async function seedActivity() {
         await manager.call(`/api/orders/${created.id}/transition`, {
           method: "POST",
           body: { status: next },
-          headers: await salesHeaders(manager),
         });
       }
       if (paid === "cash") {
@@ -564,14 +488,12 @@ async function seedActivity() {
         await pharmacist.call(`/api/payments/${invoice.id}/confirm-counter`, {
           method: "POST",
           body: {},
-          headers: await withContext(pharmacist, "payment-service"),
         });
       }
       if (refunded) {
         await manager.call(`/api/payments/${invoice.id}/refund`, {
           method: "POST",
           body: { reason: "Khách đổi ý, hoàn tiền toàn bộ" },
-          headers: await withContext(manager, "payment-service"),
         });
         await untilOrder(shopper, created.id, (order) => order.status === "Cancelled");
       }
@@ -692,7 +614,6 @@ async function seedActivity() {
           },
         ],
       },
-      headers: await inventory(warehouse),
     });
   }
   // A partial delivery against the approved order, which leaves it "partially received".
@@ -716,11 +637,10 @@ async function seedActivity() {
           },
         ],
       },
-      headers: await inventory(warehouse),
     });
   }
   const reloadBalances = async () => {
-    const rows = await admin.call("/api/inventory/balances?limit=500", { headers: await inventory(admin) });
+    const rows = await admin.call("/api/inventory/balances?limit=500");
     balances.length = 0;
     balances.push(...rows);
   };
@@ -737,9 +657,7 @@ async function seedActivity() {
   await reloadBalances();
 
   // Replenishment requests from the shop floor: waiting, approved, rejected.
-  const replenishments = await admin.call("/api/inventory/replenishment?limit=100", {
-    headers: await inventory(admin),
-  });
+  const replenishments = await admin.call("/api/inventory/replenishment?limit=100", {});
   const replenish = async (note, sku, quantity, action) => {
     if (replenishments.some((row) => row.notes === note)) return;
     const row = stock(sku, "SITE-RTL", "RTL-FRONT");
@@ -764,7 +682,7 @@ async function seedActivity() {
   await replenish("Đã đủ hàng trên kệ", "THU-0006", 20, "reject");
 
   // Returns and write-offs.
-  const returns = await admin.call("/api/inventory/returns?limit=100", { headers: await inventory(admin) });
+  const returns = await admin.call("/api/inventory/returns?limit=100");
   const returned = async (reason, sku, quantity) => {
     if (returns.some((row) => row.reason === reason)) return;
     const row = stock(sku, "SITE-RTL", "RTL-FRONT");
@@ -785,7 +703,7 @@ async function seedActivity() {
   await returned("Khách trả lại, còn nguyên niêm phong", "THU-0034", 1);
 
   // Stocktakes: one open and one posted.
-  const stocktakes = await admin.call("/api/inventory/stocktakes?limit=100", { headers: await inventory(admin) });
+  const stocktakes = await admin.call("/api/inventory/stocktakes?limit=100");
   const stocktake = async (note, skus, shouldPost) => {
     if (stocktakes.some((row) => row.notes === note)) return;
     const rows = skus.map((sku) => stock(sku, "SITE-RTL", "RTL-FRONT"));
@@ -796,7 +714,7 @@ async function seedActivity() {
       lines: rows.map((row) => ({ productBatchId: row.productBatchId })),
     });
     if (!shouldPost) return;
-    const detail = await admin.call(`/api/inventory/stocktakes/${created.id}`, { headers: await inventory(admin) });
+    const detail = await admin.call(`/api/inventory/stocktakes/${created.id}`);
     for (const line of detail.lines ?? []) {
       // One unit short on the first line, so the posted count has a variance to show.
       const counted = Number(line.systemQuantity) - (line === detail.lines[0] ? 1 : 0);
@@ -809,12 +727,11 @@ async function seedActivity() {
   await stocktake("Kiểm kê đột xuất - kệ vitamin", ["THU-0006"], false);
 
   // Prescriptions: a queue with one waiting, one dispensed and one cancelled.
-  const salesHeaders2 = await withContext(admin, "sales-service");
-  const prescriptions = await admin.call("/api/prescriptions?limit=100", { headers: salesHeaders2 });
+  const prescriptions = await admin.call("/api/prescriptions?limit=100");
   const prescribe = async (patientName, sku, quantity, action) => {
     if (prescriptions.some((row) => row.patientName === patientName)) return;
     const row = stock(sku, "SITE-RTL", "RTL-FRONT");
-    const units = await admin.call(`/api/products/${row.productId}/units`, { headers: catalogHeaders });
+    const units = await admin.call(`/api/products/${row.productId}/units`);
     const unit = need(units.find((entry) => entry.isDefaultSaleUnit) ?? units[0], `a sale unit for ${sku}`);
     const created = await pharmacist.call("/api/prescriptions", {
       method: "POST",
@@ -834,13 +751,11 @@ async function seedActivity() {
           },
         ],
       },
-      headers: await withContext(pharmacist, "sales-service"),
     });
     if (action === "cancel") {
       await pharmacist.call(`/api/prescriptions/${created.id}/cancel`, {
         method: "POST",
         body: {},
-        headers: await withContext(pharmacist, "sales-service"),
       });
     }
     if (action === "dispense") {
@@ -853,7 +768,6 @@ async function seedActivity() {
             dispensedQuantity: quantity,
           })),
         },
-        headers: await withContext(pharmacist, "sales-service"),
       });
     }
   };

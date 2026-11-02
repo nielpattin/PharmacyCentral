@@ -145,24 +145,13 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
   const sessions = new Map();
   for (const [email] of shoppers) sessions.set(email, await signIn({ email }));
 
-  // Identity contexts expire. One is reused for a short while, which keeps a few hundred requests from doubling.
-  const contextCache = new Map();
-  const withContext = async (session, audience) => {
-    const key = `${session.id}/${audience}`;
-    const cached = contextCache.get(key);
-    if (!cached || Date.now() - cached.at > 20_000) {
-      const { contexts } = await session.call("/api/auth/context");
-      contextCache.set(key, { at: Date.now(), value: contexts[audience] });
-    }
-    return { ...session.headers, "x-internal-identity-context": contextCache.get(key).value };
-  };
-  const call = async (session, audience, path, { method = "GET", body, headers = {} } = {}) => {
+  const call = async (session, path, { method = "GET", body, headers = {} } = {}) => {
     for (let attempt = 0; ; attempt += 1) {
       try {
         return await session.call(path, {
           method,
           body,
-          headers: { ...(await withContext(session, audience)), ...headers },
+          headers,
         });
       } catch (error) {
         const message = String(error instanceof Error ? error.message : error);
@@ -172,7 +161,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
     }
   };
 
-  const catalog = (path) => call(admin, "catalog-service", path);
+  const catalog = (path) => call(admin, path);
   const sites = new Map((await catalog("/api/sites?limit=100")).map((row) => [row.code, row]));
   const suppliers = new Map((await catalog("/api/suppliers?limit=100")).map((row) => [row.code, row]));
   const locations = new Map((await catalog("/api/storage-locations?limit=100")).map((row) => [row.code, row]));
@@ -185,11 +174,10 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
   const retail = need(sites.get("SITE-RTL"), "site SITE-RTL");
   const front = need(locations.get("RTL-FRONT"), "storage location RTL-FRONT");
 
-  const inventory = (session, path, options) => call(session, "inventory-service", path, options);
-  const existingReceipt = await inventory(admin, "/api/procurement/goods-receipts?q=GR-HIST-001&limit=50");
+  const existingReceipt = await call(admin, "/api/procurement/goods-receipts?q=GR-HIST-001&limit=50");
   if (existingReceipt.some((row) => row.receiptNumber === "GR-HIST-001")) {
     // GR-HIST-EXP was received exactly 40 days before the history was seeded, so it dates the seed.
-    const marker = (await inventory(admin, "/api/procurement/goods-receipts?q=GR-HIST-EXP&limit=50")).find(
+    const marker = (await call(admin, "/api/procurement/goods-receipts?q=GR-HIST-EXP&limit=50")).find(
       (row) => row.receiptNumber === "GR-HIST-EXP",
     );
     const ageDays = marker ? Math.floor((Date.now() - (Date.parse(marker.receivedAt) + 40 * DAY)) / DAY) : undefined;
@@ -293,7 +281,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
     const number = String(sequence).padStart(3, "0");
     const orderedAt = now - (74 - sequence * 2) * DAY;
     const receivedAt = orderedAt + between(3, 6) * DAY;
-    const order = await inventory(buyer, "/api/procurement/purchase-orders", {
+    const order = await call(buyer, "/api/procurement/purchase-orders", {
       method: "POST",
       body: {
         purchaseOrderNumber: `PO-HIST-${number}`,
@@ -303,11 +291,11 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
         lines: items.map((item) => ({ productId: products.get(item.sku).id, orderedQuantity: item.quantity })),
       },
     });
-    await inventory(manager, `/api/procurement/purchase-orders/${order.id}/action`, {
+    await call(manager, `/api/procurement/purchase-orders/${order.id}/action`, {
       method: "POST",
       body: { action: "approve" },
     });
-    const receipt = await inventory(warehouse, "/api/procurement/goods-receipts", {
+    const receipt = await call(warehouse, "/api/procurement/goods-receipts", {
       method: "POST",
       body: {
         receiptNumber: `GR-HIST-${number}`,
@@ -331,7 +319,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
     receipts.push({ id: receipt.id, at: receivedAt });
   }
   // Batches that expire soon, or already have, received with a cost like the rest.
-  const expiringReceipt = await inventory(warehouse, "/api/procurement/goods-receipts", {
+  const expiringReceipt = await call(warehouse, "/api/procurement/goods-receipts", {
     method: "POST",
     body: {
       receiptNumber: "GR-HIST-EXP",
@@ -354,12 +342,12 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
   // New batches wait for quality review, and Pharmacy Manager releases them.
   let balances = [];
   const reload = async () => {
-    balances = await inventory(admin, "/api/inventory/balances?limit=500");
+    balances = await call(admin, "/api/inventory/balances?limit=500");
   };
   await reload();
   for (const { batch } of balances) {
     if (batch.batchNumber.startsWith("LOT-H-") && batch.qualityStatus === "PendingQc") {
-      await inventory(manager, `/api/inventory/batches/${batch.id}/quality`, {
+      await call(manager, `/api/inventory/batches/${batch.id}/quality`, {
         method: "POST",
         body: { decision: "release", notes: "Đạt kiểm tra nhập kho" },
       });
@@ -394,20 +382,20 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
   };
   const untilOrder = async (shopper, id, ready) => {
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      const order = await call(shopper, "sales-service", `/api/orders/${id}`);
+      const order = await call(shopper, `/api/orders/${id}`);
       if (ready(order)) return;
       await sleep(400);
     }
     throw new Error(`Order ${id} did not reach the expected payment state`);
   };
   const transition = (id, status) =>
-    call(manager, "sales-service", `/api/orders/${id}/transition`, { method: "POST", body: { status } });
+    call(manager, `/api/orders/${id}/transition`, { method: "POST", body: { status } });
 
   const placed = [];
   let skipped = 0;
   const sellOnline = async (document) => {
     const shopper = sessions.get(document.shopper);
-    const created = await call(shopper, "sales-service", "/api/orders", {
+    const created = await call(shopper, "/api/orders", {
       method: "POST",
       body: {
         selectedStoreId: retail.id,
@@ -425,7 +413,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
           : {}),
       },
     });
-    const invoice = await call(shopper, "payment-service", "/api/payments/invoices", {
+    const invoice = await call(shopper, "/api/payments/invoices", {
       method: "POST",
       body: {
         invoiceId: created.id,
@@ -459,18 +447,18 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
       await transition(created.id, status);
     }
     if (document.payment === "cash" && document.fate === "completed") {
-      await call(pharmacist, "payment-service", `/api/payments/${invoice.id}/confirm-counter`, {
+      await call(pharmacist, `/api/payments/${invoice.id}/confirm-counter`, {
         method: "POST",
         body: {},
       });
     }
     if (document.fate === "refunded") {
       if (document.payment === "cash")
-        await call(pharmacist, "payment-service", `/api/payments/${invoice.id}/confirm-counter`, {
+        await call(pharmacist, `/api/payments/${invoice.id}/confirm-counter`, {
           method: "POST",
           body: {},
         });
-      await call(manager, "payment-service", `/api/payments/${invoice.id}/refund`, {
+      await call(manager, `/api/payments/${invoice.id}/refund`, {
         method: "POST",
         body: { reason: "Khách đổi ý, hoàn tiền toàn bộ" },
       });
@@ -497,7 +485,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
       skipped += 1;
       return;
     }
-    const created = await call(pharmacist, "sales-service", "/api/prescriptions", {
+    const created = await call(pharmacist, "/api/prescriptions", {
       method: "POST",
       body: {
         siteId: retail.id,
@@ -518,10 +506,10 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
     });
     placed.push({ id: created.id, at: document.at });
     if (document.fate === "cancelled") {
-      await call(pharmacist, "sales-service", `/api/prescriptions/${created.id}/cancel`, { method: "POST", body: {} });
+      await call(pharmacist, `/api/prescriptions/${created.id}/cancel`, { method: "POST", body: {} });
       return;
     }
-    await call(pharmacist, "sales-service", `/api/prescriptions/${created.id}/dispense`, {
+    await call(pharmacist, `/api/prescriptions/${created.id}/dispense`, {
       method: "POST",
       body: {
         lines: created.lines.map((line, index) => ({
@@ -532,11 +520,11 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
       },
     });
     for (const { row, quantity } of rows) row.balance.quantityOnHand = Number(row.balance.quantityOnHand) - quantity;
-    const invoice = await call(pharmacist, "payment-service", `/api/payments/prescriptions/${created.id}`, {
+    const invoice = await call(pharmacist, `/api/payments/prescriptions/${created.id}`, {
       method: "POST",
       body: {},
     });
-    await call(pharmacist, "payment-service", `/api/payments/${invoice.id}/confirm-counter`, {
+    await call(pharmacist, `/api/payments/${invoice.id}/confirm-counter`, {
       method: "POST",
       body: {},
     });
@@ -566,7 +554,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
   for (const sku of ["THU-0019", "VTYT-001"]) {
     const row = stockOf(sku);
     if (!row) continue;
-    await inventory(pharmacist, "/api/inventory/replenishment", {
+    await call(pharmacist, "/api/inventory/replenishment", {
       method: "POST",
       body: {
         siteId: retail.id,
@@ -585,7 +573,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
   }
   const cartOf = async (email, items) => {
     const shopper = sessions.get(email);
-    await call(shopper, "sales-service", "/api/carts/merge", {
+    await call(shopper, "/api/carts/merge", {
       method: "POST",
       body: {
         lines: await Promise.all(
@@ -756,41 +744,23 @@ export async function seedWarehouseActivity({ admin, signIn }) {
   const warehouse = await signIn({ email: "warehouse@pharmacycentral.vn" });
   const manager = await signIn({ email: "manager@pharmacycentral.vn" });
   const buyer = await signIn({ email: "manager2@pharmacycentral.vn" });
-  const contextCache = new Map();
-  const call = async (session, audience, path, { method = "GET", body } = {}) => {
-    const key = `${session.id}/${audience}`;
-    const cached = contextCache.get(key);
-    if (!cached || Date.now() - cached.at > 20_000) {
-      const { contexts } = await session.call("/api/auth/context");
-      contextCache.set(key, { at: Date.now(), value: contexts[audience] });
-    }
-    return session.call(path, {
-      method,
-      body,
-      headers: { ...session.headers, "x-internal-identity-context": contextCache.get(key).value },
-    });
-  };
-  const inventory = (session, path, options) => call(session, "inventory-service", path, options);
+  const call = (session, path, options) => session.call(path, options);
   const need = (value, what) => {
     if (!value) throw new Error(`The warehouse demo activity needs ${what}; import the sample data first.`);
     return value;
   };
-  const existing = await inventory(warehouse, "/api/procurement/goods-receipts?q=GR-WH-001&limit=50");
+  const existing = await call(warehouse, "/api/procurement/goods-receipts?q=GR-WH-001&limit=50");
   if (existing.some((row) => row.receiptNumber === "GR-WH-001")) {
     console.log("warehouse activity: already seeded (GR-WH-001 exists), nothing added");
     return;
   }
-  const sites = new Map((await call(admin, "catalog-service", "/api/sites?limit=100")).map((row) => [row.code, row]));
-  const suppliers = new Map(
-    (await call(admin, "catalog-service", "/api/suppliers?limit=100")).map((row) => [row.code, row]),
-  );
-  const locations = new Map(
-    (await call(admin, "catalog-service", "/api/storage-locations?limit=100")).map((row) => [row.code, row]),
-  );
+  const sites = new Map((await call(admin, "/api/sites?limit=100")).map((row) => [row.code, row]));
+  const suppliers = new Map((await call(admin, "/api/suppliers?limit=100")).map((row) => [row.code, row]));
+  const locations = new Map((await call(admin, "/api/storage-locations?limit=100")).map((row) => [row.code, row]));
   const products = new Map();
   for (const row of await admin.call("/api/products?limit=100")) products.set(row.sku, row);
   const warehouseSite = need(sites.get("SITE-WH"), "site SITE-WH");
-  const balances = await inventory(admin, "/api/inventory/balances?limit=500");
+  const balances = await call(admin, "/api/inventory/balances?limit=500");
   const stock = (sku) =>
     need(
       balances.find(
@@ -808,7 +778,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
 
   // Receiving: three goods receipts and one purchase order waiting for approval.
   const purchaseOrder = async (number, lines) => {
-    const created = await inventory(buyer, "/api/procurement/purchase-orders", {
+    const created = await call(buyer, "/api/procurement/purchase-orders", {
       method: "POST",
       body: {
         purchaseOrderNumber: number,
@@ -821,7 +791,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
     return created;
   };
   const receive = (number, order, lines) =>
-    inventory(warehouse, "/api/procurement/goods-receipts", {
+    call(warehouse, "/api/procurement/goods-receipts", {
       method: "POST",
       body: {
         receiptNumber: number,
@@ -844,7 +814,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
   // Warehouse Staff decides.
   const replenish = async (notes, sku, requestedQuantity, action) => {
     const row = stock(sku);
-    const created = await inventory(manager, "/api/inventory/replenishment", {
+    const created = await call(manager, "/api/inventory/replenishment", {
       method: "POST",
       body: {
         siteId: warehouseSite.id,
@@ -861,7 +831,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
       },
     });
     if (action)
-      await inventory(warehouse, `/api/inventory/replenishment/${created.id}/${action}`, {
+      await call(warehouse, `/api/inventory/replenishment/${created.id}/${action}`, {
         method: "POST",
         body: { reviewNotes: null },
       });
@@ -876,7 +846,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
     ["Nhà cung cấp thu hồi lô", "THU-0033", 4],
   ]) {
     const row = stock(sku);
-    await inventory(warehouse, "/api/inventory/returns", {
+    await call(warehouse, "/api/inventory/returns", {
       method: "POST",
       body: {
         siteId: warehouseSite.id,
@@ -898,7 +868,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
     // One stocktake counts one storage location, so only the products held where the first one is held are counted.
     const found = skus.map(stock);
     const rows = found.filter((row) => row.balance.storageLocationId === found[0].balance.storageLocationId);
-    const created = await inventory(warehouse, "/api/inventory/stocktakes", {
+    const created = await call(warehouse, "/api/inventory/stocktakes", {
       method: "POST",
       body: {
         siteId: warehouseSite.id,
@@ -908,15 +878,15 @@ export async function seedWarehouseActivity({ admin, signIn }) {
       },
     });
     if (!shouldPost) return;
-    const detail = await inventory(warehouse, `/api/inventory/stocktakes/${created.id}`);
+    const detail = await call(warehouse, `/api/inventory/stocktakes/${created.id}`);
     for (const line of detail.lines ?? []) {
       const counted = Number(line.systemQuantity) - (line === detail.lines[0] ? 2 : 0);
-      await inventory(warehouse, `/api/inventory/stocktake-lines/${line.id}/count`, {
+      await call(warehouse, `/api/inventory/stocktake-lines/${line.id}/count`, {
         method: "POST",
         body: { countedQuantity: counted },
       });
     }
-    await inventory(manager, `/api/inventory/stocktakes/${created.id}/post`, { method: "POST", body: {} });
+    await call(manager, `/api/inventory/stocktakes/${created.id}/post`, { method: "POST", body: {} });
   };
   await stocktake("Kiểm kê định kỳ kho A", ["THU-0031", "THU-0032"], true);
   await stocktake("Kiểm kê đột xuất kệ vật tư", ["THU-0010"], false);
@@ -924,7 +894,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
   // Adjustments: one waiting, one approved, one rejected.
   const adjust = async (reason, sku, adjustmentType, quantity, decision) => {
     const row = stock(sku);
-    const created = await inventory(warehouse, "/api/inventory/adjustments", {
+    const created = await call(warehouse, "/api/inventory/adjustments", {
       method: "POST",
       body: {
         productId: row.batch.productId,
@@ -937,7 +907,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
       },
     });
     if (decision)
-      await inventory(manager, `/api/inventory/adjustments/${created.id}/${decision}`, { method: "POST", body: {} });
+      await call(manager, `/api/inventory/adjustments/${created.id}/${decision}`, { method: "POST", body: {} });
   };
   await adjust("Hàng hỏng do ẩm khi lưu kho", "THU-0032", "Negative", 8, undefined);
   await adjust("Kiểm đếm thấy thừa", "THU-0010", "Positive", 12, "approve");
@@ -956,11 +926,11 @@ export async function seedWarehouseActivity({ admin, signIn }) {
   ]);
 
   // The received batches wait for quality review. The manager releases all but the last, which stays pending.
-  const fresh = await inventory(admin, "/api/inventory/balances?limit=500");
+  const fresh = await call(admin, "/api/inventory/balances?limit=500");
   for (const { batch } of fresh) {
     if (!batch.batchNumber.startsWith("LOT-WH-") || batch.qualityStatus !== "PendingQc") continue;
     if (batch.batchNumber === "LOT-WH-0019") continue;
-    await inventory(manager, `/api/inventory/batches/${batch.id}/quality`, {
+    await call(manager, `/api/inventory/batches/${batch.id}/quality`, {
       method: "POST",
       body: { decision: "release", notes: "Đạt kiểm tra nhập kho" },
     });

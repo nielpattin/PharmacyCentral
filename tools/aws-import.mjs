@@ -14,17 +14,9 @@ const adminPassword = requireEnv("ADMIN_PASSWORD");
 const demoPassword = requireEnv("DEMO_ACCOUNT_PASSWORD");
 
 async function makeSession(email, password) {
-  const csrfRes = await fetch(`${baseUrl}/api/auth/csrf`);
-  const { token: csrfToken } = await csrfRes.json();
-  const csrfCookie = csrfRes.headers.getSetCookie();
-
   const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": csrfToken,
-      Cookie: csrfCookie.join("; "),
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
 
@@ -32,7 +24,7 @@ async function makeSession(email, password) {
     throw new Error(`Login failed for ${email}: ${loginRes.status} ${await loginRes.text()}`);
   }
 
-  const allCookies = [...csrfCookie, ...loginRes.headers.getSetCookie()];
+  const { accessToken } = await loginRes.json();
 
   return {
     async post(path, body) {
@@ -40,8 +32,7 @@ async function makeSession(email, password) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-          Cookie: allCookies.join("; "),
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify(body),
       });

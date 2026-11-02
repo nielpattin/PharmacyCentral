@@ -16,6 +16,10 @@
 // - Catalog availability (`/api/availability`) is a projection of `inStock` booleans only (availability-projection.ts),
 //   so quantities are read from inventory balances (`/api/inventory/balances`): available = on_hand - reserved.
 //
+// Roles: setup imports the probe product as the Pharmacy Manager (catalog product imports are refused to Platform Admin
+// with 403) and posts its opening balance as Warehouse Staff (inventory opening balances are refused to everyone else).
+// The customer places the orders; the manager reads the probe back at teardown.
+//
 // Setup creates a probe product with a unique SKU and a single opening batch of STOCK units at the store. The main
 // phase sends ORDERS pickup orders from VUS VUs as the demo customer, plus a few tampered bodies. Teardown reads the
 // server's record back and checks the invariants with bounded waits for the eventually consistent projection.
@@ -83,15 +87,16 @@ function settle(read, isSettled, seconds) {
 }
 
 export function setup() {
-  const admin = login(accounts.admin);
+  const manager = login(accounts.manager);
+  const warehouse = login(accounts.warehouse);
   const runId = Date.now().toString(36);
   const sku = `K6-OVS-${runId}`;
   const startedAt = Date.now();
 
-  const stores = admin.get("/api/stores", { query: { limit: 50 }, name: "GET /stores" }).json();
+  const stores = manager.get("/api/stores", { query: { limit: 50 }, name: "GET /stores" }).json();
   if (!Array.isArray(stores) || stores.length === 0) throw new Error("No customer-facing store to sell from");
   const store = stores[0];
-  const locations = admin
+  const locations = manager
     .get("/api/storage-locations", { query: { siteId: store.id }, name: "GET /storage-locations" })
     .json()
     .filter((location) => location.siteId === store.id && location.isActive)
@@ -99,7 +104,7 @@ export function setup() {
   if (locations.length === 0) throw new Error(`Store ${store.code} has no active storage location`);
   const location = locations[0];
 
-  const imported = admin.post(
+  const imported = manager.post(
     "/api/products/imports",
     {
       schemaVersion: 1,
@@ -117,15 +122,15 @@ export function setup() {
   if (imported.status !== 200) {
     throw new Error(`Product import failed with status ${imported.status}: ${String(imported.body).slice(0, 300)}`);
   }
-  const product = waitForProduct(admin, sku);
+  const product = waitForProduct(manager, sku);
   const unit = product.units.find((item) => item.isDefaultSaleUnit) ?? product.units[0];
   if (!unit) throw new Error(`Probe product ${sku} has no unit`);
-  if (activePrice(admin, product.id, unit.id) !== PRICE) {
+  if (activePrice(manager, product.id, unit.id) !== PRICE) {
     throw new Error(`Probe product ${sku} does not read back its published price ${PRICE}`);
   }
 
   // Inventory resolves the product by id, so the import does not depend on the search index picking up the SKU.
-  const balances = admin.post(
+  const balances = warehouse.post(
     "/api/inventory/imports/opening-balances",
     {
       schemaVersion: 1,
@@ -151,7 +156,7 @@ export function setup() {
   }
 
   const { value, settled } = settle(
-    () => ({ stock: stockAt(admin, product.id, store.id), inStock: projectedInStock(admin, product.id, store.id) }),
+    () => ({ stock: stockAt(manager, product.id, store.id), inStock: projectedInStock(manager, product.id, store.id) }),
     (current) => current.stock.onHand - current.stock.reserved === STOCK && current.inStock === true,
     SETUP_WAIT_S,
   );
@@ -166,9 +171,9 @@ export function setup() {
   return { runId, sku, startedAt, storeId: store.id, productId: product.id, productUnitId: unit.id };
 }
 
-function waitForProduct(admin, sku) {
+function waitForProduct(manager, sku) {
   const { value } = settle(
-    () => admin.get("/api/products", { query: { search: sku, limit: 20 } }).json(),
+    () => manager.get("/api/products", { query: { search: sku, limit: 20 } }).json(),
     (rows) => Array.isArray(rows) && rows.some((row) => row.sku === sku),
     SETUP_WAIT_S,
   );
@@ -303,7 +308,7 @@ function probeOrders(customer, data, violations) {
 }
 
 export function teardown(data) {
-  const admin = login(accounts.admin);
+  const manager = login(accounts.manager);
   const customer = login(accounts.customer);
   const violations = [];
   const price = activePrice(customer, data.productId, data.productUnitId);
@@ -318,8 +323,8 @@ export function teardown(data) {
   // Inventory answers synchronously, but a hold given back by a failed release is repaired by the sweep, so wait.
   const { value } = settle(
     () => ({
-      stock: stockAt(admin, data.productId, data.storeId),
-      inStock: projectedInStock(admin, data.productId, data.storeId),
+      stock: stockAt(manager, data.productId, data.storeId),
+      inStock: projectedInStock(manager, data.productId, data.storeId),
     }),
     (current) =>
       current.stock.reserved === acceptedUnits && current.inStock === current.stock.onHand - current.stock.reserved > 0,

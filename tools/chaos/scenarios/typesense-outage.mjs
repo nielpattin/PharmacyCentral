@@ -53,11 +53,11 @@ export default {
     const runId = Date.now().toString(36);
     const probeName = `Chaos Probe ${runId}`;
     let created;
-    let admin;
+    let manager;
     try {
       ctx.load.start({ duration: ctx.duration, vus: VUS });
       const customer = await ctx.gateway.login(ACCOUNTS.customer);
-      admin = await ctx.gateway.login(ACCOUNTS.admin);
+      manager = await ctx.gateway.login(ACCOUNTS.manager);
       const [known] = (await customer.get("/api/products", { limit: 1 })).body ?? [];
       if (!known) throw new Error("the catalog lists no product to search for");
       const [store] = (await customer.get("/api/stores", { limit: 1 })).body ?? [];
@@ -86,7 +86,7 @@ export default {
           .join("; ")}`,
       );
 
-      const createdResponse = await admin.post("/api/products", {
+      const createdResponse = await manager.post("/api/products", {
         sku: `CHAOS-${runId}`,
         name: probeName,
         units: [{ unitName: "Hop", conversionFactorToBaseUnit: 1, isBaseUnit: true, isDefaultSaleUnit: true }],
@@ -139,7 +139,7 @@ export default {
             : "finding: the product created during the outage stays out of search until the next product change (the sweep has no timer or retry)",
         );
 
-        await admin.put(`/api/products/${created.id}`, { sku: created.sku, name: probeName, notes: `chaos ${runId}` });
+        await manager.put(`/api/products/${created.id}`, { sku: created.sku, name: probeName, notes: `chaos ${runId}` });
         const indexedAfterChange = await ctx
           .waitFor(
             "probe product searchable after one product change",
@@ -158,8 +158,8 @@ export default {
       }
     } finally {
       await ctx.load.stop();
-      if (created && admin) {
-        const deactivated = await admin.put(`/api/products/${created.id}`, {
+      if (created && manager) {
+        const deactivated = await manager.put(`/api/products/${created.id}`, {
           sku: created.sku,
           name: probeName,
           isActive: false,

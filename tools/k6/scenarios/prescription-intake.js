@@ -74,7 +74,7 @@ function bodyOf(response) {
 
 function upload(customer, body, contentType, name, expect) {
   return customer.postRaw(IMAGE_PATH, body, {
-    headers: customer.mutatingHeaders(IMAGE_PATH, { "Content-Type": contentType }),
+    headers: customer.authHeaders(IMAGE_PATH, { "Content-Type": contentType }),
     name,
     expect,
   });
@@ -92,7 +92,7 @@ function readerUpload(customer, name, expect = [422]) {
 // because each one waits on Gemini, and the first would age out before the limit is reached.
 function readerBurst(customer, count) {
   reserveReaderCalls(count);
-  const headers = customer.mutatingHeaders(IMAGE_PATH, { "Content-Type": "image/png" });
+  const headers = customer.authHeaders(IMAGE_PATH, { "Content-Type": "image/png" });
   const requests = Array.from({ length: count }, () => ({
     method: "POST",
     url: targetUrl() + IMAGE_PATH,

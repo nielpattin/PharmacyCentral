@@ -210,18 +210,21 @@ export const heldLinesOnInactiveReservations = () =>
      where r.status <> 'active' and l.quantity > 0`,
   );
 
-/** Orders sales-service holds stock for: `stock_hold = 'held'`, as a count and digest of order ids. */
-export const heldOrderDigest = () =>
+/**
+ * Orders sales-service holds stock for: `stock_hold = 'held'`, as a count and digest of order ids. With `since`, only
+ * orders created from then on, so data left by earlier runs does not count against this one.
+ */
+export const heldOrderDigest = (since) =>
   digestOf({
     db: SALES,
-    keys: `select id::text as k from orders where stock_hold = 'held'`,
+    keys: `select id::text as k from orders where stock_hold = 'held'${since ? ` and created_at >= ${ts(since)}` : ""}`,
   });
 
 /** Reservations inventory still treats as active, keyed by their owner (the order id), as a count and digest. */
-export const activeReservationOwnerDigest = () =>
+export const activeReservationOwnerDigest = (since) =>
   digestOf({
     db: INVENTORY,
-    keys: `select owner_id::text as k from stock_reservations where status = 'active'`,
+    keys: `select owner_id::text as k from stock_reservations where status = 'active'${since ? ` and created_at >= ${ts(since)}` : ""}`,
   });
 
 export const ordersWithoutLines = () =>

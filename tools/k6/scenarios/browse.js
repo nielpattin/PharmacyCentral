@@ -62,6 +62,22 @@ function scenario() {
       maxVUs,
     };
   }
+  if (PROFILE === "breakpoint") {
+    // Steps of 15 s ramp + 45 s hold from 20 to STEP_MAX requests-per-second journeys, so the first failing step is the limit.
+    const stepMax = numberEnv("STEP_MAX", 200);
+    const stages = [];
+    for (let rate = 20; rate <= stepMax; rate += 20) {
+      stages.push({ duration: "15s", target: rate }, { duration: "45s", target: rate });
+    }
+    return {
+      executor: "ramping-arrival-rate",
+      startRate: 5,
+      timeUnit: "1s",
+      preAllocatedVUs: Math.min(50, maxVUs),
+      maxVUs: numberEnv("MAX_VUS", 400),
+      stages,
+    };
+  }
   const peak = numberEnv("RATE", 40);
   return {
     executor: "ramping-arrival-rate",
@@ -78,7 +94,14 @@ function scenario() {
   };
 }
 
-const thresholds = { http_req_failed: ["rate<0.01"], checks: ["rate>0.99"] };
+const thresholds =
+  PROFILE === "breakpoint"
+    ? {
+        // Stops at the first step past "usable": 5% failures or a 3 s product list.
+        http_req_failed: [{ threshold: "rate<0.05", abortOnFail: true, delayAbortEval: "30s" }],
+        "http_req_duration{name:GET /products list}": [{ threshold: "p(95)<3000", abortOnFail: true, delayAbortEval: "30s" }],
+      }
+    : { http_req_failed: ["rate<0.01"], checks: ["rate>0.99"] };
 if (PROFILE === "load") {
   Object.assign(thresholds, {
     "http_req_duration{name:GET /products list}": ["p(95)<300"],
@@ -92,7 +115,7 @@ export const options = {
   thresholds,
 };
 
-// Guest reads need no session: the VU's cookie jar is empty for an iteration that never logged in.
+// Guest reads need no session and carry no token.
 const anonymous = {
   get(path, params = {}) {
     return http.get(targetUrl() + withQuery(path, params.query), {
@@ -265,10 +288,27 @@ function detailJourney(client, data) {
   });
 }
 
-export default function (data) {
-  const client = Math.random() < SIGNED_IN_SHARE ? loginOncePerVu(accounts.customer) : anonymous;
+// A signed-in customer also opens their order list, the other read that every account makes.
+function ordersJourney(client) {
+  const orders = client.get("/api/orders", { query: { limit: 20 }, name: "GET /orders" });
+  check(orders, { "order list loads (200)": (r) => r.status === 200 });
+}
+
+function browseJourney(client, data) {
   const roll = Math.random();
   if (roll < LIST_SHARE) listJourney(client);
   else if (roll < LIST_SHARE + SEARCH_SHARE) searchJourney(client);
   else detailJourney(client, data);
+}
+
+// Guest browsing only: store and product lists, search and product detail, with no sign-in and no token.
+export function anonymousBrowse(data) {
+  browseJourney(anonymous, data);
+}
+
+export default function (data) {
+  const signedIn = Math.random() < SIGNED_IN_SHARE;
+  const client = signedIn ? loginOncePerVu(accounts.customer) : anonymous;
+  if (signedIn && Math.random() < 0.2) ordersJourney(client);
+  browseJourney(client, data);
 }

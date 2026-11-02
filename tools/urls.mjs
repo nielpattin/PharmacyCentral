@@ -4,8 +4,7 @@
 //   staff.pharmacy.localhost    -> staff-web     (STAFF_WEB_PORT)
 //   api.pharmacy.localhost      -> gateway       (GATEWAY_PORT)
 //
-// Each name is its own browser origin, so the customer and staff sessions no longer overwrite each other the way
-// they do on `localhost` (cookies are shared across ports of one host). The routes are aliases to the fixed ports,
+// Each name is its own browser origin, so the customer and staff tokens in `localStorage` never meet. The routes are aliases to the fixed ports,
 // so they work the same for `pnpm dev` and for the container stack. The proxy listens on plain HTTP, port 80:
 // `*.localhost` is a secure context in browsers, and no certificate has to be trusted.
 //

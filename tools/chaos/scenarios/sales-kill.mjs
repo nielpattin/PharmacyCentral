@@ -136,8 +136,9 @@ export default {
       await ctx.waitFor(
         "order holds equal the active inventory reservations",
         async () => {
-          const holds = await q.heldOrderDigest();
-          const reservations = await q.activeReservationOwnerDigest();
+          // Only this run's orders: reservations left by earlier runs or demo data have no order to compare with.
+          const holds = await q.heldOrderDigest(scenarioStart);
+          const reservations = await q.activeReservationOwnerDigest(scenarioStart);
           return holds.count === reservations.count && holds.digest === reservations.digest;
         },
         { timeoutMs: 240_000, intervalMs: 5_000 },

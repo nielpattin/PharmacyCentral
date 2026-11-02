@@ -25,7 +25,6 @@ const services = [
 const ownedKeys = new Set([
   "PORT",
   "NODE_ENV",
-  "COOKIE_SECURE",
   "LOG_LEVEL",
   "DATABASE_URL",
   "DATABASE_USER",
@@ -35,9 +34,8 @@ const ownedKeys = new Set([
   "TYPESENSE_URL",
   "TYPESENSE_API_KEY",
   "SECRETS_ENCRYPTION_KEY",
-  "INTERNAL_IDENTITY_SECRET",
   "INTERNAL_SERVICE_SECRET",
-  "INTERNAL_IDENTITY_AUDIENCE",
+  "IDENTITY_JWKS_URL",
   "PROMETHEUS_URL",
   "GRAFANA_PUBLIC_URL",
   "PUBLIC_APP_URL",
@@ -84,7 +82,7 @@ for (const service of services) {
   if (!definition) throw new Error(`docker-compose.yml has no service ${service}`);
   serviceEnvironmentExtra[service] = {};
   serviceSecretValues[service] = {};
-  // Empty values count as unset in the services (the AI settings, for one), and Secrets Manager rejects empty secrets.
+  // Empty values count as unset in the services (the AI settings, for one), and SSM rejects empty parameter values.
   const environment = { ...definition.environment, ...overrides[service] };
   for (const [key, raw] of Object.entries(environment)) {
     const value = raw == null ? "" : String(raw);

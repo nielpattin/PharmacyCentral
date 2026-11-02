@@ -1,12 +1,9 @@
-// Smoke test for the edge identity contract (RFC 0003), run against the gateway the browser uses.
+// Smoke test for the identity contract (RFC 0003), run against the gateway the browser uses.
 //
 //   node --env-file=.env tools/edge-identity-smoke.mjs
 //
 // API_BASE_URL comes from the environment and has no default: an unset value stops the script rather than testing the
 // wrong origin. Every check prints PASS or FAIL, and the process exits non-zero when any check fails.
-//
-// The 401 check describes the local gateway. On AWS the authorizer refuses the merge call for its missing CSRF token
-// before it reaches sales-service.
 import { randomUUID } from "node:crypto";
 
 const fail = (message) => {
@@ -32,7 +29,7 @@ const expect = (condition, message) => {
 
 const checks = [
   [
-    "GET /api/carts with a client X-Actor-Id and no identity context answers 401 trusted_request_required",
+    "GET /api/carts with a client X-Actor-Id and no bearer token answers 401 trusted_request_required",
     async () => {
       const response = await send("/api/carts", { headers: { "x-actor-id": randomUUID() } });
       expect(response.status === 401, `status ${response.status}`);
@@ -40,14 +37,14 @@ const checks = [
     },
   ],
   [
-    "GET /api/carts with no identity context sets no cookie",
+    "GET /api/carts with no bearer token sets no cookie",
     async () => {
       const response = await send("/api/carts", { headers: { "x-actor-id": randomUUID() } });
       expect(response.headers.getSetCookie().length === 0, "a Set-Cookie header was sent");
     },
   ],
   [
-    "POST /api/carts/merge without a trusted context answers 401 trusted_request_required",
+    "POST /api/carts/merge without a bearer token answers 401 trusted_request_required",
     async () => {
       const response = await send("/api/carts/merge", {
         method: "POST",
