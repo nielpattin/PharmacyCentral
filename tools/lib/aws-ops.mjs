@@ -16,8 +16,10 @@ const awsEnv = () => ({
   AWS_SECRET_ACCESS_KEY: "",
   AWS_ENDPOINT_URL_S3: "",
   AWS_ENDPOINT_URL: "",
+  // The aws CLI is Python: without this it cannot print the box-drawing characters in task logs on a Windows console.
+  PYTHONUTF8: "1",
 });
-const aws = (args, options = {}) =>
+export const aws = (args, options = {}) =>
   execFileSync("aws", ["--region", REGION, ...args], { encoding: "utf8", env: awsEnv(), ...options });
 const sleep = (millis) => new Promise((resolve) => setTimeout(resolve, millis));
 
