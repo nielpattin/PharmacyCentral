@@ -1,9 +1,3 @@
-variable "cookie_secure" {
-  description = "Whether identity-service and the CSRF cookie carry Secure. The web apps are served over HTTPS, so this is true."
-  type        = bool
-  default     = true
-}
-
 variable "domain_name" {
   description = "The domain of the Cloudflare zone cloudflare_zone_id. The customer app is served at shop.<domain_name> and the staff app at staff.<domain_name>."
   type        = string
@@ -71,7 +65,7 @@ resource "aws_s3_bucket_policy" "media" {
   })
 }
 
-# One public ALB serves both web apps on two hostnames, so staff and customer cookies never collide. The DNS lives in
+# One public ALB serves both web apps on two hostnames, so the staff and customer tokens never share an origin. The DNS lives in
 # Cloudflare and is managed below, DNS only (not proxied). allow_overwrite takes over a record that already exists.
 resource "aws_acm_certificate" "web" {
   domain_name               = local.web_hosts["customer-web"]
@@ -236,8 +230,8 @@ resource "aws_ecs_task_definition" "web" {
   for_each = local.web_apps
 
   family                   = "${local.environment_name}-${each.key}"
-  cpu                      = var.task_cpu
-  memory                   = var.task_memory
+  cpu                      = var.web_task_cpu
+  memory                   = var.web_task_memory
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   execution_role_arn       = aws_iam_role.task_execution.arn
@@ -252,8 +246,8 @@ resource "aws_ecs_task_definition" "web" {
     name      = each.key
     image     = "${aws_ecr_repository.service[each.key].repository_url}:${var.image_tag}"
     essential = true
-    cpu       = var.task_cpu
-    memory    = var.task_memory
+    cpu       = var.web_task_cpu
+    memory    = var.web_task_memory
     portMappings = [{
       containerPort = 8080
       hostPort      = 8080
@@ -274,14 +268,17 @@ resource "aws_ecs_task_definition" "web" {
 resource "aws_ecs_service" "web" {
   for_each = var.services_enabled ? local.web_apps : toset([])
 
-  name                    = "${local.environment_name}-${each.key}"
-  cluster                 = aws_ecs_cluster.this.id
-  task_definition         = aws_ecs_task_definition.web[each.key].arn
-  desired_count           = var.desired_count
-  launch_type             = "FARGATE"
-  platform_version        = "1.4.0"
-  enable_ecs_managed_tags = true
-  propagate_tags          = "SERVICE"
+  name             = "${local.environment_name}-${each.key}"
+  cluster          = aws_ecs_cluster.this.id
+  task_definition  = aws_ecs_task_definition.web[each.key].arn
+  desired_count    = var.desired_count
+  launch_type      = "FARGATE"
+  platform_version = "1.4.0"
+  # Stop the old task before starting the new one, so a rolling deploy never exceeds the Fargate vCPU quota.
+  deployment_minimum_healthy_percent = 0
+  deployment_maximum_percent         = 100
+  enable_ecs_managed_tags            = true
+  propagate_tags                     = "SERVICE"
 
   network_configuration {
     subnets          = aws_subnet.private[*].id

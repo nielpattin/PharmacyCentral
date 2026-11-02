@@ -16,12 +16,11 @@ locals {
   }
 
   # Values TFCore generates, keyed "<scope>/<NAME>". Scope is "shared" for one secret many services read, a service name
-  # for a secret only that service reads, or "ops" for the ops task. Secrets Manager names are <environment>/<key>, parameter names /<environment>/<key>.
+  # for a secret only that service reads, or "ops" for the ops task. Parameter names are /<environment>/<key>.
   generated_secret_values = merge(
     {
       "shared/RABBITMQ_URL"                 = "amqp://${local.rabbitmq_user}:${random_password.rabbitmq.result}@${local.rabbitmq_host}:5672/"
       "shared/REDIS_URL"                    = "redis://${aws_elasticache_cluster.this.cache_nodes[0].address}:6379"
-      "shared/INTERNAL_IDENTITY_SECRET"     = random_password.internal_identity_secret.result
       "shared/INTERNAL_SERVICE_SECRET"      = random_password.internal_service_secret.result
       "shared/SECRETS_ENCRYPTION_KEY"       = random_bytes.secrets_encryption_key.base64
       "shared/TYPESENSE_URL"                = "http://typesense.${local.namespace}:8108"
@@ -49,18 +48,10 @@ locals {
     { for key in local.supplied_secret_keys : key => local.supplied_secret_values[split("/", key)[0]][split("/", key)[1]] },
   )
 
-  # The authorizer Lambda reads these two through the Secrets Manager SDK. Everything else is a SecureString parameter,
-  # which costs nothing, where a Secrets Manager secret costs 0.40 USD a month each. ECS reads both kinds by ARN.
-  lambda_secret_keys = ["shared/INTERNAL_IDENTITY_SECRET", "shared/INTERNAL_SERVICE_SECRET"]
-  parameter_keys     = nonsensitive(toset([for key in keys(local.secret_values) : key if !contains(local.lambda_secret_keys, key)]))
-
-  secret_arn = merge(
-    { for key, secret in aws_secretsmanager_secret.this : key => secret.arn },
-    { for key, parameter in aws_ssm_parameter.this : key => parameter.arn },
-  )
+  secret_arn = { for key, parameter in aws_ssm_parameter.this : key => parameter.arn }
 
   # Secrets each backend service reads as environment variables, besides its own DATABASE_URL and supplied values.
-  shared_secret_names = ["RABBITMQ_URL", "REDIS_URL", "INTERNAL_IDENTITY_SECRET", "INTERNAL_SERVICE_SECRET"]
+  shared_secret_names = ["RABBITMQ_URL", "REDIS_URL", "INTERNAL_SERVICE_SECRET"]
   service_shared_secret_names = {
     catalog-service     = ["SECRETS_ENCRYPTION_KEY", "TYPESENSE_URL", "TYPESENSE_API_KEY"]
     sales-service       = ["SECRETS_ENCRYPTION_KEY"]
@@ -79,12 +70,6 @@ locals {
   }
 
   ops_secret_arns = { for key, arn in local.secret_arn : split("/", key)[1] => arn if startswith(key, "ops/") }
-
-  # The authorizer Lambda reads these two secrets itself, so it gets their ARNs.
-  authorizer_secret_env = {
-    INTERNAL_IDENTITY_SECRET = local.secret_arn["shared/INTERNAL_IDENTITY_SECRET"]
-    INTERNAL_SERVICE_SECRET  = local.secret_arn["shared/INTERNAL_SERVICE_SECRET"]
-  }
 }
 
 resource "random_password" "postgres_admin" {
@@ -114,11 +99,6 @@ resource "random_password" "typesense_api_key" {
   special = false
 }
 
-resource "random_password" "internal_identity_secret" {
-  length  = 64
-  special = false
-}
-
 resource "random_password" "internal_service_secret" {
   length  = 64
   special = false
@@ -134,22 +114,8 @@ resource "random_bytes" "secrets_encryption_key" {
   length = 32
 }
 
-resource "aws_secretsmanager_secret" "this" {
-  for_each = toset(local.lambda_secret_keys)
-
-  name                    = "${local.environment_name}/${each.key}"
-  recovery_window_in_days = 0
-}
-
-resource "aws_secretsmanager_secret_version" "this" {
-  for_each = aws_secretsmanager_secret.this
-
-  secret_id     = each.value.id
-  secret_string = local.secret_values[each.key]
-}
-
 resource "aws_ssm_parameter" "this" {
-  for_each = local.parameter_keys
+  for_each = nonsensitive(toset(keys(local.secret_values)))
 
   name  = "/${local.environment_name}/${each.key}"
   type  = "SecureString"
@@ -248,8 +214,8 @@ resource "aws_service_discovery_service" "rabbitmq" {
 
 resource "aws_ecs_task_definition" "rabbitmq" {
   family                   = "${local.environment_name}-rabbitmq"
-  cpu                      = 512
-  memory                   = 1024
+  cpu                      = 256
+  memory                   = 512
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   execution_role_arn       = aws_iam_role.task_execution.arn
@@ -271,8 +237,8 @@ resource "aws_ecs_task_definition" "rabbitmq" {
     name      = "rabbitmq"
     image     = "rabbitmq:4.3.5-management@sha256:397fde82bc04522d88680b57cbf5d70caae715a76c957404e52e3f0fa056b8f3"
     essential = true
-    cpu       = 512
-    memory    = 1024
+    cpu       = 256
+    memory    = 512
     portMappings = [
       { containerPort = 5672, hostPort = 5672, protocol = "tcp" },
       { containerPort = 15672, hostPort = 15672, protocol = "tcp" },

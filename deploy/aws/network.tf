@@ -48,7 +48,7 @@ resource "aws_eip" "nat" {
   domain = "vpc"
 }
 
-# One NAT gateway for the demo. It serves the tasks, the authorizer Lambda and image pulls.
+# One NAT gateway for the demo. It serves the tasks and image pulls.
 resource "aws_nat_gateway" "this" {
   allocation_id = aws_eip.nat.id
   subnet_id     = aws_subnet.public[0].id

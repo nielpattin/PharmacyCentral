@@ -29,7 +29,6 @@ x-backend-environment: &backend-environment
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
   REDIS_URL: redis://redis:6379
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-  INTERNAL_IDENTITY_SECRET: ${INTERNAL_IDENTITY_SECRET}
   INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
 
 services:
@@ -360,8 +359,10 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3001
+      ACCESS_TOKEN_PRIVATE_KEY: ${ACCESS_TOKEN_PRIVATE_KEY}
+      ACCESS_TOKEN_PUBLIC_JWK: ${ACCESS_TOKEN_PUBLIC_JWK}
+      ACCESS_TOKEN_KEY_ID: ${ACCESS_TOKEN_KEY_ID}
       DATABASE_URL: postgres://identity_service:${IDENTITY_DB_PASSWORD}@postgres:5432/identity_service
-      COOKIE_SECURE: ${COOKIE_SECURE}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       PUBLIC_APP_URL: ${PUBLIC_APP_URL}
@@ -400,6 +401,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3002
+      IDENTITY_JWKS_URL: http://identity-service:3001/.well-known/jwks.json
       DATABASE_URL: postgres://catalog_service:${CATALOG_DB_PASSWORD}@postgres:5432/catalog_service
       AWS_ENDPOINT_URL_S3: http://floci:4566
       AWS_REGION: ${AWS_REGION}
@@ -467,6 +469,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3004
+      IDENTITY_JWKS_URL: http://identity-service:3001/.well-known/jwks.json
       DATABASE_URL: postgres://inventory_service:${INVENTORY_DB_PASSWORD}@postgres:5432/inventory_service
       CATALOG_SERVICE_URL: http://catalog-service:3002
       IDENTITY_SERVICE_URL: http://identity-service:3001
@@ -485,6 +488,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3005
+      IDENTITY_JWKS_URL: http://identity-service:3001/.well-known/jwks.json
       DATABASE_URL: postgres://sales_service:${SALES_DB_PASSWORD}@postgres:5432/sales_service
       CATALOG_SERVICE_URL: http://catalog-service:3002
       INVENTORY_SERVICE_URL: http://inventory-service:3004
@@ -521,8 +525,8 @@ services:
         condition: service_healthy
     environment:
       PORT: 3008
+      IDENTITY_JWKS_URL: http://identity-service:3001/.well-known/jwks.json
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      INTERNAL_IDENTITY_SECRET: ${INTERNAL_IDENTITY_SECRET}
       CATALOG_SERVICE_URL: http://catalog-service:3002
       DATABASE_URL: postgres://chatbot_service:${CHATBOT_DB_PASSWORD}@postgres:5432/chatbot_service
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY}
@@ -555,8 +559,8 @@ services:
         condition: service_healthy
     environment:
       PORT: 3010
+      IDENTITY_JWKS_URL: http://identity-service:3001/.well-known/jwks.json
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      INTERNAL_IDENTITY_SECRET: ${INTERNAL_IDENTITY_SECRET}
       IDENTITY_SERVICE_URL: http://identity-service:3001
       CATALOG_SERVICE_URL: http://catalog-service:3002
       SEARCH_SERVICE_URL: http://search-service:3009
@@ -587,6 +591,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3006
+      IDENTITY_JWKS_URL: http://identity-service:3001/.well-known/jwks.json
       DATABASE_URL: postgres://payment_service:${PAYMENT_DB_PASSWORD}@postgres:5432/payment_service
       CATALOG_SERVICE_URL: http://catalog-service:3002
       SALES_SERVICE_URL: http://sales-service:3005
@@ -609,6 +614,7 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3007
+      IDENTITY_JWKS_URL: http://identity-service:3001/.well-known/jwks.json
       DATABASE_URL: postgres://operations_query_service:${OPERATIONS_QUERY_DB_PASSWORD}@postgres:5432/operations_query_service
       CATALOG_SERVICE_URL: http://catalog-service:3002
       INVENTORY_SERVICE_URL: http://inventory-service:3004

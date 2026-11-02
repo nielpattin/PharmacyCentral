@@ -9,7 +9,7 @@ browser ── https://shop.<domain>  ─┐
         └─ https://staff.<domain> ─┴─> public ALB (host rules) ──> customer-web, staff-web (nginx, Fargate)
                                                                                     │ /api/...
                                                                                     v
-                                            API Gateway HTTP API (request authorizer + CSRF Lambdas)
+                                   API Gateway HTTP API (forwards Authorization)
                                                                   |
                                                        VPC Link ──> internal ALB (path rules)
                                                                   |
@@ -18,22 +18,28 @@ browser ── https://shop.<domain>  ─┐
                          RDS PostgreSQL, ElastiCache Redis, RabbitMQ task, Typesense task, S3 media bucket
 ```
 
-- The two web apps have separate hostnames so their session cookies never meet. One public ALB serves both through host rules; TLS ends there with an ACM certificate, and port 80 redirects to 443. `cookie_secure` (default `true`) sets `COOKIE_SECURE`.
-- The web containers proxy `/api` to API Gateway. The authorizer resolves the session, checks roles, sites and CSRF, and signs the identity context that API Gateway writes into `x-internal-identity-context`. The signature is over the context in the services' schema key order, so `lambda/identity.mjs` must keep that order.
-- The SePay webhook (`POST /api/payments/sepay/webhook`) has its own route with no authorizer. API Gateway drops empty header overrides, so payment-service strips the identity headers itself.
+- The two web apps have separate hostnames so their `localStorage` tokens never meet (each origin has its own). One public ALB serves both through host rules; TLS ends there with an ACM certificate, and port 80 redirects to 443.
+- The web containers proxy `/api` to API Gateway. API Gateway forwards the `Authorization` header untouched and overwrites only the path and `x-request-id`. Each service verifies the bearer access token against the JWKS of identity-service (`IDENTITY_JWKS_URL`).
+- The SePay webhook (`POST /api/payments/sepay/webhook`) has its own route that forwards only the path and `x-request-id`. payment-service ignores the identity headers on it.
 - RabbitMQ is a Fargate task (`rabbitmq.<environment>.pharmacy.internal`) with its queues on ephemeral task storage, because Amazon MQ has no RabbitMQ 4 broker below `mq.m7g.medium` (about 100 USD a month). A restart loses only events that were queued and not yet consumed.
 - Typesense is a Fargate task with an empty task volume at `/data`. The index is a derived copy that catalog-service rebuilds from PostgreSQL.
 - `embedder_enabled` and `otel_collector_enabled` default to `false`. Search then uses keyword matching, and the System page shows no metrics.
-- Task sizes: every backend service runs `task_cpu` 256 / `task_memory` 512 MiB, the Fargate minimum, between `autoscale_min_capacity` (1) and `autoscale_max_capacity` (3) tasks. `autoscaling.tf` adds ECS Application Auto Scaling target tracking on average CPU (`autoscale_cpu_target_percent`, 50) and memory (`autoscale_memory_target_percent`, 70), with a 30 s scale-out and 60 s scale-in cooldown; `autoscaling_enabled = false` starts the fixed `desired_count` and creates no targets. The service ignores later `desired_count` changes (`lifecycle`), so the count is changed through the autoscaling capacity while it is on. The ceiling is also bounded by the account's Fargate vCPU quota (`max_capacity * task_cpu / 1024`), and RabbitMQ runs 512 / 1024. Container Insights is off, and logs are kept `log_retention_in_days` (7) days. RDS is `db.t4g.micro`.
+- Task sizes (`variables.tf`, sized to the 6 vCPU Fargate quota): backend, migration and ops tasks run `task_cpu` 512 / `task_memory` 2048 MiB (0.5 vCPU, 2 GB); customer-web and staff-web run `web_task_cpu` 256 / `web_task_memory` 512 MiB; RabbitMQ runs 256 / 512 and Typesense 256 / 512, all valid Fargate pairs. The embedder keeps its own 2048 / 4096 (`embedder_task_cpu`, `embedder_task_memory`); it is off by default and would add 2 vCPU when on.
+- Desired counts (autoscaling off, the default): every ECS service runs 1 task. `desired_count` (1) applies to all of them, and `service_desired_count` is an optional per-service override (empty by default). The count applies on every apply because the ECS services set `desired_count` from these variables.
+- Why autoscaling is off: the stack must stay within the 6 vCPU quota, and scale-out would add 0.5 vCPU per backend task. `autoscaling.tf` keeps the ECS Application Auto Scaling target tracking code (average CPU `autoscale_cpu_target_percent` and memory `autoscale_memory_target_percent`, between `autoscale_min_capacity` and `autoscale_max_capacity`). Set `autoscaling_enabled = true` only with a quota that covers the maximum. While it is on, the ECS service leaves `desired_count` unset and the scalable target owns the count.
+- vCPU budget at the fixed counts: 9 backend x 0.5 = 4.5, 2 web x 0.25 = 0.5, RabbitMQ 0.25, Typesense 0.25. Total long-running 5.5 vCPU of the 6 vCPU On-Demand Fargate quota (`L-3032A538`). That leaves 0.5 vCPU, enough for one one-shot migration or ops task (0.5 vCPU) at a time. Run the migration and ops tasks one at a time.
+- Rolling deploys stop before they start: `deployment_minimum_healthy_percent` 0 and `deployment_maximum_percent` 100 on every ECS service, so a deploy never runs more tasks than desired and stays within the quota. The cost is a brief outage per service while its single old task stops and the new task becomes healthy. Expect it on each release.
+- A quota increase request (24 vCPU, id `b83f3c4366164a97a770b833bd25372bgmHz9ka3`) was filed and is PENDING. This stack does not rely on it; it is sized for 6 vCPU.
+- RabbitMQ and Typesense are sized for the demo load. Container Insights is off, and logs are kept `log_retention_in_days` (7) days. RDS is `db.t4g.micro`.
 
-Security groups: the VPC Link reaches only the internal ALB; the internal ALB accepts the VPC Link and the authorizer Lambda and forwards to the task ports 3001-3010; tasks accept the ALB and each other (Cloud Map) and reach the internet through NAT.
+Security groups: the VPC Link reaches only the internal ALB; the internal ALB accepts the VPC Link and forwards to the task ports 3001-3010; tasks accept the ALB and each other (Cloud Map) and reach the internet through NAT.
 
 ## Images and secrets
 
 - `registry.tf` creates one ECR repository per service plus `ops`, with immutable tags. A tag can never be pushed twice, so every build needs a new tag; use `staging-<git short SHA>`.
 - `node tools/aws-push-images.mjs <tag>` builds the backend images for `linux/amd64` and the `ops` image, then pushes them. Set the same tag with `-var image_tag=<tag>`.
 - `node tools/aws-env.mjs [tag]` writes `demo.auto.tfvars.json` (git-ignored, holds secrets) from the root `.env`: service settings, map keys, delivery and SePay values.
-- Terraform generates the database, broker and internal secrets and stores them as SSM SecureString parameters, except the two internal secrets the authorizer Lambda reads, which stay in Secrets Manager. Task definitions read them as ECS secrets; the execution role is limited to those ARNs.
+- Terraform generates the database, broker and internal secrets and stores them as SSM SecureString parameters. `ACCESS_TOKEN_PRIVATE_KEY`, `ACCESS_TOKEN_PUBLIC_JWK` and `ACCESS_TOKEN_KEY_ID` (the identity-service signing key) travel the same way through `demo.auto.tfvars.json`: run `pnpm run auth:keygen` once, put the three lines it prints in the root `.env`, then run `node tools/aws-env.mjs`. Every other service except search-service gets `IDENTITY_JWKS_URL` from Terraform and fetches the public key from identity-service. Task definitions read them as ECS secrets; the execution role is limited to those ARNs.
 - Platform Admin AI settings stay in staff-web. `SECRETS_ENCRYPTION_KEY` is shared by chatbot-service, sales-service and catalog-service.
 
 ## Release workflow
@@ -59,7 +65,7 @@ terraform apply -var domain_name=<domain> -var image_tag=<tag>
 terraform apply -var domain_name=<domain> -var image_tag=<tag> -var services_enabled=true
 ```
 
-A release with a new tag repeats the push, a `plan` review, the migration tasks for services whose schema changed, and the apply with `services_enabled=true`. The ECS rolling deployment starts the new tasks before stopping the old ones.
+A release with a new tag repeats the push, a `plan` review, the migration tasks for services whose schema changed, and the apply with `services_enabled=true`. The ECS deployment stops the old task before starting the new one (stop-before-start, see Task sizes), so each service is briefly down during a release.
 
 ## Loading data
 
@@ -101,7 +107,39 @@ The internal ALB sees paths without `/api`. Rules are evaluated by priority, low
 ```bash
 terraform fmt -check -recursive
 terraform validate
-node --test lambda/tests/*.test.mjs
 ```
 
 `terraform destroy -var domain_name=<domain> -var image_tag=<tag>` removes everything, ECR repositories included. Delete the DNS records afterwards. NAT, RDS, ElastiCache, the ALBs and the Fargate tasks bill while the stack runs; see the cost table in the design.
+
+## Idle mode (cut cost, keep data, resume later)
+
+Full destroy loses the RDS data. For a pause, keep the cheap, stateful pieces and remove only the hourly billers.
+
+Keep (free or nearly free when idle): VPC, subnets, security groups, DB subnet group, RDS instance (stopped), ECR, SSM, S3, IAM, log groups.
+
+Remove (cannot be paused): NAT gateway and EIP, both ALBs, ElastiCache (cache only, no durable data), the ECS services (desired count 0 or destroy).
+
+Pause:
+
+```bash
+aws rds stop-db-instance --db-instance-identifier pharmacy-central-staging
+terraform destroy -target=aws_lb.internal -target=aws_lb.web -target=aws_elasticache_cluster.this \
+  -target=aws_nat_gateway.this -target=aws_eip.nat   # plus -var flags as in Release workflow
+```
+
+Resume:
+
+```bash
+aws rds start-db-instance --db-instance-identifier pharmacy-central-staging
+aws rds wait db-instance-available --db-instance-identifier pharmacy-central-staging
+export CLOUDFLARE_API_TOKEN=...   # DNS records are recreated by apply
+terraform apply -var domain_name=<domain> -var image_tag=<tag> -var cloudflare_zone_id=<zone id>
+```
+
+Notes:
+
+- `terraform apply` skips what still exists in state and creates only what is missing (ALBs, NAT, ElastiCache, ECS services, DNS). It never starts a stopped RDS: start it yourself first, or the ECS tasks cannot reach the database.
+- RDS cannot stay stopped past 7 days; AWS starts it again automatically and bills the instance hours. Stop it again, or destroy it.
+- A stopped RDS still bills storage and backups.
+- ElastiCache and ALB have no stop state, so they are destroyed and recreated.
+- Run `terraform apply` with the same variables as the original apply, or the plan will replace resources.

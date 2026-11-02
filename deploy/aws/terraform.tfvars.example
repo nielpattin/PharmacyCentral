@@ -12,9 +12,12 @@ image_tag = "replace-with-image-tag"
 # First apply: false, so the database roles and migrations run before the services start.
 services_enabled = false
 
-# ECS Application Auto Scaling for the backend services (`autoscaling.tf`): target tracking on average CPU and memory,
-# between `autoscale_min_capacity` and `autoscale_max_capacity` tasks.
-autoscaling_enabled             = true
+# Task sizes (`task_cpu`/`task_memory` 512/2048 for backend, migration and ops; `web_task_cpu`/`web_task_memory` 256/512)
+# and the 1-task counts (`desired_count`, optional per-service `service_desired_count`) are the defaults in variables.tf,
+# sized to the 6 vCPU Fargate quota. Off by default: services run the fixed counts. To turn on ECS Application Auto Scaling
+# (`autoscaling.tf`, target tracking on average CPU and memory between `autoscale_min_capacity` and
+# `autoscale_max_capacity` tasks), set this to true.
+autoscaling_enabled             = false
 autoscale_min_capacity          = 1
 autoscale_max_capacity          = 3
 autoscale_cpu_target_percent    = 50

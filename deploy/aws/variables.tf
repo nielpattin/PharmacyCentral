@@ -60,19 +60,31 @@ variable "embedder_enabled" {
 }
 
 variable "task_cpu" {
-  description = "Fargate task CPU units shared by backend services."
+  description = "Fargate task CPU units for the backend, migration and ops tasks. 512 is 0.5 vCPU; the pair with task_memory must be a valid Fargate combination. Sized to fit the 6 vCPU On-Demand Fargate quota."
+  type        = number
+  default     = 512
+}
+
+variable "task_memory" {
+  description = "Fargate task memory in MiB for the backend, migration and ops tasks. 2048 MiB pairs with 512 CPU units (Fargate allows 1 to 4 GB at 0.5 vCPU)."
+  type        = number
+  default     = 2048
+}
+
+variable "web_task_cpu" {
+  description = "Fargate task CPU units for the customer-web and staff-web tasks (nginx). 256 is 0.25 vCPU; valid with web_task_memory."
   type        = number
   default     = 256
 }
 
-variable "task_memory" {
-  description = "Fargate task memory in MiB shared by backend services."
+variable "web_task_memory" {
+  description = "Fargate task memory in MiB for the customer-web and staff-web tasks. 512 MiB pairs with 256 CPU units."
   type        = number
   default     = 512
 }
 
 variable "desired_count" {
-  description = "Number of tasks per backend service at creation. Later changes are ignored: while autoscaling is on, the scalable target owns the count between autoscale_min_capacity and autoscale_max_capacity."
+  description = "Default number of tasks per ECS service (backend and web) when service_desired_count does not name it. Applied on every apply while autoscaling_enabled is false."
   type        = number
   default     = 1
 
@@ -82,10 +94,21 @@ variable "desired_count" {
   }
 }
 
+variable "service_desired_count" {
+  description = "Optional per-service task count overrides, keyed by service name. Services not listed use desired_count (1). Applied on every apply while autoscaling_enabled is false. Each backend task is 0.5 vCPU against the Fargate vCPU quota."
+  type        = map(number)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for count in values(var.service_desired_count) : count >= 1])
+    error_message = "Each service in service_desired_count must keep at least one task running."
+  }
+}
+
 variable "autoscaling_enabled" {
-  description = "Enable ECS Application Auto Scaling for backend services under load."
+  description = "Enable ECS Application Auto Scaling for backend services (autoscaling.tf). Off by default: services run the fixed counts in service_desired_count. When on, the scalable target owns the count between autoscale_min_capacity and autoscale_max_capacity."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "autoscale_min_capacity" {
@@ -135,17 +158,17 @@ variable "autoscale_memory_target_percent" {
 variable "throttling_burst_limit" {
   description = "AWS API Gateway burst limit for the default route."
   type        = number
-  default     = 200
+  default     = 2000
 }
 
 variable "throttling_rate_limit" {
   description = "AWS API Gateway steady-state requests per second for the default route."
   type        = number
-  default     = 100
+  default     = 1000
 }
 
 variable "log_retention_in_days" {
-  description = "CloudWatch log retention in days for ECS services, Lambda functions, and API Gateway access logs."
+  description = "CloudWatch log retention in days for ECS services and API Gateway access logs."
   type        = number
   default     = 7
 }

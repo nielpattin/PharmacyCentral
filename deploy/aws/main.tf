@@ -96,7 +96,7 @@ locals {
     inventory-service        = ["catalog-service", "identity-service"]
     sales-service            = ["catalog-service", "inventory-service", "identity-service"]
     payment-service          = ["catalog-service", "sales-service"]
-    operations-query-service = ["catalog-service", "inventory-service", "sales-service"]
+    operations-query-service = ["catalog-service", "inventory-service", "sales-service", "payment-service"]
     chatbot-service          = ["catalog-service"]
     search-service           = ["catalog-service"]
     ops-console-service      = ["identity-service", "catalog-service", "search-service", "inventory-service", "sales-service", "payment-service", "operations-query-service", "chatbot-service"]
@@ -106,6 +106,7 @@ locals {
   service_environment = {
     for name in keys(local.backend_services) : name => merge(
       { OTEL_EXPORTER_OTLP_ENDPOINT = "http://otel-collector.${local.namespace}:4318" },
+      name == "identity-service" || name == "search-service" ? {} : { IDENTITY_JWKS_URL = "http://identity-service.${local.namespace}:${local.backend_services["identity-service"].port}/.well-known/jwks.json" },
       { for dep in lookup(local.service_dependencies, name, []) : "${replace(upper(dep), "-", "_")}_URL" => "http://${dep}.${local.namespace}:${local.backend_services[dep].port}" },
       name == "ops-console-service" ? {
         PROMETHEUS_URL     = "http://prometheus.${local.namespace}:9090"
@@ -113,10 +114,6 @@ locals {
       } : {},
     )
   }
-
-  # identity-service sets the session and CSRF cookies with Secure when var.cookie_secure is true. The services listed
-  # here refuse to start without COOKIE_SECURE (ADR 0010).
-  cookie_secure_services = ["identity-service"]
 
   # search-service is a Go binary: no node entrypoint, no Drizzle migration, and its own health endpoint.
   go_services = ["search-service"]
@@ -153,7 +150,6 @@ locals {
       lookup(var.service_environment_extra, name, {}),
       lookup(local.web_service_environment, name, {}),
       local.service_environment[name],
-      contains(local.cookie_secure_services, name) ? { COOKIE_SECURE = tostring(var.cookie_secure) } : {},
       contains(local.embedder_client_services, name) ? local.embedder_client_environment : {},
     )
   }
@@ -198,16 +194,6 @@ resource "aws_security_group" "ecs_tasks" {
   }
 }
 
-resource "aws_security_group" "lambda" {
-  name        = "${local.environment_name}-authorizer-lambda"
-  description = "Security group for authorizer Lambda in private VPC subnets"
-  vpc_id      = aws_vpc.this.id
-
-  tags = {
-    Name = "${local.environment_name}-authorizer-lambda"
-  }
-}
-
 resource "aws_security_group_rule" "vpc_link_egress_alb" {
   type                     = "egress"
   description              = "Allow outbound HTTP traffic from VPC link to internal ALB"
@@ -226,16 +212,6 @@ resource "aws_security_group_rule" "alb_ingress_vpc_link" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.alb.id
   source_security_group_id = aws_security_group.vpc_link.id
-}
-
-resource "aws_security_group_rule" "alb_ingress_lambda" {
-  type                     = "ingress"
-  description              = "Allow inbound HTTP traffic from Authorizer Lambda"
-  from_port                = 80
-  to_port                  = 80
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.alb.id
-  source_security_group_id = aws_security_group.lambda.id
 }
 
 resource "aws_security_group_rule" "alb_egress_tasks" {
@@ -298,16 +274,6 @@ resource "aws_security_group_rule" "tasks_egress_all" {
   cidr_blocks       = ["0.0.0.0/0"]
 }
 
-resource "aws_security_group_rule" "lambda_egress_all" {
-  type              = "egress"
-  description       = "Allow outbound traffic for internal ALB calls and NAT/AWS service access"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  security_group_id = aws_security_group.lambda.id
-  cidr_blocks       = ["0.0.0.0/0"]
-}
-
 resource "aws_security_group" "embedder" {
   count = var.embedder_enabled ? 1 : 0
 
@@ -350,7 +316,7 @@ resource "aws_security_group_rule" "embedder_egress_all" {
   count = var.embedder_enabled ? 1 : 0
 
   type              = "egress"
-  description       = "Allow outbound traffic for image pulls, CloudWatch Logs, Secrets Manager, and NAT gateway"
+  description       = "Allow outbound traffic for image pulls, CloudWatch Logs, SSM, and NAT gateway"
   from_port         = 0
   to_port           = 0
   protocol          = "-1"
@@ -409,7 +375,7 @@ resource "aws_iam_policy" "task_execution_secrets" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue", "ssm:GetParameters"]
+        Action   = ["ssm:GetParameters"]
         Resource = local.execution_secret_arns
       }
     ]
@@ -452,6 +418,10 @@ resource "aws_lb_target_group" "service" {
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = aws_vpc.this.id
+
+  # A stopped task leaves the load balancer after 30 s instead of 300 s. With maximumPercent 100 the replacement cannot
+  # start before then, so this is most of the recovery time after a task dies.
+  deregistration_delay = 30
 
   health_check {
     enabled             = true
@@ -728,15 +698,18 @@ resource "aws_ecs_task_definition" "ops" {
 resource "aws_ecs_service" "service" {
   for_each = var.services_enabled ? local.backend_services : {}
 
-  name                               = "${local.environment_name}-${each.key}"
-  cluster                            = aws_ecs_cluster.this.id
-  task_definition                    = aws_ecs_task_definition.service[each.key].arn
-  desired_count                      = var.desired_count
-  launch_type                        = "FARGATE"
-  platform_version                   = "1.4.0"
-  health_check_grace_period_seconds  = 60
-  deployment_minimum_healthy_percent = 50
-  deployment_maximum_percent         = 200
+  name            = "${local.environment_name}-${each.key}"
+  cluster         = aws_ecs_cluster.this.id
+  task_definition = aws_ecs_task_definition.service[each.key].arn
+  # Fixed count while autoscaling is off. While it is on, null leaves the count to the scalable target (autoscaling.tf).
+  desired_count                     = var.autoscaling_enabled ? null : lookup(var.service_desired_count, each.key, var.desired_count)
+  launch_type                       = "FARGATE"
+  platform_version                  = "1.4.0"
+  health_check_grace_period_seconds = 60
+  # Stop-before-start: a rolling deploy never runs more tasks than desired_count, so it stays within the Fargate vCPU
+  # quota. Each service has a brief outage while its single old task stops and the new one becomes healthy.
+  deployment_minimum_healthy_percent = 0
+  deployment_maximum_percent         = 100
   enable_ecs_managed_tags            = true
   propagate_tags                     = "SERVICE"
 
@@ -754,14 +727,6 @@ resource "aws_ecs_service" "service" {
 
   service_registries {
     registry_arn = aws_service_discovery_service.service[each.key].arn
-  }
-
-  # The scalable target owns the count (autoscaling.tf). Ignoring the attribute keeps every plan after a scale-out from
-  # resetting it to var.desired_count and fighting the policies; with autoscaling off, the count still applies on
-  # creation. With autoscaling on, change the count through autoscale_min_capacity/autoscale_max_capacity; otherwise
-  # re-create the service.
-  lifecycle {
-    ignore_changes = [desired_count]
   }
 
   depends_on = [aws_lb_listener_rule.service, aws_lb_listener_rule.search_products]
@@ -812,7 +777,7 @@ resource "aws_ecs_task_definition" "embedder" {
       cpu       = local.embedder_task_cpu
       memory    = local.embedder_task_memory
       user      = "10001"
-      # The shell only expands API_KEY, which ECS injects from Secrets Manager, so the key never appears in Terraform
+      # The shell only expands API_KEY, which ECS injects from SSM, so the key never appears in Terraform
       # state or in this file. The :? guard stops the container if the secret is empty.
       entryPoint = ["/bin/sh", "-c"]
       command = [
@@ -874,140 +839,6 @@ resource "aws_ecs_service" "embedder" {
   }
 }
 
-data "archive_file" "lambda_package" {
-  type        = "zip"
-  source_dir  = "${path.module}/lambda"
-  output_path = "${path.module}/.terraform/lambda_package.zip"
-  excludes = [
-    "tests",
-    "tests/**",
-  ]
-}
-
-resource "aws_iam_role" "authorizer" {
-  name = "${local.environment_name}-authorizer-lambda"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-      Action = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "authorizer_vpc" {
-  role       = aws_iam_role.authorizer.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
-
-resource "aws_iam_policy" "authorizer_secrets" {
-  name        = "${local.environment_name}-authorizer-secrets"
-  description = "Allow authorizer Lambda to read the internal identity and service secrets"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = values(local.authorizer_secret_env)
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "authorizer_secrets" {
-  role       = aws_iam_role.authorizer.name
-  policy_arn = aws_iam_policy.authorizer_secrets.arn
-}
-
-resource "aws_iam_role" "csrf" {
-  name = "${local.environment_name}-csrf-lambda"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-      Action = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "csrf_basic" {
-  role       = aws_iam_role.csrf.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_cloudwatch_log_group" "authorizer" {
-  name              = "/aws/lambda/${local.environment_name}-authorizer"
-  retention_in_days = var.log_retention_in_days
-}
-
-resource "aws_lambda_function" "authorizer" {
-  filename         = data.archive_file.lambda_package.output_path
-  source_code_hash = data.archive_file.lambda_package.output_base64sha256
-  function_name    = "${local.environment_name}-authorizer"
-  role             = aws_iam_role.authorizer.arn
-  handler          = "index.authorizerHandler"
-  runtime          = "nodejs22.x"
-  timeout          = 10
-  memory_size      = 256
-
-  vpc_config {
-    subnet_ids         = aws_subnet.private[*].id
-    security_group_ids = [aws_security_group.lambda.id]
-  }
-
-  environment {
-    variables = merge(
-      {
-        NODE_ENV             = "production"
-        IDENTITY_SERVICE_URL = "http://${aws_lb.internal.dns_name}"
-      },
-      local.authorizer_secret_env
-    )
-  }
-
-  depends_on = [
-    aws_iam_role_policy_attachment.authorizer_vpc,
-    aws_cloudwatch_log_group.authorizer,
-  ]
-}
-
-resource "aws_cloudwatch_log_group" "csrf" {
-  name              = "/aws/lambda/${local.environment_name}-csrf"
-  retention_in_days = var.log_retention_in_days
-}
-
-resource "aws_lambda_function" "csrf" {
-  filename         = data.archive_file.lambda_package.output_path
-  source_code_hash = data.archive_file.lambda_package.output_base64sha256
-  function_name    = "${local.environment_name}-csrf"
-  role             = aws_iam_role.csrf.arn
-  handler          = "index.csrfHandler"
-  runtime          = "nodejs22.x"
-  timeout          = 5
-  memory_size      = 128
-
-  environment {
-    variables = {
-      COOKIE_SECURE = tostring(var.cookie_secure)
-    }
-  }
-
-  depends_on = [
-    aws_iam_role_policy_attachment.csrf_basic,
-    aws_cloudwatch_log_group.csrf,
-  ]
-}
-
 # No CORS: the browsers call /api on the origin of their app, and that origin proxies it here, so no cross-origin
 # request exists.
 resource "aws_apigatewayv2_api" "public" {
@@ -1043,9 +874,6 @@ resource "aws_apigatewayv2_stage" "default" {
       protocol                = "$context.protocol"
       responseLength          = "$context.responseLength"
       integrationErrorMessage = "$context.integrationErrorMessage"
-      authorizerError         = "$context.authorizer.error"
-      authorizerStatus        = "$context.authorizer.status"
-      authorizerLatency       = "$context.authorizer.latency"
       integrationLatency      = "$context.integration.latency"
       integrationStatus       = "$context.integration.status"
       userAgent               = "$context.identity.userAgent"
@@ -1058,32 +886,6 @@ resource "aws_apigatewayv2_stage" "default" {
   }
 }
 
-resource "aws_apigatewayv2_authorizer" "request" {
-  api_id                            = aws_apigatewayv2_api.public.id
-  authorizer_type                   = "REQUEST"
-  authorizer_uri                    = aws_lambda_function.authorizer.invoke_arn
-  authorizer_payload_format_version = "2.0"
-  enable_simple_responses           = true
-  name                              = "${local.environment_name}-request-authorizer"
-  authorizer_result_ttl_in_seconds  = 0
-}
-
-resource "aws_lambda_permission" "authorizer" {
-  statement_id  = "AllowApiGatewayInvokeAuthorizer"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.authorizer.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.public.execution_arn}/authorizers/${aws_apigatewayv2_authorizer.request.id}"
-}
-
-resource "aws_lambda_permission" "csrf" {
-  statement_id  = "AllowApiGatewayInvokeCsrf"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.csrf.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.public.execution_arn}/*/*/api/auth/csrf"
-}
-
 resource "aws_apigatewayv2_integration" "services" {
   api_id                 = aws_apigatewayv2_api.public.id
   integration_type       = "HTTP_PROXY"
@@ -1094,11 +896,8 @@ resource "aws_apigatewayv2_integration" "services" {
   payload_format_version = "1.0"
 
   request_parameters = {
-    "overwrite:path"                               = "/$request.path.proxy"
-    "overwrite:header.x-internal-identity-context" = "$context.authorizer.signedIdentityContext"
-    "overwrite:header.x-actor-id"                  = "$context.authorizer.actorId"
-    "overwrite:header.x-actor-type"                = "$context.authorizer.actorType"
-    "overwrite:header.x-request-id"                = "$context.requestId"
+    "overwrite:path"                = "/$request.path.proxy"
+    "overwrite:header.x-request-id" = "$context.requestId"
   }
 }
 
@@ -1106,22 +905,6 @@ resource "aws_apigatewayv2_route" "api" {
   api_id             = aws_apigatewayv2_api.public.id
   route_key          = "ANY /api/{proxy+}"
   target             = "integrations/${aws_apigatewayv2_integration.services.id}"
-  authorization_type = "CUSTOM"
-  authorizer_id      = aws_apigatewayv2_authorizer.request.id
-}
-
-resource "aws_apigatewayv2_integration" "csrf" {
-  api_id                 = aws_apigatewayv2_api.public.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.csrf.invoke_arn
-  integration_method     = "POST"
-  payload_format_version = "2.0"
-}
-
-resource "aws_apigatewayv2_route" "csrf" {
-  api_id             = aws_apigatewayv2_api.public.id
-  route_key          = "GET /api/auth/csrf"
-  target             = "integrations/${aws_apigatewayv2_integration.csrf.id}"
   authorization_type = "NONE"
 }
 
