@@ -32,3 +32,8 @@ output "migration_task_definitions" {
   description = "Task definition ARN of the one-shot database migration per service."
   value       = { for name, task in aws_ecs_task_definition.migration : name => task.arn }
 }
+
+output "github_ci_role_arn" {
+  description = "Role that GitHub Actions assumes (variable AWS_ROLE_ARN in the repository)."
+  value       = aws_iam_role.github_ci.arn
+}
