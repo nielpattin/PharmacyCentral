@@ -137,8 +137,12 @@ tsconfig.tsbuildinfo
 credentials.json
 plans/
 .omp/
-.factory/
 TODO.md
 
 # Scratch files for local experiments (load-test logs, profiles, helper scripts)
 tmp/
+
+.claude/*
+!.claude/skills/maintain-verification-skill/
+!.claude/skills/verify-pharmacy-central/
+CLAUDE.local.md
