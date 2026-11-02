@@ -57,6 +57,7 @@ import { StoreBreadcrumb } from "../components/storefront/StoreBreadcrumb.tsx";
 import { SiteFooter } from "../components/storefront/SiteFooter.tsx";
 import { SiteHeader } from "../components/storefront/SiteHeader.tsx";
 import { cartQueryKey, checkoutQueryKey, writeCart, writeDeliveryAddresses } from "../storefront/cart-cache.ts";
+import { createCheckoutKeys } from "../storefront/checkout-key.ts";
 import { buildPriceIndex, buildStockIndex, uniqueCategories } from "../storefront/catalog.ts";
 import { buildCheckoutLines, checkoutTotals, type CheckoutLine } from "../storefront/checkout.ts";
 import { formatMoney } from "../storefront/format.ts";
@@ -162,6 +163,7 @@ export const OrdersHubPage = (): React.JSX.Element => {
   const queryClient = useQueryClient();
   // Newest cart message wins: a timer only clears the feedback it was scheduled for.
   const feedbackToken = useRef(0);
+  const [checkoutKeys] = useState(createCheckoutKeys);
 
   const showFeedback = (next: Feedback): void => {
     feedbackToken.current += 1;
@@ -462,7 +464,7 @@ export const OrdersHubPage = (): React.JSX.Element => {
     setError(undefined);
     let order: CustomerOrderDetail | undefined;
     try {
-      const created = await createOrder({
+      const orderInput: Parameters<typeof createOrder>[0] = {
         selectedStoreId: selectedStore.id,
         fulfillmentType,
         paymentMethod,
@@ -470,8 +472,19 @@ export const OrdersHubPage = (): React.JSX.Element => {
         ...(fulfillmentType === "delivery"
           ? { delivery: { destination, ...(addressNote ? { addressNote } : {}) } }
           : {}),
+      };
+      // A retry of this same submission reuses its key, so the server answers the order it already created.
+      const submission = JSON.stringify({
+        order: orderInput,
+        lines: orderedLines.map((line) => ({
+          id: line.id,
+          productUnitId: line.productUnitId,
+          quantity: line.quantity,
+        })),
       });
+      const created = await createOrder(orderInput, checkoutKeys.keyFor(submission));
       order = created;
+      checkoutKeys.settle();
       // The order exists from here on: the orders tab is refreshed now rather than after the payment step below. The
       // server took the ordered lines out of the cart with the order, so a failed payment step cannot leave the same
       // items to be ordered a second time; the lines the shopper left unticked stay for a later order.

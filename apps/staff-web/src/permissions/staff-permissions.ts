@@ -3,7 +3,8 @@ import { translateText } from "../i18n.ts";
 /**
  * What each staff action needs before the server answers it, so a control the server would refuse is not offered. The
  * role contract is the role-by-section table in `docs/product/staff-shell-sign-in-and-navigation.md`; the server rules
- * are in `deploy/aws/lambda/policy.mjs`. A role list names every role that may act, Platform Admin included: it reads
+ * are the role rules in each service's `src/middleware/trusted-request.ts`. A role list names every role that may act,
+ * Platform Admin included: it reads
  * the operational screens and writes only users, site create and delete, AI credentials and the owner of an action plan.
  */
 

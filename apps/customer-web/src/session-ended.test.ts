@@ -9,6 +9,16 @@ describe("a 401 ends the shopper session", () => {
   let ended: Mock;
 
   beforeEach(() => {
+    const items = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string): string | null => items.get(key) ?? null,
+      setItem: (key: string, value: string): void => {
+        items.set(key, value);
+      },
+      removeItem: (key: string): void => {
+        items.delete(key);
+      },
+    });
     ended = vi.fn();
     setSessionEndedListener(ended);
     vi.stubGlobal(

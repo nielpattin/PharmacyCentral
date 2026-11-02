@@ -82,7 +82,6 @@ export const AccountPage = (): React.JSX.Element => {
   const [pendingAddressId, setPendingAddressId] = useState<string>();
   /** A create has no row to mark, so the form's own submit state is what shows a request is in flight. */
   const [savingAddress, setSavingAddress] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
 
   const accountQuery = useQuery({
     // The header renders the account label from this payload, so a sign-out has to take the whole page with it.
@@ -125,27 +124,18 @@ export const AccountPage = (): React.JSX.Element => {
 
   const announce = (next: AccountNotice): void => setNotice(next);
 
-  const signOut = async (): Promise<void> => {
-    setSigningOut(true);
-    try {
-      await logoutCustomer();
-      // Everything the signed-in shopper was reading belongs to that shopper: the account and order lists must not
-      // survive the sign-out in the cache for the next visitor to render from.
-      queryClient.removeQueries({ queryKey: accountQueryKey });
-      queryClient.removeQueries({ queryKey: ["customer-orders"] });
-      queryClient.removeQueries({ queryKey: ["customer-prescriptions"] });
-      queryClient.removeQueries({ queryKey: ["customer-prescription-consultations"] });
-      queryClient.removeQueries({ queryKey: checkoutQueryKey });
-      // The header now shows this browser's cart, so the cart is read again rather than kept from the account.
-      void queryClient.resetQueries({ queryKey: cartQueryKey });
-      void navigate({ to: "/" });
-    } catch (reason) {
-      announce({
-        kind: "error",
-        message: reason instanceof Error ? reason.message : "Không đăng xuất được, thử lại sau.",
-      });
-      setSigningOut(false);
-    }
+  const signOut = (): void => {
+    logoutCustomer();
+    // Everything the signed-in shopper was reading belongs to that shopper: the account and order lists must not
+    // survive the sign-out in the cache for the next visitor to render from.
+    queryClient.removeQueries({ queryKey: accountQueryKey });
+    queryClient.removeQueries({ queryKey: ["customer-orders"] });
+    queryClient.removeQueries({ queryKey: ["customer-prescriptions"] });
+    queryClient.removeQueries({ queryKey: ["customer-prescription-consultations"] });
+    queryClient.removeQueries({ queryKey: checkoutQueryKey });
+    // The header now shows this browser's cart, so the cart is read again rather than kept from the account.
+    void queryClient.resetQueries({ queryKey: cartQueryKey });
+    void navigate({ to: "/" });
   };
 
   const replaceAddresses = (next: DeliveryAddress[]): void => {
@@ -309,10 +299,7 @@ export const AccountPage = (): React.JSX.Element => {
       return (
         <ChangePasswordCard
           onChanged={() => {
-            // The browser is signed out now: drop the account's checkout copy and read this browser's cart instead.
-            queryClient.removeQueries({ queryKey: checkoutQueryKey });
-            void queryClient.resetQueries({ queryKey: cartQueryKey });
-            announce({ kind: "notice", message: "Đã đổi mật khẩu. Hãy đăng nhập lại." });
+            announce({ kind: "notice", message: "Đã đổi mật khẩu." });
           }}
         />
       );
@@ -429,14 +416,8 @@ export const AccountPage = (): React.JSX.Element => {
               );
             })}
             <li className="mt-1 border-t border-line pt-1">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                disabled={signingOut}
-                onClick={() => void signOut()}
-              >
-                {signingOut ? "Đang đăng xuất…" : "Đăng xuất"}
+              <Button type="button" variant="outline" className="w-full" onClick={signOut}>
+                Đăng xuất
               </Button>
             </li>
           </ul>

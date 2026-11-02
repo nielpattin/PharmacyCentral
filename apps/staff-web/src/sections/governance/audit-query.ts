@@ -98,7 +98,6 @@ const AUDIT_VERBS: Readonly<Record<string, string>> = {
   "access-updated": "Update access",
   "profile-updated": "Update profile",
   "password-reset": "Reset password",
-  "sessions-revoked": "Revoke sessions",
 };
 
 /**
@@ -112,14 +111,12 @@ const AUDIT_PHRASES: Readonly<Record<string, string>> = {
   "Update access|user": "Update user access",
   "Update profile|user": "Update user profile",
   "Reset password|user": "Reset user password",
-  "Revoke sessions|user": "Revoke user sessions",
   "Update image|product": "Update product image",
 };
 
 /** Verbs that read as a whole sentence without an entity after them: signing in, changing one's own password. */
 const AUDIT_STANDALONE_VERBS: Readonly<Record<string, string>> = {
   login: "Signed in",
-  logout: "Signed out",
   "password-changed": "Changed password",
   "profile-updated": "Updated profile",
   setup: "Created first administrator",

@@ -75,7 +75,7 @@ export const shellLiterals: Record<string, string> = {
   "At least 12 characters.": "Tối thiểu 12 ký tự.",
   "Change password": "Đổi mật khẩu",
   "Unable to change the password.": "Không đổi được mật khẩu.",
-  "Password changed. Sign in again with the new password.": "Đã đổi mật khẩu. Hãy đăng nhập lại bằng mật khẩu mới.",
+  "Password changed.": "Đã đổi mật khẩu.",
   Profile: "Hồ sơ",
   "Phone number": "Số điện thoại",
   "Used by colleagues and administrators to reach you.": "Để đồng nghiệp và quản trị viên liên hệ với bạn.",
@@ -95,6 +95,6 @@ export const shellLiterals: Record<string, string> = {
   "The new password and its confirmation do not match.": "Mật khẩu mới chưa khớp với phần xác nhận.",
   "Your name and phone number appear in staff lists and on the records you handle. The email is your sign-in name, and an administrator manages your roles and sites.":
     "Tên và số điện thoại của bạn hiển thị trong danh sách nhân viên và trên các hồ sơ bạn xử lý. Email là tên đăng nhập, còn vai trò và cơ sở do quản trị viên quản lý.",
-  "Changing the password ends every session of this account, on every browser. Sign in again with the new password.":
-    "Đổi mật khẩu sẽ kết thúc mọi phiên đăng nhập của tài khoản này trên mọi trình duyệt. Hãy đăng nhập lại bằng mật khẩu mới.",
+  "Use a new password of at least 12 characters. You stay signed in on this browser.":
+    "Dùng mật khẩu mới có ít nhất 12 ký tự. Bạn vẫn đăng nhập trên trình duyệt này.",
 };

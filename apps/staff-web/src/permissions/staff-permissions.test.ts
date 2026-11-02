@@ -18,7 +18,7 @@ const PHARMACIST = "Pharmacist";
 const WAREHOUSE = "Warehouse Staff";
 
 // Who the role contract admits for each action, without Platform Admin (listed separately below). Written from the inventory and
-// shell specs and deploy/aws/lambda/policy.mjs, not read back from the map, so a wrong map entry fails here.
+// shell specs and the services' role rules, not read back from the map, so a wrong map entry fails here.
 const admitted: Record<StaffAction, readonly StaffRole[]> = {
   "prescription.create": [PHARMACIST],
   "prescription.dispense": [PHARMACIST],

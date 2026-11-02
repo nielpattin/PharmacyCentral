@@ -47,9 +47,6 @@ export const SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
 /** Refused at the staff sign-in: a customer account. Shown through `translateText` (shell literals). */
 export const EMPLOYEE_ACCOUNT_REQUIRED = "Employee account required";
 
-/** Shown on the sign-in card after a forced password change: identity ends the session when the change succeeds. */
-export const PASSWORD_CHANGED_MESSAGE = "Password changed. Sign in again with the new password.";
-
 /** Refused at the staff sign-in: an employee with no role. Shown through `translateText` (shell literals). */
 export const NO_ROLE_ASSIGNED = "This account has no role assigned. Contact an administrator.";
 

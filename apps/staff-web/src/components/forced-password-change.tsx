@@ -2,14 +2,14 @@ import { Alert, Button, Field, Input } from "@pharmacy/ui";
 import { useState } from "react";
 
 import { translateText } from "../i18n.ts";
-import { request } from "../staff-api.ts";
+import { changePassword } from "../staff-api.ts";
 
 /** The password rule of identity's `change-password` route (12 to 200 characters). */
 const MIN_PASSWORD_LENGTH = 12;
 
 /**
  * Shown in place of every section while the employee must change the password (identity refuses the other calls with
- * 403 `password_change_required`). A successful change ends the session, so `onChanged` sends the employee to sign in.
+ * 403 `password_change_required`). A successful change stores the fresh token, so `onChanged` opens the sections.
  */
 export const ForcedPasswordChange = ({
   onChanged,
@@ -28,10 +28,7 @@ export const ForcedPasswordChange = ({
     setBusy(true);
     setError(undefined);
     try {
-      await request("/api/auth/change-password", {
-        method: "POST",
-        body: JSON.stringify({ currentPassword, nextPassword }),
-      });
+      await changePassword(currentPassword, nextPassword);
       onChanged();
     } catch (reason) {
       setBusy(false);

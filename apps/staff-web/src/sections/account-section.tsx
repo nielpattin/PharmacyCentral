@@ -20,7 +20,7 @@ import { useUnsavedChangesGuard } from "../hooks/useUnsavedChangesGuard.ts";
 import { useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { translateText } from "../i18n.ts";
 import { referenceName } from "./procurement/labels.ts";
-import { readOne, request, writeJson } from "../staff-api.ts";
+import { changePassword, readOne, writeJson } from "../staff-api.ts";
 import {
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
@@ -193,12 +193,13 @@ const ProfileCard = ({ account }: { account: OwnAccount }): React.JSX.Element =>
   );
 };
 
-const PasswordCard = ({ onChanged }: { onChanged: () => void }): React.JSX.Element => {
+const PasswordCard = (): React.JSX.Element => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [changed, setChanged] = useState(false);
 
   const submit = async (): Promise<void> => {
     const problem = passwordProblem(nextPassword, confirmPassword);
@@ -208,12 +209,14 @@ const PasswordCard = ({ onChanged }: { onChanged: () => void }): React.JSX.Eleme
     }
     setBusy(true);
     setError(undefined);
+    setChanged(false);
     try {
-      await request("/api/auth/change-password", {
-        method: "POST",
-        body: JSON.stringify({ currentPassword, nextPassword }),
-      });
-      onChanged();
+      await changePassword(currentPassword, nextPassword);
+      setCurrentPassword("");
+      setNextPassword("");
+      setConfirmPassword("");
+      setBusy(false);
+      setChanged(true);
     } catch (reason) {
       setBusy(false);
       setError(translateText(reason instanceof Error ? reason.message : "Unable to change the password."));
@@ -225,9 +228,7 @@ const PasswordCard = ({ onChanged }: { onChanged: () => void }): React.JSX.Eleme
       <CardHeader>
         <CardTitle>{translateText("Change password")}</CardTitle>
         <CardDescription>
-          {translateText(
-            "Changing the password ends every session of this account, on every browser. Sign in again with the new password.",
-          )}
+          {translateText("Use a new password of at least 12 characters. You stay signed in on this browser.")}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -270,6 +271,7 @@ const PasswordCard = ({ onChanged }: { onChanged: () => void }): React.JSX.Eleme
             />
           </Field>
           {error ? <Alert variant="danger">{error}</Alert> : null}
+          {changed ? <Alert variant="success">{translateText("Password changed.")}</Alert> : null}
           <div>
             <Button type="submit" disabled={busy}>
               {translateText("Change password")}
@@ -283,9 +285,9 @@ const PasswordCard = ({ onChanged }: { onChanged: () => void }): React.JSX.Eleme
 
 /**
  * The signed-in employee's own account: the identity facts they cannot edit, the name and phone they can, and the
- * password change. `onPasswordChanged` hands the sign-out to the shell, because identity ends every session on a change.
+ * password change.
  */
-export const AccountSection = ({ onPasswordChanged }: { onPasswordChanged: () => void }): React.JSX.Element => {
+export const AccountSection = (): React.JSX.Element => {
   const session = useSession();
   const account = useQuery({
     queryKey: accountQueryKey(session.userId),
@@ -306,7 +308,7 @@ export const AccountSection = ({ onPasswordChanged }: { onPasswordChanged: () =>
           <span className="sr-only">{translateText("Loading account...")}</span>
         </div>
       )}
-      <PasswordCard onChanged={onPasswordChanged} />
+      <PasswordCard />
     </section>
   );
 };

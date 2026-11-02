@@ -8,7 +8,7 @@ import { changePassword } from "../../customer-api.ts";
 const MIN_PASSWORD_LENGTH = 12;
 
 type ChangePasswordCardProps = {
-  /** The identity service signs the browser out after a change, so the page hands the outcome back and re-reads. */
+  /** Called once the new password is saved; the fresh token it came with is already stored. */
   onChanged: () => void;
 };
 
@@ -42,8 +42,7 @@ export const ChangePasswordCard = ({ onChanged }: ChangePasswordCardProps): Reac
       <CardHeader>
         <CardTitle>Đổi mật khẩu</CardTitle>
         <CardDescription>
-          Sau khi đổi mật khẩu, hệ thống kết thúc phiên đăng nhập hiện tại trên mọi trình duyệt. Bạn cần đăng nhập lại
-          bằng mật khẩu mới.
+          Mật khẩu mới có hiệu lực ngay cho lần đăng nhập sau. Bạn vẫn đăng nhập trên trình duyệt này.
         </CardDescription>
       </CardHeader>
       <CardContent>

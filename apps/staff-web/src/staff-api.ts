@@ -1,11 +1,10 @@
-import { apiServiceForPath, createIdentityContextCache, type IdentityContexts } from "@pharmacy/ui";
+import { createAccessTokenStore, type AccessGrant } from "@pharmacy/ui";
 import { z } from "zod";
 
 import { getLanguage, type Language } from "./i18n.ts";
 import { NEXT_CURSOR_HEADER, parseNextCursor } from "./lib/page-request.ts";
 
 export type ApiRequestOptions = RequestInit & {
-  csrfToken?: string;
   idempotencyKey?: string;
 };
 
@@ -30,74 +29,62 @@ export class ApiProblemError extends Error {
   }
 }
 
-let identityContextsEnabled = false;
+/** The access token every call sends as `Authorization: Bearer`. It is kept in localStorage until it expires. */
+export const accessTokens = createAccessTokenStore();
 
 let sessionEndedListener: (() => void) | undefined;
 
 /**
- * Called for a 401 that the identity-context retry did not clear. The shell registers it to end the session at once
- * (shell US4, Decision 6). `/api/auth/*` is excluded: the sign-in refusal and the session probe answer 401 by design.
+ * Called for a 401 from a service route. The shell registers it to end the session at once (shell US4, Decision 6). `/api/auth/*` is excluded: the sign-in refusal and the session probe answer 401 by design.
  */
 export const setSessionEndedListener = (listener: (() => void) | undefined): void => {
   sessionEndedListener = listener;
 };
 
-const identityContextCache = createIdentityContextCache(async () => {
-  const response = await fetch("/api/auth/context", {
-    credentials: "include",
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) throw new Error(`Identity contexts unavailable (${response.status})`);
-  return (await response.json()) as IdentityContexts;
-});
-
-export const setIdentityContextsEnabled = (enabled: boolean): void => {
-  identityContextsEnabled = enabled;
-  if (!enabled) identityContextCache.invalidate();
-};
-
 type SentResponse<T> = { body: T; headers: Headers };
 
 const send = async <T>(url: string, options: ApiRequestOptions): Promise<SentResponse<T>> => {
-  const attempt = async (retried: boolean): Promise<SentResponse<T>> => {
-    const headers = new Headers(options.headers);
-    headers.set("Accept", "application/json");
-    if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-    const browserCsrfToken =
-      typeof document === "undefined" ? undefined : document.cookie.match(/(?:^|;\s*)pharmacy_csrf=([^;]+)/)?.[1];
-    if (options.csrfToken ?? browserCsrfToken) headers.set("X-CSRF-TOKEN", options.csrfToken ?? browserCsrfToken ?? "");
-    if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
-    const service = apiServiceForPath(url);
-    if (service && identityContextsEnabled && !headers.has("x-internal-identity-context")) {
-      const token = await identityContextCache.tokenFor(service);
-      if (token) headers.set("x-internal-identity-context", token);
+  const headers = new Headers(options.headers);
+  headers.set("Accept", "application/json");
+  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
+  const token = accessTokens.current();
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(url, { ...options, headers });
+  if (response.status === 401 && !url.startsWith("/api/auth/")) {
+    accessTokens.clear();
+    sessionEndedListener?.();
+  }
+  if (!response.ok) {
+    let detail = `API request failed with status ${response.status}`;
+    let problem: ApiProblem = { status: response.status };
+    try {
+      const body = (await response.json()) as ApiProblem;
+      problem = { ...body, status: response.status };
+      detail = body.detail ?? body.title ?? detail;
+    } catch {
+      // Keep the status error when the upstream response is not JSON.
     }
-    const response = await fetch(url, { ...options, credentials: "include", headers });
-    if (response.status === 401 && service && identityContextsEnabled && !retried) {
-      identityContextCache.invalidate();
-      return attempt(true);
-    }
-    if (response.status === 401 && !url.startsWith("/api/auth/")) sessionEndedListener?.();
-    if (!response.ok) {
-      let detail = `API request failed with status ${response.status}`;
-      let problem: ApiProblem = { status: response.status };
-      try {
-        const body = (await response.json()) as ApiProblem;
-        problem = { ...body, status: response.status };
-        detail = body.detail ?? body.title ?? detail;
-      } catch {
-        // Keep the status error when the upstream response is not JSON.
-      }
-      throw new ApiProblemError(detail, problem);
-    }
-    if (response.status === 204) return { body: undefined as T, headers: response.headers };
-    return { body: (await response.json()) as T, headers: response.headers };
-  };
-  return attempt(false);
+    throw new ApiProblemError(detail, problem);
+  }
+  if (response.status === 204) return { body: undefined as T, headers: response.headers };
+  return { body: (await response.json()) as T, headers: response.headers };
 };
 
 export const request = async <T>(url: string, options: ApiRequestOptions = {}): Promise<T> =>
   (await send<T>(url, options)).body;
+
+/**
+ * Changes the signed-in account's password. Identity answers with a fresh token for the same account, which replaces
+ * the one the browser holds.
+ */
+export const changePassword = async (currentPassword: string, nextPassword: string): Promise<void> => {
+  const { accessToken, accessTokenExpiresAt } = await request<AccessGrant>("/api/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, nextPassword }),
+  });
+  accessTokens.set({ accessToken, accessTokenExpiresAt });
+};
 
 export type JsonPage = { rows: JsonRecord[]; nextCursor: string | null };
 

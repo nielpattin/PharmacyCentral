@@ -18,6 +18,10 @@ const isSessionGone = (error: unknown): boolean =>
   error instanceof ApiError && SESSION_GONE_STATUSES[error.status] === true;
 
 const failureText = (error: unknown): string => {
+  if (error instanceof ApiError && error.code === "ai_budget_exceeded")
+    return "Trợ lý tư vấn đã đạt giới hạn chi phí, tạm thời chưa trả lời được. Vui lòng quay lại sau.";
+  if (error instanceof ApiError && error.code === "assistant_busy")
+    return "Trợ lý tư vấn đang bận. Vui lòng gửi lại sau vài giây.";
   if (error instanceof ApiError && error.status === 503)
     return "Trợ lý tư vấn đang gặp sự cố. Vui lòng thử lại sau ít phút.";
   if (error instanceof ApiError && error.status === 429) return "Bạn hỏi hơi nhanh, vui lòng thử lại sau ít phút.";

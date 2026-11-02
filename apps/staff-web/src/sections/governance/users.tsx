@@ -63,26 +63,15 @@ export const UsersTab = (): React.JSX.Element => {
     await run({
       path: `/api/admin/users/${account.id}/reset-password`,
       body: { password },
-      success: "Password reset. The employee's sessions have been signed out.",
+      success: "Password reset.",
     });
-  };
-
-  const revokeSessions = async (account: EmployeeAccount): Promise<void> => {
-    const accepted = await confirm({
-      title: "Revoke sessions?",
-      description: "Every active session of this employee ends. They must sign in again.",
-      confirmLabel: "Revoke sessions",
-      tone: "danger",
-    });
-    if (!accepted) return;
-    await run({ path: `/api/admin/users/${account.id}/revoke-sessions`, success: "Sessions revoked." });
   };
 
   const deactivate = async (account: EmployeeAccount): Promise<void> => {
     const accepted = await confirm({
       title: "Deactivate account?",
       description:
-        "The employee can no longer sign in and every active session ends. Roles, sites and history are kept.",
+        "The employee can no longer sign in once the current sign-in expires. Roles, sites and history are kept.",
       confirmLabel: "Deactivate",
       tone: "danger",
     });
@@ -164,12 +153,6 @@ export const UsersTab = (): React.JSX.Element => {
                           id: "reset",
                           label: translateText("Reset password"),
                           onSelect: () => void resetPassword(account),
-                        },
-                        {
-                          id: "revoke",
-                          label: translateText("Revoke sessions"),
-                          tone: "danger" as const,
-                          onSelect: () => void revokeSessions(account),
                         },
                         ...(account.id === session.userId
                           ? []

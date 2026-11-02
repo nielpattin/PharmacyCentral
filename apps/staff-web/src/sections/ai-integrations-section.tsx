@@ -7,6 +7,7 @@ import { translateText } from "../i18n.ts";
 import { readRows, request, text } from "../staff-api.ts";
 import { AiCredentialCard, credentialsQueryKey, type FeatureStatus } from "./ai-integrations/credential-card.tsx";
 import { aiFeatures, type CredentialView } from "./ai-integrations/features.ts";
+import { AiBudgetPanel } from "./ai-integrations/ai-budget-panel.tsx";
 
 const loadStatuses = async (): Promise<FeatureStatus[]> => {
   const results = await Promise.allSettled(aiFeatures.map((feature) => request<CredentialView>(feature.path)));
@@ -59,6 +60,7 @@ export const AiIntegrationsSection = (): React.JSX.Element => {
           <span className="sr-only">{translateText("Loading AI integrations...")}</span>
         </div>
       )}
+      <AiBudgetPanel />
     </section>
   );
 };

@@ -1,4 +1,4 @@
-import { apiServiceForPath, createIdentityContextCache, type IdentityContexts } from "@pharmacy/ui";
+import { createAccessTokenStore, type AccessGrant } from "@pharmacy/ui";
 import { z } from "zod";
 
 import { setSessionSnapshot } from "./auth.ts";
@@ -10,33 +10,18 @@ import {
   storedGuestLines,
   updateGuestCartLine,
 } from "./storefront/guest-cart.ts";
-import { newUuid } from "./storefront/ids.ts";
 
 export type ApiRequestOptions = RequestInit & {
-  csrfToken?: string;
   idempotencyKey?: string;
 };
 
-let identityContextsEnabled = false;
-
-const identityContextCache = createIdentityContextCache(async () => {
-  const response = await fetch("/api/auth/context", {
-    credentials: "include",
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) throw new Error(`Identity contexts unavailable (${response.status})`);
-  return (await response.json()) as IdentityContexts;
-});
-
-export const setIdentityContextsEnabled = (enabled: boolean): void => {
-  identityContextsEnabled = enabled;
-  if (!enabled) identityContextCache.invalidate();
-};
+/** The access token every call sends as `Authorization: Bearer`. It is kept in localStorage until it expires. */
+const accessTokens = createAccessTokenStore();
 
 let sessionEndedListener: (() => void) | undefined;
 
 /**
- * Called for a 401 that the identity-context retry did not clear. The app registers it to end the session at once and
+ * Called for a 401 from a service route. The app registers it to end the session at once and
  * open the sign-in dialog over the current page (customer-web shopper flows). `/api/auth/*` is excluded: the sign-in
  * refusal and the session probe answer 401 by design.
  */
@@ -62,47 +47,37 @@ export class ApiError extends Error {
 }
 
 export const request = async <T>(url: string, options: ApiRequestOptions = {}): Promise<T> => {
-  const attempt = async (retried: boolean): Promise<T> => {
-    const headers = new Headers(options.headers);
-    headers.set("Accept", "application/json");
-    if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-    const browserCsrfToken =
-      typeof document === "undefined" ? undefined : document.cookie.match(/(?:^|;\s*)pharmacy_csrf=([^;]+)/)?.[1];
-    if (options.csrfToken ?? browserCsrfToken) headers.set("X-CSRF-TOKEN", options.csrfToken ?? browserCsrfToken ?? "");
-    if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
-    const service = apiServiceForPath(url);
-    if (service && identityContextsEnabled && !headers.has("x-internal-identity-context")) {
-      const token = await identityContextCache.tokenFor(service);
-      if (token) headers.set("x-internal-identity-context", token);
+  const headers = new Headers(options.headers);
+  headers.set("Accept", "application/json");
+  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
+  const token = accessTokens.current();
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(url, { ...options, headers });
+  if (response.status === 401 && !url.startsWith("/api/auth/")) {
+    accessTokens.clear();
+    sessionEndedListener?.();
+  }
+  if (!response.ok) {
+    let detail = `Không thực hiện được yêu cầu (mã ${response.status})`;
+    let code: string | undefined;
+    try {
+      const problem = (await response.json()) as { title?: string; detail?: string; code?: string };
+      detail = problem.detail ?? problem.title ?? detail;
+      code = problem.code;
+    } catch {
+      // Keep the status error when the upstream response is not JSON.
     }
-    const response = await fetch(url, { ...options, credentials: "include", headers });
-    if (response.status === 401 && service && identityContextsEnabled && !retried) {
-      identityContextCache.invalidate();
-      return attempt(true);
-    }
-    if (response.status === 401 && !url.startsWith("/api/auth/")) sessionEndedListener?.();
-    if (!response.ok) {
-      let detail = `Không thực hiện được yêu cầu (mã ${response.status})`;
-      let code: string | undefined;
-      try {
-        const problem = (await response.json()) as { title?: string; detail?: string; code?: string };
-        detail = problem.detail ?? problem.title ?? detail;
-        code = problem.code;
-      } catch {
-        // Keep the status error when the upstream response is not JSON.
-      }
-      const retryAfter = Number(response.headers.get("Retry-After"));
-      throw new ApiError(
-        response.status,
-        detail,
-        code,
-        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
-      );
-    }
-    if (response.status === 204) return undefined as T;
-    return (await response.json()) as T;
-  };
-  return attempt(false);
+    const retryAfter = Number(response.headers.get("Retry-After"));
+    throw new ApiError(
+      response.status,
+      detail,
+      code,
+      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+    );
+  }
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
 };
 
 export type CatalogUnit = {
@@ -392,15 +367,22 @@ export const reverseGeocode = (destination: {
 }): Promise<{ providerResolvedAddress: string }> =>
   request("/api/delivery/reverse-geocode", { method: "POST", body: JSON.stringify({ destination }) });
 
-export const createOrder = (input: {
-  selectedStoreId: string;
-  fulfillmentType: "pickup" | "delivery";
-  paymentMethod: "sepay_qr" | "cash_on_delivery";
-  /** Orders the ticked lines of the signed-in shopper's cart; the server reads them and removes them once ordered. */
-  fromCart: true;
-  delivery?: { destination: { latitude: number; longitude: number }; addressNote?: string };
-}): Promise<CustomerOrderDetail> =>
-  request("/api/orders", { method: "POST", body: JSON.stringify(input), idempotencyKey: newUuid() });
+/**
+ * Places the order of one checkout submission. The caller passes that submission's key, so a retry of the same
+ * submission carries the same Idempotency-Key and the server answers the order it already created.
+ */
+export const createOrder = (
+  input: {
+    selectedStoreId: string;
+    fulfillmentType: "pickup" | "delivery";
+    paymentMethod: "sepay_qr" | "cash_on_delivery";
+    /** Orders the ticked lines of the signed-in shopper's cart; the server reads them and removes them once ordered. */
+    fromCart: true;
+    delivery?: { destination: { latitude: number; longitude: number }; addressNote?: string };
+  },
+  idempotencyKey: string,
+): Promise<CustomerOrderDetail> =>
+  request("/api/orders", { method: "POST", body: JSON.stringify(input), idempotencyKey });
 export const createPaymentInvoice = (input: {
   invoiceId: string;
   orderId: string;
@@ -575,45 +557,44 @@ export const updateProfile = (input: { displayName?: string; phoneNumber?: strin
   request("/api/auth/me", { method: "PATCH", body: JSON.stringify(input) });
 export const registerCustomer = (email: string, password: string, displayName: string) =>
   request("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password, displayName }) });
+
 export const loginCustomer = async (email: string, password: string): Promise<Customer> => {
-  const customer = await request<Customer>("/api/auth/login", {
+  const { accessToken, accessTokenExpiresAt, ...customer } = await request<Customer & AccessGrant>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+  accessTokens.set({ accessToken, accessTokenExpiresAt });
   forgetSessionProbe();
-  return customer;
+  return customer as Customer;
 };
 
-/** Signing out also drops the signed internal-context cache, so a later signed-out call cannot replay the old identity. */
-export const logoutCustomer = async (): Promise<void> => {
-  await request("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
+/** Signing out discards the access token, so a later signed-out call cannot replay the old identity. */
+export const logoutCustomer = (): void => {
+  accessTokens.clear();
   forgetSessionProbe();
   setSessionSnapshot({ authenticated: false, resolved: true });
-  setIdentityContextsEnabled(false);
 };
 
 /** The Vietnamese text of `auth.sessionExpired`, as the staff app shows it. */
 export const SESSION_EXPIRED_NOTICE = "Phiên đã hết hạn. Vui lòng đăng nhập lại.";
 
-/** Ends a session that a 401 revoked: the probe is forgotten, and the sign-in dialog opens with the notice. */
+/** Ends a session that a 401 rejected: the probe is forgotten, and the sign-in dialog opens with the notice. */
 export const endCustomerSessionAfter401 = (): void => {
   forgetSessionProbe();
   setSessionSnapshot({ authenticated: false, resolved: true, sessionEndedNotice: SESSION_EXPIRED_NOTICE });
-  setIdentityContextsEnabled(false);
+  accessTokens.clear();
 };
 
 /**
- * The identity service clears the session cookie on a password change, so the caller has to sign in again with the
- * password it just set. The snapshot is dropped for the same reason: the browser is signed out whether or not it says so.
+ * Identity answers a password change with a fresh token for the same account, which replaces the one the browser
+ * holds, so the shopper stays signed in.
  */
 export const changePassword = async (currentPassword: string, nextPassword: string): Promise<void> => {
-  await request("/api/auth/change-password", {
+  const { accessToken, accessTokenExpiresAt } = await request<AccessGrant>("/api/auth/change-password", {
     method: "POST",
     body: JSON.stringify({ currentPassword, nextPassword }),
   });
-  forgetSessionProbe();
-  setSessionSnapshot({ authenticated: false, resolved: true });
-  setIdentityContextsEnabled(false);
+  accessTokens.set({ accessToken, accessTokenExpiresAt });
 };
 
 export const currentUser = (): Promise<Customer | undefined> => request("/api/auth/me");
@@ -630,25 +611,30 @@ const forgetSessionProbe = (): void => {
 };
 
 const probeCustomerSession = async (): Promise<Customer | undefined> => {
-  await request("/api/auth/csrf");
-  // Only a 401 means "signed out". Any other failure must not be remembered as signed out, or a signed-in shopper's
-  // cart would stay hidden until the next sign-in.
-  const customer = await currentUser().catch((reason: unknown) => {
-    if (reason instanceof ApiError && reason.status === 401) return undefined;
-    throw reason;
-  });
-  if (!customer) {
+  accessTokens.adoptUrlFragment();
+  if (!accessTokens.current()) {
     setSessionSnapshot({ authenticated: false, resolved: true });
     return undefined;
   }
-  setSessionSnapshot({ authenticated: true, resolved: true, userId: customer.id });
-  setIdentityContextsEnabled(true);
-  return customer;
+  // Only a rejected token (401) means "signed out". Any other failure must not be remembered as signed out, or a
+  // signed-in shopper's cart would stay hidden until the next sign-in.
+  try {
+    const customer = await request<Customer>("/api/auth/me");
+    setSessionSnapshot({ authenticated: true, resolved: true, userId: customer.id });
+    return customer;
+  } catch (reason) {
+    if (reason instanceof ApiError && reason.status === 401) {
+      accessTokens.clear();
+      setSessionSnapshot({ authenticated: false, resolved: true });
+      return undefined;
+    }
+    throw reason;
+  }
 };
 
 /**
- * Resolves the shopper's session for a page that can be opened directly: probes the session cookie and publishes the
- * answer, so a deep link or a reload shows the right UI instead of guessing "signed out".
+ * Resolves the shopper's session for a page that can be opened directly: validates the stored token with
+ * `/api/auth/me` and publishes the answer, so a deep link or a reload shows the right UI instead of guessing "signed out".
  */
 export const resolveCustomerSession = (): Promise<Customer | undefined> => {
   sessionProbe ??= probeCustomerSession().catch((reason: unknown) => {

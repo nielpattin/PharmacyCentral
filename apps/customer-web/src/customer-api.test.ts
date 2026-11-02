@@ -1,3 +1,4 @@
+import { ACCESS_TOKEN_STORAGE_KEY } from "@pharmacy/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { forShopper, type Cart } from "./customer-api.ts";
@@ -58,44 +59,61 @@ const onlyLine = (cart: Cart) => {
   return line;
 };
 
-type Recorded = { method: string; url: string; body: unknown };
+const grant = () => ({
+  accessToken: "access-token",
+  accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+});
+
+/** The browser's localStorage, shared by the fake server (which seeds a held token) and the tests. */
+let items: Map<string, string>;
+
+const holdToken = (): void => {
+  const { accessToken, accessTokenExpiresAt } = grant();
+  items.set(
+    ACCESS_TOKEN_STORAGE_KEY,
+    JSON.stringify({ token: accessToken, expiresAt: new Date(accessTokenExpiresAt).getTime() }),
+  );
+};
+
+type Recorded = { method: string; url: string; body: unknown; authorization: string | null; headers: Headers };
 
 const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 /**
  * Stands in for the identity and sales services as far as the cart calls can tell. It records every request, so a
- * test can assert what reached the server and what stayed in the browser. A cart request is refused until the session
- * probe has answered, so a cart call that does not wait for the session fails the test.
+ * test can assert what reached the server and what stayed in the browser. A signed-in browser holds a token from the
+ * start. Its cart request is refused until `/api/auth/me` has answered, so a cart call that does not wait for the
+ * session fails the test.
  */
 const installFakeServer = (options: { signedIn: boolean; mergeStatus?: number; prescriptionOnly?: string[] }) => {
   let signedIn = options.signedIn;
   let probed = false;
+  if (signedIn) holdToken();
   const requests: Recorded[] = [];
   const fetchMock = vi.fn(async (url: string, init?: RequestInit): Promise<Response> => {
     const method = init?.method ?? "GET";
     const rawBody = init?.body;
     const body: unknown = typeof rawBody === "string" ? JSON.parse(rawBody) : undefined;
-    requests.push({ method, url, body });
+    const headers = new Headers(init?.headers);
+    requests.push({ method, url, body, authorization: headers.get("Authorization"), headers });
 
-    if (url.startsWith("/api/carts") && !probed) {
+    if (url.startsWith("/api/carts") && signedIn && !probed) {
       throw new Error(`Cart request sent before the session was known: ${method} ${url}`);
     }
-    if (url === "/api/auth/csrf") return new Response(null, { status: 204 });
     if (url === "/api/auth/me") {
       probed = true;
-      return signedIn ? jsonResponse(shopper) : jsonResponse(unauthenticated, 401);
+      return signedIn && headers.get("Authorization") === "Bearer access-token"
+        ? jsonResponse(shopper)
+        : jsonResponse(unauthenticated, 401);
     }
     if (url === "/api/auth/login") {
       signedIn = true;
-      return jsonResponse(shopper);
+      return jsonResponse({ ...shopper, ...grant() });
     }
-    if (url === "/api/auth/logout") {
-      signedIn = false;
-      return new Response(null, { status: 204 });
+    if (url === "/api/auth/change-password") {
+      return jsonResponse({ ...grant(), accessToken: "renewed-token" });
     }
-    // The identity contexts are not what these tests measure, so the service refuses them and the cart calls go on.
-    if (url === "/api/auth/context") return jsonResponse(unauthenticated, 401);
     if (url === "/api/carts/merge") {
       const status = options.mergeStatus ?? 200;
       return status === 200 ? jsonResponse(accountCart) : jsonResponse({ title: "Merge refused", status }, status);
@@ -119,7 +137,6 @@ const installFakeServer = (options: { signedIn: boolean; mergeStatus?: number; p
 
 describe("cart calls", () => {
   let api: typeof CustomerApi;
-  let items: Map<string, string>;
 
   beforeEach(async () => {
     // Loaded per test on purpose: the session answer and the merge in flight are module state, and a static import
@@ -130,6 +147,9 @@ describe("cart calls", () => {
       getItem: (key: string): string | null => items.get(key) ?? null,
       setItem: (key: string, value: string): void => {
         items.set(key, value);
+      },
+      removeItem: (key: string): void => {
+        items.delete(key);
       },
     });
     api = await import("./customer-api.ts");
@@ -149,7 +169,7 @@ describe("cart calls", () => {
     expect(await api.updateCartLine(line.id, 0)).toMatchObject({ lines: [] });
 
     expect(server.cartRequests()).toEqual([]);
-    expect(server.requestsTo("/api/auth/csrf")).toHaveLength(1);
+    expect(server.requestsTo("/api/auth/me")).toHaveLength(0);
   });
 
   it("waits for the session before choosing where the cart lives", async () => {
@@ -160,7 +180,11 @@ describe("cart calls", () => {
     // before the probe has answered.
     await expect(api.getCart()).resolves.toEqual(accountCart);
     expect(server.requestsTo("/api/carts/merge")).toHaveLength(1);
-    expect(server.requestsTo("/api/auth/csrf")).toHaveLength(1);
+    expect(server.requestsTo("/api/auth/me")).toHaveLength(1);
+    for (const request of server.requests) {
+      expect(request.headers.has("X-CSRF-TOKEN")).toBe(false);
+      expect(request.authorization).toBe("Bearer access-token");
+    }
   });
 
   it("sends the browser's lines once at sign-in and clears them after the server accepts them", async () => {
@@ -206,7 +230,8 @@ describe("cart calls", () => {
   it("stops reaching /api/carts after sign-out, and keeps the cart in the browser", async () => {
     const server = installFakeServer({ signedIn: true });
     await api.getCart();
-    await api.logoutCustomer();
+    api.logoutCustomer();
+    expect(items.has(ACCESS_TOKEN_STORAGE_KEY)).toBe(false);
     const cartRequestsBeforeSignedOut = server.cartRequests().length;
 
     await api.addCartLine(PRODUCT, UNIT, 1);
@@ -222,12 +247,37 @@ describe("cart calls", () => {
     expect(server.cartRequests()).toEqual([]);
 
     await api.loginCustomer("lan@example.com", "passphrase-123");
+    expect(JSON.parse(items.get(ACCESS_TOKEN_STORAGE_KEY) ?? "null")).toMatchObject({ token: "access-token" });
 
     await expect(api.getCart()).resolves.toEqual(accountCart);
     expect(server.requestsTo("/api/carts/merge").map((request) => request.body)).toEqual([
       { lines: [{ productId: PRODUCT, productUnitId: UNIT, quantity: 1, selected: false }] },
     ]);
   });
+
+  it("ends up signed out, with the token dropped, when /api/auth/me rejects the stored token", async () => {
+    const server = installFakeServer({ signedIn: false });
+    items.set(ACCESS_TOKEN_STORAGE_KEY, JSON.stringify({ token: "rejected", expiresAt: Date.now() + 3_600_000 }));
+
+    await expect(api.resolveCustomerSession()).resolves.toBeUndefined();
+    expect(server.requestsTo("/api/auth/me")).toHaveLength(1);
+    expect(items.has(ACCESS_TOKEN_STORAGE_KEY)).toBe(false);
+  });
+
+  it("does not call identity at startup when the stored token has expired", async () => {
+    const server = installFakeServer({ signedIn: false });
+    items.set(ACCESS_TOKEN_STORAGE_KEY, JSON.stringify({ token: "old", expiresAt: Date.now() - 1_000 }));
+
+    await expect(api.resolveCustomerSession()).resolves.toBeUndefined();
+    expect(server.requests).toEqual([]);
+  });
+
+  it("replaces the stored token with the fresh one a password change answers, and stays signed in", async () => {
+    installFakeServer({ signedIn: true });
+    await api.changePassword("old-passphrase-1", "new-passphrase-2");
+    expect(JSON.parse(items.get(ACCESS_TOKEN_STORAGE_KEY) ?? "null")).toMatchObject({ token: "renewed-token" });
+  });
+
   it("refuses a prescription-only product for a signed-out shopper and stores nothing", async () => {
     const server = installFakeServer({ signedIn: false, prescriptionOnly: [PRODUCT] });
 

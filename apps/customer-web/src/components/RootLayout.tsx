@@ -18,7 +18,7 @@ export const RootLayout = (): React.JSX.Element => {
   const queryClient = useQueryClient();
   const session = useSession();
   useQuery({ queryKey: ["customer-session"], queryFn: resolveCustomerSession });
-  // A 401 that the identity-context retry did not clear ends the session: every shopper query goes, so the next
+  // A 401 from a service route ends the session: every shopper query goes, so the next
   // shopper on this browser sees none of this one's data. The session probe stays, or the notice would be lost.
   useMountEffect(() => {
     setSessionEndedListener(() => {

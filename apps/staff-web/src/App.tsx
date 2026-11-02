@@ -25,16 +25,19 @@ import {
   Keyboard,
 } from "lucide-react";
 
-import { Alert, Breadcrumb, Button, Field, Input, PageHeader, ToastProvider, type BreadcrumbItem } from "@pharmacy/ui";
-
 import {
-  currentSession,
-  PASSWORD_CHANGED_MESSAGE,
-  SESSION_EXPIRED_MESSAGE,
-  setSessionSnapshot,
-  staffAccessRefusal,
-  useSession,
-} from "./auth.ts";
+  Alert,
+  Breadcrumb,
+  Button,
+  Field,
+  Input,
+  PageHeader,
+  ToastProvider,
+  type AccessGrant,
+  type BreadcrumbItem,
+} from "@pharmacy/ui";
+
+import { currentSession, SESSION_EXPIRED_MESSAGE, setSessionSnapshot, staffAccessRefusal, useSession } from "./auth.ts";
 import { ConfirmProvider } from "./components/confirm.tsx";
 import { CommandPalette } from "./components/command-palette.tsx";
 import { ForcedPasswordChange } from "./components/forced-password-change.tsx";
@@ -76,7 +79,7 @@ import { PrescriptionsSection } from "./sections/prescriptions-section.tsx";
 import { ProcurementSection } from "./sections/procurement-section.tsx";
 import { SearchSynonymsSection } from "./sections/search-synonyms-section.tsx";
 import { SystemSection } from "./sections/system-section.tsx";
-import { request, setIdentityContextsEnabled, setSessionEndedListener } from "./staff-api.ts";
+import { accessTokens, ApiProblemError, request, setSessionEndedListener } from "./staff-api.ts";
 import { governanceTabPaths, pathForSection, sectionFromPath, type Section, type StaffPath } from "./router.ts";
 import "./styles.css";
 
@@ -185,7 +188,7 @@ const StaffApp = (): React.JSX.Element => {
   // Ends the session in this tab and shows the sign-in card, with `message` when given. Every cached response goes, so
   // the next employee on this browser sees none of this one's rows (shell US4, Decision 8).
   const endSession = (message: string | undefined): void => {
-    setIdentityContextsEnabled(false);
+    accessTokens.clear();
     setSessionSnapshot({ authenticated: false });
     queryClient.clear();
     setEmail("");
@@ -193,7 +196,7 @@ const StaffApp = (): React.JSX.Element => {
     setError(message);
   };
 
-  // A 401 that the identity-context retry did not clear ends the session. The URL is kept, so the same page opens
+  // A 401 from a service route ends the session. The URL is kept, so the same page opens
   // once the employee signs in again (shell Decision 6).
   useMountEffect(() => {
     setSessionEndedListener(() => {
@@ -202,18 +205,26 @@ const StaffApp = (): React.JSX.Element => {
     return () => setSessionEndedListener(undefined);
   });
 
-  // A refused account keeps no session: the server ends it before the notice shows (shell Decision 7).
-  const refuseSession = async (message: string): Promise<void> => {
-    await request("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-    endSession(message);
-  };
+  // A refused account keeps no session: its token is dropped before the notice shows (shell Decision 7).
+  const refuseSession = (message: string): void => endSession(message);
 
+  // A token held from an earlier visit, or handed over by the Google callback, is checked with identity before the
+  // shell opens: `/api/auth/me` reads the account, so a deactivated or changed account is seen here.
   useMountEffect(() => {
-    void request("/api/auth/csrf")
-      .then(() => request<StaffAccount>("/api/auth/me"))
-      .then(async (current) => {
+    accessTokens.adoptUrlFragment();
+    const finish = (): void => setAuthReady(true);
+    if (!accessTokens.current()) {
+      setSessionSnapshot({ authenticated: false });
+      finish();
+      return;
+    }
+    void request<StaffAccount>("/api/auth/me")
+      .then((current) => {
         const refusal = staffAccessRefusal(current);
-        if (refusal) return refuseSession(refusal);
+        if (refusal) {
+          refuseSession(refusal);
+          return;
+        }
         setEmail(current.email ?? "");
         setSessionSnapshot({
           authenticated: true,
@@ -223,23 +234,29 @@ const StaffApp = (): React.JSX.Element => {
           siteIds: current.siteIds,
           passwordChangeRequired: current.passwordChangeRequired,
         });
-        setIdentityContextsEnabled(true);
       })
-      .catch(() => setSessionSnapshot({ authenticated: false }))
-      .finally(() => setAuthReady(true));
+      .catch((reason: unknown) => {
+        if (reason instanceof ApiProblemError && reason.problem.status === 401) accessTokens.clear();
+        setSessionSnapshot({ authenticated: false });
+      })
+      .finally(finish);
   });
 
   const login = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     try {
-      // `audience: "employee"` makes identity refuse a customer account before it sets any session cookie.
-      const account = await request<StaffAccount>("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password, audience: "employee" }),
-      });
+      // `audience: "employee"` makes identity refuse a customer account before it issues a token.
+      const { accessToken, accessTokenExpiresAt, ...account } = await request<StaffAccount & AccessGrant>(
+        "/api/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify({ email, password, audience: "employee" }),
+        },
+      );
+      accessTokens.set({ accessToken, accessTokenExpiresAt });
       const refusal = staffAccessRefusal(account);
       if (refusal) {
-        await refuseSession(refusal);
+        refuseSession(refusal);
         return;
       }
       setSessionSnapshot({
@@ -250,20 +267,15 @@ const StaffApp = (): React.JSX.Element => {
         siteIds: account.siteIds,
         passwordChangeRequired: account.passwordChangeRequired,
       });
-      setIdentityContextsEnabled(true);
       setError(undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Staff login failed");
     }
   };
 
-  const signOut = async (): Promise<void> => {
-    try {
-      await request("/api/auth/logout", { method: "POST" });
-    } finally {
-      endSession(undefined);
-      void navigate({ to: pathForSection("dashboard") });
-    }
+  const signOut = (): void => {
+    endSession(undefined);
+    void navigate({ to: pathForSection("dashboard") });
   };
 
   if (!authReady) {
@@ -303,7 +315,10 @@ const StaffApp = (): React.JSX.Element => {
   // Until the password is changed no section opens: identity refuses every other call (shell Decision 9).
   if (session.passwordChangeRequired) {
     return (
-      <ForcedPasswordChange onChanged={() => endSession(PASSWORD_CHANGED_MESSAGE)} onSignOut={() => void signOut()} />
+      <ForcedPasswordChange
+        onChanged={() => setSessionSnapshot({ ...currentSession(), passwordChangeRequired: false })}
+        onSignOut={signOut}
+      />
     );
   }
 
@@ -409,7 +424,7 @@ const StaffApp = (): React.JSX.Element => {
       case "actionPlans":
         return <ActionPlansSection key={activeSection} />;
       case "account":
-        return <AccountSection key={activeSection} onPasswordChanged={() => endSession(PASSWORD_CHANGED_MESSAGE)} />;
+        return <AccountSection key={activeSection} />;
     }
   };
 
@@ -603,7 +618,7 @@ const StaffApp = (): React.JSX.Element => {
                 <button type="button" className="profile-menu-item" onClick={() => toggleLanguage()}>
                   <span>{language.toUpperCase()}</span> {translateText("Switch language")}
                 </button>
-                <button type="button" className="profile-menu-item" onClick={() => void signOut()}>
+                <button type="button" className="profile-menu-item" onClick={signOut}>
                   <LogOut size={15} strokeWidth={2} /> {translateText("Sign out")}
                 </button>
               </div>
