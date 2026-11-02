@@ -19,7 +19,7 @@ Staff sign in at the staff portal with an employee email and password. A signed-
 
 Preconditions:
 
-- Mode chosen with the user. Dev mode: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-service,staff-web` reported `READY`. Container mode: `pnpm run stack:up` finished and every container in `docker compose ps` is healthy. No launch in container mode.
+- Mode chosen with the user. Dev mode: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-service,staff-web` reported `READY`. Container mode: `pnpm run aws` finished and every container in `docker compose ps` is healthy. No launch in container mode.
 - `node .agents/skills/verify-pharmacy-central/scripts/doctor.mjs --mode <dev|container> --need identity-service,staff-web --role staff-admin --email admin@pharmacycentral.vn` reports `RESULT ready`.
 - `admin@pharmacycentral.vn` is an active employee with the `Platform Admin` role. The doctor checks it with `--email`.
 - The role state `~/.omp/browser-profiles/staff-admin.json` exists and parses. `<home>` below is `os.homedir()`. If the state is missing or stale, sign in on a clean tab (below) and save it with `tab.saveState`.

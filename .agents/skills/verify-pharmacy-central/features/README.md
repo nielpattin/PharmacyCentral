@@ -6,21 +6,21 @@ This directory maps the user-facing features of the customer shop (`customer-web
 
 Ask the user which mode to use at the start of the session. Never assume it. Pass the answer to every helper as `--mode dev` or `--mode container`.
 
-- **Dev mode** (`--mode dev`): infra in Docker (`pnpm run infra:up`), apps on the host through Nx. The skill may start the Nx targets it needs with `launch.mjs --need <names>` and stops exactly what it started with `stop.mjs`.
-- **Container mode** (`--mode container`): everything in Docker (`pnpm run stack:up`), closest to AWS. The skill starts and stops nothing. It only checks (`doctor.mjs --mode container`) and drives.
+- **Dev mode** (`--mode dev`): infra in Docker (`pnpm run dev:infra`), apps on the host through Nx. The skill may start the Nx targets it needs with `launch.mjs --need <names>` and stops exactly what it started with `stop.mjs`.
+- **Container mode** (`--mode container`): everything in Docker (`pnpm run aws`), closest to AWS. The skill starts and stops nothing. It only checks (`doctor.mjs --mode container`) and drives.
 
-Each feature file names the launch step for dev mode and the single `stack:up` step for container mode.
+Each feature file names the launch step for dev mode and the single `aws` step for container mode.
 
 ## Baseline preconditions
 
-- Dev mode: `pnpm run infra:up` and `launch.mjs --need <names>`. Container mode: `pnpm run stack:up` and every container in `docker compose ps` healthy. Both modes: `pnpm run urls:up` once per session for the named URLs.
+- Dev mode: `pnpm run dev:infra` and `launch.mjs --need <names>`. Container mode: `pnpm run aws` and every container in `docker compose ps` healthy. Both modes: `pnpm run urls:up` once per session for the named URLs.
 - The migrations and demo accounts exist: `pnpm run db:migrate`, `pnpm run seed:default` (the admin) and `pnpm run seed:demo` (the demo accounts). The doctor checks the admin account by default, or the `--email` you pass.
 - Dev mode: `.tmp/verify/current` names the run, or pass `--run <id>` to every helper. Container mode: the drive snippet creates `container-<YYYYMMDD-HHMMSS>`.
 - Browser work uses the browser tool's default browser at 1920x1080, with `browser.open({ name, url, viewport, app: { tern: false, relay: false } })`. Signed-in roles are saved state files at `~/.omp/browser-profiles/<role>.json`. Read `xd://eval/browser` before first use.
 
 ## AI gate
 
-These services can call a paid AI provider. Each feature file that needs one is marked. Start them only with the user's explicit approval for that run. Dev mode enforces it with `launch.mjs --ai-approved`. In container mode the approval is the user's recorded go-ahead before `pnpm run stack:up`, because the catalog sweep runs when its container starts.
+These services can call a paid AI provider. Each feature file that needs one is marked. Start them only with the user's explicit approval for that run. Dev mode enforces it with `launch.mjs --ai-approved`. In container mode the approval is the user's recorded go-ahead before `pnpm run aws`, because the catalog sweep runs when its container starts.
 
 | Service | Where AI runs |
 | --- | --- |

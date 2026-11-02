@@ -1,9 +1,10 @@
 // Creates and approves the demo search synonym groups on the deployed stack, through the public API. The manager
 // proposes and the pharmacist approves, as four-eyes review requires. Safe to run again: a group that already exists
-// is skipped. Usage: node --env-file=.env tools/aws-seed-synonyms.mjs   (target: CHAOS_BASE_URL, default staff site)
+// is skipped. Usage: node --env-file=.env tools/aws-seed-synonyms.mjs   (target: CHAOS_BASE_URL in .env)
 import { searchSynonymGroups } from "./lib/demo-synonyms.mjs";
 
-const baseUrl = process.env.CHAOS_BASE_URL ?? "https://staff.nielpat.cloud";
+const baseUrl = process.env.CHAOS_BASE_URL;
+if (!baseUrl) throw new Error("CHAOS_BASE_URL is required: the staff site of the deployed stack, set in .env");
 const password = process.env.DEMO_ACCOUNT_PASSWORD;
 if (!password) throw new Error("DEMO_ACCOUNT_PASSWORD is required");
 

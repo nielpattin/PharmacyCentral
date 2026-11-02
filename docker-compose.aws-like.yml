@@ -1,63 +1,68 @@
-# Sizes the container stack like the ECS Fargate services of deploy/aws: every backend service gets the task size of
-# `task_cpu` / `task_memory` (0.5 vCPU, 1 GiB) and runs `desired_count` tasks (2), except sales-service, which gets
-# `sales_task_cpu` / `sales_task_memory` (1 vCPU, 2 GiB). Layer it over the main file:
+# Sizes the container stack like deploy/aws, one container per ECS service, as `terraform.tfvars` runs it
+# (`desired_count = 1`, autoscaling off). Layer it over the main file:
 #
-#   pnpm run stack:aws-like
+#   pnpm run aws
 #
-# Its purpose is load testing. Numbers measured on the plain stack are not what ECS gives. Two caveats:
-# - The data tier (PostgreSQL, Redis, RabbitMQ, Typesense) is not defined in deploy/aws, so its limits below are an
-#   assumption, not a mirror of production. Change them to match the managed services you pick.
-# - Autoscaling to `max_count` is not modelled: this is the floor of two tasks, which is the case that matters when
-#   asking where a deployment starts to fail.
-x-ecs-task:
-  &ecs-task # The host ports of the plain stack would collide between replicas. Everything goes through the gateway here.
-  ports: !reset []
+# Limits mirror the Fargate task sizes and the managed data tier of deploy/aws:
+# - Backend services: `task_cpu` 512 / `task_memory` 2048 (0.5 vCPU, 2 GiB). sales-service has no override.
+# - customer-web, staff-web: `web_task_cpu` 256 / `web_task_memory` 512 (0.25 vCPU, 512 MiB).
+# - RabbitMQ and Typesense are Fargate tasks of 256 / 512 in data.tf.
+# - The embedder is a Fargate task of 2048 / 4096 (`embedder_task_cpu`, `embedder_task_memory`).
+# - PostgreSQL is RDS `db.t4g.micro` (2 vCPU, 1 GiB) and Redis is ElastiCache `cache.t4g.micro` (2 vCPU, 0.5 GiB).
+# Fargate vCPUs are CPU quota, like the Docker limits below, so the numbers are comparable but not identical to AWS.
+x-backend-task: &backend-task
   deploy:
-    replicas: 2
     resources:
       limits:
         cpus: "0.5"
-        memory: 1g
+        memory: 2g
+
+x-web-task: &web-task
+  deploy:
+    resources:
+      limits:
+        cpus: "0.25"
+        memory: 512m
+
+x-data-task: &data-task
+  deploy:
+    resources:
+      limits:
+        cpus: "0.25"
+        memory: 512m
 
 services:
-  identity-service: *ecs-task
-  catalog-service: *ecs-task
-  search-service: *ecs-task
-  inventory-service: *ecs-task
-  sales-service:
-    <<: *ecs-task
+  identity-service: *backend-task
+  catalog-service: *backend-task
+  search-service: *backend-task
+  inventory-service: *backend-task
+  sales-service: *backend-task
+  payment-service: *backend-task
+  operations-query-service: *backend-task
+  chatbot-service: *backend-task
+  ops-console-service: *backend-task
+
+  customer-web: *web-task
+  staff-web: *web-task
+
+  rabbitmq: *data-task
+  typesense: *data-task
+  embedder:
     deploy:
-      replicas: 2
       resources:
         limits:
-          cpus: "1"
-          memory: 2g
-  payment-service: *ecs-task
-  operations-query-service: *ecs-task
-  chatbot-service: *ecs-task
-  ops-console-service: *ecs-task
+          cpus: "2"
+          memory: 4g
 
   postgres:
     deploy:
       resources:
         limits:
           cpus: "2"
-          memory: 4g
+          memory: 1g
   redis:
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: 1g
-  rabbitmq:
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: 2g
-  typesense:
-    deploy:
-      resources:
-        limits:
           cpus: "2"
-          memory: 4g
+          memory: 512m

@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { datasets, csvRows } from "../apps/staff-web/src/import-datasets.ts";
 
-const baseUrl = "https://staff.nielpat.cloud";
+const baseUrl = process.env.CHAOS_BASE_URL;
+if (!baseUrl) throw new Error("CHAOS_BASE_URL is required: the staff site of the deployed stack, set in .env");
 
 const requireEnv = (name) => {
   const value = process.env[name];

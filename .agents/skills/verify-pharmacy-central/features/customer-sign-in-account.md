@@ -19,7 +19,7 @@ A shopper signs in or registers from the account page, sees their name in the ac
 
 Preconditions:
 
-- Mode chosen with the user. Dev mode: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-service,sales-service,customer-web`. Container mode: `pnpm run stack:up` finished and healthy, with no launch. Sales-service is required for the sign-in merge. It is not AI-gated.
+- Mode chosen with the user. Dev mode: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-service,sales-service,customer-web`. Container mode: `pnpm run aws` finished and healthy, with no launch. Sales-service is required for the sign-in merge. It is not AI-gated.
 - `node .agents/skills/verify-pharmacy-central/scripts/doctor.mjs --mode <dev|container> --need identity-service,sales-service,customer-web --role customer --email khachhang@pharmacycentral.vn` reports `RESULT ready`. The doctor checks `admin@` by default, so pass `--email` to check this account.
 - The demo customer `khachhang@pharmacycentral.vn` exists with role `Customer`.
 - The password is `DEMO_ACCOUNT_PASSWORD` from `.env` (the demo seed creates this account). Read it inside the eval cell. Never print it.

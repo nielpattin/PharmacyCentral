@@ -117,7 +117,7 @@ model {
 
       k6 = observability "k6" {
         #obs
-        summary "Load generator, started on demand with pnpm run load. It drives the customer and staff journeys through the gateway and pushes its results to Prometheus. The chaos runner reuses it as its background load."
+        summary "Load generator, started on demand with pnpm run load. It drives the customer and staff journeys through the gateway, local or deployed, and pushes its results to Prometheus. The chaos runner against AWS reuses it as its background load."
       }
     }
   }

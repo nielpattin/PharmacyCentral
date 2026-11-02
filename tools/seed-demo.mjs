@@ -87,7 +87,7 @@ const signIn = async ({ email }) => {
     return { id: account.id, call };
   } catch (error) {
     throw new Error(
-      `Could not sign in as ${email} through ${baseUrl.origin}. Is the gateway reachable (pnpm run infra:up, and ` +
+      `Could not sign in as ${email} through ${baseUrl.origin}. Is the gateway reachable (pnpm run dev:infra, and ` +
         `host networking on Docker Desktop) and are the services running (pnpm dev)?\n` +
         String(error instanceof Error ? error.message : error),
       { cause: error },

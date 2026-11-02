@@ -315,7 +315,7 @@ services:
       - "${GATEWAY_PORT}:8080"
 
   # Same routes as `gateway`, but forwarding to services that `pnpm dev` runs on the host.
-  # Only started when named (`pnpm run infra:up`); it shares GATEWAY_PORT with `gateway`, so run one of them.
+  # Only started when named (`pnpm run dev:infra`); it shares GATEWAY_PORT with `gateway`, so run one of them.
   #
   # It shares the host network instead of publishing a port, and proxies to the host's own loopback.
   # A container on the compose bridge cannot reach host services: ufw denies new connections on INPUT
@@ -669,9 +669,9 @@ services:
     ports:
       - "${STAFF_WEB_PORT}:8080"
 
-  # Load and chaos runs (`pnpm run load -- <script>`). The profile keeps it out of `up`: it exists to be run on demand.
+  # Load runs (`pnpm run load -- <script>`). The profile keeps it out of `up`: it exists to be run on demand.
   # It sits on the compose network to write results to Prometheus, and reaches the gateway at LOAD_TARGET_URL:
-  # http://host.docker.internal:${GATEWAY_PORT} against `pnpm dev`, http://gateway:8080 against `stack:up`.
+  # http://host.docker.internal:${GATEWAY_PORT} against `pnpm dev`, http://gateway:8080 against `aws`, or at the public URL of the cloud stack.
   k6:
     image: grafana/k6:2.3.0@sha256:9c2dee7f8ed74d317e4027c06a10f169b625638189de8d4555d0b3486a5aeb34
     profiles: ["loadtest"]

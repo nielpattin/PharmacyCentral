@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // DEV MODE ONLY. Starts only the Nx dev targets a feature needs, waits until they are usable, and records every PID it
-// started. Container mode (pnpm run stack:up) is never launched here: check it with doctor.mjs --mode container.
+// started. Container mode (pnpm run aws) is never launched here: check it with doctor.mjs --mode container.
 // Usage (repo root):
 //   node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-service,staff-web [--run <id>] [--ai-approved]
 // Add --ai-approved only with the user's explicit approval for that run (catalog-service and chatbot-service call paid AI).
@@ -79,7 +79,7 @@ if (aiGated.length > 0 && !values["ai-approved"]) {
 
 // Preflight: nothing started yet, so every failure here is safe to exit on.
 const gateway = await httpGet(`${gatewayUrl()}/healthz`);
-if (gateway.status !== 200) fail(`gateway-dev is not answering on ${gatewayUrl()}. Run pnpm run infra:up first`);
+if (gateway.status !== 200) fail(`gateway-dev is not answering on ${gatewayUrl()}. Run pnpm run dev:infra first`);
 if (need.includes("identity-service")) {
   await identityDb((client) => client.query("select 1")).catch((error) =>
     fail(`identity database unreachable: ${error.message}`),

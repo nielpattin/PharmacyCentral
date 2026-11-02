@@ -74,8 +74,8 @@ The system supports two runtime topologies sharing the same Docker images and co
 ### 1. Local Docker Compose
 
 - Provisions backing infrastructure: PostgreSQL, RabbitMQ, Redis, Typesense, Mailpit, the OTel collector, and Floci (the local AWS emulator: S3 for product images, ECR for image push tests).
-- `pnpm run infra:up` starts that infra plus `gateway-dev`; `pnpm run infra:down` stops everything, `gateway-dev` included.
-- `pnpm run stack:up` switches to the full container stack (stops `gateway-dev`, rebuilds, waits until healthy); `pnpm run stack:down` switches back to dev mode.
+- `pnpm run dev:infra` starts that infra plus `gateway-dev` and runs the migrations; `pnpm dev` does that and then runs the apps; `pnpm run dev:down` stops everything, `gateway-dev` included.
+- `pnpm run aws` switches to the full container stack, sized like the ECS tasks (one container per service) (stops `gateway-dev`, rebuilds, migrates, waits until healthy); `pnpm run aws:down` switches back to dev mode.
 - `pnpm dev` runs every app in dev mode through Nx (`nx run-many -t dev --all`): services with `node --experimental-transform-types --watch` and both webs with Vite HMR. The flag is set in each service's own `dev` script because Node's strip-only TypeScript mode rejects the parameter properties they use. Nx loads `apps/<svc>-service/.env.dev` for the `dev` target, so each service gets its own port and `DATABASE_URL`; running `pnpm --dir apps/<app> dev` bypasses Nx and skips it.
 - Host port mappings and credentials load directly from the root `.env` file.
 
@@ -130,9 +130,9 @@ There are two local modes (details in `docs/runbook.md`). **Ask the user which o
 |                                | Dev mode                                                                                                   | Container mode                                                                            |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | What runs                      | Infra in Docker; the six services and both webs on the host (`node --watch`, Vite HMR)                     | Everything in Docker, built from the images, closest to AWS                               |
-| Start                          | `pnpm run infra:up`, then `pnpm dev` (background service; stop it when you finish unless the user runs it) | `pnpm run stack:up` (stops `gateway-dev`, rebuilds, waits until healthy)                  |
+| Start                          | `pnpm dev` (background service; stop it when you finish unless the user runs it) | `pnpm run aws` (stops `gateway-dev`, rebuilds, waits until healthy)                  |
 | Use it for                     | Fast iteration while coding                                                                                | Checking what ships; Dockerfile, Compose, env, dependency, migration, load and chaos work |
-| Latest change is visible after | The file is saved                                                                                          | You rebuild with `pnpm run stack:up`                                                      |
+| Latest change is visible after | The file is saved                                                                                          | You rebuild with `pnpm run aws`                                                      |
 
 Then follow the same loop in both modes:
 
@@ -140,7 +140,7 @@ Then follow the same loop in both modes:
 2. **Orient.** Read `docs/architecture.md`, the ADRs in `docs/adr`, any draft in `docs/design`, and the spec in `docs/product` of every page you change. Reuse the existing pattern. A big change (new service, new integration event, a schema change across services, a new external dependency) starts as a draft in `docs/design`; stop for review before building. A new page or user-facing feature, or a change to what a page contains or why, starts with its spec in `docs/product`. When an open question in that spec decides the work, ask the owner instead of guessing.
 3. **Implement in small slices.** Delegate disjoint slices to sub-agents in parallel and set shared contracts (types, schema, events) first. Sub-agents only edit; they do not run gates, formatters, or commit. Build UI only from `@pharmacy/ui`, with no custom in-place styles.
 4. **Run the gates once** (see Verification workflow). Use pnpm only.
-5. **Run the change in the chosen mode.** After a migration change run `pnpm run db:migrate`; Compose does not run it. In container mode rebuild with `pnpm run stack:up` and confirm every container in `docker compose ps` is healthy. Run `pnpm run urls:up` once per session for the named URLs.
+5. **Run the change in the chosen mode.** After a migration change run `pnpm run db:migrate`; Compose does not run it. In container mode rebuild with `pnpm run aws` and confirm every container in `docker compose ps` is healthy. Run `pnpm run urls:up` once per session for the named URLs.
 6. **Verify the real surface** (the `verify-pharmacy-central` skill in `.agents/skills` scripts the checks for both modes). Open the named URLs at 1920x1080 with the saved role state (see Browser testing) and exercise the changed path. For an API change, call it through `http://api.pharmacy.localhost`. Report only what you ran. Dev data is disposable: reseed with `pnpm run seed:default` and `pnpm run seed:demo` instead of preserving it.
 7. **Update docs in the same change.** `docs/` (user guide, API guide, runbook), `docs/product` for the spec of every page or user-facing feature you added or changed, `docs/business-rules.md` for every new or changed business rule (its section 25 requires this), the LikeC4 diagrams, `CHANGELOG.md` under Unreleased, and an ADR when you made a lasting decision.
 8. **Report and stop.** Commit only when asked. When asked: split by concern, use `type(scope): summary` with a short body, amend the last commit when told to fix it, and never push.

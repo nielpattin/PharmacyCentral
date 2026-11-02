@@ -4,7 +4,7 @@ A script for presenting Pharmacy Central from a fresh demo dataset: who signs in
 
 ## Before you present
 
-1. Container mode: `pnpm run stack:up`, then `pnpm run urls:up` once per session.
+1. Container mode: `pnpm run aws`, then `pnpm run urls:up` once per session.
 2. **Run `pnpm run demo:reset` the same day, ideally the morning of the demo.** It takes about three minutes. It wipes the seven service databases and the search index, migrates, runs both seeds, and restarts `inventory-service` so the automatic action plans exist.
 3. Open the apps by their named URLs, never `localhost`: `http://staff.pharmacy.localhost` and `http://customer.pharmacy.localhost`. A browser holds one staff session at a time, so sign out between roles (or use a second profile).
 4. Passwords: `ADMIN_PASSWORD` for the admin, `DEMO_ACCOUNT_PASSWORD` for every other account, both in `.env`.

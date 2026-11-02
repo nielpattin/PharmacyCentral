@@ -132,14 +132,14 @@ AWS: identity's task needs `EMAIL_PROVIDER` and `RESEND_API_KEY` before the new 
 
 Risk to `pnpm dev`: a `.env` without the new keys fails at boot and names the key (`env-contract --env .env` lists them). Bypass runs fail clearly instead of using the catalog database. `.env.dev` files do not change. Existing `.env` copies can delete the root `DATABASE_URL` line.
 
-Risk to the container stack: low, since all seven `DATABASE_URL`s exist. Rebuild with `pnpm run stack:up`, which passes `--build`.
+Risk to the container stack: low, since all seven `DATABASE_URL`s exist. Rebuild with `pnpm run aws`, which passes `--build`.
 
 ## Testing
 
 - Unit (Vitest, `src/shared/infrastructure/environment.test.ts`): required, empty, optional and integer cases, following `internal-service-headers.test.ts:44-47`. Existing `vitest.config.ts` files get `test.env` with fixed non-secret values (`LOG_LEVEL: "silent"`).
 - Startup (Vitest, `src/startup.test.ts`, per service): spawn `node --experimental-transform-types src/main.ts` with a complete env minus one required name; expect exit 1 and stderr naming it. Build the env inside the test so a developer `.env` cannot leak in. Also cover `LOG_LEVEL=loud`, `EMAIL_PROVIDER=Resend`, a lone `GOOGLE_CLIENT_ID`, and an ORS key without its base URL. Positive boot needs PostgreSQL, so the stack smoke test covers it.
 - Drizzle: load the config with `DATABASE_URL` unset; expect exit 1. Vite: `src/vite-config.test.ts` in both web apps: `serve` without `API_BASE_URL` throws, `build` does not.
-- Main agent, after all subagents land: `pnpm run fmt:check`, `sync:check`, `typecheck`, `lint`, `build`, `pnpm test`, `git diff --check`; `node tools/env-contract.mjs`; the compose check above; `pnpm run db:migrate`; `pnpm run stack:up`, then `docker compose ps` all healthy (catalog's health passes without a DB, so health alone is not proof).
+- Main agent, after all subagents land: `pnpm run fmt:check`, `sync:check`, `typecheck`, `lint`, `build`, `pnpm test`, `git diff --check`; `node tools/env-contract.mjs`; the compose check above; `pnpm run db:migrate`; `pnpm run aws`, then `docker compose ps` all healthy (catalog's health passes without a DB, so health alone is not proof).
 - Smoke: `curl -fsS http://localhost:8080/api/sites` returns JSON; `curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/auth/me` returns 401.
 - Fail-fast on rebuilt images with `--no-deps`: `docker compose run --rm --no-deps -e DATABASE_URL= catalog-service node dist/main.js` (exit 1, names it); `-e EMAIL_PROVIDER=log identity-service node dist/main.js` (exit 1); `-e API_BASE_URL= customer-web nginx -g "daemon off;"` (non-zero, with the message).
 - Shell without `DATABASE_URL`: `pnpm --dir apps/sales-service db:migrate` fails naming it. `pnpm --dir apps/identity-service seed` with the root `.env` succeeds.

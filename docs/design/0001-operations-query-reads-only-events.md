@@ -136,7 +136,7 @@ Rollback: before step 6, redeploy release A, since owners received only additive
 - Owners: each write path asserts one outbox row in the same transaction. A forced failure inside the transaction leaves neither the change nor the row. Version increments are tested, and each new payload has a contract test.
 - Backfill: a fixture database, backfilled, then applied to an empty projection, must reproduce the owners' counts and valuation.
 - Manifest tests in `apps/ops-console-service/src/modules/system/`.
-- Stack verification: `pnpm run stack:up`, then `docker compose ps` must show every service healthy. Sign in as `staff-admin` (state file, per AGENTS.md) or through `POST /api/auth/login` on `http://api.pharmacy.localhost`, call `GET /api/dashboard/summary`, and compare each count with `COUNT(*)` run as admin on the owners' databases.
+- Stack verification: `pnpm run aws`, then `docker compose ps` must show every service healthy. Sign in as `staff-admin` (state file, per AGENTS.md) or through `POST /api/auth/login` on `http://api.pharmacy.localhost`, call `GET /api/dashboard/summary`, and compare each count with `COUNT(*)` run as admin on the owners' databases.
 - Load: a new k6 scenario `tools/k6/scenarios/dashboard.js` at 1,000 VUs with no sleep, run at the target directly. Compare p95 and error rate with the HTTP baseline on the same data, before step 6.
 - Chaos: a new `owner-outage` scenario in `tools/chaos/scenarios` stops catalog, inventory and sales for 60 s. The dashboard keeps answering 200, and `projectionLag` grows.
 

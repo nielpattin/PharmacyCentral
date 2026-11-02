@@ -20,7 +20,7 @@ A signed-in shopper adds a product to the cart, reviews it on the checkout page,
 
 Preconditions:
 
-- Mode chosen with the user. Dev mode: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-service,catalog-service,inventory-service,sales-service,payment-service,customer-web --ai-approved`. The `--ai-approved` flag covers the catalog startup sweep. Container mode: the user's approval is recorded, `pnpm run stack:up` is healthy, and no launch runs.
+- Mode chosen with the user. Dev mode: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-service,catalog-service,inventory-service,sales-service,payment-service,customer-web --ai-approved`. The `--ai-approved` flag covers the catalog startup sweep. Container mode: the user's approval is recorded, `pnpm run aws` is healthy, and no launch runs.
 - `node .agents/skills/verify-pharmacy-central/scripts/doctor.mjs --mode <dev|container> --need identity-service,catalog-service,inventory-service,sales-service,payment-service,customer-web --role customer` reports `RESULT ready`.
 - The signed-in customer state `~/.omp/browser-profiles/customer.json` exists and parses. If it is missing or stale, sign in as in customer-sign-in-account.md and save it with `tab.saveState`. Open the tab with `browser.open({ name, url, viewport: { width: 1920, height: 1080 }, app: { tern: false, relay: false } })`, then `tab.loadState` before `tab.goto`. Confirm `GET /api/auth/me` returns `khachhang@pharmacycentral.vn` before the first step.
 - Stock exists. Opening balances come from `POST /api/inventory/imports/opening-balances`, or `pnpm run seed:demo`.

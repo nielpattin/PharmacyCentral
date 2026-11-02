@@ -74,7 +74,7 @@ The demo seed (B, `pnpm run seed:demo`) refuses a non-loopback `API_BASE_URL`, s
 
 1. `node tools/aws-upload-media.mjs` (no `--env-file`: `.env` holds the local Floci dummy keys, and the script refuses to run with `AWS_ENDPOINT_URL_S3` set) uploads `data/product-images/images` to the media bucket under `product-images/<SKU>/<sha256>.<ext>` and writes `tmp/aws-demo/products.csv` with the image URLs moved to the public media base URL.
 2. In staff-web, Data import: sites, storage locations, suppliers, `tmp/aws-demo/products.csv` (not the original), then the opening balances once the products are searchable.
-3. Run the `ops` task with the command `node /ops/seed-demo.mjs` (needs `DEMO_ACCOUNT_PASSWORD`): it creates the demo staff and shopper accounts with their site access, so the sites must be imported first. Then run `node --env-file=.env tools/aws-seed-synonyms.mjs` (set `CHAOS_BASE_URL` to the staff site if it is not `https://staff.nielpat.cloud`): the manager proposes the demo search synonym groups and the pharmacist approves them. It skips a group that is already approved.
+3. Run the `ops` task with the command `node /ops/seed-demo.mjs` (needs `DEMO_ACCOUNT_PASSWORD`): it creates the demo staff and shopper accounts with their site access, so the sites must be imported first. Then run `node --env-file=.env tools/aws-seed-synonyms.mjs` (`CHAOS_BASE_URL` in `.env` is the staff site): the manager proposes the demo search synonym groups and the pharmacist approves them. It skips a group that is already approved.
 
 ## Outputs
 

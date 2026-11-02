@@ -10,7 +10,7 @@ node .agents/skills/verify-pharmacy-central/scripts/order-stock-proof.mjs [--run
 
 The helper is mode independent and runs the same in dev mode and in container mode. It neither launches nor stops any app, and it needs no browser.
 
-Needs the infra containers healthy (`docker compose ps` shows RabbitMQ and PostgreSQL up: `pnpm run infra:up` in dev mode, part of `pnpm run stack:up` in container mode). Starts inventory-service, sales-service and payment-service on free ports, each on a scratch database, with a scratch RabbitMQ vhost. Catalog is a stand-in inside the script, so no AI provider is called. Removes the databases and the vhost, and kills the processes it started, in a `finally`.
+Needs the infra containers healthy (`docker compose ps` shows RabbitMQ and PostgreSQL up: `pnpm run dev:infra` in dev mode, part of `pnpm run aws` in container mode). Starts inventory-service, sales-service and payment-service on free ports, each on a scratch database, with a scratch RabbitMQ vhost. Catalog is a stand-in inside the script, so no AI provider is called. Removes the databases and the vhost, and kills the processes it started, in a `finally`.
 
 ## Checks (7)
 

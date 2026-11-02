@@ -8,7 +8,7 @@ Infra always runs on Docker Compose; the apps run either on the host or in conta
 pnpm install --frozen-lockfile
 cp .env.example .env   # then fill in secrets
 pnpm run auth:keygen   # prints ACCESS_TOKEN_PRIVATE_KEY, ACCESS_TOKEN_PUBLIC_JWK and ACCESS_TOKEN_KEY_ID; paste them into .env
-pnpm run infra:up
+pnpm run dev:infra
 docker compose ps   # postgres, rabbitmq, redis, mailpit, otel-collector, floci, gateway-dev healthy (floci-init exits 0)
 ```
 
@@ -45,17 +45,16 @@ Infra always runs in Docker. The two modes differ only in where the apps and the
 | 2 webs | Host, Vite HMR | Containers |
 | Gateway on `:8080` | `gateway-dev` container on the host network | `gateway` container |
 | Infra | Containers | The same containers |
-| Start | `pnpm run infra:up`, then `pnpm dev` | Stop `pnpm dev`, then `pnpm run stack:up` |
-| Back to dev mode | | `pnpm run stack:down`, then `pnpm dev` |
-| Stop everything | `pnpm run infra:down` | `pnpm run infra:down` |
+| Start | `pnpm dev` (starts infra, migrates, runs the apps) | Stop `pnpm dev`, then `pnpm run aws` (sized like the ECS tasks, migrates) |
+| Back to dev mode | | `pnpm run aws:down`, then `pnpm dev` |
+| Stop everything | `pnpm run dev:down` | `pnpm run dev:down` |
 
 Use dev mode for fast iteration and container mode to check what ships. An agent session asks which mode to use before it starts ([AGENTS.md](../AGENTS.md#change-workflow)). Run container mode before opening a pull request, and always after changing a Dockerfile, `docker-compose.yml`, environment variables, dependencies, or migrations; every container in `docker compose ps` must be healthy.
 
 #### Dev mode
 
 ```bash
-pnpm run infra:up   # infra + gateway-dev
-pnpm dev            # nx run-many -t dev --all
+pnpm dev   # dev:infra (infra + gateway-dev + migrations), then nx run-many -t dev --all
 ```
 
 `pnpm dev` starts every service with `node --watch` and both webs with Vite HMR through Nx, which prints a TUI with one pane per app. Each service's `dev` script runs Node with `--experimental-transform-types`, because Node's strip-only TypeScript mode rejects the parameter properties the services use.
@@ -88,15 +87,15 @@ Services reach infra through the published ports (`localhost:5432`, `localhost:5
 
 Services also call each other directly, with the `*_SERVICE_URL` values in `.env` (`CATALOG_SERVICE_URL`, `IDENTITY_SERVICE_URL`, `INVENTORY_SERVICE_URL`, `SALES_SERVICE_URL`), never through a gateway. `sales-service` requires `IDENTITY_SERVICE_URL`: it looks the account up there before filing a prescription with a customer, so a missing or wrong value fails the create with `503 identity_unavailable` instead of writing the record against nobody. `payment-service` and `operations-query-service` require `SALES_SERVICE_URL` for the order behind an invoice and for the dashboard's prescription figures. `operations-query-service` also requires `PAYMENT_SERVICE_URL`: the period analytics read the paid invoices from `GET /internal/analytics/paid-invoices`, and it reads sales documents and stock health from `/internal/analytics/*` of `sales-service` and `inventory-service`. Those `/internal` routes accept only the service secret and are not routed by the gateway or the ALB. `inventory-service` requires `IDENTITY_SERVICE_URL` to check the owner of an action plan against `GET /internal/employees/{id}`. Run `pnpm run db:migrate` after pulling: migration `0013_action_plans` adds the plan table and `0014_receipt_line_unit_cost` adds the nullable purchase cost to goods receipt lines. Gross profit on the Analytics page stays "—" for sales whose goods have no recorded unit cost: opening balances carry none, so `seed:demo` receives the shop's stock again through goods receipts with a cost (the demo history step), and your own receipts need a **Giá nhập**; `GET /internal/analytics/dispense-costs` of `inventory-service` is the read behind it.
 
-On Docker Desktop (Windows and macOS), host networking runs inside the Docker VM, so `gateway-dev` needs it turned on. Open Settings, then Resources, then Network, and turn on **Enable host networking** (Docker Desktop 4.34 or later). Choose Apply & restart, then run `pnpm run infra:up` again. Without it, the container reports healthy but nothing listens on `localhost:8080`, and the Vite proxy logs `http proxy error: /api/... AggregateError [ECONNREFUSED]` for every call. Check with `curl http://localhost:8080/api/products?limit=1`. Linux hosts need no setting.
+On Docker Desktop (Windows and macOS), host networking runs inside the Docker VM, so `gateway-dev` needs it turned on. Open Settings, then Resources, then Network, and turn on **Enable host networking** (Docker Desktop 4.34 or later). Choose Apply & restart, then run `pnpm run dev:infra` again. Without it, the container reports healthy but nothing listens on `localhost:8080`, and the Vite proxy logs `http proxy error: /api/... AggregateError [ECONNREFUSED]` for every call. Check with `curl http://localhost:8080/api/products?limit=1`. Linux hosts need no setting.
 
 #### Container mode
 
 ```bash
 # Stop `pnpm dev` first: the app containers publish the same host ports.
-pnpm run stack:up     # stops gateway-dev, rebuilds the images, starts everything, waits until healthy
+pnpm run aws   # stops gateway-dev, rebuilds the images, starts everything, migrates, waits until healthy
 docker compose ps     # every container must be healthy
-pnpm run stack:down   # back to dev mode: stops gateway and the app containers, starts gateway-dev again
+pnpm run aws:down   # back to dev mode: stops gateway and the app containers, starts gateway-dev again
 ```
 
 `gateway` and `gateway-dev` share `GATEWAY_PORT` (8080), so only one runs at a time; the two scripts swap them. On a small machine, building all eight images at once can exhaust memory; build them one at a time first with `docker compose build <name>`.
@@ -169,15 +168,15 @@ Open backing tools on your laptop (ports come from `.env`):
 Tear everything down (including `gateway-dev`):
 
 ```bash
-pnpm run infra:down
+pnpm run dev:down
 ```
 
 ## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
-| `localhost:8080` refused or 502 from `/api/...` | Start the gateway for your mode: `pnpm run infra:up` for dev mode, or `pnpm run stack:up` for containers. Only one of the two can hold port 8080 |
-| Vite logs `http proxy error: /api/... ECONNREFUSED` while `gateway-dev` is healthy (Docker Desktop) | Host networking is off, so port 8080 never reaches the host. Enable it as described under Dev mode, then rerun `pnpm run infra:up` |
+| `localhost:8080` refused or 502 from `/api/...` | Start the gateway for your mode: `pnpm run dev:infra` for dev mode, or `pnpm run aws` for containers. Only one of the two can hold port 8080 |
+| Vite logs `http proxy error: /api/... ECONNREFUSED` while `gateway-dev` is healthy (Docker Desktop) | Host networking is off, so port 8080 never reaches the host. Enable it as described under Dev mode, then rerun `pnpm run dev:infra` |
 | Gateway 404 on `/api/...` | Check the path against the routing map above |
 | `/api/...` returns 401 `trusted_request_required` | The path needs an access token. Sign in and send the `accessToken` as `Authorization: Bearer <token>`; a token lives one day |
 | `typesense` exits with code 139 and no log line (Docker Desktop with WSL2) | Typesense 30.2 bundles brpc, which reads `/proc/self/io` before `main()`. The WSL2 kernel of Docker Desktop has no task I/O accounting, so the file is missing and the 30.2 server segfaults (upstream [typesense/typesense#2998](https://github.com/typesense/typesense/issues/2998)). Compose pins `typesense/typesense:31.0.rc23` by digest, which starts on that kernel (it only logs `Fail to open /proc/self/io`, harmless). Pull it with `docker compose up -d --no-deps --wait typesense`, then check `docker compose ps typesense` and `curl http://localhost:8108/health` (`{"ok":true}`). The AWS task definition (`deploy/aws/data.tf`) pins the same digest, so local and AWS run one version. |
@@ -219,13 +218,7 @@ Identity `0003_must_change_password` adds `users.must_change_password` (default 
 
 Inventory `0015_disposal_records` adds `disposal_records` and `disposal_lines` for the Disposals tab (biên bản tiêu hủy). An approval subtracts stock and writes a `Disposal` ledger entry; a proposal writes neither. No backfill is needed: existing negative adjustments stay adjustments, and the new tables start empty.
 
-Sales `0014_early_robin_chapel` adds nullable `orders.paid_at` and `prescriptions.paid_at`: the first time a paid invoice settled the document, kept after a refund. The payment events fill it from then on. A database that already holds paid invoices needs one backfill after the migration, or every customer reads as new on Analytics:
-
-```bash
-pnpm run backfill:paid-at
-```
-
-It reads the paid and refunded invoices from `payment_service`, writes the earliest payment date per document, and prints how many sales rows now carry one. It needs the compose Postgres (`docker compose exec postgres psql`), like `seed:demo`, and is safe to run again.
+Sales `0014_early_robin_chapel` adds nullable `orders.paid_at` and `prescriptions.paid_at`: the first time a paid invoice settled the document, kept after a refund. The payment events fill it from then on. Rows paid before the migration keep no date and read as new customers on Analytics; dev data is disposable, so reseed instead of backfilling.
 
 Sales `0015` indexes the first-payment lookup (`customer_id`, `paid_at` where paid), and `0016` adds `sales_targets`: one row per site and month, unique on `(site_id, month)`. Neither needs a backfill; a month starts with no targets until a Pharmacy Manager sets one.
 
@@ -233,7 +226,7 @@ Sales `0015` indexes the first-payment lookup (`customer_id`, `paid_at` where pa
 
 Every service connects as its own Postgres role, named after its database (`sales_service`, `payment_service`, and so on). The role owns that database and has no `CONNECT` privilege on the others, so a leaked `DATABASE_URL` exposes one service's data, not all of them. `POSTGRES_USER` is the admin account; only role setup and the chaos tooling use it.
 
-The `postgres-roles` Compose service runs `deploy/local/postgres/roles.sh` after Postgres is healthy and before any backend service starts (`pnpm run infra:up` includes it). The script reads the passwords from `IDENTITY_DB_PASSWORD`, `CATALOG_DB_PASSWORD`, `INVENTORY_DB_PASSWORD`, `SALES_DB_PASSWORD`, `PAYMENT_DB_PASSWORD`, `OPERATIONS_QUERY_DB_PASSWORD` and `CHATBOT_DB_PASSWORD` in `.env`. It is safe to run again: it creates missing roles, resets passwords, and moves tables that an older run created as the admin user to the owning role. A stack that already holds data needs only `docker compose up -d postgres-roles`, then the services.
+The `postgres-roles` Compose service runs `deploy/local/postgres/roles.sh` after Postgres is healthy and before any backend service starts (`pnpm run dev:infra` includes it). The script reads the passwords from `IDENTITY_DB_PASSWORD`, `CATALOG_DB_PASSWORD`, `INVENTORY_DB_PASSWORD`, `SALES_DB_PASSWORD`, `PAYMENT_DB_PASSWORD`, `OPERATIONS_QUERY_DB_PASSWORD` and `CHATBOT_DB_PASSWORD` in `.env`. It is safe to run again: it creates missing roles, resets passwords, and moves tables that an older run created as the admin user to the owning role. A stack that already holds data needs only `docker compose up -d postgres-roles`, then the services.
 
 Migrations run as the owning role (`pnpm run db:migrate` builds each URL from the same passwords), so the tables belong to the role that uses them. On RDS, create the same roles by hand with the equivalent SQL, one secret per service as in `deploy/aws`; Terraform does not create the database tier.
 
@@ -295,7 +288,7 @@ an import the truth lives in the owning service database: catalog data in `catal
 Imports are idempotent on natural keys (`code`, `sku`, `batchNumber`). An opening balance row is accepted only while the batch and storage location have no stock balance or ledger history. Reimporting the same quantity is a no-op; changing an existing balance requires a stock adjustment so the ledger keeps an audit trail.
 
 ```bash
-pnpm run infra:up
+pnpm run dev:infra
 ```
 
 Then open `http://127.0.0.1:5302/imports` from the staff web app.
@@ -305,8 +298,7 @@ Then open `http://127.0.0.1:5302/imports` from the staff web app.
 A fresh local database has no accounts and no master data. Migrations create empty tables, and sites, storage locations, suppliers, products, prices, and opening stock exist only after an import. The steps below fill all of it:
 
 ```bash
-pnpm run infra:up   # infra + gateway-dev (host networking on Docker Desktop)
-pnpm run db:migrate
+pnpm run dev:infra   # infra + gateway-dev (host networking on Docker Desktop) + migrations
 pnpm run seed:default   # A: the one admin (needs only the identity database)
 pnpm dev                # the services must be running: seed B goes through the API
 pnpm run seed:demo      # B: the demo dataset, in another terminal
@@ -332,7 +324,7 @@ Without the script, run `pnpm run seed:default`, then upload the same files by h
 
 Every date in the demo dataset is relative to the day it is seeded: the opening-balance expiry dates in `data/import-samples/opening-balances.csv` are written against 2026-10-29 and `seed:demo` moves each one by the days since, and the history, receipts and expiry countdowns count back or forward from the seed time. The data then ages with the clock (an expiry countdown drops by a day each day, the newest sale gets older), so reseed on the day you present.
 
-`pnpm run demo:reset` (`tools/demo-reset.mjs`) does that in one command, in container mode: it stops the services, drops and recreates the seven service databases, removes the Typesense volume, runs `db:migrate`, starts the services (`--no-deps`, so an unhealthy Typesense does not block them), runs `seed:default` and `seed:demo`, then restarts `inventory-service` so the automatic action plans are raised against the fresh stock, and prints how many exist. It takes about three minutes. It is destructive: it refuses `NODE_ENV=production` and any `API_BASE_URL` that is not a loopback host, and needs the stack from `pnpm run stack:up` (or at least `postgres`, `rabbitmq`, `redis`, `floci` and the gateway) to be up. `pnpm run seed:demo` alone is idempotent but never refreshes the dates of data it already created; it warns when the history is a day old. The presenter's script is [Demo walkthrough](demo-walkthrough.md).
+`pnpm run demo:reset` (`tools/demo-reset.mjs`) does that in one command, in container mode: it stops the services, drops and recreates the seven service databases, removes the Typesense volume, runs `db:migrate`, starts the services (`--no-deps`, so an unhealthy Typesense does not block them), runs `seed:default` and `seed:demo`, then restarts `inventory-service` so the automatic action plans are raised against the fresh stock, and prints how many exist. It takes about three minutes. It is destructive: it refuses `NODE_ENV=production` and any `API_BASE_URL` that is not a loopback host, and needs the stack from `pnpm run aws` (or at least `postgres`, `rabbitmq`, `redis`, `floci` and the gateway) to be up. `pnpm run seed:demo` alone is idempotent but never refreshes the dates of data it already created; it warns when the history is a day old. The presenter's script is [Demo walkthrough](demo-walkthrough.md).
 
 ### Product images
 
@@ -502,7 +494,7 @@ Local development uses a single RabbitMQ node.
 
 ## Observability
 
-The local stack collects traces, metrics and logs. `pnpm run infra:up` starts the `otel-collector`, `tempo`, `prometheus`, `loki` and `grafana` containers together with the rest of the infrastructure.
+The local stack collects traces, metrics and logs. `pnpm run dev:infra` starts the `otel-collector`, `tempo`, `prometheus`, `loki` and `grafana` containers together with the rest of the infrastructure.
 
 - `otel-collector` receives OTLP on host ports 4317 (gRPC) and 4318 (HTTP). It sends traces to Tempo, metrics to Prometheus (its OTLP receiver) and logs to Loki.
 - Grafana runs at `http://localhost:${GRAFANA_PORT}` (3030 in `.env.example`). Log in with `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` from `.env`. The datasources `Prometheus`, `Tempo` and `Loki` are provisioned.
@@ -630,7 +622,7 @@ Queues stay on the System page, and Business Health (row Consumers and queues) h
 
 ## Self-hosted product search embeddings
 
-Semantic product search needs a text-embedding model. The default is the `embedder` service of Compose: HuggingFace text-embeddings-inference on CPU, model `intfloat/multilingual-e5-small` (384 dimensions), ONNX weights. `pnpm run infra:up` and `pnpm run stack:up` start it with the rest of the infrastructure, so search needs no quota and no key from a provider. The first start downloads the model into a volume (about 2 minutes here), and until it is healthy search matches keywords only.
+Semantic product search needs a text-embedding model. The default is the `embedder` service of Compose: HuggingFace text-embeddings-inference on CPU, model `intfloat/multilingual-e5-small` (384 dimensions), ONNX weights. `pnpm run dev:infra` and `pnpm run aws` start it with the rest of the infrastructure, so search needs no quota and no key from a provider. The first start downloads the model into a volume (about 2 minutes here), and until it is healthy search matches keywords only.
 
 `.env` holds the settings that `catalog-service` reads (`.env.example` has them ready): `AI_EMBEDDING_PROVIDER=openai-compatible`, `AI_EMBEDDING_BASE_URL=http://localhost:8109/v1`, and `AI_EMBEDDING_MODEL` and `AI_EMBEDDING_API_KEY` equal to `EMBEDDER_MODEL` and `EMBEDDER_API_KEY`. The container stack ignores the base URL and calls `http://embedder:80/v1`, like it does for Typesense. A Platform Admin can still save other settings in staff-web (AI integrations); saved settings win over `.env`, and a saved base URL must be https. `search-service` reads the same four variables and cannot see the saved settings, so its values must match those of `catalog-service` (see the search service section).
 
@@ -752,7 +744,7 @@ Caveats: single runs, run-to-run spread about 25%; k6, Prometheus and the other 
 
 ## Load and chaos testing
 
-Load tests run with k6, chaos tests with a Node runner that injects one fault at a time under a steady checkout load. Both are local tools, never part of a container image. Run them against the **container stack** (`pnpm run stack:up`): under `pnpm dev`, `node --watch` restarts services and leaves stale keepalive connections in the gateway, which shows up as 60 s stalls that are not application problems.
+Load tests run with k6, chaos tests with a Node runner against the deployed stack (`chaos:aws`). Both are workstation tools, never part of a container image. Run them against the **container stack** (`pnpm run stack:up`): under `pnpm dev`, `node --watch` restarts services and leaves stale keepalive connections in the gateway, which shows up as 60 s stalls that are not application problems.
 
 k6 runs as the Compose service `k6` (profile `loadtest`, image pinned by digest), so nothing is installed on the host. It pushes its results to Prometheus remote write; Grafana shows them in the dashboard `Pharmacy Central - Load Test` (uid `pc-load-test`), next to the server-side latency, outbox, queue and database panels. Set `LOAD_TARGET_URL` in `.env`: `http://gateway:8080` for the container stack, `http://host.docker.internal:8080` when the services run under `pnpm dev`.
 
@@ -774,208 +766,19 @@ pnpm run load -e PROFILE=load /scripts/scenarios/checkout.js
 
 The AI scripts spend provider quota. A customer may send 30 prescription photos in a rolling 24 hours, so keep the `smoke` profile for those two scripts. Product imports also call the embedding provider once per changed product.
 
-Chaos scenarios (`tools/chaos/scenarios/`) each start a checkout load, inject the fault, restore everything in a `finally` block (and on Ctrl-C), and then assert data invariants through PostgreSQL, the RabbitMQ management API, Prometheus and the Grafana alert states.
+Chaos against the deployed stack is `pnpm run chaos:aws <scenario|all> [--duration 240]` (`tools/chaos/aws/runner.mjs`). It injects each fault through the ECS API, holds a steady browse load of 20 journeys a second, and reads every invariant through the public API, because RDS and Typesense are private. Checkout, payment, import and the chatbot are out of scope. It calls the AWS CLI with the `pharmacy` profile (`tools/chaos/lib/ecs.mjs`: region `us-east-1`, cluster `pharmacy-central-staging`; the dummy `AWS_*` keys of `.env` are cleared), so run `aws sso login` or configure that profile first. `.env` also needs `CHAOS_BASE_URL` (the staff site), `DEMO_ACCOUNT_PASSWORD` and `GRAFANA_PORT`.
 
-```bash
-pnpm run chaos rabbitmq-outage          # one scenario; "all" runs every one, about 25 minutes
-pnpm run chaos all --dry-run            # reads only: checks the helpers and queries, injects nothing
-```
+| Scenario | Fault |
+| --- | --- |
+| `typesense-outage` | Typesense service scaled to 0 for 45 s: search falls back to SQL, reads keep working, search recovers. |
+| `catalog-kill` | catalog-service tasks stopped under load. |
+| `identity-kill` | identity-service tasks stopped under load. |
 
-| Scenario | Fault | Expected outcome |
-| --- | --- | --- |
-| `rabbitmq-outage` | RabbitMQ stopped for 60 s | Orders and reads keep answering; the outbox backlog grows and drains; every event is published and applied exactly once; `.dead` queues stay empty. |
-| `poison-message` | Three malformed events published to `pharmacy.events` | They land in the bound `.dead` queues and nowhere else; consumers carry on; `Dead-letter queue not empty` fires. The runner purges only its own messages. |
-| `redis-outage` | Redis stopped for 45 s | Pickup checkout is unaffected; photo intake answers `503 rate_limit_unavailable`; no 5xx storm. |
-| `typesense-outage` | Typesense stopped | Search answers within its budget; detail, availability and orders stay 200; search works again after the restart. |
-| `payment-outage` | payment-service stopped | The webhook is refused while down; replaying it after the restart creates exactly one transaction and one paid invoice. |
-| `sales-kill` | `SIGKILL` on sales-service under load | No order without lines, no reservation drift, no stranded outbox row, checkout recovers. |
-| `ai-provider-outage` | Chat model and intent gate fail (slow, hung, 500, 429, malformed, truncated) | A clean `503 assistant_unavailable` inside the provider timeout (30 s model, about 12 s gate), unrelated endpoints stay fast, the question is answered again after recovery. |
-| `ai-reader-outage` | Prescription reader fails the same ways | A clean `502 reader_failed` inside the 45 s timeout, then the photo is read again. |
-
-The two AI scenarios never call a real provider. `ai-provider-outage` starts two copies of `tools/mock-ai-server.mjs` (needs `MOCK_AI_PORT`; modes `ok`, `slow`, `hang`, `error500`, `error429`, `malformed`, `truncated`, switched with `POST /__mode`) on ports 5390 and 5391, and recreates `chatbot-service` with `AI_CHATBOT_*` and `AI_INTENT_GATE_*` pointed at them; `ai-reader-outage` does the same on port 5392 for `sales-service` and `AI_PRESCRIPTION_READER_*`. Compose reads process variables before `.env`, so `.env` and the saved credentials stay untouched; the runner recreates the service with the real settings at the end. The containers must reach `host.docker.internal`; if a firewall blocks it, the first check fails and the run stops before injecting anything.
-
-`ai-reader-outage` sends 8 photos as the demo customer. The intake limiter allows 5 a minute and 30 a day, and it counts photos that reach the reader even when the read fails. When the scenario stops at its first check with `429`, wait, or clear the day counter of the demo customer: `docker compose exec redis redis-cli DEL sales:prescription-intake:day:<customer id>`.
+To point k6 at the deployed stack, set `LOAD_TARGET_URL` in `.env` to the public URL of the stack (the same value as `CHAOS_BASE_URL`; k6 only makes HTTP calls, so it needs no AWS CLI); the scripts use the demo accounts, so seed the stack first. Size the run against the Fargate vCPU quota and the task sizes in `deploy/aws/variables.tf`.
 
 ### Capacity on an ECS-sized stack
 
-`pnpm run stack:aws-like` layers `docker-compose.aws-like.yml` over the container stack and sizes it like `deploy/aws`: every backend service runs 2 replicas of 0.5 vCPU and 1 GiB (the `task_cpu`, `task_memory` and `desired_count` defaults), except `sales-service`, which runs 1 vCPU and 2 GiB (`sales_task_cpu`, `sales_task_memory`: it takes every order and runs its outbox relay, and was the first container at its CPU cap in the checkout test), and the gateway balances between them. Terraform defines no data tier, so PostgreSQL (2 CPUs, 4 GB), Redis (1, 1 GB), RabbitMQ (1, 2 GB) and Typesense (2, 4 GB) are assumptions you should replace with the sizes you choose. Autoscaling is not modelled: this is the floor of two tasks. Host ports of the services are closed in this mode; everything goes through the gateway. Return to the plain stack with `pnpm run stack:down`.
-
-```bash
-node --env-file=.env tools/bulk-products.mjs add 10000     # synthetic BULK-nnnnnn products; waits until the search index holds them
-pnpm run load -e PROFILE=breakpoint /scripts/scenarios/checkout.js   # steps 20 to 300 VUs, a minute each
-node --env-file=.env tools/bulk-products.mjs remove 10000  # deactivates them again
-```
-
-The `breakpoint` profile stops itself when more than 5% of requests fail or the `POST /orders` p95 passes 3 s (checked after 40 s). Measured on one 16 GB workstation with k6 and the observability stack on the same machine, 10,120 products in the index:
-
-| Measurement | Result |
-| --- | --- |
-| Import of 10,000 products | 102 s through the API (40 requests of 250, median 2.6 s) |
-| Search index complete | 17 minutes after the first import, about 11 documents a second; the cause was not isolated (catalog-service at 0.5 vCPU, or the embedder) |
-| Search, warm / first time a query is seen | 12 to 72 ms / 500 to 630 ms (the embedding call) |
-| Browse load, 10 iterations/s for 2 minutes | 0 failures in 5,499 checks, search p95 68 ms, list p95 17.7 ms |
-| Checkout breakpoint, run 1 | all 300 VUs reached; 117,717 requests at 186 req/s, 0.04% failed, `POST /orders` p95 2.43 s |
-| Checkout breakpoint, run 2 | stopped at 275 VUs by the 3 s gate (`POST /orders` p95 3.0 s) |
-
-Throughput stopped growing at about 60 VUs: 199 req/s there against 218 req/s at 300 VUs, about 14 completed checkouts a second. Past that point extra VUs only add waiting. Sampled during the second run, the containers at their limits were `sales-service` (both replicas at about 50% of one core, the 0.5 vCPU cap), PostgreSQL (113% to 160% of its 200%), and RabbitMQ in bursts (100% of its 1 CPU). In run 1, 35% of the orders were not marked paid within the script's wait, so the payment-to-order path fails first, long before requests fail: order to paid p95 was 14 s over the run. These percentiles are for the whole run, not per step. Adding tasks (autoscaling) helps `sales-service`, but the data tier then limits next.
-
-**Outbox relay and sales-service size, measured.** The same breakpoint ramp again after the relay sent 500 rows per batch with one confirm wait and one UPDATE (it sent one row at a time, 50 a tick), an index on the unpublished rows, and `sales-service` at 1 vCPU and 2 GiB. One run each, same stack:
-
-| Measurement | Before | After |
-| --- | --- | --- |
-| Oldest unpublished outbox row (payment / sales) | 28 s / 208 s | 1 s / 1 s |
-| Unpublished rows at the peak (payment / sales) | 725 / 6,347 | 29 / 16 |
-| Order to paid p95 | 13.8 s | 14.7 s |
-| `POST /orders` p95 | 2.2 s | 3.0 s (the 3 s gate stopped the run at 8 min 40 s; the first run finished all 300 VUs) |
-| PostgreSQL CPU | 160% to 205% of 200% | 196% to 208% of 200%, from about 100 VUs on |
-
-The relay backlog is gone, but the checkout did not get faster, so the relay was not what limited the order to paid time. With `sales-service` no longer capped, more work reached PostgreSQL, which sat at its 2 CPU limit, and `POST /orders` got slower.
-
-**Missing indexes, found with `pg_stat_statements` and fixed.** One ramp with `pg_stat_statements` on showed two statements using 87% of all query time: `select ... from order_lines where order_id = $1` in sales (999 s, 27 ms each, 68%) and `select ... from payment_invoice_lines where payment_invoice_id = $1` in payment (285 s, 29 ms each, 19%). Neither column had an index, so each call read all 83,000 rows (`order_lines`: 413,223 sequential scans, 20 billion rows read, no index scan). `stock_reservation_lines.reservation_id` had the same gap. The three indexes bring the sales query from 5.9 ms to 0.16 ms in `EXPLAIN ANALYZE`. The same ramp after the indexes and the per-service database roles, one run each:
-
-| Measurement | After relay and sizing change, before indexes | After indexes |
-| --- | --- | --- |
-| Run | stopped at 8 min 40 s by the 3 s gate | all 300 VUs, 10 min |
-| Checkouts per second | 12.6 | 26.0 (15,929 done) |
-| `POST /orders` p95 | 3.01 s | 1.03 s |
-| Order to paid, average / p95 | 5.2 s / 14.7 s | 4.3 s / 11.5 s |
-| Orders not paid within the 15 s wait | 25% (1,302 of 5,125) | 1.3% (164 of 12,717) |
-| Failed HTTP requests | 0.20% | 0.00% (3 of 183,813) |
-| PostgreSQL CPU, average / peak (200% limit) | 160 to 205% | 134% / 188% |
-| `sales-service` CPU per replica (1 vCPU) | not recorded | 86 to 88% average, 101% peak |
-
-The checkout is no longer limited by PostgreSQL. `sales-service` is back at its 1 vCPU limit, which is the next likely limit; that was not measured further. Order to paid still takes 11.5 s at p95 at the top of the ramp. Not yet explained. The PostgreSQL here runs with its stock settings (`shared_buffers` 128 MB), so the figures are for an untuned database.
-
-**Search capacity** (`search.js`, `limit=60` as customer-web asks, 10,120 products, same ECS-sized stack, each rate run after the previous backlog had drained). The first measurement found an N+1: after the search, `catalog-routes.ts` read the units of each result with its own query, about one PostgreSQL query per result. `DrizzleStoreRepository.listUnitsByProductIds` now reads them for the whole page in one query, in `GET /products` and `POST /products/match`. Ten searches at `limit=60` went from about 500 PostgreSQL transactions to about 20, and the median search at `limit=60` from 91 ms to 26 ms.
-
-| Rate | p95 before, cached queries | p95 after, cached queries | p95 after, mixed queries |
-| --- | --- | --- | --- |
-| 20 req/s | 140 ms | 34 ms | 71 ms |
-| 25 req/s | 1.2 s (fails) | not run | not run |
-| 30 req/s | 4.1 s (fails) | 35 ms | 90 ms |
-| 40 req/s | not run | 70 ms | 292 ms |
-| 50 req/s | not run | 101 ms | 447 ms |
-| 60 req/s | not run | 150 ms | 623 ms (fails) |
-| 80 req/s | not run | 787 ms (fails) | 7.3 s (fails) |
-| 100 req/s | not run | 2.25 s (fails) | not run |
-
-Search now holds about 60 requests a second when the query vectors are cached and about 50 when most queries need a new embedding, three times and two and a half times the 20 before the fix, with the p95 under 500 ms. The mixed runs fail earlier because every new query costs one embedder call. If a visitor searches once every 10 seconds, 50 requests a second is about 500 people at the same moment; that ratio is an assumption, not a measurement. The limit that remains was not isolated: the replicas of `catalog-service` are capped at 0.5 vCPU, so more or larger tasks raise it.
-
-A virtual user here checks out continuously. A shopper checks out once in many minutes, so read the result as throughput (about 14 checkouts a second at the floor size), not as a number of people.
-
-**Search on one container (1 vCPU, 1 GiB), 1,000 users.** One `catalog-service` container limited with `docker update --cpus 1` (memory 1 GiB), the other services at 2 × 0.5 vCPU, mixed queries, `limit=60`, 5,120, 10,120 and 15,120 products in the index. `search.js` holds a fixed rate; `search-users.js` holds 1,000 concurrent shoppers who search, then wait `THINK` seconds (±50%), so the request rate is about 1,000 / `THINK`. The p95 gate is 500 ms and no run had failed requests: a run fails by getting slow.
-
-| Test | 5,120 products | 10,120 products | 15,120 products |
-| --- | --- | --- | --- |
-| 20 req/s, p95 | 119 ms | 96 ms | 71 ms |
-| 30 req/s, p95 | 167 ms | 160 ms | 71 ms |
-| 40 req/s, p95 | 285 ms | 250 ms | 100 ms |
-| 50 req/s, p95 | 1.86 s (fails) | 1.08 s (fails) | 263 ms |
-| 60 req/s, p95 | not run | not run | 604 ms (fails) |
-| 80 req/s, p95 | not run | not run | 5.03 s (fails) |
-| 1,000 users, think 30 s (about 33 req/s), p95 | 223 ms | 273 ms | 418 ms |
-| 1,000 users, think 15 s (about 67 req/s), p95 | 2.15 s (fails) | 1.97 s (fails) | 5.17 s (fails) |
-
-One container holds 40 to 50 req/s, so 1,000 users fit when they search about every 30 seconds and do not fit when they search every 15 seconds. The ceiling in users is about 40 to 50 req/s times the seconds between searches (1,200 to 1,500 users at 30 s, 600 to 750 at 15 s). Where it fails, the catalog container is at 80% of its core on average and touches 100%, and Typesense (2 CPUs) is at 120% to 160%; memory never passed 225 MiB of 1 GiB. Each rate was run once on a workstation that also runs k6, Prometheus, Grafana and the embedder, and the p95 at 20 to 50 req/s is lower at 15,120 products than at 5,120: run-to-run variation is larger than the effect of catalog size here, so these runs do not show how latency grows with the catalog. They show that memory is not the limit. These runs did not sample the embedder; the next run, below, found it saturated.
-
-**What changed after that, and one more run at 50 req/s.** `GET /products` now pages with `cursor` (see the API guide), the catalog keeps whole list answers for 30 seconds (an LRU of 5,000 pages, concurrent identical requests share one load, and a product change through the replica clears it), and the local container got more CPU: `catalog-service` 2 vCPU and 1 GiB, Typesense 4 CPUs, set with `docker update --cpus` on the running containers (Terraform is unchanged). The run: 10,120 products, one catalog container, `search.js` at 50 req/s with pages of 20, one request in five for the second page, and 30% one-off queries that no cache has seen.
-
-| Measurement during the 60 s | Result |
-| --- | --- |
-| Search p95 / median / p99 | 1.19 s (fails) / 338 ms / 1.42 s; no failed request, no dropped iteration |
-| `catalog-service` CPU | 57% of its 2 vCPU on average, 81% at most; memory 385 MiB |
-| Typesense CPU | 42% of its 4 CPUs on average |
-| **Embedder CPU** | **194% of its 2 CPUs on average**: saturated |
-| Response cache | about one lookup in five was a hit (counter `pharmacy.search.cache`, taken over a window that included a second run): the 1,200 popular queries and 2 pages are too many to repeat within 100 s |
-
-The search failed because of the embedder, not the catalog or Typesense. Every query that is not in a cache is embedded, 40 or so a second here, and the embedder's two CPUs are at their limit. The earlier sweeps did not sample the embedder, so their conclusion that the catalog container's CPU was the limit is not proven.
-
-**Embedder at 4 CPUs, vector cache of 5,000.** The same run again with the embedder limited to 4 CPUs and 4 GB and the query-vector cache raised from 500 to 5,000 entries (about 30 MB for 768 dimensions):
-
-| Measurement | Embedder 2 CPUs, cache 500 | Embedder 4 CPUs, cache 5,000 |
-| --- | --- | --- |
-| Search p95 | 1.19 s (fails) | 602 ms (still over 500 ms) |
-| Median / p99 | 338 ms / 1.42 s | 73 ms / 1.30 s |
-| Embedder CPU | 194% of 200% | 373% of 400%, peaks at 403% |
-| Query-vector cache (`pharmacy_search_embedding_cache_total`) | not counted | 537 hits, 1,941 misses |
-| Response cache (`pharmacy_search_cache_total`) | about 1 in 5 hits | 563 hits, 2,478 misses |
-
-**multilingual-e5-small, queries of fewer than three words not embedded, Zipf traffic.** The index was rebuilt with multilingual-e5-small (384 dimensions, collection `catalog_products_v2`), queries under `SEMANTIC_MIN_WORDS` (3) went keyword-only, and `search.js` was changed to draw its 1,200 popular queries by a Zipf law (shorter ones more often) with 15% one-off queries. The run: 50 req/s, 10,120 products, one catalog container (2 vCPU), embedder 4 CPUs.
-
-| Measurement | Result |
-| --- | --- |
-| Search p95 / p99 / median | 1.45 s (fails) / 1.85 s / **10.7 ms** |
-| Failed requests / dropped iterations | none / none |
-| `catalog-service` CPU / event loop busy | 43% of 2 vCPU / 29% |
-| Response cache | 1,129 hits, 1,120 misses (50%), 4 shared |
-| Query-vector cache | 62 hits, 698 misses |
-| Embedder, per request in the window | inference p50 113 ms, **queue wait p50 916 ms (p95 1.53 s)**, 14 requests a second |
-
-Half of the requests are answered without the embedder and take milliseconds; the rest, the new queries of three words or more, wait about a second in the embedder's queue. The embedder alone does far better than it did under load: on the same machine with nothing else running it served about 210 new queries a second at 2 CPUs and 226 at 4 (see Self-hosted product search embeddings; the figures of this run used the removed `--max-batch-tokens 4096 --tokenization-workers 2` flags, with which the same machine gave 105 and 224), and a single query takes 10 ms, against an inference time of 113 ms in the run. The run was therefore limited by the workstation, which runs k6, 13 service containers, Typesense (4 CPUs), the embedder (4 CPUs), Postgres, the observability stack and the browser on 16 logical cores, with CPU limits that add up to more than the machine has. ONNX threads that cannot get a core wait in the queue. Treat the 1.45 s as a floor for this machine, not as a capacity of the design; a faithful number needs the load generator and the embedder on separate hosts, or at least the embedder pinned to its own cores.
-
-**Same run with each container pinned to its own cores.** No second machine is needed: on the 16 logical cores of the workstation the embedder got cores 0 to 3, Typesense 4 to 7, `catalog-service` 8 and 9 and every other container 12 to 15, with `docker update --cpuset-cpus <cores> <container>` on the running containers (`--cpus` kept as before; the pinning is lost when a container is recreated). The embedder then sees 4 CPUs instead of 16 and stops fighting the rest of the stack for cores. Same traffic, 50 req/s, 10,120 products, multilingual-e5-small:
-
-| Measurement | Unpinned | Pinned |
-| --- | --- | --- |
-| Search p95 / p99 | 1.45 s (fails) / 1.85 s | **406 ms (passes)** / 477 ms |
-| Median | 10.7 ms | 5.6 ms |
-| Failed requests / dropped iterations | none / none | none / none |
-| `catalog-service` CPU / event loop busy | 43% of 2 vCPU / 29% | 21% of 2 vCPU / 15% |
-| Embedder CPU | 390% of 400% | 198% of 400% |
-| Embedder inference p50 / queue wait p50 | 113 ms / 916 ms | **21 ms / 190 ms** |
-| Response cache | 50% hits | 53% hits (1,952 hits, 1,712 misses) |
-| Query-vector cache | 62 hits, 698 misses | 176 hits, 1,070 misses (14%) |
-
-So 50 requests a second with mostly new three-word queries fit: the embedder used half of its 4 CPUs. The pinned run is the number to quote for this machine. It is one run; the margin to the 500 ms gate is 94 ms.
-
-**1,000 users on one container (1 vCPU, 1 GiB), after all of this.** `catalog-service` limited with `docker update --cpus 1 --memory 1g` and pinned to one core, the embedder (4 cores), Typesense (4 cores) and the rest pinned as above, 10,120 products, `search-users.js` with pages of 20, Zipf-drawn popular queries, 15% one-off queries, one request in five on the second page. One run each, back to back:
-
-| Test | p95 | Median | p99 | Failed | Catalog CPU avg / max | Catalog memory max | Embedder CPU avg |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1,000 users, think 30 s (about 33 req/s), caches cold | **456 ms** (passes) | 8 ms | 593 ms | 0% | 13% / 36% | 263 MiB | 116% of 400% |
-| 1,000 users, think 15 s (about 67 req/s), caches warm | **30 ms** (passes) | 5 ms | 45 ms | 0% | 19% / 37% | 283 MiB | 52% of 400% |
-
-The two rows are not like for like. The 15 s run came second and found the caches filled by the first (the 30 s response cache and the 5,000-entry query-vector cache), so its 30 ms is the warm case; the 456 ms of the first run is the cold case and the number to plan on. Before these changes the same 1,000 users failed at think 15 s (p95 1.97 s at 10,120 products). The earlier tables used pages of 60 and uniformly random queries, so they are a harsher traffic mix than this one. Only 10,120 products were measured this time; the 5,000 and 15,000 rows above were not repeated.
-
-**1,000 concurrent users with no think time.** The same container (1 vCPU, 1 GiB), the same pinning and traffic, `search-users.js` with `-e USERS=1000 -e THINK=0`: every user sends the next search the moment the last answer arrives, so the rate is whatever the service can answer. Caches cold, one run.
-
-| Measurement | Result |
-| --- | --- |
-| Requests answered | 61,913 in the whole run, 387 a second on average (the ramp and ramp-down included) |
-| Search p95 / p99 / median | **4.54 s (fails)** / 13.5 s / 1.18 s; slowest 60 s (the k6 timeout) |
-| Failed requests | 0.20% (129): timeouts |
-| `catalog-service` CPU | **97% of its 1 vCPU on average**, 98% at most; memory 415 MiB |
-| Typesense / embedder CPU | 58% of 4 / 193% of 4 |
-| Response cache / query-vector cache | 76% hits (37,916 of 50,182) / 32% hits (3,524 of 11,053) |
-
-With 1,000 users in flight and about 390 answers a second, each one waits 1,000 / 390 = 2.6 s on average: a closed loop of 1,000 users cannot do better than the service's throughput allows, and here that is the catalog container's one core. Memory is not the limit. By the same arithmetic a p95 under 500 ms with 1,000 users who never pause needs at least 2,000 answers a second, about five to six times what one core did, so five to six cores of `catalog-service` (Node runs one thread per process: replicas or `node:cluster`). A rerun of the same test on a cleaner machine (Grafana, Loki, Tempo, Mailpit, both web apps and every service but `catalog-service` stopped; k6 pinned to its own cores 10 and 11; the embedder at 2 CPUs instead of 4) did not do better: 296 requests a second, p95 5.38 s, median 1.59 s, 0.33% failed, `catalog-service` at 92% of its core and the embedder at 196% of its 2 CPUs. The other containers were therefore not what held the first run back; the run-to-run spread is about a quarter, and with the embedder at 2 CPUs it is a second limit at this load. That is an estimate from this run, not a measurement. 1,000 users who read for 15 to 30 seconds between searches is the case the previous table measured.
-
-**Where the saturated thread goes.** A CPU profile of the `catalog-service` process for 30 s of that run (inspector, 1 ms sampling; the event loop was busy 94.6% of the window), each sample counted against the closest application or package frame on its stack:
-
-| Share of busy time | Who |
-| --- | --- |
-| 24% | Node's own HTTP server and sockets (parsing requests, `writev` of responses), with no application frame above |
-| 18% | our code (the routes, hybrid search, the Typesense call and its response parsing, about 8% in all) |
-| 14% | Express and its router, 1.6% of it computing an ETag for every response |
-| 13% | PostgreSQL: drizzle-orm 7.5%, pg 3.4%, pg-protocol 1.7% (two queries for each page that missed the response cache) |
-| 12% | OpenTelemetry: HTTP instrumentation 5.4%, context propagation 2.2%, trace SDK 2.1%, metrics SDK 1.8% |
-| 6.5% | garbage collection |
-
-No single function stands out: about 40% is the cost of serving an HTTP request at all (Node, Express, ETag), 12% is tracing, 13% is the database lookups behind cache misses, and 18% is ours. One core therefore answers about 2.5 ms of CPU per request, whatever the request is. The levers, from cheapest: more processes (replicas, `node:cluster`); turning off Express's ETag and `x-powered-by`; sampling or narrowing the OpenTelemetry HTTP instrumentation; returning the display fields from Typesense so a miss does not query PostgreSQL (price and stock must still come from PostgreSQL, so this needs a decision); a faster HTTP layer than Express.
-
-
-A CPU profile of the catalog's Node process for 30 s of the first of these runs (embedder 2 CPUs; the last run's profile shows the same shape, with the event loop busy 29%) (inspector, `Profiler.start`, 1 ms sampling): the event loop was busy 13.3 s of 30.2 s (44%), so the catalog itself had headroom of about two. The busy time: Node internals 26% (mostly socket writes, 6.8% in `writev`), native and anonymous frames 16%, the application's own code 12%, drizzle-orm 8%, garbage collection 4% and 6% for the runtime, OpenTelemetry (trace, HTTP and metrics) about 6%, zod 1.6%. The biggest single functions of ours are the Typesense `search` call and its response parsing (about 5%). Nothing in the catalog stands out. A Node process runs its JavaScript on one thread, so the second vCPU helps only with GC and I/O threads; more throughput from the catalog needs more replicas.
-
-Where to look to raise it, in order of what the measurements support:
-
-- Run the load test with the embedder on its own cores (`cpuset`) or on another host, to get a capacity number that is not the workstation's. On an idle machine, with default settings, the embedder does 97, about 210 and 226 requests a second on 1, 2 and 4 CPUs, so 2 CPUs are enough; size it from that, not from this run.
-- Warm the query-vector cache with the popular queries.
-- Add catalog replicas to use more than one core, and keep the response cache: it helps as soon as shoppers repeat queries, which this test hardly does.
-
-Two gaps the runs exposed were fixed afterwards: a failed embedding call no longer fails the whole search index sweep, which now retries by itself, and error logs show the cause (see Self-hosted product search embeddings). The others are reported, not fixed:
-
-- Every order refused for stock leaves a `Cancelled` order row, because the order commits before the stock hold.
-- Product and opening-balance imports are all or nothing: one bad row returns 400 for the whole payload.
+`pnpm run aws` layers `docker-compose.aws-like.yml` over the container stack and sizes it like `deploy/aws` as `terraform.tfvars` runs it: one container per service (`desired_count = 1`, autoscaling off). Backend services get 0.5 vCPU and 2 GiB (`task_cpu` 512, `task_memory` 2048), `customer-web` and `staff-web` 0.25 vCPU and 512 MiB, RabbitMQ and Typesense 0.25 vCPU and 512 MiB (their Fargate tasks in `data.tf`), and the embedder 2 vCPU and 4 GiB. PostgreSQL (RDS `db.t4g.micro`) gets 2 CPUs and 1 GiB and Redis (ElastiCache `cache.t4g.micro`) 2 CPUs and 512 MiB. Change the compose file when `variables.tf` or `data.tf` changes.
 
 ## Online order stock
 

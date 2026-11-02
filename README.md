@@ -126,12 +126,11 @@ pnpm run build
 pnpm test
 ```
 
-Load and chaos tests run against the container stack (`pnpm run stack:up`) and are described in `docs/runbook.md`:
+Load tests use k6 in Docker and can target the local stack (`pnpm run aws`) or the deployed one (set `LOAD_TARGET_URL`). Fault injection runs against the deployed stack. Both are described in `docs/runbook.md`:
 
 ```bash
 pnpm run load -e PROFILE=smoke /scripts/scenarios/checkout.js   # k6 in Docker, results in Grafana
-pnpm run chaos rabbitmq-outage                                  # one fault under load; "all" runs every scenario
-pnpm run stack:aws-like                                         # container stack sized like the ECS tasks, for capacity tests
+pnpm run chaos:aws typesense-outage                             # one fault under load on the AWS stack
 ```
 
 ## Configuration and deployment

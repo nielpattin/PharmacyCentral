@@ -20,7 +20,7 @@ Ask the user which mode to use at the start of every session, and keep it until 
 |           | Dev mode                                                                          | Container mode                                                                                                                                               |
 | --------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | What runs | Infra in Docker. Six services and both webs on the host, started by `launch.mjs`. | Everything in Docker, built from the images, closest to AWS.                                                                                                 |
-| Setup     | `pnpm run infra:up`, `pnpm run db:migrate`, `pnpm run urls:up` (once per session) | `pnpm run stack:up` (stops gateway-dev, rebuilds, waits until healthy), `pnpm run db:migrate` when migrations changed, `pnpm run urls:up` (once per session) |
+| Setup     | `pnpm run dev:infra`, `pnpm run db:migrate`, `pnpm run urls:up` (once per session) | `pnpm run aws` (stops gateway-dev, rebuilds, waits until healthy), `pnpm run db:migrate` when migrations changed, `pnpm run urls:up` (once per session) |
 | Apps      | The skill starts the Nx targets the feature needs                                 | The skill never starts, stops, or rebuilds anything. It checks and drives.                                                                                   |
 | Doctor    | `doctor.mjs --mode dev`                                                           | `doctor.mjs --mode container`                                                                                                                                |
 
@@ -45,7 +45,7 @@ node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-s
 - Launch refuses a needed port that already has a listener. Readiness: a service answers `GET /health/ready` with its own name, a web app answers `GET /` with the `root` div, and identity answers `GET /api/auth/me` with 401 through the gateway. Wait is up to 240 seconds. On timeout it cleans up the run and exits `1`.
 - Output lines: `START`, `WAIT`, `READY`, `URL`, `PIDS`, `STOP`. The run id is in `.tmp/verify/current`; `--run <id>` selects another run.
 
-From an empty database: `pnpm run infra:up`, `pnpm run db:migrate`, then `launch.mjs`. `pnpm run seed:default` then `pnpm run seed:demo`. The demo seed needs the services it calls running, catalog-service included, so it needs `--ai-approved`. Not proven on this machine.
+From an empty database: `pnpm run dev:infra`, `pnpm run db:migrate`, then `launch.mjs`. `pnpm run seed:default` then `pnpm run seed:demo`. The demo seed needs the services it calls running, catalog-service included, so it needs `--ai-approved`. Not proven on this machine.
 
 ## Online order stock and invoice pricing
 

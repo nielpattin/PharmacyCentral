@@ -72,7 +72,7 @@ const rabbitContainer = spawnSync("docker", ["compose", "ps", "-q", "rabbitmq"],
   encoding: "utf8",
 }).stdout.trim();
 if (!rabbitContainer) {
-  console.log("FAIL infra  rabbitmq container is not running: pnpm run infra:up");
+  console.log("FAIL infra  rabbitmq container is not running: pnpm run dev:infra");
   process.exit(1);
 }
 const rabbitctl = (...args) => {

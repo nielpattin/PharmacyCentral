@@ -30,7 +30,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 **sales-service, payment-service, operations-query-service, staff-web, docs**
 
-- Analytics now splits the identified customers into **Khách mới** and **Khách quay lại** by their first paid purchase ever. Sales documents gain nullable `paid_at` (sales migration `0014`), set when the first `payment.invoice.paid.v1` arrives — the payload now also carries `prescriptionId` — and kept after a refund; `GET /internal/analytics/customer-first-paid` answers that date for the period's customers. A customer is new when the date falls inside the period, returning when it is earlier. A database that already holds paid invoices needs `pnpm run backfill:paid-at` once. Spec US6, BR-REPORT-017, design 0007.
+- Analytics now splits the identified customers into **Khách mới** and **Khách quay lại** by their first paid purchase ever. Sales documents gain nullable `paid_at` (sales migration `0014`), set when the first `payment.invoice.paid.v1` arrives — the payload now also carries `prescriptionId` — and kept after a refund; `GET /internal/analytics/customer-first-paid` answers that date for the period's customers. A customer is new when the date falls inside the period, returning when it is earlier. Spec US6, BR-REPORT-017, design 0007.
 
 **operations-query-service, sales-service, staff-web, docs**
 

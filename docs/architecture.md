@@ -214,8 +214,8 @@ Both topologies run the same Docker images and the same contracts. Details are i
 | Telemetry | `otel-collector` with Tempo, Prometheus, Loki, and Grafana | An ADOT collector task that forwards to Amazon Managed Service for Prometheus, AWS X-Ray, and CloudWatch Logs |
 | Status | Development and integration | Configuration only. No AWS resource has been created. |
 
-The local stack is started with `pnpm run infra:up` (infrastructure plus `gateway-dev`) or
-`pnpm run stack:up` (full container stack). Commands are listed in the [runbook](runbook.md).
+The local stack is started with `pnpm run dev:infra` (infrastructure plus `gateway-dev`) or
+`pnpm run aws` (full container stack). Commands are listed in the [runbook](runbook.md).
 
 ## Observability
 
