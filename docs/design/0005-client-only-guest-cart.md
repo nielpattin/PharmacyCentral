@@ -74,7 +74,7 @@ None. Carts publish no integration event.
 ### Security
 <!-- anchor: security-and-csrf -->
 
-- No guest bearer cookie remains. The cart-side exposure in design 0003 (a), (b) and the guest part of (d) disappears because no cart route is public.
+- No guest bearer cookie remains, and no cart route is public, so there is no cart route that needs a guest cookie or an anonymous-caller rule of its own.
 - The merge route takes ids, quantities and ticks from the browser; it does not take prices, stock or identity. Like `POST /api/carts/lines` today, it does not check that a product exists. Ordering resolves and prices the lines again (BR-ORD-002).
 - A shopper can edit `localStorage`, which only changes their own cart. The merge request is bounded by the zod schema and the 200-line limit.
 - Browser mutations authenticate with the bearer token only.
@@ -119,6 +119,6 @@ If the merge response is lost after the server committed, the local lines stay, 
 ## Related
 
 - [ADR 0004](../adr/0004-server-authoritative-pricing-stock-and-fees.md): unchanged; the browser cart holds no prices.
-- [ADR 0005](../adr/0005-jwt-only-authentication-no-sessions-or-csrf.md) and [design 0003](0003-harden-guest-cart-cookie-and-trusted-headers.md): their guest cart parts are replaced if this is accepted.
+- [ADR 0005](../adr/0005-jwt-only-authentication-no-sessions-or-csrf.md): its guest cart part is replaced if this is accepted. [Design 0003](0003-harden-guest-cart-cookie-and-trusted-headers.md): the actor-header stripping and the `anonymous` actor stay.
 - [Design 0004](0004-order-from-selected-cart-lines.md): concerns the signed-in cart only and is not affected.
 - [Product spec: Orders page](../product/customer-orders-page.md): US1 and the signed-out state.

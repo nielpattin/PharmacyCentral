@@ -89,7 +89,7 @@ The demo seed (`pnpm run seed:demo`) refuses non-loopback `API_BASE_URL`, so the
 | ElastiCache `cache.t4g.micro` | 12 | 12 | |
 | RabbitMQ | 100 (Amazon MQ `mq.m7g.medium`) | in Fargate | The 9 USD of Fargate is counted above |
 | Container Insights (393 metrics at 0.30) | 118 | 0 | Turned off |
-| Secrets Manager (36 secrets at 0.40) | 14 | 0 | No Secrets Manager secret; 40 SSM parameters, which are free |
+| Secrets Manager (36 secrets at 0.40) | 14 | 0 | No Secrets Manager secret; the values are SSM SecureString parameters, which are free |
 | Autoscaling alarms (36 at 0.10) | 4 | 0 | `autoscaling_enabled = false` creates no scaling policy or alarm; with it on, 9 services x 2 policies x 2 alarms is 36 alarms, about 4 |
 | CloudWatch Logs, S3, API Gateway | about 5 | about 5 | Retention 30 to 7 days; 15 log groups |
 | **Total with services running** | **about 505** | **about 335** | |
@@ -104,7 +104,7 @@ Not done, with the saving: Fargate Spot for the stateless services (about 150 US
 - **One EC2 instance running `docker compose`.** About 60 USD a month, 8 USD stopped, about 150 lines of Terraform, and it reuses the stack already tested. Rejected by the owner on 2026-10-26 in favor of the topology the repository already defines.
 - **Fargate tasks in public subnets with public IPs instead of NAT.** Saves about 0 USD (a public IPv4 costs 3.65 USD a month per task), and drops the private-subnet model of `main.tf`. Rejected.
 - **GHCR instead of ECR.** Needs a registry credential secret and a public or paid image path, and image pulls leave AWS. Rejected.
-- **RabbitMQ on Fargate.** Cheaper by a few USD but loses queued events on restart. Rejected.
+- **Amazon MQ for RabbitMQ.** About 100 USD a month for the smallest RabbitMQ 4 broker. Rejected for the demo: RabbitMQ runs on Fargate and a restart loses only the events not yet consumed.
 - **CloudFront and S3 for the web apps.** Cheaper and needs no containers, but the account could not create distributions. Rejected for the demo.
 
 ## Rollout and migration

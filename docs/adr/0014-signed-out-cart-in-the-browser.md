@@ -10,7 +10,7 @@ Date: 2026-10-26
 
 The server cart cost more than it gave:
 
-- a bearer cookie and a public `/api/carts*` route to protect ([design 0003](../design/0003-harden-guest-cart-cookie-and-trusted-headers.md))
+- a bearer cookie and a public `/api/carts*` route to protect
 - a read that created a row: every page load called `GET /api/carts` twice before the session was known, and each call created a guest cart. The development database held 37 guest carts, 36 of them empty, and nothing deleted them
 - a required `COOKIE_SECURE` setting in `sales-service` that existed only for that cookie
 
@@ -27,7 +27,7 @@ The decision is in [design 0005](../design/0005-client-only-guest-cart.md).
 
 - A signed-out cart exists only in one browser. Clearing site data empties it.
 - A visitor who never signs in costs the server nothing, and a page load creates no cart row.
-- The guest-cart exposures in design 0003 (a), (b) and the guest part of (d) no longer exist. The actor-header stripping and the `anonymous` actor stay.
+- No cart route is public and no guest cookie exists. The actor-header stripping and the `anonymous` actor of [design 0003](../design/0003-harden-guest-cart-cookie-and-trusted-headers.md) stay.
 - The browser cart is user-editable. That only changes the shopper's own cart: the merge request is bounded by its schema and 200 lines, and an order resolves and prices its lines again.
 - If a merge response is lost after the server committed, the next load sends the same lines again and duplicates are summed twice ([BR-GAP-007](../business-rules.md)).
 - This supersedes the guest cart bullets of [ADR 0005](0005-jwt-only-authentication-no-sessions-or-csrf.md).
