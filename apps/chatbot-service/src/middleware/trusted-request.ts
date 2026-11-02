@@ -396,11 +396,7 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
     // calling without an access token may forward the scope of the employee it acts for.
     if (identity || !isServiceSecretValid) delete request.headers[ACTOR_SITE_IDS_HEADER];
 
-    if (
-      identity &&
-      identity.actorType === "employee" &&
-      !identity.roles.includes("Platform Admin")
-    ) {
+    if (identity && identity.actorType === "employee" && !identity.roles.includes("Platform Admin")) {
       const employeeSiteIds = identity.siteIds ?? [];
       request.headers[ACTOR_SITE_IDS_HEADER] = employeeSiteIds.join(",");
 

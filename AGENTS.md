@@ -127,12 +127,12 @@ The local gateway and AWS ALB forward traffic with identical path patterns. The 
 
 There are two local modes (details in `docs/runbook.md`). **Ask the user which one to use at the start of every session** and keep it until they change it. Never assume, and never switch silently.
 
-|                                | Dev mode                                                                                                   | Container mode                                                                            |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| What runs                      | Infra in Docker; the six services and both webs on the host (`node --watch`, Vite HMR)                     | Everything in Docker, built from the images, closest to AWS                               |
-| Start                          | `pnpm dev` (background service; stop it when you finish unless the user runs it) | `pnpm run local:up` (stops `gateway-dev`, rebuilds, waits until healthy)                  |
-| Use it for                     | Fast iteration while coding                                                                                | Checking what ships; Dockerfile, Compose, env, dependency, migration, load and chaos work |
-| Latest change is visible after | The file is saved                                                                                          | You rebuild with `pnpm run local:up`                                                      |
+|                                | Dev mode                                                                               | Container mode                                                                            |
+| ------------------------------ | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| What runs                      | Infra in Docker; the six services and both webs on the host (`node --watch`, Vite HMR) | Everything in Docker, built from the images, closest to AWS                               |
+| Start                          | `pnpm dev` (background service; stop it when you finish unless the user runs it)       | `pnpm run local:up` (stops `gateway-dev`, rebuilds, waits until healthy)                  |
+| Use it for                     | Fast iteration while coding                                                            | Checking what ships; Dockerfile, Compose, env, dependency, migration, load and chaos work |
+| Latest change is visible after | The file is saved                                                                      | You rebuild with `pnpm run local:up`                                                      |
 
 Then follow the same loop in both modes:
 

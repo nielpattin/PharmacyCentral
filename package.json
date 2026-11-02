@@ -35,7 +35,8 @@
     "typecheck": "nx run-many -t typecheck --all",
     "diagrams:serve": "node --env-file=.env tools/likec4.mjs serve docs/diagrams",
     "diagrams:validate": "node tools/likec4.mjs validate --json --no-layout docs/diagrams",
-    "diagrams:export": "node tools/likec4.mjs export png -o docs/diagrams/png docs/diagrams"  },
+    "diagrams:export": "node tools/likec4.mjs export png -o docs/diagrams/png docs/diagrams"
+  },
   "devDependencies": {
     "@nx/js": "23.2.1",
     "@typescript/native": "npm:typescript@7.0.2",

@@ -99,7 +99,9 @@ const thresholds =
     ? {
         // Stops at the first step past "usable": 5% failures or a 3 s product list.
         http_req_failed: [{ threshold: "rate<0.05", abortOnFail: true, delayAbortEval: "30s" }],
-        "http_req_duration{name:GET /products list}": [{ threshold: "p(95)<3000", abortOnFail: true, delayAbortEval: "30s" }],
+        "http_req_duration{name:GET /products list}": [
+          { threshold: "p(95)<3000", abortOnFail: true, delayAbortEval: "30s" },
+        ],
       }
     : { http_req_failed: ["rate<0.01"], checks: ["rate>0.99"] };
 if (PROFILE === "load") {

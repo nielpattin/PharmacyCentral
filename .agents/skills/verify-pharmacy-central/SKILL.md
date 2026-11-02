@@ -17,12 +17,12 @@ Feature map: [features/README.md](features/README.md). Open the feature file tha
 
 Ask the user which mode to use at the start of every session, and keep it until they change it. Never assume it (AGENTS.md, Change workflow). A running `pnpm dev` stack holds the same host ports: ask the user to stop their own stack, and never stop it from here.
 
-|           | Dev mode                                                                          | Container mode                                                                                                                                               |
-| --------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| What runs | Infra in Docker. Six services and both webs on the host, started by `launch.mjs`. | Everything in Docker, built from the images, closest to AWS.                                                                                                 |
+|           | Dev mode                                                                           | Container mode                                                                                                                                               |
+| --------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| What runs | Infra in Docker. Six services and both webs on the host, started by `launch.mjs`.  | Everything in Docker, built from the images, closest to AWS.                                                                                                 |
 | Setup     | `pnpm run dev:infra`, `pnpm run db:migrate`, `pnpm run urls:up` (once per session) | `pnpm run local:up` (stops gateway-dev, rebuilds, waits until healthy), `pnpm run db:migrate` when migrations changed, `pnpm run urls:up` (once per session) |
-| Apps      | The skill starts the Nx targets the feature needs                                 | The skill never starts, stops, or rebuilds anything. It checks and drives.                                                                                   |
-| Doctor    | `doctor.mjs --mode dev`                                                           | `doctor.mjs --mode container`                                                                                                                                |
+| Apps      | The skill starts the Nx targets the feature needs                                  | The skill never starts, stops, or rebuilds anything. It checks and drives.                                                                                   |
+| Doctor    | `doctor.mjs --mode dev`                                                            | `doctor.mjs --mode container`                                                                                                                                |
 
 ## Rules
 

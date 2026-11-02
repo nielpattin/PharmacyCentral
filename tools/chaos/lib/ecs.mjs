@@ -89,7 +89,16 @@ export function createEcs({ note, onCleanup }) {
     note(`scale ${service} to 0 (was ${svc.desiredCount})`);
     // Application Auto Scaling would raise the count back to its minimum, so the minimum goes to 0 first.
     if (target) await setScalable(service, 0, target.MaxCapacity);
-    await aws(["ecs", "update-service", "--cluster", CLUSTER, "--service", serviceName(service), "--desired-count", "0"]);
+    await aws([
+      "ecs",
+      "update-service",
+      "--cluster",
+      CLUSTER,
+      "--service",
+      serviceName(service),
+      "--desired-count",
+      "0",
+    ]);
   }
 
   async function start(service) {
@@ -127,16 +136,20 @@ export function createEcs({ note, onCleanup }) {
     for (;;) {
       last = await status(service);
       if (last.healthy >= Math.max(want, 1) && last.pending === 0) return last;
-      if (Date.now() >= deadline) throw new Error(`${service} not healthy in ${timeoutMs / 1000}s: ${JSON.stringify(last)}`);
+      if (Date.now() >= deadline)
+        throw new Error(`${service} not healthy in ${timeoutMs / 1000}s: ${JSON.stringify(last)}`);
       await new Promise((resolve) => setTimeout(resolve, 5_000));
     }
   }
 
   async function rebootRedis() {
     note("reboot the ElastiCache Redis node");
-    await aws(["elasticache", "reboot-cache-cluster", "--cache-cluster-id", CLUSTER, "--cache-node-ids-to-reboot", "0001"], {
-      json: false,
-    });
+    await aws(
+      ["elasticache", "reboot-cache-cluster", "--cache-cluster-id", CLUSTER, "--cache-node-ids-to-reboot", "0001"],
+      {
+        json: false,
+      },
+    );
   }
 
   async function redisAvailable() {

@@ -65,11 +65,7 @@ export class GatewayClient {
     return this.request("POST", path, { rawBody, contentType, timeoutMs });
   }
 
-  async request(
-    method,
-    path,
-    { body, rawBody, contentType, query, timeoutMs = REQUEST_TIMEOUT_MS } = {},
-  ) {
+  async request(method, path, { body, rawBody, contentType, query, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
     // Signing in only fetches a token, so a read-only client may still log in.
     if (this.readOnly && method !== "GET" && !path.startsWith("/api/auth/")) {
       throw new Error(`read-only client refused ${method} ${path}`);

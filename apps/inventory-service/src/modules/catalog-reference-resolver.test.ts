@@ -54,8 +54,7 @@ describe("CatalogServiceReferenceResolver", () => {
 
     const calls = fetchImplementation.mock.calls;
     expect(calls.length).toBeGreaterThan(0);
-    for (const [, init] of calls)
-      expect(init?.headers).toMatchObject({ Authorization: authorization });
+    for (const [, init] of calls) expect(init?.headers).toMatchObject({ Authorization: authorization });
   });
 
   it("resolves natural keys and caches catalog lookups", async () => {

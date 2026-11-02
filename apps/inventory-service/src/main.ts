@@ -63,7 +63,10 @@ const employeeDirectory = new IdentityEmployeeClient(identityServiceUrl);
 const expiryAvailabilitySweeper = repository ? new ExpiryAvailabilitySweeper(repository, logger) : undefined;
 expiryAvailabilitySweeper?.start();
 const inventoryImportService = database
-  ? new InventoryImportService(database, (authorization) => new CatalogServiceReferenceResolver(catalogServiceUrl, authorization))
+  ? new InventoryImportService(
+      database,
+      (authorization) => new CatalogServiceReferenceResolver(catalogServiceUrl, authorization),
+    )
   : undefined;
 const procurementRepository = database
   ? new ProcurementRepository(database, async (input) => {

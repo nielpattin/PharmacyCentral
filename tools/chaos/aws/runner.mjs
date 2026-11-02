@@ -90,7 +90,8 @@ const seconds = (since) => Math.round((Date.now() - since) / 1000);
 const scenarios = [
   {
     name: "typesense-outage",
-    description: "Typesense service scaled to 0 for 45 s: search falls back to SQL, reads keep working, search recovers",
+    description:
+      "Typesense service scaled to 0 for 45 s: search falls back to SQL, reads keep working, search recovers",
     async run(ctx) {
       const runId = Date.now().toString(36);
       const probeName = `Chaos Probe ${runId}`;
@@ -139,7 +140,11 @@ const scenarios = [
           units: [{ unitName: "Hop", conversionFactorToBaseUnit: 1, isBaseUnit: true, isDefaultSaleUnit: true }],
         });
         created = createdResponse.status === 201 ? createdResponse.body : undefined;
-        ctx.check("a product can be created while Typesense is down", Boolean(created), `status ${createdResponse.status}`);
+        ctx.check(
+          "a product can be created while Typesense is down",
+          Boolean(created),
+          `status ${createdResponse.status}`,
+        );
         const remaining = 45_000 - (Date.now() - stoppedAt);
         if (remaining > 0) await ctx.sleep(remaining);
         const restoreAt = Date.now();
@@ -153,7 +158,11 @@ const scenarios = [
           },
           { timeoutMs: 300_000, intervalMs: 5_000 },
         );
-        ctx.check("search finds the known product after Typesense restarts", true, `${seconds(restoreAt)} s after the restore`);
+        ctx.check(
+          "search finds the known product after Typesense restarts",
+          true,
+          `${seconds(restoreAt)} s after the restore`,
+        );
         if (created) {
           const resynced = await ctx
             .waitFor(
@@ -226,7 +235,11 @@ const scenarios = [
         guest.get("/api/stores", { limit: 5 }),
         guest.get("/api/products", { search: "paracetamol", limit: 20 }),
       ]);
-      ctx.check("stores and search answer 200 after the recovery", after.every((r) => r.status === 200), after.map((r) => r.status).join(", "));
+      ctx.check(
+        "stores and search answer 200 after the recovery",
+        after.every((r) => r.status === 200),
+        after.map((r) => r.status).join(", "),
+      );
       const w = await ctx.load.window(seconds(killedAt) + 10);
       ctx.note(`k6 since the kill: ${w.requests} requests, ${w.errors} failed`);
     },
@@ -234,7 +247,8 @@ const scenarios = [
 
   {
     name: "identity-kill",
-    description: "every identity-service task stopped under browse load: guests keep browsing, sign-in returns after the replacement",
+    description:
+      "every identity-service task stopped under browse load: guests keep browsing, sign-in returns after the replacement",
     async run(ctx) {
       ctx.load.start({ duration: ctx.duration, rate: RATE });
       const anonymous = ctx.gateway.anonymous();
@@ -329,7 +343,8 @@ async function main() {
     allPassed &&= ok;
     console.log(`\n${r.name}: ${ok ? "PASS" : "FAIL"} (${passed}/${r.checks.length} checks passed)`);
     console.log(`  load: ${describeLoad(r.load)}`);
-    for (const c of r.checks) console.log(`  ${c.passed ? "PASS" : "FAIL"}  ${c.label}${c.detail ? `  -- ${c.detail}` : ""}`);
+    for (const c of r.checks)
+      console.log(`  ${c.passed ? "PASS" : "FAIL"}  ${c.label}${c.detail ? `  -- ${c.detail}` : ""}`);
     if (r.error) console.log(`  FAIL  scenario threw: ${r.error.message}`);
   }
   process.exitCode = allPassed ? 0 : 1;

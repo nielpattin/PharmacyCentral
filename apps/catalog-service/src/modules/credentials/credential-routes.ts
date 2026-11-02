@@ -67,7 +67,7 @@ export const createCredentialRouter = (options: CredentialRouteOptions): Router 
   };
 
   router.get(CREDENTIAL_PATH, async (request, response) => {
-    if (!await platformAdminId(request, response, options)) return;
+    if (!(await platformAdminId(request, response, options))) return;
     const view: CredentialView = {
       providers: aiProviders.map((id) => ({ id, ...aiProviderCatalog[id] })),
       current: await options.vault.status(),
@@ -99,7 +99,7 @@ export const createCredentialRouter = (options: CredentialRouteOptions): Router 
   });
 
   router.delete(CREDENTIAL_PATH, async (request, response) => {
-    if (!await platformAdminId(request, response, options)) return;
+    if (!(await platformAdminId(request, response, options))) return;
     await options.vault.clear();
     notifySettingsChanged();
     response.status(204).end();

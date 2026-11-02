@@ -174,7 +174,11 @@ describe("trusted request role restatement", () => {
     let seen: Record<string, string | undefined> = {};
     app.use(createTrustedRequestMiddleware({ verifier: testVerifier, serviceSecret }));
     app.use((req, res) => {
-      seen = { actorId: req.header("x-actor-id"), actorType: req.header("x-actor-type"), roles: req.header("x-actor-roles") };
+      seen = {
+        actorId: req.header("x-actor-id"),
+        actorType: req.header("x-actor-type"),
+        roles: req.header("x-actor-roles"),
+      };
       res.json({ ok: true });
     });
     const { server, url } = await startServer(app);

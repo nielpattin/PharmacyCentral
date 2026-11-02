@@ -36,6 +36,9 @@
     },
     {
       "path": "./packages/cache"
+    },
+    {
+      "path": "./packages/auth"
     }
   ],
   "extends": "./tsconfig.base.json"
