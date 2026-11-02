@@ -161,7 +161,7 @@ locals {
   }
 
   # The execution role reads every secret the stack creates.
-  execution_secret_arns = concat(values(local.secret_arn), [for parameter in aws_ssm_parameter.catalog_media : parameter.arn])
+  execution_secret_arns = concat(values(local.secret_arn), [for parameter in aws_ssm_parameter.catalog_media : parameter.arn], aws_ssm_parameter.grafana_admin_password[*].arn)
 }
 
 resource "aws_security_group" "vpc_link" {

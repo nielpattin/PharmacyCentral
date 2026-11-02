@@ -69,7 +69,7 @@ resource "aws_s3_bucket_policy" "media" {
 # Cloudflare and is managed below, DNS only (not proxied). allow_overwrite takes over a record that already exists.
 resource "aws_acm_certificate" "web" {
   domain_name               = local.web_hosts["customer-web"]
-  subject_alternative_names = [local.web_hosts["staff-web"]]
+  subject_alternative_names = concat([local.web_hosts["staff-web"]], var.grafana_enabled ? [local.grafana_host] : [])
   validation_method         = "DNS"
 
   lifecycle {
@@ -132,6 +132,14 @@ resource "aws_security_group" "web_alb" {
     description     = "Web containers on port 8080"
     from_port       = 8080
     to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ecs_tasks.id]
+  }
+
+  egress {
+    description     = "Grafana on port 3000"
+    from_port       = 3000
+    to_port         = 3000
     protocol        = "tcp"
     security_groups = [aws_security_group.ecs_tasks.id]
   }
@@ -330,5 +338,6 @@ output "web" {
     customer_url   = "https://${local.web_hosts["customer-web"]}"
     media_bucket   = aws_s3_bucket.media.bucket
     media_base_url = "https://${aws_s3_bucket.media.bucket_regional_domain_name}"
+    grafana_url    = var.grafana_enabled ? "https://${local.grafana_host}" : null
   }
 }
