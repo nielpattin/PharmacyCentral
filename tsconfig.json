@@ -33,6 +33,9 @@
     },
     {
       "path": "./apps/ops-console-service"
+    },
+    {
+      "path": "./packages/cache"
     }
   ],
   "extends": "./tsconfig.base.json"

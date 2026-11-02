@@ -28,6 +28,7 @@
   },
   "targetDefaults": {
     "dev": {
+      "dependsOn": ["^build"],
       "continuous": true,
       "cache": false
     },

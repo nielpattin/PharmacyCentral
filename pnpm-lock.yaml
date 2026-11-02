@@ -230,6 +230,9 @@ catalogs:
     ioredis:
       specifier: 6.0.0
       version: 6.0.0
+    jose:
+      specifier: 6.2.9
+      version: 6.2.9
     jsqr:
       specifier: 1.4.0
       version: 1.4.0
@@ -371,6 +374,12 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@pharmacy/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@pharmacy/cache':
+        specifier: workspace:*
+        version: link:../../packages/cache
       amqplib:
         specifier: 'catalog:'
         version: 2.0.1
@@ -380,6 +389,9 @@ importers:
       express:
         specifier: 'catalog:'
         version: 5.3.0(supports-color@7.2.0)
+      ioredis:
+        specifier: 'catalog:'
+        version: 6.0.0(supports-color@7.2.0)
       pg:
         specifier: 'catalog:'
         version: 8.23.0
@@ -450,6 +462,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@pharmacy/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)
@@ -581,6 +596,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@pharmacy/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       amqplib:
         specifier: 'catalog:'
         version: 2.0.1
@@ -675,6 +693,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@pharmacy/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       amqplib:
         specifier: 'catalog:'
         version: 2.0.1
@@ -757,6 +778,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@pharmacy/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       amqplib:
         specifier: 'catalog:'
         version: 2.0.1
@@ -830,6 +854,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@pharmacy/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       express:
         specifier: 'catalog:'
         version: 5.3.0(supports-color@7.2.0)
@@ -891,6 +918,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@pharmacy/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       amqplib:
         specifier: 'catalog:'
         version: 2.0.1
@@ -976,6 +1006,9 @@ importers:
       '@opentelemetry/sdk-node':
         specifier: 'catalog:'
         version: 0.223.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
+      '@pharmacy/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       amqplib:
         specifier: 'catalog:'
         version: 2.0.1
@@ -1083,6 +1116,32 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.2.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/auth:
+    dependencies:
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.9
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/cache:
+    dependencies:
+      ioredis:
+        specifier: 'catalog:'
+        version: 6.0.0(supports-color@7.2.0)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.3
       vitest:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@8.2.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
