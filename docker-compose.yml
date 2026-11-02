@@ -258,7 +258,7 @@ services:
   # Floci is the local AWS emulator (S3 for product media, ECR for image push tests). The Docker socket lets it start
   # the backing ECR registry container; its web console sidecar is off.
   floci:
-    image: floci/floci:latest
+    image: floci/floci:2.4.0@sha256:5ee85db604c4aa74ac76e07ea5cc83086f37bb472bf3dbb97e34019e48efae9c
     restart: unless-stopped
     environment:
       FLOCI_HOSTNAME: floci
