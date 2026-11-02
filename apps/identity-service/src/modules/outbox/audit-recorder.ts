@@ -33,7 +33,7 @@ export const createTransactionalAuditRecorder = (executor: IdentityExecutor): Au
 });
 
 /**
- * For the sign-in and sign-out of a person's own session. A failure is logged and swallowed: the sign-in has already
+ * For the sign-in of a person's own account. A failure is logged and swallowed: the sign-in has already
  * happened, and answering it with an error would invite a retry of something that happened.
  */
 export const createAuditRecorder = (database: IdentityDatabase, logger: Logger): AuditRecorder => {

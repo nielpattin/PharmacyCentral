@@ -1,7 +1,7 @@
 /**
  * The unauthenticated routes a password, token, or account can be guessed through. `setup-admin` is absent because it
  * answers 409 after the first administrator exists, and `change-password` is absent because it already requires a
- * session.
+ * bearer token.
  */
 export type AuthRateLimitAction = "login" | "register" | "request-password-reset" | "reset-password" | "verify-email";
 

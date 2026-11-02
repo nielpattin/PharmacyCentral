@@ -17,7 +17,7 @@ export const registerRequestSchema = z.object({
 export const loginRequestSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1).max(200),
-  /** `employee`: a staff sign-in, which refuses a customer account before any session is created. */
+  /** `employee`: a staff sign-in, which refuses a customer account before any token is issued. */
   audience: z.enum(["employee"]).optional(),
 });
 
@@ -32,17 +32,7 @@ export const updateProfileRequestSchema = z.object({
   phoneNumber: phoneNumberSchema.nullable().optional(),
 });
 
-export const sessionUserSchema = z.object({
-  id: z.string().uuid(),
-  actorType: z.enum(["customer", "employee"]),
-  email: z.string().email(),
-  displayName: z.string(),
-  roles: z.array(z.string()),
-  siteIds: z.array(z.string().uuid()),
-});
-
 export type AccountCreatedEvent = z.infer<typeof accountCreatedEventSchema>;
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>;
-export type SessionUser = z.infer<typeof sessionUserSchema>;

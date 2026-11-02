@@ -3,7 +3,6 @@ import { createLogger } from "../logger.ts";
 import type { IdentityDatabase } from "../shared/infrastructure/database.ts";
 import { Redis } from "ioredis";
 import { DrizzleAccountRepository } from "../modules/accounts/infrastructure/drizzle-account-repository.ts";
-import { DrizzleSessionRepository } from "../modules/sessions/infrastructure/drizzle-session-repository.ts";
 import { AccountService } from "../modules/accounts/application/account-service.ts";
 import { VerificationTokenService } from "../modules/accounts/application/verification-token-service.ts";
 import { InMemoryAccountRepository } from "../modules/accounts/infrastructure/in-memory-account-repository.ts";
@@ -16,7 +15,6 @@ import {
 } from "../modules/accounts/infrastructure/email/verification-email-sender.ts";
 import { Argon2idPasswordHasher } from "../modules/accounts/infrastructure/security/argon2id-password-hasher.ts";
 import { GoogleOidcClient, type GoogleSignIn } from "../modules/accounts/infrastructure/security/google-oidc-client.ts";
-import { InMemorySessionRepository } from "../modules/sessions/infrastructure/in-memory-session-repository.ts";
 import { createDrizzleUnitOfWork, createInMemoryUnitOfWork } from "../modules/accounts/infrastructure/unit-of-work.ts";
 
 export const createGoogleSignIn = (): GoogleSignIn | undefined => {
@@ -29,7 +27,11 @@ export const createGoogleSignIn = (): GoogleSignIn | undefined => {
   if (!redirectUri)
     throw new Error("Missing required environment variable: GOOGLE_REDIRECT_URI. Please set it in your .env file.");
 
-  return { client: new GoogleOidcClient({ clientId, clientSecret, redirectUri }), redirectUri };
+  const appUrl = process.env.PUBLIC_APP_URL;
+  if (!appUrl)
+    throw new Error("Missing required environment variable: PUBLIC_APP_URL. Please set it in your .env file.");
+
+  return { client: new GoogleOidcClient({ clientId, clientSecret, redirectUri }), redirectUri, appUrl };
 };
 
 /**
@@ -85,10 +87,8 @@ export const createAccountService = (database?: IdentityDatabase): AccountServic
         : new SmtpVerificationEmailSender(emailOptions);
 
   const accounts = database ? new DrizzleAccountRepository(database.db) : new InMemoryAccountRepository();
-  const sessions = database ? new DrizzleSessionRepository(database.db) : new InMemorySessionRepository();
   return new AccountService(
     accounts,
-    sessions,
     new Argon2idPasswordHasher({
       memory: Number.parseInt(
         process.env.ARGON2_MEMORY_KIB ??
@@ -119,6 +119,6 @@ export const createAccountService = (database?: IdentityDatabase): AccountServic
     }),
     new VerificationTokenService(),
     sender,
-    database ? createDrizzleUnitOfWork(database) : createInMemoryUnitOfWork(accounts, sessions),
+    database ? createDrizzleUnitOfWork(database) : createInMemoryUnitOfWork(accounts),
   );
 };

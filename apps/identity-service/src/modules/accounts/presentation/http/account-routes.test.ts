@@ -6,14 +6,20 @@ import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { AccountService } from "../../application/account-service.ts";
 import { AuthRateLimiterError, type AuthRateLimiter } from "../../domain/auth-rate-limit.ts";
 import { AccountError } from "../../domain/account-error.ts";
+import type { GoogleSignIn } from "../../infrastructure/security/google-oidc-client.ts";
 
 import { noAuditRecorder, type AuditEntry, type AuditRecorder } from "../../../outbox/audit-recorder.ts";
+import { createTestAccessTokens } from "../../../../test-support/access-tokens.ts";
+import { createTrustedRequestMiddleware, IDENTITY_PUBLIC_AUTH_PATHS } from "../../../../middleware/trusted-request.ts";
+import { createJwksRouter } from "./jwks-routes.ts";
 import {
   createAccountRouter as createAccountRouterFor,
   createAdminRouter,
   createCustomerRouter,
   createInternalRouter,
 } from "./account-routes.ts";
+
+const tokens = await createTestAccessTokens();
 
 const startServer = async (app: express.Express): Promise<{ server: Server; url: string }> => {
   const server = createServer(app);
@@ -27,54 +33,14 @@ const unlimitedAttempts: AuthRateLimiter = {
   admit: async () => ({ admitted: true, withdraw: async () => undefined }),
 };
 
-// The cookie flag is asserted in its own block below; these route tests run with plain-HTTP cookies.
 const createAccountRouter = (
   service: AccountService,
-  googleSignIn: undefined,
+  googleSignIn: GoogleSignIn | undefined,
   rateLimiter: AuthRateLimiter,
   audit: AuditRecorder,
-) => createAccountRouterFor(service, googleSignIn, rateLimiter, audit, false);
+) => createAccountRouterFor(service, googleSignIn, rateLimiter, audit, tokens.signer);
 
-describe("auth cookie Secure attribute", () => {
-  const csrfSetCookieFor = async (cookieSecure: boolean): Promise<string> => {
-    const app = express();
-    app.use(
-      "/auth",
-      createAccountRouterFor(
-        {} as unknown as AccountService,
-        undefined,
-        unlimitedAttempts,
-        noAuditRecorder,
-        cookieSecure,
-      ),
-    );
-    const { server, url } = await startServer(app);
-    try {
-      const response = await fetch(`${url}/auth/csrf`);
-      return response.headers.get("set-cookie") ?? "";
-    } finally {
-      const { promise, resolve } = Promise.withResolvers<void>();
-      server.close(() => resolve());
-      await promise;
-    }
-  };
-
-  it("sets Secure on auth cookies only when COOKIE_SECURE is true", async () => {
-    expect(await csrfSetCookieFor(true)).toContain("; Secure");
-    expect(await csrfSetCookieFor(false)).not.toContain("Secure");
-  });
-
-  it("ignores NODE_ENV when deciding Secure", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-    try {
-      expect(await csrfSetCookieFor(false)).not.toContain("Secure");
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-});
-
-describe("account csrf route", () => {
+describe("account routes", () => {
   let activeServer: Server | undefined;
 
   afterEach(
@@ -82,67 +48,6 @@ describe("account csrf route", () => {
       activeServer &&
       new Promise<void>((resolve, reject) => activeServer?.close((error) => (error ? reject(error) : resolve()))),
   );
-
-  it("issues a csrf token and readable cookie without credentials", async () => {
-    const app = express();
-    app.use(express.json());
-    app.use(
-      "/auth",
-      createAccountRouter({} as unknown as AccountService, undefined, unlimitedAttempts, noAuditRecorder),
-    );
-    const { server, url } = await startServer(app);
-    activeServer = server;
-
-    const response = await fetch(`${url}/auth/csrf`);
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { csrfToken?: unknown };
-    expect(typeof body.csrfToken).toBe("string");
-    expect((body.csrfToken as string).length).toBeGreaterThan(16);
-    const setCookie = response.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain("pharmacy_csrf=");
-    expect(setCookie).not.toContain("HttpOnly");
-  });
-
-  it("mints per-service identity contexts for the session", async () => {
-    process.env.INTERNAL_IDENTITY_SECRET = "test-identity-secret-1234567890123456";
-    const account = {
-      id: "00000000-0000-4000-8000-000000000001",
-      actorType: "employee",
-      roles: ["Platform Admin"],
-      siteIds: [] as string[],
-    };
-    const stub = { currentSession: async () => ({ account, session: {} }) } as unknown as AccountService;
-    const app = express();
-    app.use(express.json());
-    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
-    const { server, url } = await startServer(app);
-    activeServer = server;
-
-    const response = await fetch(`${url}/auth/context`, { headers: { Cookie: "pharmacy_session=valid" } });
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { contexts?: Record<string, string> };
-    expect(Object.keys(body.contexts ?? {}).sort()).toEqual([
-      "catalog-service",
-      "chatbot-service",
-      "inventory-service",
-      "operations-query-service",
-      "ops-console-service",
-      "payment-service",
-      "sales-service",
-    ]);
-  });
-
-  it("refuses contexts without a session", async () => {
-    const stub = { currentSession: async () => undefined } as unknown as AccountService;
-    const app = express();
-    app.use(express.json());
-    app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
-    const { server, url } = await startServer(app);
-    activeServer = server;
-
-    const response = await fetch(`${url}/auth/context`);
-    expect(response.status).toBe(401);
-  });
 
   it("updates the signed-in shopper's own display name and phone", async () => {
     const account = {
@@ -165,7 +70,7 @@ describe("account csrf route", () => {
         };
       },
     );
-    const stub = { currentSession: async () => ({ account, session: {} }), updateProfile } as unknown as AccountService;
+    const stub = { findActiveAccount: async () => account, updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
     app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
@@ -174,14 +79,14 @@ describe("account csrf route", () => {
 
     const response = await fetch(`${url}/auth/me`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Cookie: "pharmacy_session=valid" },
+      headers: { "Content-Type": "application/json", "x-actor-id": "00000000-0000-4000-8000-000000000001" },
       body: JSON.stringify({ displayName: "Nguyễn Thị B", phoneNumber: "0901234567" }),
     });
     expect(response.status).toBe(200);
     const body = (await response.json()) as { displayName: string; phoneNumber: string | null };
     expect(body.displayName).toBe("Nguyễn Thị B");
     expect(body.phoneNumber).toBe("0901234567");
-    // The session identity owns the profile: the route must address the signed-in account, not a body-supplied id.
+    // The token identity owns the profile: the route must address the signed-in account, not a body-supplied id.
     expect(updateProfile.mock.calls[0]?.[0]).toBe(account.id);
   });
 
@@ -201,7 +106,7 @@ describe("account csrf route", () => {
       ...account,
       displayName: input.displayName ?? account.displayName,
     }));
-    const stub = { currentSession: async () => ({ account, session: {} }), updateProfile } as unknown as AccountService;
+    const stub = { findActiveAccount: async () => account, updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
     app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
@@ -210,7 +115,7 @@ describe("account csrf route", () => {
 
     const response = await fetch(`${url}/auth/me`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Cookie: "pharmacy_session=valid" },
+      headers: { "Content-Type": "application/json", "x-actor-id": "00000000-0000-4000-8000-000000000001" },
       body: JSON.stringify({ displayName: "Tên mới" }),
     });
     expect(response.status).toBe(200);
@@ -220,9 +125,9 @@ describe("account csrf route", () => {
     expect(body.phoneNumber).toBe("0909999999");
   });
 
-  it("rejects a profile patch from a caller with no session", async () => {
+  it("rejects a profile patch from a caller with no identity", async () => {
     const updateProfile = vi.fn();
-    const stub = { currentSession: async () => undefined, updateProfile } as unknown as AccountService;
+    const stub = { findActiveAccount: async () => undefined, updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
     app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
@@ -250,7 +155,7 @@ describe("account csrf route", () => {
       createdAt: new Date(),
     };
     const updateProfile = vi.fn();
-    const stub = { currentSession: async () => ({ account, session: {} }), updateProfile } as unknown as AccountService;
+    const stub = { findActiveAccount: async () => account, updateProfile } as unknown as AccountService;
     const app = express();
     app.use(express.json());
     app.use("/auth", createAccountRouter(stub, undefined, unlimitedAttempts, noAuditRecorder));
@@ -259,7 +164,7 @@ describe("account csrf route", () => {
 
     const response = await fetch(`${url}/auth/me`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Cookie: "pharmacy_session=valid" },
+      headers: { "Content-Type": "application/json", "x-actor-id": "00000000-0000-4000-8000-000000000001" },
       body: JSON.stringify({ phoneNumber: "gọi tôi sau" }),
     });
     expect(response.status).toBe(400);
@@ -315,7 +220,7 @@ describe("credential attempt limit", () => {
     expect(login).not.toHaveBeenCalled();
   });
 
-  it("lets a successful login through under the limit with the unchanged session contract", async () => {
+  it("lets a successful login through under the limit with a token and no cookie", async () => {
     const account = {
       id: "00000000-0000-4000-8000-000000000001",
       actorType: "customer",
@@ -325,15 +230,16 @@ describe("credential attempt limit", () => {
       siteIds: [] as string[],
       emailVerifiedAt: new Date(),
     };
-    const login = vi.fn(async () => ({ account, session: { rawToken: "raw-session-token" } }));
+    const login = vi.fn(async () => account);
     const withdraw = vi.fn(async () => undefined);
     const url = await startAuthServer({ login } as unknown as AccountService, admitting(withdraw));
 
     const response = await jsonPost(url, "/auth/login", credentials);
     expect(response.status).toBe(200);
-    expect(response.headers.get("set-cookie")).toContain("pharmacy_session=raw-session-token");
-    const body = (await response.json()) as { id: string; email: string; emailVerified: boolean };
+    expect(response.headers.get("set-cookie")).toBeNull();
+    const body = (await response.json()) as { id: string; email: string; emailVerified: boolean; accessToken: string };
     expect(body).toMatchObject({ id: account.id, email: account.email, emailVerified: true });
+    expect(typeof body.accessToken).toBe("string");
     expect(login).toHaveBeenCalledTimes(1);
     // A successful sign-in gives its attempt back, so only failed sign-ins spend the budget.
     expect(withdraw).toHaveBeenCalledTimes(1);
@@ -361,7 +267,7 @@ describe("credential attempt limit", () => {
       siteIds: [] as string[],
       emailVerifiedAt: new Date(),
     };
-    const login = vi.fn(async () => ({ account, session: { rawToken: "raw-session-token" } }));
+    const login = vi.fn(async () => account);
     const withdraw = vi.fn(async () => {
       throw new AuthRateLimiterError("Auth rate limiter store is unavailable");
     });
@@ -369,7 +275,7 @@ describe("credential attempt limit", () => {
 
     const response = await jsonPost(url, "/auth/login", credentials);
     expect(response.status).toBe(200);
-    expect(response.headers.get("set-cookie")).toContain("pharmacy_session=raw-session-token");
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 
   it("answers 503 without checking the password when the counter store is unavailable", async () => {
@@ -434,14 +340,14 @@ describe("customer lookup route", () => {
     createdAt: new Date(),
   });
 
-  const sessionCookie = { Cookie: "pharmacy_session=valid" };
+  const sessionCookie = { "x-actor-id": "00000000-0000-4000-8000-000000000001" };
 
   const startLookupServer = async (
     account: { roles: string[] } | undefined,
     searchCustomers: Mock,
   ): Promise<{ server: Server; url: string }> => {
     const stub = {
-      currentSession: async () => (account ? { account, session: {} } : undefined),
+      findActiveAccount: async () => account,
       searchCustomers,
     } as unknown as AccountService;
     const app = express();
@@ -487,7 +393,7 @@ describe("customer lookup route", () => {
     expect(searchCustomers).not.toHaveBeenCalled();
   });
 
-  it("refuses a lookup without a session", async () => {
+  it("refuses a lookup without an identity", async () => {
     const searchCustomers = vi.fn().mockResolvedValue([]);
     const { server, url } = await startLookupServer(undefined, searchCustomers);
     activeServer = server;
@@ -611,24 +517,22 @@ describe("audit entries", () => {
       body: JSON.stringify(body),
     });
 
-  it("records an employee sign-in and sign-out under their own id", async () => {
+  it("records an employee sign-in under their own id", async () => {
     const employee = account(ids.admin, "employee", ["Pharmacist"]);
     const { url, entries } = await start({
-      login: async () => ({ account: employee, session: { rawToken: "t" } }),
-      currentSession: async () => ({ account: employee, session: {} }),
-      logout: async () => undefined,
+      login: async () => employee,
     });
     expect((await post(url, "/auth/login", { email: "x@example.vn", password: "a-long-password-1" })).status).toBe(200);
-    expect((await post(url, "/auth/logout")).status).toBe(204);
     expect(entries).toEqual([
       { action: "identity.auth.login", entityType: "user", entityId: ids.admin, actorId: ids.admin },
-      { action: "identity.auth.logout", entityType: "user", entityId: ids.admin, actorId: ids.admin },
     ]);
   });
 
   it("does not record a shopper signing in", async () => {
     const shopper = account(ids.shopper, "customer", []);
-    const { url, entries } = await start({ login: async () => ({ account: shopper, session: { rawToken: "t" } }) });
+    const { url, entries } = await start({
+      login: async () => shopper,
+    });
     expect((await post(url, "/auth/login", { email: "x@example.vn", password: "a-long-password-1" })).status).toBe(200);
     expect(entries).toEqual([]);
   });
@@ -682,24 +586,6 @@ describe("audit entries", () => {
     expect((await post(url, "/auth/login", { email: "x@example.vn", password: "a-long-password-1" })).status).toBe(401);
     expect(entries).toEqual([]);
   });
-
-  it("refuses a context to an account that must change its password, with the code and detail", async () => {
-    const { url } = await start({
-      currentSession: async () => ({
-        account: { ...account(ids.admin, "employee", ["Pharmacist"]), mustChangePassword: true },
-        session: {},
-      }),
-    });
-
-    const response = await fetch(`${url}/auth/context`, { headers: { Cookie: "pharmacy_session=valid" } });
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({
-      title: "Password change required",
-      status: 403,
-      code: "password_change_required",
-      detail: "Bạn cần đổi mật khẩu trước khi tiếp tục.",
-    });
-  });
 });
 
 describe("administrator routes", () => {
@@ -731,12 +617,12 @@ describe("administrator routes", () => {
     return started.url;
   };
 
-  const session = { Cookie: "pharmacy_session=valid" };
+  const session = { "x-actor-id": adminId };
 
   it("passes the acting administrator to a change and answers 204", async () => {
     const deactivateEmployee = vi.fn(async () => undefined);
     const url = await start({
-      currentSession: async () => ({ account: admin(false), session: {} }),
+      findActiveAccount: async () => admin(false),
       deactivateEmployee,
     });
 
@@ -747,7 +633,7 @@ describe("administrator routes", () => {
 
   it("answers a refused change with its code and Vietnamese detail", async () => {
     const url = await start({
-      currentSession: async () => ({ account: admin(false), session: {} }),
+      findActiveAccount: async () => admin(false),
       deactivateEmployee: async () => {
         throw new AccountError(
           403,
@@ -770,7 +656,7 @@ describe("administrator routes", () => {
 
   it("refuses a new employee without a valid phone before the service runs", async () => {
     const createEmployee = vi.fn(async () => ({ ...admin(false), id: targetId, phoneNumber: "0901234567" }));
-    const url = await start({ currentSession: async () => ({ account: admin(false), session: {} }), createEmployee });
+    const url = await start({ findActiveAccount: async () => admin(false), createEmployee });
     const body = {
       email: "new@example.vn",
       password: "a-long-enough-password",
@@ -797,7 +683,7 @@ describe("administrator routes", () => {
   it("passes the acting administrator and a valid name and phone to a profile correction", async () => {
     const updateEmployeeProfile = vi.fn(async () => ({ ...admin(false), id: targetId, phoneNumber: "0912345678" }));
     const url = await start({
-      currentSession: async () => ({ account: admin(false), session: {} }),
+      findActiveAccount: async () => admin(false),
       updateEmployeeProfile,
     });
     const put = (body: Record<string, unknown>) =>
@@ -819,7 +705,7 @@ describe("administrator routes", () => {
 
   it("filters the list by status and refuses an unknown status", async () => {
     const listUsers = vi.fn(async () => []);
-    const url = await start({ currentSession: async () => ({ account: admin(false), session: {} }), listUsers });
+    const url = await start({ findActiveAccount: async () => admin(false), listUsers });
 
     expect((await fetch(`${url}/admin/users?status=deactivated`, { headers: session })).status).toBe(200);
     expect(listUsers).toHaveBeenCalledWith("deactivated");
@@ -828,7 +714,7 @@ describe("administrator routes", () => {
 
   it("refuses every administrator route while the administrator must change their own password", async () => {
     const listUsers = vi.fn();
-    const url = await start({ currentSession: async () => ({ account: admin(true), session: {} }), listUsers });
+    const url = await start({ findActiveAccount: async () => admin(true), listUsers });
 
     const response = await fetch(`${url}/admin/users`, { headers: session });
     expect(response.status).toBe(403);
@@ -936,7 +822,7 @@ describe("staff directory route", () => {
     listActiveEmployees: Mock,
   ): Promise<{ server: Server; url: string }> => {
     const stub = {
-      currentSession: async () => (account ? { account, session: {} } : undefined),
+      findActiveAccount: async () => account,
       listActiveEmployees,
     } as unknown as AccountService;
     const app = express();
@@ -951,7 +837,7 @@ describe("staff directory route", () => {
     return promise;
   };
 
-  const sessionCookie = { Cookie: "pharmacy_session=valid" };
+  const sessionCookie = { "x-actor-id": "00000000-0000-4000-8000-000000000001" };
 
   it("lists every active employee for a Platform Admin, with only the name, roles and sites", async () => {
     // The stub answers the contact fields too: the route must still leave them out of the answer.
@@ -1036,7 +922,7 @@ describe("staff directory route", () => {
     expect(listActiveEmployees).not.toHaveBeenCalled();
   });
 
-  it("refuses a caller with no session", async () => {
+  it("refuses a caller with no identity", async () => {
     const listActiveEmployees = vi.fn();
     const { server, url } = await startDirectory(undefined, listActiveEmployees);
     try {
@@ -1157,5 +1043,275 @@ describe("internal employee route", () => {
     expect(employeeCaller.status).toBe(403);
     const malformed = await fetch(`${started.url}/internal/employees?siteId=nope`, { headers: systemActor });
     expect(malformed.status).toBe(400);
+  });
+});
+
+describe("access tokens", () => {
+  let activeServer: Server | undefined;
+  afterEach(async () => {
+    if (!activeServer) return;
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    activeServer.close((error) => (error ? reject(error) : resolve()));
+    activeServer = undefined;
+    await promise;
+  });
+
+  const accountId = "00000000-0000-4000-8000-000000000001";
+  const siteId = "00000000-0000-4000-8000-0000000000e1";
+  const account = (overrides: Record<string, unknown> = {}) => ({
+    id: accountId,
+    actorType: "employee",
+    email: "duocsi@example.vn",
+    displayName: "Dược sĩ",
+    roles: ["Pharmacist"],
+    siteIds: [siteId],
+    isActive: true,
+    mustChangePassword: false,
+    emailVerifiedAt: new Date(),
+    ...overrides,
+  });
+  const appUrl = "https://app.example.vn";
+  const googleRedirectUri = "http://localhost:3001/auth/google/callback";
+
+  /** The routes as main.ts wires them: trusted-request, then the routers. */
+  const start = async (
+    service: Partial<Record<keyof AccountService, unknown>>,
+    googleSignIn?: GoogleSignIn,
+  ): Promise<string> => {
+    const app = express();
+    app.use(express.json());
+    app.use(
+      createTrustedRequestMiddleware({
+        verifier: tokens.verifier,
+        serviceSecret: "service-secret",
+        publicPaths: [...IDENTITY_PUBLIC_AUTH_PATHS],
+      }),
+    );
+    app.use(createJwksRouter(tokens.signer));
+    app.use(
+      "/auth",
+      createAccountRouterFor(
+        service as unknown as AccountService,
+        googleSignIn,
+        unlimitedAttempts,
+        noAuditRecorder,
+        tokens.signer,
+      ),
+    );
+    app.use("/admin", createAdminRouter(service as unknown as AccountService));
+    const started = await startServer(app);
+    activeServer = started.server;
+    return started.url;
+  };
+
+  const claims = async (token: string) => {
+    const identity = await tokens.verifier.verify(token);
+    if (!identity) throw new Error("token did not verify");
+    return identity;
+  };
+
+  const json = (body: unknown) => ({ headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+  it("issues a one-day access token and no cookie on login", async () => {
+    const url = await start({ login: async () => account() });
+
+    const response = await fetch(url + "/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "duocsi@example.vn", password: "a-long-password-1" }),
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { accessToken: string; accessTokenExpiresAt: string; id: string };
+    expect(body.id).toBe(accountId);
+    const identity = await claims(body.accessToken);
+    expect(identity).toMatchObject({
+      actorId: accountId,
+      actorType: "employee",
+      roles: ["Pharmacist"],
+      siteIds: [siteId],
+      passwordChangeRequired: false,
+    });
+    expect(identity.expiresAt - identity.issuedAt).toBe(86_400);
+    expect(new Date(body.accessTokenExpiresAt).getTime()).toBe(identity.expiresAt * 1000);
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("carries pcr on the token of an account that must change its password", async () => {
+    const url = await start({ login: async () => account({ mustChangePassword: true }) });
+    const response = await fetch(url + "/auth/login", {
+      method: "POST",
+      ...json({ email: "duocsi@example.vn", password: "a-long-password-1" }),
+    });
+    const body = (await response.json()) as { accessToken: string; passwordChangeRequired: boolean };
+    expect(body.passwordChangeRequired).toBe(true);
+    expect((await claims(body.accessToken)).passwordChangeRequired).toBe(true);
+  });
+
+  it("issues an access token when the first administrator is set up", async () => {
+    const url = await start({
+      createFirstAdmin: async () => account({ roles: ["Platform Admin"], siteIds: [] }),
+    });
+    const response = await fetch(url + "/auth/setup-admin", {
+      method: "POST",
+      ...json({ email: "admin@example.vn", password: "a-long-password-1", displayName: "Quản trị" }),
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { accessToken: string };
+    expect((await claims(body.accessToken)).roles).toEqual(["Platform Admin"]);
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  describe("change password", () => {
+    it("returns a fresh token with pcr cleared", async () => {
+      const changePassword = vi.fn(async () => account({ mustChangePassword: false }));
+      const url = await start({
+        findActiveAccount: async () => account({ mustChangePassword: true }),
+        changePassword,
+      });
+
+      const response = await fetch(url + "/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          authorization: await tokens.bearer({ actorId: accountId, passwordChangeRequired: true }),
+        },
+        body: JSON.stringify({ currentPassword: "mat-khau-tam-thoi", nextPassword: "mat-khau-moi-12-ky-tu" }),
+      });
+      expect(response.status).toBe(200);
+      expect(changePassword).toHaveBeenCalledWith(accountId, "mat-khau-tam-thoi", "mat-khau-moi-12-ky-tu");
+      const body = (await response.json()) as { accessToken: string; passwordChangeRequired: boolean };
+      expect(body.passwordChangeRequired).toBe(false);
+      expect((await claims(body.accessToken)).passwordChangeRequired).toBe(false);
+      expect(response.headers.get("set-cookie")).toBeNull();
+    });
+  });
+
+  describe("google callback", () => {
+    const googleSignIn = (): GoogleSignIn =>
+      ({
+        client: {
+          completeAuthorization: async () => ({ subject: "g-1", email: "khach@example.com", displayName: "Khách" }),
+        },
+        redirectUri: googleRedirectUri,
+        appUrl,
+      }) as unknown as GoogleSignIn;
+
+    it("redirects to the web app with the access token in the URL fragment and clears the state cookie", async () => {
+      const url = await start(
+        { loginWithGoogle: async () => account({ actorType: "customer", roles: [], siteIds: [] }) },
+        googleSignIn(),
+      );
+
+      const response = await fetch(url + "/auth/google/callback?state=abc&code=xyz", {
+        redirect: "manual",
+        headers: { Cookie: "oauth_state=abc" },
+      });
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(location.origin + location.pathname).toBe(`${appUrl}/auth/callback`);
+      expect(location.search).toBe("");
+      const token = new URLSearchParams(location.hash.slice(1)).get("access_token");
+      expect(token).toBeTruthy();
+      expect(await claims(token ?? "")).toMatchObject({ actorId: accountId, actorType: "customer", roles: [] });
+      const cookies = response.headers.getSetCookie();
+      expect(cookies).toHaveLength(1);
+      expect(cookies[0]).toContain("oauth_state=;");
+      expect(cookies[0]).toContain("Max-Age=0");
+    });
+
+    it("refuses a callback whose state does not match the cookie", async () => {
+      const loginWithGoogle = vi.fn();
+      const url = await start({ loginWithGoogle }, googleSignIn());
+
+      const response = await fetch(url + "/auth/google/callback?state=abc&code=xyz", {
+        redirect: "manual",
+        headers: { Cookie: "oauth_state=other" },
+      });
+      expect(response.status).toBe(400);
+      expect(response.headers.get("location")).toBeNull();
+      expect(loginWithGoogle).not.toHaveBeenCalled();
+    });
+
+    it("sets the oauth_state cookie on start, Secure only over https", async () => {
+      const beginAuthorization = async () => ({ state: "abc", url: new URL("https://accounts.google.com/auth") });
+      const sign = (redirectUri: string) =>
+        ({ client: { beginAuthorization }, redirectUri, appUrl }) as unknown as GoogleSignIn;
+
+      const plainUrl = await start({}, sign(googleRedirectUri));
+      const plain = await fetch(plainUrl + "/auth/google/start", { redirect: "manual" });
+      expect(plain.status).toBe(302);
+      expect(plain.headers.get("set-cookie")).toContain("oauth_state=abc; HttpOnly");
+      expect(plain.headers.get("set-cookie")).not.toContain("Secure");
+
+      const secureUrl = await start({}, sign("https://api.example.vn/auth/google/callback"));
+      const secure = await fetch(secureUrl + "/auth/google/start", { redirect: "manual" });
+      expect(secure.headers.get("set-cookie")).toContain("; Secure");
+    });
+  });
+
+  it("serves no refresh, logout or csrf routes", async () => {
+    const url = await start({});
+    expect((await fetch(url + "/auth/refresh", { method: "POST" })).status).toBe(401);
+    expect((await fetch(url + "/auth/logout", { method: "POST" })).status).toBe(401);
+    expect((await fetch(url + "/auth/csrf")).status).toBe(401);
+  });
+
+  describe("me", () => {
+    it("reads the profile of the bearer token's account from the database", async () => {
+      const findActiveAccount = vi.fn(async () => account({ displayName: "Tên mới" }));
+      const url = await start({ findActiveAccount });
+
+      const response = await fetch(url + "/auth/me", {
+        headers: { authorization: await tokens.bearer({ actorId: accountId }) },
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ id: accountId, displayName: "Tên mới" });
+      expect(findActiveAccount).toHaveBeenCalledWith(accountId);
+    });
+
+    it("answers 401 without a bearer token", async () => {
+      const url = await start({ findActiveAccount: async () => account() });
+
+      const response = await fetch(url + "/auth/me");
+      expect(response.status).toBe(401);
+    });
+
+    it("answers 401 for an account that has been deactivated since the token was issued", async () => {
+      const url = await start({ findActiveAccount: async () => undefined });
+      const response = await fetch(url + "/auth/me", { headers: { authorization: await tokens.bearer() } });
+      expect(response.status).toBe(401);
+    });
+
+    it("answers 401 for an expired token", async () => {
+      const url = await start({ findActiveAccount: async () => account() });
+      const expired = await tokens.bearer({}, new Date(Date.now() - 86_400_000 - 60_000));
+      const response = await fetch(url + "/auth/me", { headers: { authorization: expired } });
+      expect(response.status).toBe(401);
+    });
+
+    it("serves a pcr token on the auth routes and refuses it on the admin routes", async () => {
+      const url = await start({
+        findActiveAccount: async () => account({ mustChangePassword: true, roles: ["Platform Admin"] }),
+      });
+      const authorization = await tokens.bearer({ roles: ["Platform Admin"], passwordChangeRequired: true });
+
+      expect((await fetch(url + "/auth/me", { headers: { authorization } })).status).toBe(200);
+      const admin = await fetch(url + "/admin/users", { headers: { authorization } });
+      expect(admin.status).toBe(403);
+      expect(await admin.json()).toMatchObject({ code: "password_change_required" });
+    });
+  });
+
+  describe("jwks", () => {
+    it("publishes the public key without authentication, and the key verifies the tokens", async () => {
+      const url = await start({});
+
+      const response = await fetch(url + "/.well-known/jwks.json");
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { keys: Array<Record<string, unknown>> };
+      expect(body.keys).toHaveLength(1);
+      expect(body.keys[0]).toMatchObject({ kty: "EC", crv: "P-256", alg: "ES256", use: "sig", kid: "test-key" });
+      expect(body.keys[0]).not.toHaveProperty("d");
+    });
   });
 });

@@ -11,7 +11,6 @@ import { VerificationTokenService } from "../application/verification-token-serv
 import { Argon2idPasswordHasher } from "../infrastructure/security/argon2id-password-hasher.ts";
 import { DrizzleAccountRepository } from "./drizzle-account-repository.ts";
 import { createDrizzleUnitOfWork } from "./unit-of-work.ts";
-import { DrizzleSessionRepository } from "../../sessions/infrastructure/drizzle-session-repository.ts";
 import { AccountError } from "../domain/account-error.ts";
 
 const migrationsFolder = fileURLToPath(new URL("../../../../drizzle/migrations", import.meta.url));
@@ -30,11 +29,9 @@ describe("DrizzleAccountRepository", () => {
   // The unit of work only reads `db`; the pool is not used against PGlite, so it is absent here.
   const identityDatabase = { db, pool: undefined } as unknown as IdentityDatabase;
   const repository = new DrizzleAccountRepository(executor);
-  const sessions = new DrizzleSessionRepository(executor);
   const hasher = new Argon2idPasswordHasher({ memory: 19456, passes: 2, parallelism: 1, tagLength: 32 });
   const service = new AccountService(
     repository,
-    sessions,
     hasher,
     new VerificationTokenService(),
     { sendVerificationEmail: async () => undefined },
@@ -51,7 +48,6 @@ describe("DrizzleAccountRepository", () => {
   });
 
   beforeEach(async () => {
-    await db.delete(schema.sessions);
     await db.delete(schema.outboxMessages);
     await db.delete(schema.userSiteScopes);
     await db.delete(schema.userRoles);
@@ -144,13 +140,10 @@ describe("DrizzleAccountRepository", () => {
     ]);
   });
 
-  it("deactivates an employee, ends the session and writes the audit entry in one transaction", async () => {
-    const session = await sessions.create(employeeId, new Date(Date.now() + 60_000));
-
+  it("deactivates an employee and writes the audit entry in one transaction", async () => {
     await service.deactivateEmployee(adminId, employeeId);
 
     await expect(repository.findById(employeeId)).resolves.toMatchObject({ isActive: false });
-    await expect(sessions.findActive(session.rawToken)).resolves.toBeUndefined();
     const audit = await db.select().from(schema.outboxMessages);
     expect(audit.map((row) => row.eventType)).toEqual(["identity.audit.v1"]);
     expect(JSON.parse(audit[0]?.payload ?? "{}")).toMatchObject({
@@ -161,8 +154,6 @@ describe("DrizzleAccountRepository", () => {
   });
 
   it("rolls the deactivation back when its audit entry cannot be written", async () => {
-    const session = await sessions.create(employeeId, new Date(Date.now() + 60_000));
-
     // Park the outbox table so the audit insert inside the same transaction fails.
     await client.exec('ALTER TABLE "outbox_messages" RENAME TO "outbox_messages_parked"');
     try {
@@ -177,7 +168,11 @@ describe("DrizzleAccountRepository", () => {
     }
 
     await expect(repository.findById(employeeId)).resolves.toMatchObject({ isActive: true });
-    await expect(sessions.findActive(session.rawToken)).resolves.toMatchObject({ accountId: employeeId });
+  });
+
+  it("has no sessions table", async () => {
+    const result = await client.query<{ name: string | null }>("SELECT to_regclass('public.sessions') AS name");
+    expect(result.rows[0]?.name).toBeNull();
   });
 
   it("lists active employees by name with their roles and sites, narrowed by site, and never a customer", async () => {

@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import type { AccessTokenSigner } from "@pharmacy/auth";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 
@@ -18,7 +18,6 @@ import {
   type AuthRateLimiter,
 } from "../../domain/auth-rate-limit.ts";
 import type { AccountService } from "../../application/account-service.ts";
-import { signInternalIdentityContext } from "../../../../middleware/trusted-request.ts";
 import type { GoogleSignIn } from "../../infrastructure/security/google-oidc-client.ts";
 import type { AuditRecorder } from "../../../outbox/audit-recorder.ts";
 
@@ -50,8 +49,6 @@ const employeesAtSiteSchema = z.object({ siteId: z.string().uuid() });
 const customerBatchSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) });
 // A one-character query would return the whole customer base, so the counter has to type at least three.
 const customerLookupSchema = z.object({ q: z.string().trim().min(3).max(320) });
-const sessionCookieName = "pharmacy_session";
-const csrfCookieName = "pharmacy_csrf";
 /** The counter roles that may search the customer accounts a prescription can be linked to. */
 const customerLookupRoles = ["Pharmacist", "Platform Admin"];
 /** The roles that assign plan owners: Platform Admin reads every active employee, Pharmacy Manager those at their sites. */
@@ -59,7 +56,7 @@ const staffDirectoryRoles = ["Pharmacy Manager", "Platform Admin"];
 const platformAdminRole = "Platform Admin";
 
 /**
- * Records a staff member acting on their own account: signing in or out. Shoppers are left out, because the audit log
+ * Records a staff member acting on their own account: signing in. Shoppers are left out, because the audit log
  * is the staff trail and a shopper signing in is not a staff action.
  */
 const auditOwnAccount = (
@@ -76,7 +73,7 @@ export const createAccountRouter = (
   googleSignIn: GoogleSignIn | undefined,
   rateLimiter: AuthRateLimiter,
   audit: AuditRecorder,
-  cookieSecure: boolean,
+  signer: AccessTokenSigner,
 ): Router => {
   const router = Router();
 
@@ -92,76 +89,17 @@ export const createAccountRouter = (
     }
 
     try {
-      const result = await service.createFirstAdmin(parsed.data);
+      const account = await service.createFirstAdmin(parsed.data);
       await audit.record({
         action: "identity.admin.setup",
         entityType: "user",
-        entityId: result.account.id,
-        actorId: result.account.id,
+        entityId: account.id,
+        actorId: account.id,
       });
-      setSessionCookie(response, result.session.rawToken, cookieSecure);
-      response.status(201).json(toPublicAccount(result.account));
+      response.status(201).json(await signedInAccount(signer, account));
     } catch (error) {
       writeServiceError(response, error, 409);
     }
-  });
-
-  const contextAudiences = [
-    "catalog-service",
-    "inventory-service",
-    "sales-service",
-    "payment-service",
-    "operations-query-service",
-    "chatbot-service",
-    "ops-console-service",
-  ];
-
-  router.get("/context", async (request, response) => {
-    const token = getSessionToken(request);
-    const current = token ? await service.currentSession(token) : undefined;
-    if (!current) {
-      response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
-      return;
-    }
-    // Every service trusts a context it can verify, so no context is minted for an account that must change its password.
-    if (current.account.mustChangePassword) {
-      writeServiceError(response, accountErrors.passwordChangeRequired(), 403);
-      return;
-    }
-    const secret = process.env.INTERNAL_IDENTITY_SECRET;
-    if (!secret) {
-      response
-        .status(503)
-        .json({ title: "Identity signing is not configured", status: 503, code: "identity_unconfigured" });
-      return;
-    }
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 5 * 60_000).toISOString();
-    const contexts: Record<string, string> = {};
-    for (const audience of contextAudiences) {
-      contexts[audience] = signInternalIdentityContext(
-        {
-          version: "v1",
-          requestId: randomUUID(),
-          correlationId: randomUUID(),
-          actorId: current.account.id,
-          actorType: current.account.actorType,
-          roles: current.account.roles,
-          siteIds: current.account.siteIds,
-          issuedAt: now.toISOString(),
-          expiresAt,
-          audience,
-        },
-        secret,
-      );
-    }
-    response.json({ contexts, expiresAt });
-  });
-
-  router.get("/csrf", async (_request, response) => {
-    const token = randomBytes(32).toString("hex");
-    setReadableCookie(response, csrfCookieName, token, 3600, cookieSecure);
-    response.json({ csrfToken: token });
   });
 
   router.post("/register", async (request, response) => {
@@ -206,7 +144,7 @@ export const createAccountRouter = (
 
     try {
       const authorization = await googleSignIn.client.beginAuthorization();
-      setCookie(response, "oauth_state", authorization.state, 600, cookieSecure);
+      setOauthStateCookie(response, authorization.state, isHttps(googleSignIn.redirectUri));
       response.redirect(authorization.url.href);
     } catch (error) {
       writeServiceError(response, error, 503);
@@ -233,10 +171,11 @@ export const createAccountRouter = (
     try {
       const callbackUrl = new URL(request.originalUrl, googleSignIn.redirectUri);
       const profile = await googleSignIn.client.completeAuthorization(callbackUrl, state);
-      const result = await service.loginWithGoogle(profile);
-      setSessionCookie(response, result.session.rawToken, cookieSecure);
-      clearCookie(response, "oauth_state");
-      response.json(toPublicAccount(result.account));
+      const account = await service.loginWithGoogle(profile);
+      const { token } = await signAccessToken(signer, account);
+      clearOauthStateCookie(response);
+      // The fragment never reaches a server or a log, so the token goes only to the page that reads it.
+      response.redirect(`${googleSignIn.appUrl}/auth/callback#access_token=${token}`);
     } catch (error) {
       writeServiceError(response, error, 401);
     }
@@ -252,13 +191,12 @@ export const createAccountRouter = (
     if (!attempt) return;
 
     try {
-      const result = await service.login(parsed.data);
+      const account = await service.login(parsed.data);
       // Only failed sign-ins spend the budget: the attempt admitted above is withdrawn once the password checks out.
       // A counter that cannot withdraw leaves this success counted, and the sign-in itself must not fail over it.
       await attempt.withdraw().catch(() => undefined);
-      setSessionCookie(response, result.session.rawToken, cookieSecure);
-      await auditOwnAccount(audit, result.account, "identity.auth.login");
-      response.json(toPublicAccount(result.account));
+      await auditOwnAccount(audit, account, "identity.auth.login");
+      response.json(await signedInAccount(signer, account));
     } catch (error) {
       // A failed staff sign-in is recorded without its password. The entry names the account when the email matched
       // one, and why it was refused. A shopper's failed sign-in is not recorded (no audit of shoppers' activity).
@@ -274,36 +212,23 @@ export const createAccountRouter = (
     }
   });
 
-  router.post("/logout", async (request, response) => {
-    const token = getSessionToken(request);
-    if (token) {
-      const current = await service.currentSession(token);
-      await service.logout(token);
-      if (current) await auditOwnAccount(audit, current.account, "identity.auth.logout");
-    }
-    clearSessionCookie(response);
-    response.status(204).end();
-  });
-
   router.get("/me", async (request, response) => {
-    const token = getSessionToken(request);
-    const current = token ? await service.currentSession(token) : undefined;
-    if (!current) {
+    const account = await currentAccount(service, request);
+    if (!account) {
       response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
       return;
     }
 
-    response.json(toPublicAccount(current.account));
+    response.json(toPublicAccount(account));
   });
 
   router.patch("/me", async (request, response) => {
-    const token = getSessionToken(request);
-    const current = token ? await service.currentSession(token) : undefined;
-    if (!current) {
+    const account = await currentAccount(service, request);
+    if (!account) {
       response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
       return;
     }
-    if (current.account.mustChangePassword) {
+    if (account.mustChangePassword) {
       writeServiceError(response, accountErrors.passwordChangeRequired(), 403);
       return;
     }
@@ -315,7 +240,7 @@ export const createAccountRouter = (
     }
 
     try {
-      const updated = await service.updateProfile(current.account.id, parsed.data);
+      const updated = await service.updateProfile(account.id, parsed.data);
       response.json(toPublicAccount(updated));
     } catch (error) {
       writeServiceError(response, error, 400);
@@ -327,13 +252,12 @@ export const createAccountRouter = (
    * employees sharing one of the manager's sites. Only the name, roles and sites leave this route, never an email.
    */
   router.get("/staff-directory", async (request, response) => {
-    const token = getSessionToken(request);
-    const current = token ? await service.currentSession(token) : undefined;
-    if (!current) {
+    const account = await currentAccount(service, request);
+    if (!account) {
       response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
       return;
     }
-    if (!current.account.roles.some((role) => staffDirectoryRoles.includes(role))) {
+    if (!account.roles.some((role) => staffDirectoryRoles.includes(role))) {
       response.status(403).json({
         title: "Pharmacy Manager role required",
         status: 403,
@@ -342,12 +266,12 @@ export const createAccountRouter = (
       });
       return;
     }
-    if (current.account.mustChangePassword) {
+    if (account.mustChangePassword) {
       writeServiceError(response, accountErrors.passwordChangeRequired(), 403);
       return;
     }
 
-    const sharingSiteIds = current.account.roles.includes(platformAdminRole) ? undefined : current.account.siteIds;
+    const sharingSiteIds = account.roles.includes(platformAdminRole) ? undefined : account.siteIds;
     const employees = await service.listActiveEmployees(sharingSiteIds);
     response.json({
       employees: employees.map((employee) => ({
@@ -388,9 +312,8 @@ export const createAccountRouter = (
   });
 
   router.post("/change-password", async (request, response) => {
-    const token = getSessionToken(request);
-    const current = token ? await service.currentSession(token) : undefined;
-    if (!current) {
+    const account = await currentAccount(service, request);
+    if (!account) {
       response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
       return;
     }
@@ -402,9 +325,8 @@ export const createAccountRouter = (
     }
 
     try {
-      await service.changePassword(current.account.id, parsed.data.currentPassword, parsed.data.nextPassword);
-      clearSessionCookie(response);
-      response.status(204).end();
+      const changed = await service.changePassword(account.id, parsed.data.currentPassword, parsed.data.nextPassword);
+      response.json(await signedInAccount(signer, changed));
     } catch (error) {
       writeServiceError(response, error, 400);
     }
@@ -421,13 +343,12 @@ export const createAdminRouter = (service: AccountService): Router => {
   const router = Router();
 
   router.use(async (request, response, next) => {
-    const token = getSessionToken(request);
-    const current = token ? await service.currentSession(token) : undefined;
-    if (!current) {
+    const account = await currentAccount(service, request);
+    if (!account) {
       response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
       return;
     }
-    if (!current.account.roles.includes("Platform Admin")) {
+    if (!account.roles.includes("Platform Admin")) {
       response.status(403).json({
         title: "Platform Admin role required",
         status: 403,
@@ -436,12 +357,12 @@ export const createAdminRouter = (service: AccountService): Router => {
       });
       return;
     }
-    if (current.account.mustChangePassword) {
+    if (account.mustChangePassword) {
       writeServiceError(response, accountErrors.passwordChangeRequired(), 403);
       return;
     }
 
-    response.locals.adminId = current.account.id;
+    response.locals.adminId = account.id;
     next();
   });
 
@@ -550,26 +471,6 @@ export const createAdminRouter = (service: AccountService): Router => {
     }
   });
 
-  router.post("/users/:id/revoke-sessions", async (request, response) => {
-    const id = userIdSchema.safeParse(request.params);
-    if (!id.success) {
-      response.status(400).json({
-        title: "Invalid request",
-        status: 400,
-        code: "invalid_request",
-        detail: "Dữ liệu gửi lên không hợp lệ.",
-      });
-      return;
-    }
-
-    try {
-      await service.revokeAllSessions(response.locals.adminId as string, id.data.id);
-      response.status(204).end();
-    } catch (error) {
-      writeServiceError(response, error, 400);
-    }
-  });
-
   router.post("/users/:id/deactivate", async (request, response) => {
     const id = userIdSchema.safeParse(request.params);
     if (!id.success) {
@@ -614,21 +515,19 @@ export const createAdminRouter = (service: AccountService): Router => {
 };
 
 /**
- * The counter's customer picker. It reads the same session cookie the `/auth` router does, because the trusted
- * middleware exempts `/customers` from gateway checks the way it exempts `/admin`. A shopper cannot reach the
- * customer base through it: only a counter role passes, and only customer accounts are ever returned.
+ * The counter's customer picker. A shopper cannot reach the customer base through it: only a counter role passes, and
+ * only customer accounts are ever returned.
  */
 export const createCustomerRouter = (service: AccountService): Router => {
   const router = Router();
 
   router.use(async (request, response, next) => {
-    const token = getSessionToken(request);
-    const current = token ? await service.currentSession(token) : undefined;
-    if (!current) {
+    const account = await currentAccount(service, request);
+    if (!account) {
       response.status(401).json({ title: "Authentication required", status: 401, code: "unauthenticated" });
       return;
     }
-    if (!current.account.roles.some((role) => customerLookupRoles.includes(role))) {
+    if (!account.roles.some((role) => customerLookupRoles.includes(role))) {
       response.status(403).json({
         title: "Pharmacist role required",
         status: 403,
@@ -637,7 +536,7 @@ export const createCustomerRouter = (service: AccountService): Router => {
       });
       return;
     }
-    if (current.account.mustChangePassword) {
+    if (account.mustChangePassword) {
       writeServiceError(response, accountErrors.passwordChangeRequired(), 403);
       return;
     }
@@ -800,7 +699,29 @@ const toPublicAccount = (account: Account) => ({
   siteIds: account.siteIds,
 });
 
-const getSessionToken = (request: Request): string | undefined => getCookie(request, sessionCookieName);
+const signAccessToken = (signer: AccessTokenSigner, account: Account) =>
+  signer.sign({
+    actorId: account.id,
+    actorType: account.actorType,
+    roles: account.roles,
+    siteIds: account.siteIds,
+    passwordChangeRequired: account.mustChangePassword,
+  });
+
+/** The profile with a fresh access token, valid until its expiry. */
+const signedInAccount = async (signer: AccessTokenSigner, account: Account) => {
+  const { token, expiresAt } = await signAccessToken(signer, account);
+  return { ...toPublicAccount(account), accessToken: token, accessTokenExpiresAt: expiresAt.toISOString() };
+};
+
+/**
+ * The active account the trusted-request middleware verified from the bearer token, read from the database so a
+ * profile or access change shows at once. That middleware overwrites or deletes the actor headers of every request.
+ */
+const currentAccount = async (service: AccountService, request: Request): Promise<Account | undefined> => {
+  const accountId = request.header("x-actor-id");
+  return accountId ? service.findActiveAccount(accountId) : undefined;
+};
 
 /**
  * Admits one attempt before any credential is checked, so a refused attempt answers the same whether or not the
@@ -835,33 +756,21 @@ const getCookie = (request: Request, name: string): string | undefined => {
   return match?.[1];
 };
 
-const setReadableCookie = (
-  response: Response,
-  name: string,
-  value: string,
-  maxAge: number,
-  cookieSecure: boolean,
-): void => {
-  const secure = cookieSecure ? "; Secure" : "";
-  response.setHeader("Set-Cookie", `${name}=${value}; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`);
+const isHttps = (url: string): boolean => new URL(url).protocol === "https:";
+
+/** The Google authorization state, kept for the ten minutes the round trip to Google may take. */
+const setOauthStateCookie = (response: Response, state: string, secure: boolean): void => {
+  response.append(
+    "Set-Cookie",
+    `oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600${secure ? "; Secure" : ""}`,
+  );
 };
 
-const setSessionCookie = (response: Response, token: string, cookieSecure: boolean): void => {
-  setCookie(response, sessionCookieName, token, 604800, cookieSecure);
+const clearOauthStateCookie = (response: Response): void => {
+  response.append("Set-Cookie", "oauth_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
 };
 
-const setCookie = (response: Response, name: string, value: string, maxAge: number, cookieSecure: boolean): void => {
-  const secure = cookieSecure ? "; Secure" : "";
-  response.setHeader("Set-Cookie", `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`);
-};
-
-const clearSessionCookie = (response: Response): void => clearCookie(response, sessionCookieName);
-
-const clearCookie = (response: Response, name: string): void => {
-  response.setHeader("Set-Cookie", `${name}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
-};
-
-/** A refusal the domain made answers its own status, code and Vietnamese detail; anything else keeps the old shape. */
+/** A refusal the domain made answers its own status, code and Vietnamese detail; anything else answers a generic problem. */
 const writeServiceError = (response: Response, error: unknown, defaultStatus: number): void => {
   if (error instanceof AccountError) {
     response

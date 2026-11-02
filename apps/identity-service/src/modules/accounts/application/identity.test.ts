@@ -4,7 +4,6 @@ import { AccountService } from "./account-service.ts";
 import { InMemoryAccountRepository } from "../infrastructure/in-memory-account-repository.ts";
 import { createInMemoryUnitOfWork } from "../infrastructure/unit-of-work.ts";
 import { Argon2idPasswordHasher } from "../infrastructure/security/argon2id-password-hasher.ts";
-import { InMemorySessionRepository } from "../../sessions/infrastructure/in-memory-session-repository.ts";
 import { VerificationTokenService } from "../application/verification-token-service.ts";
 import type { AuditEntry, AuditRecorder } from "../../outbox/audit-recorder.ts";
 import { AccountError } from "../domain/account-error.ts";
@@ -14,19 +13,16 @@ const hasher = new Argon2idPasswordHasher({ memory: 19456, passes: 2, parallelis
 const password = "correct horse battery staple";
 const passwordHash = await hasher.hash(password);
 const sender = { sendVerificationEmail: async () => undefined };
-const adminId = "00000000-0000-4000-8000-0000000000a1";
 
 /** A service over in-memory stores, with the audit entries it writes collected for assertions. */
 type Harness = {
   accounts: InMemoryAccountRepository;
-  sessions: InMemorySessionRepository;
   service: AccountService;
   entries: AuditEntry[];
 };
 
 const createHarness = (audit?: AuditRecorder): Harness => {
   const accounts = new InMemoryAccountRepository();
-  const sessions = new InMemorySessionRepository();
   const entries: AuditEntry[] = [];
   const recorder: AuditRecorder = audit ?? {
     record: async (entry) => {
@@ -35,13 +31,12 @@ const createHarness = (audit?: AuditRecorder): Harness => {
   };
   const service = new AccountService(
     accounts,
-    sessions,
     hasher,
     new VerificationTokenService(),
     sender,
-    createInMemoryUnitOfWork(accounts, sessions, recorder),
+    createInMemoryUnitOfWork(accounts, recorder),
   );
-  return { accounts, sessions, service, entries };
+  return { accounts, service, entries };
 };
 
 const addAccount = (harness: Harness, overrides: Partial<Omit<Account, "id" | "createdAt">> = {}): Promise<Account> =>
@@ -101,14 +96,12 @@ describe("identity security primitives", () => {
     expect(await service.consume(issued.token, "account-2")).toBe(false);
   });
 
-  it("registers verified customers and creates sessions after verification", async () => {
+  it("registers customers who can sign in once verified", async () => {
     const accountRepository = new InMemoryAccountRepository();
-    const sessions = new InMemorySessionRepository();
     const tokenService = new VerificationTokenService();
     const sentTokens: string[] = [];
     const service = new AccountService(
       accountRepository,
-      sessions,
       hasher,
       tokenService,
       {
@@ -116,7 +109,7 @@ describe("identity security primitives", () => {
           sentTokens.push(token);
         },
       },
-      createInMemoryUnitOfWork(accountRepository, sessions),
+      createInMemoryUnitOfWork(accountRepository),
     );
 
     const registration = await service.registerCustomer({
@@ -130,19 +123,15 @@ describe("identity security primitives", () => {
     await service.verifyEmail(registration.account.id, sentTokens[0]!);
     const login = await service.login({ email: "customer@example.com", password: "correct horse battery staple" });
 
-    expect(login.account.actorType).toBe("customer");
-    expect(await service.currentSession(login.session.rawToken)).toMatchObject({
-      account: { email: "customer@example.com" },
-    });
+    expect(login.actorType).toBe("customer");
+    expect(await service.findActiveAccount(login.id)).toMatchObject({ email: "customer@example.com" });
   });
 
   it("uses one-time password reset tokens without revealing account existence", async () => {
     const accountRepository = new InMemoryAccountRepository();
-    const sessions = new InMemorySessionRepository();
     const resetTokens: string[] = [];
     const service = new AccountService(
       accountRepository,
-      sessions,
       hasher,
       new VerificationTokenService(),
       {
@@ -151,7 +140,7 @@ describe("identity security primitives", () => {
           resetTokens.push(token);
         },
       },
-      createInMemoryUnitOfWork(accountRepository, sessions),
+      createInMemoryUnitOfWork(accountRepository),
     );
 
     const account = await accountRepository.create({
@@ -178,13 +167,13 @@ describe("identity security primitives", () => {
   it("creates the first administrator once", async () => {
     const harness = createHarness();
 
-    const result = await harness.service.createFirstAdmin({
+    const admin = await harness.service.createFirstAdmin({
       email: "first-admin@example.com",
       password: "correct horse battery staple",
       displayName: "Admin",
     });
-    expect(result.account.roles).toEqual(["Platform Admin"]);
-    expect(result.account.mustChangePassword).toBe(false);
+    expect(admin.roles).toEqual(["Platform Admin"]);
+    expect(admin.mustChangePassword).toBe(false);
     await expect(
       harness.service.createFirstAdmin({
         email: "other@example.com",
@@ -193,31 +182,18 @@ describe("identity security primitives", () => {
       }),
     ).rejects.toThrow("already configured");
   });
-
-  it("revokes opaque sessions and supports global revocation", async () => {
-    const repository = new InMemorySessionRepository();
-    const first = await repository.create("account-1", new Date(Date.now() + 60_000));
-    const second = await repository.create("account-1", new Date(Date.now() + 60_000));
-
-    expect(await repository.findActive(first.rawToken)).toMatchObject({ accountId: "account-1" });
-    await repository.revoke(first.sessionId);
-    expect(await repository.findActive(first.rawToken)).toBeUndefined();
-
-    await repository.revokeAll("account-1");
-    expect(await repository.findActive(second.rawToken)).toBeUndefined();
-  });
 });
 
 describe("account lifecycle", () => {
-  it("ends the sessions of a deactivated account and refuses its sign-in with the generic message", async () => {
+  it("stops resolving a deactivated account and refuses its sign-in with the generic message", async () => {
     const harness = createHarness();
     const admin = await addAdmin(harness);
     const employee = await addAccount(harness);
-    const session = await harness.service.login({ email: employee.email, password });
+    await harness.service.login({ email: employee.email, password });
 
     await harness.service.deactivateEmployee(admin.id, employee.id);
 
-    expect(await harness.service.currentSession(session.session.rawToken)).toBeUndefined();
+    expect(await harness.service.findActiveAccount(employee.id)).toBeUndefined();
     const refusal = await expectRefusal(
       harness.service.login({ email: employee.email, password }),
       "request_failed",
@@ -239,7 +215,7 @@ describe("account lifecycle", () => {
     await harness.service.activateEmployee(admin.id, employee.id);
 
     const restored = await harness.service.login({ email: employee.email, password });
-    expect(restored.account).toMatchObject({ isActive: true, roles: ["Pharmacy Manager"], siteIds });
+    expect(restored).toMatchObject({ isActive: true, roles: ["Pharmacy Manager"], siteIds });
     expect(harness.entries.map((entry) => entry.action)).toEqual([
       "identity.user.deactivated",
       "identity.user.activated",
@@ -249,10 +225,8 @@ describe("account lifecycle", () => {
   it("refuses a deactivated account a password reset token and a reset", async () => {
     const resetEmails: string[] = [];
     const accounts = new InMemoryAccountRepository();
-    const sessions = new InMemorySessionRepository();
     const service = new AccountService(
       accounts,
-      sessions,
       hasher,
       new VerificationTokenService(),
       {
@@ -261,7 +235,7 @@ describe("account lifecycle", () => {
           resetEmails.push(email);
         },
       },
-      createInMemoryUnitOfWork(accounts, sessions),
+      createInMemoryUnitOfWork(accounts),
     );
     const admin = await accounts.create({
       actorType: "employee",
@@ -300,10 +274,8 @@ describe("account lifecycle", () => {
   it("refuses a password reset token consumed after the account was deactivated", async () => {
     const tokens: string[] = [];
     const accounts = new InMemoryAccountRepository();
-    const sessions = new InMemorySessionRepository();
     const service = new AccountService(
       accounts,
-      sessions,
       hasher,
       new VerificationTokenService(),
       {
@@ -312,7 +284,7 @@ describe("account lifecycle", () => {
           tokens.push(token);
         },
       },
-      createInMemoryUnitOfWork(accounts, sessions),
+      createInMemoryUnitOfWork(accounts),
     );
     const customer = await accounts.create({
       actorType: "customer",
@@ -346,7 +318,7 @@ describe("account lifecycle", () => {
     expect(refusal.reason).toBe("not_employee");
     expect(refusal.accountId).toBe(customer.id);
     await expect(harness.service.login({ email: customer.email, password })).resolves.toMatchObject({
-      account: { actorType: "customer" },
+      actorType: "customer",
     });
   });
 
@@ -407,13 +379,11 @@ describe("administrator changes", () => {
         "self_change_forbidden",
         403,
       ),
-      await expectRefusal(harness.service.revokeAllSessions(admin.id, admin.id), "self_change_forbidden", 403),
       await expectRefusal(harness.service.deactivateEmployee(admin.id, admin.id), "self_change_forbidden", 403),
     ];
     expect(selfDetails.map((error) => error.detail)).toEqual([
       "Bạn không thể tự đổi quyền của mình.",
       "Bạn không thể tự đặt lại mật khẩu của mình tại đây.",
-      "Bạn không thể tự đăng xuất các phiên của mình tại đây.",
       "Bạn không thể tự vô hiệu hóa tài khoản của mình.",
     ]);
     expect(harness.entries).toEqual([]);
@@ -666,7 +636,6 @@ describe("administrator changes", () => {
     for (const attempt of [
       harness.service.updateUserAccess(admin.id, customer.id, ["Pharmacist"], [site]),
       harness.service.resetUserPassword(admin.id, customer.id, "a brand new phrase"),
-      harness.service.revokeAllSessions(admin.id, customer.id),
       harness.service.deactivateEmployee(admin.id, customer.id),
       harness.service.activateEmployee(admin.id, customer.id),
     ]) {
@@ -688,15 +657,13 @@ describe("administrator changes", () => {
     expect((await harness.service.listUsers("active")).map((account) => account.id)).toEqual([admin.id]);
   });
 
-  it("resets a password, flags it for change, ends the sessions and audits without the password", async () => {
+  it("resets a password, flags it for change and audits without the password", async () => {
     const harness = createHarness();
     const admin = await addAdmin(harness);
     const employee = await addAccount(harness);
-    const session = await harness.service.login({ email: employee.email, password });
 
     await harness.service.resetUserPassword(admin.id, employee.id, "a brand new phrase");
 
-    expect(await harness.service.currentSession(session.session.rawToken)).toBeUndefined();
     const reflagged = await harness.accounts.findById(employee.id);
     expect(reflagged?.mustChangePassword).toBe(true);
     await expect(
@@ -706,14 +673,13 @@ describe("administrator changes", () => {
     expect(JSON.stringify(harness.entries)).not.toContain("brand new phrase");
   });
 
-  it("clears the change flag when the holder changes the password, and ends their sessions", async () => {
+  it("clears the change flag when the holder changes the password and returns the account", async () => {
     const harness = createHarness();
     const employee = await addAccount(harness, { mustChangePassword: true });
-    const session = await harness.service.login({ email: employee.email, password });
 
-    await harness.service.changePassword(employee.id, password, "a brand new phrase");
+    const changed = await harness.service.changePassword(employee.id, password, "a brand new phrase");
 
-    expect(await harness.service.currentSession(session.session.rawToken)).toBeUndefined();
+    expect(changed).toMatchObject({ id: employee.id, mustChangePassword: false });
     expect((await harness.accounts.findById(employee.id))?.mustChangePassword).toBe(false);
     expect(harness.entries.map((entry) => entry.action)).toEqual(["identity.account.password-changed"]);
   });
@@ -738,32 +704,16 @@ describe("administrator changes", () => {
       503,
     );
   });
-
-  it("revokes the sessions of a deactivated account in the same change that turns it off", async () => {
-    const harness = createHarness();
-    const admin = await addAdmin(harness);
-    const employee = await addAccount(harness);
-    const session = await harness.service.login({ email: employee.email, password });
-
-    await harness.service.deactivateEmployee(admin.id, employee.id);
-
-    expect(await harness.sessions.findActive(session.session.rawToken)).toBeUndefined();
-    expect(harness.entries.map((entry) => [entry.action, entry.entityId, entry.actorId])).toEqual([
-      ["identity.user.deactivated", employee.id, admin.id],
-    ]);
-  });
 });
 
 describe("customer lookup", () => {
   const createService = (accountRepository: InMemoryAccountRepository): AccountService => {
-    const sessions = new InMemorySessionRepository();
     return new AccountService(
       accountRepository,
-      sessions,
       hasher,
       new VerificationTokenService(),
       sender,
-      createInMemoryUnitOfWork(accountRepository, sessions),
+      createInMemoryUnitOfWork(accountRepository),
     );
   };
 

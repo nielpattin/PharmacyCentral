@@ -1,10 +1,11 @@
 import "./telemetry.ts"; // Must load first so the OpenTelemetry instrumentations can patch libraries.
 import express from "express";
 import { createServer } from "node:http";
+import { createAccessTokenVerifier } from "@pharmacy/auth";
 
 import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware, IDENTITY_PUBLIC_AUTH_PATHS } from "./middleware/trusted-request.ts";
-import { createCsrfMiddleware } from "./middleware/csrf.ts";
+import { createAccessTokenSignerFromEnv } from "./bootstrap/access-token.ts";
 
 import { createAuditRecorder, noAuditRecorder } from "./modules/outbox/audit-recorder.ts";
 import { IdentityOutboxPublisher } from "./modules/outbox/outbox-publisher.ts";
@@ -15,6 +16,7 @@ import {
   createCustomerRouter,
   createInternalRouter,
 } from "./modules/accounts/presentation/http/account-routes.ts";
+import { createJwksRouter } from "./modules/accounts/presentation/http/jwks-routes.ts";
 import {
   createAccountService,
   createAuthRateLimit,
@@ -30,12 +32,6 @@ const app = express();
 app.set("trust proxy", readPositiveIntegerEnv("TRUST_PROXY_HOPS"));
 const portStr = process.env.PORT;
 if (!portStr) throw new Error("Missing required environment variable: PORT. Please set it in your .env file.");
-const cookieSecureEnv = process.env.COOKIE_SECURE;
-if (!cookieSecureEnv)
-  throw new Error("Missing required environment variable: COOKIE_SECURE. Please set it in your .env file.");
-if (cookieSecureEnv !== "true" && cookieSecureEnv !== "false")
-  throw new Error('Invalid COOKIE_SECURE: expected "true" or "false".');
-const cookieSecure = cookieSecureEnv === "true";
 const port = Number.parseInt(portStr, 10);
 const rabbitmqUrl = process.env.RABBITMQ_URL;
 if (!rabbitmqUrl)
@@ -47,21 +43,23 @@ const audit = database ? createAuditRecorder(database, logger) : noAuditRecorder
 const accountService = createAccountService(database);
 const googleSignIn = createGoogleSignIn();
 const authRateLimit = createAuthRateLimit();
+const accessTokenSigner = await createAccessTokenSignerFromEnv();
+const accessTokenVerifier = createAccessTokenVerifier({ jwks: accessTokenSigner.jwks() });
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
 app.use(
   createTrustedRequestMiddleware({
-    expectedAudience: serviceName,
-    publicPaths: [...IDENTITY_PUBLIC_AUTH_PATHS, "/admin", "/customers"],
+    verifier: accessTokenVerifier,
+    publicPaths: [...IDENTITY_PUBLIC_AUTH_PATHS],
   }),
 );
 app.get("/health/live", (_request, response) => response.json({ status: "ok", service: serviceName }));
 app.get("/health/ready", (_request, response) =>
   response.status(database ? 200 : 503).json({ status: database ? "ok" : "degraded", service: serviceName }),
 );
-app.use(createCsrfMiddleware());
-app.use("/auth", createAccountRouter(accountService, googleSignIn, authRateLimit.limiter, audit, cookieSecure));
+app.use(createJwksRouter(accessTokenSigner));
+app.use("/auth", createAccountRouter(accountService, googleSignIn, authRateLimit.limiter, audit, accessTokenSigner));
 app.use("/admin", createAdminRouter(accountService));
 app.use("/customers", createCustomerRouter(accountService));
 app.use("/internal", createInternalRouter(accountService));

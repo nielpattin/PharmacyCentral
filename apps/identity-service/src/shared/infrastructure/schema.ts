@@ -38,21 +38,6 @@ export const userSiteScopes = pgTable(
   (table) => [uniqueIndex("user_site_scopes_user_site_unique").on(table.userId, table.siteId)],
 );
 
-export const sessions = pgTable(
-  "sessions",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    userId: uuid("user_id").notNull(),
-    tokenDigest: varchar("token_digest", { length: 128 }).notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    revokedAt: timestamp("revoked_at", { withTimezone: true }),
-  },
-  (table) => [
-    uniqueIndex("sessions_token_digest_unique").on(table.tokenDigest),
-    index("sessions_user_active_idx").on(table.userId, table.revokedAt),
-  ],
-);
-
 export const oneTimeTokens = pgTable("one_time_tokens", {
   digest: varchar("digest", { length: 128 }).primaryKey(),
   userId: uuid("user_id").notNull(),

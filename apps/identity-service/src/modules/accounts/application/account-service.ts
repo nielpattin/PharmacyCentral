@@ -7,11 +7,6 @@ import { canonicalPhoneDigits } from "../domain/phone-number.ts";
 import type { InMemoryAccountRepository } from "../infrastructure/in-memory-account-repository.ts";
 import { Argon2idPasswordHasher } from "../infrastructure/security/argon2id-password-hasher.ts";
 import { VerificationTokenService } from "./verification-token-service.ts";
-import type {
-  InMemorySessionRepository,
-  CreatedSession,
-  Session,
-} from "../../sessions/infrastructure/in-memory-session-repository.ts";
 import type { GoogleProfile } from "../infrastructure/security/google-oidc-client.ts";
 import type { AuditEntry, AuditRecorder } from "../../outbox/audit-recorder.ts";
 
@@ -33,21 +28,15 @@ export type AccountRepository = Pick<
   | "findActiveEmployeeById"
   | "listActiveEmployees"
 >;
-export type SessionRepository = Pick<InMemorySessionRepository, "create" | "findActive" | "revoke" | "revokeAll">;
 
-/** The repositories and the audit writer one change runs on. In production they share a single transaction. */
-export type WriteScope = { accounts: AccountRepository; sessions: SessionRepository; audit: AuditRecorder };
+/** The repository and the audit writer one change runs on. In production they share a single transaction. */
+export type WriteScope = { accounts: AccountRepository; audit: AuditRecorder };
 
 /**
  * Runs a change and its audit entry together: either both commit or neither does, so a change whose entry cannot be
  * written is refused rather than left unrecorded.
  */
 export type UnitOfWork = { run: <T>(work: (scope: WriteScope) => Promise<T>) => Promise<T> };
-
-export type LoginResult = {
-  account: Account;
-  session: CreatedSession;
-};
 
 export const employeeRoles = ["Platform Admin", "Pharmacy Manager", "Pharmacist", "Warehouse Staff"] as const;
 
@@ -68,7 +57,6 @@ const assertAccessGrant = (roles: readonly string[], siteIds: readonly string[])
 export class AccountService {
   public constructor(
     private readonly accounts: AccountRepository,
-    private readonly sessions: SessionRepository,
     private readonly passwordHasher: Argon2idPasswordHasher,
     private readonly verificationTokens: VerificationTokenService,
     private readonly verificationEmailSender: VerificationEmailSender,
@@ -78,7 +66,7 @@ export class AccountService {
 
   private readonly googleSubjects = new Map<string, string>();
 
-  public async loginWithGoogle(profile: GoogleProfile): Promise<LoginResult> {
+  public async loginWithGoogle(profile: GoogleProfile): Promise<Account> {
     let account: Account | undefined;
     const linkedAccountId = this.googleSubjects.get(profile.subject);
     if (linkedAccountId) {
@@ -110,8 +98,7 @@ export class AccountService {
     account.emailVerifiedAt ??= new Date();
     await this.accounts.save(account);
     this.googleSubjects.set(profile.subject, account.id);
-    const session = await this.sessions.create(account.id, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
-    return { account, session };
+    return account;
   }
 
   public async registerCustomer(input: {
@@ -156,13 +143,9 @@ export class AccountService {
 
   /**
    * Signs in with a password. An inactive account gets the same answer as a wrong password, so a deactivated account
-   * is not revealed. With `audience: "employee"` a customer is refused before any session exists.
+   * is not revealed. With `audience: "employee"` a customer is refused before any token is issued.
    */
-  public async login(input: {
-    email: string;
-    password: string;
-    audience?: "employee" | undefined;
-  }): Promise<LoginResult> {
+  public async login(input: { email: string; password: string; audience?: "employee" | undefined }): Promise<Account> {
     const account = await this.accounts.findByEmail(assertEmail(input.email));
     if (!account || !(await this.passwordHasher.verify(input.password, account.passwordHash))) {
       throw refused(accountErrors.invalidCredentials(), "invalid_credentials", account?.id);
@@ -182,26 +165,13 @@ export class AccountService {
       await this.accounts.save(account);
     }
 
-    const session = await this.sessions.create(account.id, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
-    return { account, session };
+    return account;
   }
 
-  /** A session of an inactive account ends at the next request: it resolves to nothing. */
-  public async currentSession(rawToken: string): Promise<{ account: Account; session: Session } | undefined> {
-    const session = await this.sessions.findActive(rawToken);
-    if (!session) {
-      return undefined;
-    }
-
-    const account = await this.accounts.findById(session.accountId);
-    return account?.isActive ? { account, session } : undefined;
-  }
-
-  public async logout(rawToken: string): Promise<void> {
-    const session = await this.sessions.findActive(rawToken);
-    if (session) {
-      await this.sessions.revoke(session.sessionId);
-    }
+  /** The account an access token names, read fresh so a profile or access change shows at once. Inactive is `undefined`. */
+  public async findActiveAccount(accountId: string): Promise<Account | undefined> {
+    const account = await this.accounts.findById(accountId);
+    return account?.isActive ? account : undefined;
   }
 
   public async requestPasswordReset(emailInput: string): Promise<void> {
@@ -235,11 +205,11 @@ export class AccountService {
       account.passwordHash = passwordHash;
       account.mustChangePassword = false;
       await scope.accounts.save(account);
-      await scope.sessions.revokeAll(account.id);
     });
   }
 
-  public async changePassword(accountId: string, currentPassword: string, nextPassword: string): Promise<void> {
+  /** Sets the new password, clears the change flag and returns the account so the caller can issue a fresh token. */
+  public async changePassword(accountId: string, currentPassword: string, nextPassword: string): Promise<Account> {
     const account = await this.requireAccount(accountId);
     if (!(await this.passwordHasher.verify(currentPassword, account.passwordHash))) {
       throw accountErrors.currentPasswordInvalid();
@@ -250,9 +220,9 @@ export class AccountService {
       account.passwordHash = passwordHash;
       account.mustChangePassword = false;
       await scope.accounts.save(account);
-      await scope.sessions.revokeAll(account.id);
       await this.auditOwnEmployeeChange(scope, account, "identity.account.password-changed");
     });
+    return account;
   }
 
   /**
@@ -453,24 +423,11 @@ export class AccountService {
       account.passwordHash = passwordHash;
       account.mustChangePassword = true;
       await scope.accounts.save(account);
-      await scope.sessions.revokeAll(account.id);
       await this.auditAdminChange(scope, actorId, "identity.user.password-reset", account.id);
     });
   }
 
-  public async revokeAllSessions(actorId: string, accountId: string): Promise<void> {
-    const account = await this.requireEmployee(accountId);
-    if (account.id === actorId) {
-      throw accountErrors.selfChange("Bạn không thể tự đăng xuất các phiên của mình tại đây.");
-    }
-
-    await this.unitOfWork.run(async (scope) => {
-      await scope.sessions.revokeAll(account.id);
-      await this.auditAdminChange(scope, actorId, "identity.user.sessions-revoked", account.id);
-    });
-  }
-
-  /** Turns the account off: it signs in no more and its sessions end in the same transaction. Nothing is deleted. */
+  /** Turns the account off: it signs in no more and its token stops being honoured at expiry. Nothing is deleted. */
   public async deactivateEmployee(actorId: string, accountId: string): Promise<void> {
     const account = await this.requireEmployee(accountId);
     if (account.id === actorId) {
@@ -483,7 +440,6 @@ export class AccountService {
     await this.unitOfWork.run(async (scope) => {
       account.isActive = false;
       await scope.accounts.save(account);
-      await scope.sessions.revokeAll(account.id);
       await this.auditAdminChange(scope, actorId, "identity.user.deactivated", account.id);
     });
   }
@@ -502,7 +458,7 @@ export class AccountService {
     return { configured: accounts.some((account) => account.roles.includes(platformAdminRole)) };
   }
 
-  public async createFirstAdmin(input: { email: string; password: string; displayName: string }): Promise<LoginResult> {
+  public async createFirstAdmin(input: { email: string; password: string; displayName: string }): Promise<Account> {
     if ((await this.getSetupStatus()).configured) {
       throw new Error("First administrator is already configured");
     }
@@ -524,8 +480,7 @@ export class AccountService {
       roles: [platformAdminRole],
       siteIds: [],
     });
-    const session = await this.sessions.create(account.id, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
-    return { account, session };
+    return account;
   }
 
   /** Active Platform Admins other than `accountId`. The last active one may not lose the role or be turned off. */

@@ -14,6 +14,8 @@ export type GoogleProfile = {
 export type GoogleSignIn = {
   client: GoogleOidcClient;
   redirectUri: string;
+  /** The web app the callback hands the access token to, in the URL fragment of `${appUrl}/auth/callback`. */
+  appUrl: string;
 };
 
 type PendingAuthorization = {
