@@ -8,7 +8,7 @@
 
 Three staff-web features for Pharmacy Managers; Platform Admin reads them and writes only the owner of a plan (BR-AUTH-010). (1) An **Analytics** page with period KPIs (revenue, orders, average order value, gross profit, each against the previous period) filtered by site and channel, and inventory health (turnover, dead stock, stockout rate, stock value by site, expiry buckets). (2) **Replenishment suggestions** on the Procurement page: suggested order quantities per product and supplier from sales velocity, stock, minimum stock and supplier lead time, reviewed by the user and turned into one **draft** purchase order per supplier. (3) **Action plans**: a plan item (owner, due date, open / in progress / done) that the system creates for every suggestion or alert and assigns to an owner by rule, with one list filtered by owner and status; a manager can still create one by hand and change the owner, due date and title.
 
-Services touched: `operations-query-service` (aggregation, read only), `sales-service` and `payment-service` (one internal read each), `inventory-service` (one internal read, the suggestion routes, the action plan module and its table), `identity-service` (one read-only staff directory route), `staff-web`, and the edge policy.
+Services touched: `operations-query-service` (aggregation, read only), `sales-service` and `payment-service` (one internal read each), `inventory-service` (one internal read, the suggestion routes, the action plan module and its table), `identity-service` (one read-only staff directory route), and `staff-web`.
 
 ## Motivation
 
@@ -35,7 +35,7 @@ The dashboard shows counts only ([staff dashboard spec](../product/staff-dashboa
 
 All new service-to-service reads live under `/internal/...`, which neither the local gateway (`routes.conf`) nor the ALB forwards, so a browser can never reach them. They require the service secret (`internalServiceHeaders()`); site scope travels in `x-actor-site-ids` as every existing read of `operations-query-service` does. The path routing map is unchanged: the browser routes below use the prefixes that already exist.
 
-Browser routes (all behind the edge role rules and the service role check):
+Browser routes (all behind the role rules of each service):
 
 | Route | Service | Roles | Purpose |
 | --- | --- | --- | --- |
@@ -189,7 +189,7 @@ A Pharmacy Manager can still create a plan by hand (the four **Tạo kế hoạc
 
 Read only. Platform Admin gets every active employee; a Pharmacy Manager gets the active employees who share at least one site with them. Fields: `id`, `displayName`, `roles`, `siteIds`; never email. Other callers get 403, and so does an account that must still change its password. `inventory-service` checks an owner through the service-only `GET /internal/employees/{id}` of identity-service (`IDENTITY_SERVICE_URL`), which answers an active employee or 404, and finds the automatic owner through the service-only `GET /internal/employees?siteId={id}`, which answers `{ employees: [{ id, displayName, roles, siteIds }] }` for the active employees at that site (never an email; the caller filters by role). A valid owner who does not hold the plan's site answers 422 `owner_not_at_site`.
 
-An employee with no assigned site (and not Platform Admin) is refused by the edge and by the service on every site-scoped list, the plan list included. The action plans page reads that as its own state and shows "Tài khoản của bạn chưa được gán cơ sở nào…" without sending the request; a 403 from the list shows the same sentence.
+An employee with no assigned site (and not Platform Admin) is refused by the service on every site-scoped list, the plan list included. The action plans page reads that as its own state and shows "Tài khoản của bạn chưa được gán cơ sở nào…" without sending the request; a 403 from the list shows the same sentence.
 
 ### Data model
 
@@ -209,10 +209,11 @@ One nullable column is added to `goods_receipt_lines` (see "Purchase cost and gr
 
 `sales.target.set.v1` (`targetId`, `siteId`, `month`, `amount`, `actorId`) is written to the sales outbox when a manager sets a target; no consumer projects it today, it is the audit trail. Plans are not published; operations-query keeps reading its own projections and the HTTP reads it already uses.
 
-### Security and CSRF
+### Security
+<!-- anchor: security-and-csrf -->
 
-- Every browser route re-checks its role in the service (ADR 0017) and has a rule in `deploy/aws/lambda/policy.mjs`. The new site-scoped prefixes are added to the site scope lists of the edge and of each service's `trusted-request.ts`.
-- Mutations (`POST`, `PATCH`) are browser mutations, so they need the CSRF token like every other write.
+- Every browser route checks its role in the service (ADR 0017). The new site-scoped prefixes are added to the site scope lists of each service's `trusted-request.ts`.
+- Mutations (`POST`, `PATCH`) are browser mutations that authenticate with the bearer token like every other write.
 - Internal routes accept only the service secret and refuse any caller that carries an employee identity.
 - The staff directory returns names and roles only, to the two roles that assign owners.
 - Client input is never authoritative: the suggestion quantities shown are server computed, and the draft route recomputes nothing but validates every reference and that each line is a positive integer; stock, price and identity are not taken from the client.
@@ -231,7 +232,7 @@ The new routes inherit the services' request tracing and metrics. No new metric.
 ## Rollout and migration
 
 1. Deploy `inventory-service` (migrations `0013` and `0014`), `sales-service`, `payment-service`, `identity-service`; the new routes are additive.
-2. Deploy `operations-query-service` (it calls the four internal reads: sales documents, paid invoices, dispense costs and stock health), then the edge policy, then `staff-web`.
+2. Deploy `operations-query-service` (it calls the four internal reads: sales documents, paid invoices, dispense costs and stock health), then `staff-web`.
 3. Run `pnpm run db:migrate`. Rollback: drop `action_plans` and the column `goods_receipt_lines.unit_cost`; no other data changes.
 
 ## Testing
@@ -248,4 +249,4 @@ Unit tests for the pure computations (velocity, lead time, reorder quantity, tur
 
 ## Related ADRs
 
-- [0003](../adr/0003-transactional-outbox-and-integration-events.md), [0017](../adr/0017-roles-checked-at-the-edge-and-in-each-service.md).
+- [0003](../adr/0003-transactional-outbox-and-integration-events.md), [0017](../adr/0017-roles-checked-in-every-service.md).

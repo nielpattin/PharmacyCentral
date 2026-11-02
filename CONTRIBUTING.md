@@ -73,7 +73,7 @@ Do not claim container validation passed until `docker compose ps` shows the con
 Read these sections of [AGENTS.md](AGENTS.md) before you change code. They are not repeated here:
 
 - [Non-negotiable rules](AGENTS.md#non-negotiable-rules)
-- [Architecture and service boundaries](AGENTS.md#architecture-and-service-boundaries), including the CSRF requirement for browser mutations
+- [Architecture and service boundaries](AGENTS.md#architecture-and-service-boundaries), including how identity is carried by the bearer JWT
 - [Configuration and environment variables](AGENTS.md#configuration-and-environment-variables)
 - [Frontend guidelines](AGENTS.md#frontend-guidelines)
 

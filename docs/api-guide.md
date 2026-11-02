@@ -11,39 +11,35 @@ Production clients send requests to `/api` routes on AWS API Gateway HTTP API. L
 - `GET /api/auth/google/start`
 - `GET /api/auth/google/callback`
 - `POST /api/auth/login`
-- `POST /api/auth/logout`
 - `GET /api/auth/me`
 - `PATCH /api/auth/me`
 - `POST /api/auth/change-password`
 - `POST /api/auth/request-password-reset`
 - `POST /api/auth/reset-password`
-- `GET /api/auth/csrf`
-- `GET /api/auth/context`
 
-Authenticated browser mutations send the `pharmacy_session` cookie and `X-CSRF-TOKEN`. Authenticated service calls add the per-service token from `GET /api/auth/context` as `x-internal-identity-context`. Locally `identity-service` mints these tokens for the browser session; in production the Lambda authorizer mints them instead. A signed-out cart stays in the browser and has no server copy; `POST /api/carts/merge` moves the browser cart into the signed-in account. The Lambda Authorizer verifies session state with `identity-service`, sets `x-actor-id` and `x-actor-type`, and injects HMAC-signed `x-internal-identity-context`, discarding any client-supplied identity headers.
+Every authenticated call sends `Authorization: Bearer <access token>`. The access token is an ES256 JWT that `identity-service` issues; it lives one day and carries the actor id, actor type, roles, site ids and the `pcr` flag. There is no refresh token, session cookie or CSRF token, and no sign-out route: a client signs out by discarding the token, and revocation is by expiry (at most one day). Each service verifies it against the public keys at `GET /.well-known/jwks.json` of `identity-service` (not routed by the gateways), sets `x-actor-id`, `x-actor-type`, `x-actor-roles` and the site ids from it, and discards any client-supplied value of those headers. `POST /api/auth/login` and every other route that issues a token (register, verify-email, password reset, change-password, setup-admin) return the profile with `accessToken` and `accessTokenExpiresAt` (ISO) in the body and set no authentication cookie. The Google callback redirects to the web app with the token in the URL fragment (`#access_token=<jwt>`). Browsers keep the token in `localStorage`. `GET /api/auth/me` reads the profile for the bearer token from the database, so a deactivation or a role change shows there at once but reaches a token already issued only when it expires. A signed-out cart stays in the browser and has no server copy; `POST /api/carts/merge` moves the browser cart into the signed-in account.
 
 The Google routes answer `503 google_not_configured` when Google sign-in is not configured. The callback answers `400 invalid_oauth_state` when the `state` query value does not match the `oauth_state` cookie.
 
-Credential routes are rate limited: `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, and `GET /api/auth/verify-email`. Each is a sliding window of `AUTH_RATE_LIMIT_WINDOW_SECONDS` seconds with up to `AUTH_RATE_LIMIT_MAX_ATTEMPTS` attempts. On `POST /api/auth/login` only failed sign-ins count: a successful sign-in gives its attempt back, so a shopper who signs in normally never reaches the limit. The other four routes count every attempt. The bucket is the email (or the account id on the two token routes) together with the client address identity-service sees behind the gateway. The limit applies whether or not the account exists, so a refused request reveals nothing about the address. A refused attempt answers `429` with `code: "rate_limited"`, a `Retry-After` header in whole seconds, and the usual `{ title, status, code }` body, and it records nothing. The check runs before the password or token is read. When the Redis counter cannot be read or written, the route answers `503 rate_limit_unavailable` and processes nothing. `setup-admin` and `change-password` are not limited: the first is a one-time bootstrap and the second already requires a session.
+Credential routes are rate limited: `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password`, and `GET /api/auth/verify-email`. Each is a sliding window of `AUTH_RATE_LIMIT_WINDOW_SECONDS` seconds with up to `AUTH_RATE_LIMIT_MAX_ATTEMPTS` attempts. On `POST /api/auth/login` only failed sign-ins count: a successful sign-in gives its attempt back, so a shopper who signs in normally never reaches the limit. The other four routes count every attempt. The bucket is the email (or the account id on the two token routes) together with the client address identity-service sees behind the gateway. The limit applies whether or not the account exists, so a refused request reveals nothing about the address. A refused attempt answers `429` with `code: "rate_limited"`, a `Retry-After` header in whole seconds, and the usual `{ title, status, code }` body, and it records nothing. The check runs before the password or token is read. When the Redis counter cannot be read or written, the route answers `503 rate_limit_unavailable` and processes nothing. `setup-admin` and `change-password` are not limited: the first is a one-time bootstrap and the second already requires a bearer token.
 
 ## Accounts and administration
 
 Employee roles are `Platform Admin`, `Pharmacy Manager`, `Pharmacist`, and `Warehouse Staff`.
 
-Admin routes require a signed-in account with the `Platform Admin` role. A request with no session answers `401 unauthenticated`, and any other account answers `403 forbidden`.
+Admin routes require a signed-in account with the `Platform Admin` role. A request with no valid access token answers `401 unauthenticated`, and any other account answers `403 forbidden`.
 
-`POST /api/auth/login` takes `{ email, password, audience? }`. Staff Web sends `audience: "employee"`: a customer account then answers `403 employee_required` before any session cookie is set. An employee account signs in with its password, so a Google sign-in for one answers `403 password_sign_in_required`. A deactivated account gets the same `401` as a wrong password. A failed employee sign-in is audited as `identity.auth.login-failed` with its reason, never its password.
+`POST /api/auth/login` takes `{ email, password, audience? }`. Staff Web sends `audience: "employee"`: a customer account then answers `403 employee_required` before any token is issued. An employee account signs in with its password, so a Google sign-in for one answers `403 password_sign_in_required`. A deactivated account gets the same `401` as a wrong password. A failed employee sign-in is audited as `identity.auth.login-failed` with its reason, never its password.
 
-While an account must change its password, the edge refuses every route except the auth routes, and `GET /api/auth/context` and `PATCH /api/auth/me` answer `403 password_change_required`. `POST /api/auth/change-password` clears the flag and the session cookie.
+While an account must change its password, its access token carries `pcr: true` and every service refuses it with `403 password_change_required` except on the auth routes; `PATCH /api/auth/me` answers the same code. `POST /api/auth/change-password` clears the flag and answers a fresh `accessToken`.
 
 - `GET /api/admin/roles` lists the employee roles.
 - `GET /api/admin/users` lists employee accounts. `status=active` or `status=deactivated` narrows the list.
 - `POST /api/admin/users` creates an employee account and answers `201`. The body takes `email`, `password` (the temporary password, 12 to 200 characters), `displayName`, `phoneNumber` (required, 8 to 20 digits and `+ ( ) -`), `roles` and `siteIds`. The account must change its password at its first sign-in. `roles` needs at least one role (`400 role_required`), and every role except Platform Admin needs at least one site (`400 site_required`).
 - `PUT /api/admin/users/{id}/access` takes `{ "roles", "siteIds" }`, follows the same rules as create, and answers the account. It refuses the caller's own account (`403 self_change_forbidden`) and any change that leaves no active Platform Admin (`409 last_platform_admin`).
 - `PUT /api/admin/users/{id}/profile` takes `{ "displayName", "phoneNumber" }`, both required, and answers the account. It corrects another employee's contact details: the caller's own account is refused (`403 self_change_forbidden`, use `PATCH /api/auth/me`), a customer id answers `404`, and an empty phone answers `400 phone_required`.
-- `POST /api/admin/users/{id}/reset-password` takes `{ "password" }` (12 to 200 characters) and answers `204`. The account must change the password at its next sign-in, and all its sessions end. A deactivated account answers `409 account_deactivated`. The caller's own account is refused (`403 self_change_forbidden`).
-- `POST /api/admin/users/{id}/revoke-sessions` answers `204`. The caller's own account is refused (`403 self_change_forbidden`).
-- `POST /api/admin/users/{id}/deactivate` answers `204`. The account cannot sign in, its sessions end in the same transaction, and no data is deleted. The caller's own account and the last active Platform Admin are refused as above.
+- `POST /api/admin/users/{id}/reset-password` takes `{ "password" }` (12 to 200 characters) and answers `204`. The account must change the password at its next sign-in; a token already issued stays valid until it expires. A deactivated account answers `409 account_deactivated`. The caller's own account is refused (`403 self_change_forbidden`).
+- `POST /api/admin/users/{id}/deactivate` answers `204`. The account cannot sign in and no data is deleted; a token already issued stays valid until it expires (at most one day). The caller's own account and the last active Platform Admin are refused as above.
 - `POST /api/admin/users/{id}/activate` answers `204`.
 - `GET /api/auth/staff-directory` lists the active employees as `{ employees: [{ id, displayName, roles, siteIds }] }`, never an email. Platform Admin gets every one; a Pharmacy Manager gets those who share a site with them; any other caller answers `403`. Staff Web uses it for the owner picker of action plans.
 
@@ -55,7 +51,7 @@ An id that is not an employee account answers `404 employee_not_found`. Every ch
 
 ## Refusal codes
 
-Problem bodies carry a `code`. A role refusal by the edge is a bare `403` with no code; the service that owns the route answers the codes below.
+Problem bodies carry a `code`. The service that owns the route answers the codes below.
 
 | Code | Status | Meaning |
 | --- | --- | --- |
@@ -110,7 +106,7 @@ Every `/api/carts*` route needs a signed-in customer. A signed-out shopper's car
 
 `POST /api/orders` accepts the selected store, the pickup or delivery choice, and exactly one of `lines` (product and unit IDs with quantities) or `fromCart: true`. With `fromCart` the server orders the caller's ticked cart lines, takes the quantities from the cart, and removes those lines once the stock is held; no ticked line answers `409 cart_selection_empty`, and a refused order leaves the cart untouched. An order that includes a product marked `prescriptionRequired` answers `409 prescription_required` with its `productId`, for `lines` and `fromCart` alike. Sending both, or neither, answers `400`. `sales-service` recalculates active prices and delivery server-side. Delivery snapshots contain the provider-resolved address, separate customer note, road distance, duration, fee, and GeoJSON route.
 
-`GET /api/orders` answers the signed-in shopper's own orders. A staff session answers the orders at its sites (Platform Admin: all), narrowed by `status` and `paymentStatus`. `GET /api/orders/{id}` answers `404` for an order that belongs to another customer.
+`GET /api/orders` answers the signed-in shopper's own orders. A staff token answers the orders at its sites (Platform Admin: all), narrowed by `status` and `paymentStatus`. `GET /api/orders/{id}` answers `404` for an order that belongs to another customer.
 
 `GET /api/orders` takes `status`, `paymentStatus`, `limit` (default 100, at most 500), `cursor`, and `q`. The body is the plain array of one page, newest first. `q` is a case-insensitive substring match over the order id only: sales-service stores no customer name, phone, or order number, and those live with identity-service. When another page follows, the answer carries its cursor in the `X-Next-Cursor` header; send it back as `cursor` with the same other parameters. The last page has no header. A cursor is opaque, and a malformed one answers `400 invalid_cursor` (problem JSON). A staff row carries `customer` (`{ displayName, phoneNumber }`, or `null` when the account is not found), read from identity-service. If identity-service does not answer, a staff list answers `503 identity_unavailable`.
 
@@ -236,7 +232,7 @@ Procurement routes check that the supplier, site, products, and storage location
 
 ## Catalog administration
 
-Public reads need no session: `/api/products` (except `search-synonyms` and the AI credential paths), `/api/stores`, `/api/availability`, `/api/pricing/active`, and `GET /api/pricing/prices?status=Published`. Every other read under `/sites`, `/storage-locations`, `/suppliers` and `/pricing` needs a signed-in employee. Writes are staff actions: a Pharmacy Manager writes them, and Platform Admin alone creates and deletes sites (any other caller gets `403`; Platform Admin editing an existing site, or any other write on these routes, also gets `403 role_forbidden`). A single-site employee sees only the storage locations of their own site. An update that would move a storage location to another site answers `400 location_site_fixed`; deleting a site or product that is still referenced answers `409 in_use`.
+Public reads need no token: `/api/products` (except `search-synonyms` and the AI credential paths), `/api/stores`, `/api/availability`, `/api/pricing/active`, and `GET /api/pricing/prices?status=Published`. Every other read under `/sites`, `/storage-locations`, `/suppliers` and `/pricing` needs a signed-in employee. Writes are staff actions: a Pharmacy Manager writes them, and Platform Admin alone creates and deletes sites (any other caller gets `403`; Platform Admin editing an existing site, or any other write on these routes, also gets `403 role_forbidden`). A single-site employee sees only the storage locations of their own site. An update that would move a storage location to another site answers `400 location_site_fixed`; deleting a site or product that is still referenced answers `409 in_use`.
 
 - `GET|POST /api/sites`, `GET|PUT|DELETE /api/sites/{id}`
 - `GET|POST /api/storage-locations`, `GET|PUT|DELETE /api/storage-locations/{id}`
@@ -295,7 +291,7 @@ Payment invoices snapshot line prices. A shopper invoice is priced from the orde
 
 `GET /api/payments/invoices` takes `status` (`Pending`, `Paid`, `Failed`, `Refunded` or `Cancelled`, matched exactly), `q` (a case-insensitive substring of the invoice number, the `orderId` or the `customerId`; `%` and `_` match themselves), `limit` (1 to 500; a larger value is clamped to 500) and `cursor`. Invoices are listed newest first by `(createdAt, id)`. With neither `limit` nor `cursor` the body is the whole filtered list, and no header is sent. With a `limit`, or with a `cursor` alone (default page size 100), the body is one page: when another page follows, `X-Next-Cursor` carries its cursor, and the last page has no header. Send the cursor back as `cursor` with the same other parameters. A malformed or tampered cursor answers `400` with `code: "invalid_cursor"`.
 
-QR attempts use provider-neutral invoice data and configured SePay VietQR instructions. The SePay webhook is the only payment route that skips the gateway identity check. API Gateway passes its raw request bytes through unchanged. `payment-service` verifies `x-sepay-signature` (HMAC-SHA256 over `${x-sepay-timestamp}.${rawBody}`) and answers `401 invalid_signature` when verification fails. For every verified delivery it answers `200 {"success": true}`, because SePay records a delivery as successful only on that exact response. It accepts inbound transfers only, matches the payment code and amount, and deduplicates provider transaction IDs.
+QR attempts use provider-neutral invoice data and configured SePay VietQR instructions. The SePay webhook is the only payment route that carries no access token. API Gateway passes its raw request bytes through unchanged. `payment-service` verifies `x-sepay-signature` (HMAC-SHA256 over `${x-sepay-timestamp}.${rawBody}`) and answers `401 invalid_signature` when verification fails. For every verified delivery it answers `200 {"success": true}`, because SePay records a delivery as successful only on that exact response. It accepts inbound transfers only, matches the payment code and amount, and deduplicates provider transaction IDs.
 
 ## Shopping assistant
 
@@ -331,7 +327,7 @@ Saving the product search settings also starts a background reindex that creates
 
 ## System overview
 
-All routes below need a Platform Admin: `401` without a session, `403` for any other account. They are read only and answer `Cache-Control: no-store`. Errors are problem JSON `{ title, status, code }`.
+All routes below need a Platform Admin: `401` without a token, `403` for any other account. They are read only and answer `Cache-Control: no-store`. Errors are problem JSON `{ title, status, code }`.
 
 `GET /api/system/overview` answers `{ generatedAt, services, load, queues, searchIndex, links }`. Each of `services`, `load`, `queues` and `searchIndex` is `{ "status": "ok", "data" }` or `{ "status": "unavailable", "error" }`, so one source being down does not fail the request. `links` is `[{ label, url }]` from the configured dashboards; the Grafana entry drives the Grafana card.
 

@@ -54,8 +54,8 @@ outlive the feature becomes an ADR. The design document links to the ADRs it rel
 | [0002](0002-service-owned-databases.md) | Service-owned databases | Accepted | 2026-09-10 |
 | [0003](0003-transactional-outbox-and-integration-events.md) | Transactional outbox and integration events | Accepted | 2026-09-10 |
 | [0004](0004-server-authoritative-pricing-stock-and-fees.md) | Server-authoritative pricing, stock and fees | Accepted | 2026-09-10 |
-| [0005](0005-opaque-sessions-and-csrf.md) | Opaque browser sessions and CSRF protection | Accepted | 2026-09-10 |
-| [0006](0006-edge-identity-context.md) | Edge-verified identity context forwarded to services | Accepted | 2026-09-10 |
+| [0005](0005-jwt-only-authentication-no-sessions-or-csrf.md) | JWT-only authentication, no sessions or CSRF | Accepted | 2026-09-10 |
+| [0006](0006-jwt-access-tokens-verified-by-every-service.md) | JWT access tokens verified by every service | Accepted | 2026-09-10 |
 | [0007](0007-gateway-path-routing-and-two-topologies.md) | One path-routing map for the local gateway and AWS, in two topologies | Accepted | 2026-10-08 |
 | [0008](0008-search-service-in-go-on-typesense.md) | Serve the product list from a Go search service on Typesense | Accepted | 2026-10-23 |
 | [0009](0009-ai-feature-settings-in-database.md) | Store AI feature settings in the owning service's database | Accepted | 2026-10-20 |
@@ -66,7 +66,8 @@ outlive the feature becomes an ADR. The design document links to the ADRs it rel
 | [0014](0014-signed-out-cart-in-the-browser.md) | Keep the signed-out cart in the browser | Accepted | 2026-10-26 |
 | [0015](0015-server-picks-the-cart-lines-of-an-order.md) | The server picks the cart lines of an order | Accepted | 2026-10-26 |
 | [0016](0016-prescription-only-products-are-not-sold-online.md) | Prescription-only products are not put in the cart or sold online | Accepted | 2026-10-26 |
-| [0017](0017-roles-checked-at-the-edge-and-in-each-service.md) | Roles are checked at the edge and in every service | Accepted | 2026-10-26 |
+| [0017](0017-roles-checked-in-every-service.md) | Roles are checked in every service | Accepted | 2026-10-26 |
 | [0018](0018-default-seed-and-demo-seed-are-separate.md) | The default seed and the demo seed are separate | Accepted | 2026-10-28 |
 | [0019](0019-platform-admin-reads-and-administers.md) | Platform Admin reads and administers, and works nothing else | Accepted | 2026-10-30 |
 | [0020](0020-interactions-have-physical-weight.md) | Interactions carry physical weight | Accepted | 2026-10-30 |
+| [0021](0021-es256-jwt-access-tokens.md) | One-day ES256 JWT access token | Accepted | 2026-11-01 |

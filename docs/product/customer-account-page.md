@@ -25,8 +25,8 @@ Tags: `[owner]` a recorded owner decision (ADR 0014 to 0016, orders spec); `[obs
 - Accepted when:
   - Signed out, the card **Đăng nhập để quản lý tài khoản** shows **Email**, **Mật khẩu**, **Đăng nhập**, **Đăng nhập bằng Google** (gap G1), and the links **Tạo tài khoản mới** and **Quên mật khẩu?** (gap G8).
   - A wrong email or password shows "Email hoặc mật khẩu không đúng." (gap G4). An unverified account shows "Email chưa được xác thực. Kiểm tra hộp thư và thư rác, rồi bấm liên kết xác thực." with **Gửi lại email xác thực** (gap G17).
-  - Success shows **Xin chào, {displayName}** and "Xin chào {displayName}, giỏ thuốc của bạn đã được đồng bộ.", then returns to the `?from=` path (same-site only; default `/tai-khoan`) (gap G9). The session survives a reload for 7 days (BR-USER-009).
-  - An inactive account is refused and its open sessions end. An employee account is refused with "Tài khoản này dành cho nhân viên. Hãy đăng nhập ở trang nhân viên." and no session is kept (gap G13).
+  - Success shows **Xin chào, {displayName}** and "Xin chào {displayName}, giỏ thuốc của bạn đã được đồng bộ.", then returns to the `?from=` path (same-site only; default `/tai-khoan`) (gap G9). The token is kept in `localStorage`, so the sign-in survives a reload for one day (BR-USER-009).
+  - An inactive account is refused at sign-in; a token already issued works until it expires. An employee account is refused with "Tài khoản này dành cho nhân viên. Hãy đăng nhập ở trang nhân viên." and no token is kept (gap G13).
 - Rules: BR-USER-008, BR-USER-009, BR-AUTH-006.
 
 ### US2. As a new shopper, I register, so that I can verify my email and sign in
@@ -67,7 +67,7 @@ Tags: `[owner]` a recorded owner decision (ADR 0014 to 0016, orders spec); `[obs
 - Source: `[observed]`; length and checks are `[standard]` (Decisions 2, 3).
 - Accepted when:
   - **Đổi mật khẩu** asks **Mật khẩu hiện tại**, **Mật khẩu mới** (hint "Tối thiểu 12 ký tự.") and **Xác nhận mật khẩu mới**. A mismatch shows "Mật khẩu mới chưa khớp với xác nhận." before any request. Under 12 characters is refused by the browser and the server; a common password is refused (gap G3). A wrong current password shows "Mật khẩu hiện tại không đúng." (gap G4).
-  - Success shows "Đã đổi mật khẩu. Hãy đăng nhập lại.". This browser is signed out and every session of the account ends.
+  - Success shows "Đã đổi mật khẩu."; the answer carries a fresh access token, which the browser stores, and the shopper stays signed in.
 - Rules: BR-USER-005.
 
 ### US7. As a shopper, I reset a forgotten password or verify my email from the link I was sent
@@ -102,7 +102,7 @@ Tags: `[owner]` a recorded owner decision (ADR 0014 to 0016, orders spec); `[obs
 
 - Source: `[observed]`; the session-end notice is `[standard]` (Decision 20).
 - Accepted when:
-  - **Đăng xuất** shows "Đang đăng xuất…", clears every cached account read, and opens `/`. The header then shows this browser's cart. A failure shows "Không đăng xuất được, thử lại sau." and the shopper stays signed in (gap G4).
+  - **Đăng xuất** discards the stored token on the client, clears every cached account read, and opens `/`. The header then shows this browser's cart. Sign-out cannot fail, because no server call is made.
   - A 401 on this page shows "Phiên đăng nhập đã hết. Hãy đăng nhập lại." and the sign-in card; after sign-in the shopper returns to the page (gap G11).
 - Rules: BR-USER-009.
 
@@ -113,7 +113,7 @@ Tags: `[owner]` a recorded owner decision (ADR 0014 to 0016, orders spec); `[obs
 - **Signed-out view:** the sign-in card (US1), or the registration form after **Tạo tài khoản mới**. Errors show in a red box under the fields.
 - **Signed-in layout:** a left list of six sections (**Tổng quan**, **Đơn hàng**, **Đơn thuốc**, **Địa chỉ giao hàng**, **Thông tin cá nhân**, **Đổi mật khẩu**), the active one marked with `aria-current`, and **Đăng xuất** below. The panel is on the right. Heading **Tài khoản của tôi** with the shopper's initials.
 - **Tổng quan:** greeting card (email; phone or "Chưa có số điện thoại"), tiles **Địa chỉ đã lưu** and **Đơn thuốc trên tài khoản**, and **Đơn hàng gần đây**. Each panel ends with **Đặt hàng & thanh toán**, linking to `/don-hang`.
-- **Session and audit:** an opaque session cookie lasting 7 days ([ADR 0005](../adr/0005-opaque-sessions-and-csrf.md)); a CSRF token goes with each change and is not shown. Sign-in, sign-out, profile and password changes are written to the audit log (`identity.auth.*`, `identity.account.*`).
+- **Session and audit:** one ES256 access token lasting one day, kept in `localStorage`, with no refresh token, session cookie or CSRF token ([ADR 0005](../adr/0005-jwt-only-authentication-no-sessions-or-csrf.md), [ADR 0021](../adr/0021-es256-jwt-access-tokens.md)). Sign-in, profile and password changes are written to the audit log (`identity.auth.*`, `identity.account.*`).
 - **Status labels** (`[standard]`, Decisions 4 and 5): one staff label and one customer label per status.
 
 | Object and status | Staff label | Customer label |
@@ -146,7 +146,7 @@ Tags: `[owner]` a recorded owner decision (ADR 0014 to 0016, orders spec); `[obs
 ## Rules and designs
 
 - Business rules: [BR-CART-001, 003, 005](../business-rules.md), [BR-ORD-001, 005, 008, 011](../business-rules.md), [BR-DLV-002, 003](../business-rules.md), [BR-RX-005, 019 to 021](../business-rules.md), [BR-USER-005, 008 to 010](../business-rules.md), [BR-AUTH-006](../business-rules.md), [BR-CHAT-001](../business-rules.md) (gap G21).
-- [ADR 0005](../adr/0005-opaque-sessions-and-csrf.md); [ADR 0014](../adr/0014-signed-out-cart-in-the-browser.md); [design 0005](../design/0005-client-only-guest-cart.md); [ADR 0016](../adr/0016-prescription-only-products-are-not-sold-online.md). [User guide, Account](../user-guide.md#account) and [API guide](../api-guide.md) (`/api/auth/*`, `/api/delivery/addresses*`, `/api/prescriptions*`).
+- [ADR 0005](../adr/0005-jwt-only-authentication-no-sessions-or-csrf.md); [ADR 0014](../adr/0014-signed-out-cart-in-the-browser.md); [design 0005](../design/0005-client-only-guest-cart.md); [ADR 0016](../adr/0016-prescription-only-products-are-not-sold-online.md). [User guide, Account](../user-guide.md#account) and [API guide](../api-guide.md) (`/api/auth/*`, `/api/delivery/addresses*`, `/api/prescriptions*`).
 
 ## Decisions
 
@@ -168,7 +168,7 @@ Tags: `[owner]` a recorded owner decision (ADR 0014 to 0016, orders spec); `[obs
 | 14 | Registration with an address already in use? | Same notice as a new account; its owner gets an email that an account exists. `[standard]` | OWASP Authentication Cheat Sheet: account creation answers the same whether or not the account exists. |
 | 15 | Resend the verification email? | Yes: **Gửi lại email xác thực** after the unverified message and on a failed link (US7). Same rate limit as `verify-email`. `[standard]` | A shopper who lost the first email is otherwise stuck. |
 | 16 | Can the default address be unticked? | No. Change the default with **Đặt mặc định** on another address; deleting the default promotes the most recently updated one. `[standard]` | The account keeps exactly one default; `sales-repository.ts` already promotes a survivor on delete. |
-| 17 | What if the account is inactive? | It cannot sign in, and its open sessions end at the next request. `[standard]` | Rejected accounts are signed out on the server too. |
+| 17 | What if the account is inactive? | It cannot sign in; a token already issued works until it expires, at most one day. `[standard]` | Revocation is by expiry (ADR 0005). |
 | 18 | Lists beyond the first page? | 50 at a time with **Xem thêm**; never silently capped. `[standard]` | A capped list reads as complete. |
 | 19 | Which time zone for dates? | Asia/Ho_Chi_Minh for every date. `[standard]` | The pharmacies and shoppers are in Vietnam; the browser's zone would shift dates. |
 | 20 | What when a 401 arrives mid-session? | Notice "Phiên đăng nhập đã hết. Hãy đăng nhập lại.", the sign-in card, then return to the page. `[standard]` | A silent sign-out hides the event and loses the shopper's place. |

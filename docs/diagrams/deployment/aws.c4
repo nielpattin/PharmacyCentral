@@ -4,19 +4,11 @@ deployment {
 
     edge = zone "Public edge" {
       webAlb = managed "Public ALB, both web apps" {
-        summary "HTTPS with one ACM certificate; port 80 redirects. Host rules for shop. and staff. keep the cookies of customer-web and staff-web apart."
+        summary "HTTPS with one ACM certificate; port 80 redirects. Host rules for shop. and staff. keep customer-web and staff-web in separate browser origins."
       }
 
       apiGateway = managed "API Gateway, HTTP API" {
-        summary "The public surface of /api. CORS, throttling, and the raw bytes of the SePay webhook."
-      }
-
-      authorizer = workload "Lambda, session and CSRF authorizer" {
-        instanceOf pharmacyCentral.security.sessionAuthorizer
-      }
-
-      csrfLambda = managed "Lambda, CSRF token" {
-        summary "Answers GET /api/auth/csrf and issues the pharmacy_csrf cookie."
+        summary "The public surface of /api. CORS, throttling, the raw bytes of the SePay webhook, and the Authorization header forwarded untouched."
       }
 
       vpcLink = managed "VPC Link" {
@@ -63,7 +55,7 @@ deployment {
           instanceOf pharmacyCentral.services.chatbotService
         }
         opsConsoleTask = workload "ops-console-service :3010" {
-          summary "Platform Admin only. The edge Lambda policy and the service both check the role."
+          summary "Platform Admin only. The service checks the role."
           instanceOf pharmacyCentral.services.opsConsoleService
         }
         otelCollectorTask = workload "otel-collector :4318" {
@@ -102,7 +94,7 @@ deployment {
         instanceOf pharmacyCentral.data.mediaStorage
       }
       secrets = managed "SSM Parameter Store" {
-        summary "SecureString parameters: DATABASE_URL (one per service, each with its own database role), RABBITMQ_URL, REDIS_URL, TYPESENSE_*. Only the two internal secrets the authorizer Lambda reads are in Secrets Manager."
+        summary "SecureString parameters: DATABASE_URL (one per service, each with its own database role), RABBITMQ_URL, REDIS_URL, TYPESENSE_*, and the identity-service access token signing key (ACCESS_TOKEN_*)."
       }
       prometheusManaged = managed "Amazon Managed Service for Prometheus" {
         summary "Only with the collector. Receives the metrics by remote write. Queries need SigV4, so ops-console-service cannot read it directly yet."
@@ -111,7 +103,7 @@ deployment {
         summary "Receives the traces."
       }
       cloudwatch = managed "CloudWatch Logs" {
-        summary "Receives the logs of the tasks, of the Lambdas and of the API Gateway."
+        summary "Receives the logs of the tasks and of the API Gateway."
       }
     }
 

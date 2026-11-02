@@ -137,7 +137,7 @@ Not on the page: an image gallery or zoom; reviews; a quantity per pharmacy; a s
 - `[standard]` **Out of stock at the chosen pharmacy:** "Hết hàng" badge, price muted, buy controls disabled. The card suggests "Chọn nhà thuốc khác để xem tồn kho" when another pharmacy exists; related products are the alternatives (Decision 2).
 - `[observed]` **No units:** danger alert, buy controls disabled (US2). **Prescription-only:** warning alert and link (US5).
 - `[observed]` **Adding:** "Đang thêm..." after 350 ms; repeat clicks ignored while in flight (US3).
-- `[standard]` **Session ended:** a cart call that still returns 401 after one identity refresh shows "Phiên đăng nhập đã hết. Vui lòng đăng nhập lại." with a sign-in link; after sign-in the shopper returns to this page (D6) (gap G13).
+- `[standard]` **Session ended:** a cart call that returns 401 shows "Phiên đăng nhập đã hết. Vui lòng đăng nhập lại." with a sign-in link; after sign-in the shopper returns to this page (D6) (gap G13).
 
 ## Out of scope
 

@@ -7,6 +7,7 @@ Infra always runs on Docker Compose; the apps run either on the host or in conta
 ```bash
 pnpm install --frozen-lockfile
 cp .env.example .env   # then fill in secrets
+pnpm run auth:keygen   # prints ACCESS_TOKEN_PRIVATE_KEY, ACCESS_TOKEN_PUBLIC_JWK and ACCESS_TOKEN_KEY_ID; paste them into .env
 pnpm run infra:up
 docker compose ps   # postgres, rabbitmq, redis, mailpit, otel-collector, floci, gateway-dev healthy (floci-init exits 0)
 ```
@@ -75,7 +76,7 @@ pnpm nx run-many -t dev -p @pharmacy/sales-service @pharmacy/customer-web
 | `http://staff.pharmacy.localhost` | staff-web (`STAFF_WEB_PORT`) |
 | `http://api.pharmacy.localhost` | gateway (`GATEWAY_PORT`) |
 
-Each name is a separate browser origin. On `localhost` the customer and staff apps share one cookie jar (cookies ignore the port), so signing in to one signs the other out; on the named URLs both stay signed in side by side. `*.localhost` is a secure context in browsers, so `crypto` APIs that need HTTPS work without a certificate. The proxy is plain HTTP; run `pnpm exec portless proxy stop`, then `pnpm exec portless proxy start` for HTTPS (it asks to trust a local CA).
+Each name is a separate browser origin. Each app keeps its own access token in that origin's `localStorage`, so both stay signed in side by side. `*.localhost` is a secure context in browsers, so `crypto` APIs that need HTTPS work without a certificate. The proxy is plain HTTP; run `pnpm exec portless proxy stop`, then `pnpm exec portless proxy start` for HTTPS (it asks to trust a local CA).
 
 Chrome, Edge and Firefox resolve `*.localhost` themselves. `curl` does too; Node scripts and Safari may not, so `API_BASE_URL` stays `http://localhost:8080` and `pnpm run seed:demo` is unchanged. `pnpm run urls:down` removes the routes and stops the proxy; `pnpm exec portless doctor` checks it. Port 80 must be free; if another program holds it, `urls:up` fails with the portless error.
 
@@ -107,21 +108,20 @@ curl http://localhost:8080/healthz
 curl -s http://localhost:8080/api/sites | head -c 200
 ```
 
-The second command returns the site list with status 200. Catalog reads are public. A 401 with `trusted_request_required` means the path needs a signed identity context (see the hand-call recipe below). A 401 with `unauthenticated` means the session cookie is missing or expired.
+The second command returns the site list with status 200. Catalog reads are public. A 401 with `trusted_request_required` means the path needs a bearer access token (see the hand-call recipe below). A 401 with `unauthenticated` means the bearer token is missing or expired.
 
 ### Call the API by hand
 
-Browsers authenticate with the `pharmacy_session` cookie. Authenticated service calls also need the per-service token from `/api/auth/context`:
+Sign in to get a JWT access token (valid one day), then send it as a bearer token to any service:
 
 ```bash
-curl -s -c cookies.txt http://localhost:8080/api/auth/csrf
-curl -s -b cookies.txt -c cookies.txt -X POST http://localhost:8080/api/auth/login   -H 'Content-Type: application/json'   -d '{"email":"admin@pharmacycentral.vn","password":"DemoPassword123!"}'
-CTX=$(curl -s -b cookies.txt http://localhost:8080/api/auth/context)
-SALES=$(echo "$CTX" | python3 -c "import json,sys; print(json.load(sys.stdin)['contexts']['sales-service'])")
-curl -s -b cookies.txt http://localhost:8080/api/orders -H "x-internal-identity-context: $SALES"
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login   -H 'Content-Type: application/json'   -d '{"email":"admin@pharmacycentral.vn","password":"DemoPassword123!"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['accessToken'])")
+curl -s http://localhost:8080/api/orders -H "Authorization: Bearer $TOKEN"
 ```
 
-Mutations also send the CSRF token from the `pharmacy_csrf` cookie as `X-CSRF-TOKEN`.
+The login response sets no cookie. There is no refresh route: when the token expires, sign in again.
+
+There is no CSRF token and no sign-out route; a client signs out by discarding the token. The public key set is served by identity-service at `/.well-known/jwks.json`; the gateways do not route it, and services read it from `IDENTITY_JWKS_URL`.
 
 ### Path routing map
 
@@ -179,7 +179,7 @@ pnpm run infra:down
 | `localhost:8080` refused or 502 from `/api/...` | Start the gateway for your mode: `pnpm run infra:up` for dev mode, or `pnpm run stack:up` for containers. Only one of the two can hold port 8080 |
 | Vite logs `http proxy error: /api/... ECONNREFUSED` while `gateway-dev` is healthy (Docker Desktop) | Host networking is off, so port 8080 never reaches the host. Enable it as described under Dev mode, then rerun `pnpm run infra:up` |
 | Gateway 404 on `/api/...` | Check the path against the routing map above |
-| `/api/...` returns 401 `trusted_request_required` | The path needs an identity token. Fetch `/api/auth/context` after login and send the matching service token as `x-internal-identity-context` |
+| `/api/...` returns 401 `trusted_request_required` | The path needs an access token. Sign in and send the `accessToken` as `Authorization: Bearer <token>`; a token lives one day |
 | `typesense` exits with code 139 and no log line (Docker Desktop with WSL2) | Typesense 30.2 bundles brpc, which reads `/proc/self/io` before `main()`. The WSL2 kernel of Docker Desktop has no task I/O accounting, so the file is missing and the 30.2 server segfaults (upstream [typesense/typesense#2998](https://github.com/typesense/typesense/issues/2998)). Compose pins `typesense/typesense:31.0.rc23` by digest, which starts on that kernel (it only logs `Fail to open /proc/self/io`, harmless). Pull it with `docker compose up -d --no-deps --wait typesense`, then check `docker compose ps typesense` and `curl http://localhost:8108/health` (`{"ok":true}`). The AWS task definition (`deploy/aws/data.tf`) pins the same digest, so local and AWS run one version. |
 
 ## Runtime contract
@@ -194,11 +194,11 @@ pnpm install --frozen-lockfile
 
 identity-service requires `REDIS_URL`, `AUTH_RATE_LIMIT_MAX_ATTEMPTS`, `AUTH_RATE_LIMIT_WINDOW_SECONDS`, and `TRUST_PROXY_HOPS`, with no defaults. Startup fails when one is missing or is not a whole number of at least 1.
 
-identity-service also requires `COOKIE_SECURE`, which must be exactly `true` or `false`, with no default. It adds `Secure` to the session, CSRF and OAuth state cookies. Use `false` on the plain-HTTP local URLs and `true` on AWS (`deploy/pharmacycentral.env.example`). The trusted layer of every service drops `x-actor-id` and `x-actor-type` from a request that carries no verified identity context or service secret, and logs a `warn` with the request id when it does; both local gateways also strip those headers from clients. `node --env-file=.env tools/edge-identity-smoke.mjs` checks this against `API_BASE_URL`.
+identity-service also requires `COOKIE_SECURE`, which must be exactly `true` or `false`, with no default. It adds `Secure` to the OAuth state cookie. Use `false` on the plain-HTTP local URLs and `true` on AWS (`deploy/pharmacycentral.env.example`). identity-service also requires `ACCESS_TOKEN_PRIVATE_KEY`, `ACCESS_TOKEN_PUBLIC_JWK` and `ACCESS_TOKEN_KEY_ID`, generated by `pnpm run auth:keygen`; every other service except search-service requires `IDENTITY_JWKS_URL`. The trusted layer of every service drops `x-actor-id` and `x-actor-type` from a request that carries no verified access token or service secret, and logs a `warn` with the request id when it does; both local gateways also strip those headers from clients. `node --env-file=.env tools/edge-identity-smoke.mjs` checks this against `API_BASE_URL`.
 
 - `TRUST_PROXY_HOPS` is the number of proxies in front of identity-service that append to `X-Forwarded-For`. Locally it is `1`: the nginx gateway overwrites the header with its own `$remote_addr`, so a client cannot supply its own address. Behind AWS the value is unverified. The path is API Gateway HTTP API, then the VPC link, then the internal ALB. Two is the expected value if API Gateway appends the client address and the ALB appends the VPC link address. Confirm that from the `X-Forwarded-For` header of a real request before setting it in `deploy/aws`. A value that is too low keys every client to a proxy address, and a value that is too high lets a client choose its own.
 - The Compose stack reaches identity-service through the nginx gateway. Docker usually presents host clients to nginx as the bridge gateway address, which is not verified here, so locally the limit may be one bucket per account rather than per client.
-- When Redis is unreachable, `POST /api/auth/login`, `register`, `request-password-reset`, and `reset-password`, and `GET /api/auth/verify-email` answer `503 rate_limit_unavailable`. Sessions are stored in Postgres, so `GET /api/auth/me` keeps working.
+- When Redis is unreachable, `POST /api/auth/login`, `register`, `request-password-reset`, and `reset-password`, and `GET /api/auth/verify-email` answer `503 rate_limit_unavailable`. `GET /api/auth/me` reads the profile from Postgres and keeps working for a caller with a valid token.
 - To clear a lockout for a support request, find the account's keys with `redis-cli --scan --pattern 'identity:auth-limit:<action>:<digest>:*'`, where `<digest>` is the SHA-256 of the lowercased, trimmed email, then `DEL` them. Keys hold that digest and the client address, never the email itself.
 
 ## Database migrations and seeds
@@ -426,10 +426,10 @@ pnpm test
 
 ## Edge routing and security
 
-- AWS API Gateway HTTP API exposes `/api` routes with a Lambda authorizer.
-- Sessions use the opaque `pharmacy_session` HttpOnly cookie.
-- The authorizer validates sessions against `identity-service`, refuses an employee role that the rule table in `deploy/aws/lambda/policy.mjs` does not allow (ADR 0017), and injects HMAC-signed identity context (`x-internal-identity-context`, `x-actor-id`, `x-actor-type`, `x-request-id`), discarding any client-supplied identity headers.
-- Mutating browser requests require CSRF tokens. The external SePay webhook route is the explicit exception and uses HMAC payload verification.
+- AWS API Gateway HTTP API exposes `/api` routes. The integration forwards `Authorization` untouched and overwrites only the path and `x-request-id`.
+- Authentication is one ES256 JWT access token that lives one day (ADR 0005, ADR 0021). There is no refresh token, session cookie or sessions table. Browsers keep the token in `localStorage`, sign-out is client-side, and revocation is by expiry, at most one day.
+- Every service verifies `Authorization: Bearer <access token>` against the JWKS of `identity-service` (`IDENTITY_JWKS_URL`), refuses an employee role that its own rule table does not allow (ADR 0017), and sets `x-actor-id`, `x-actor-type`, `x-actor-roles` and the site ids from the token, discarding any client-supplied value of those headers (ADR 0006).
+- No route authenticates with a cookie, so there is no CSRF token. The external SePay webhook route carries no token and uses HMAC payload verification.
 
 ## Payment webhook test
 
@@ -602,10 +602,10 @@ How the numbers come about:
 - The version is the `BUILD_VERSION` build arg (`local` in `.env`, the commit sha in the release workflow), which ends up as `service_version` on `target_info`.
 - Instances are counted from the memory gauge series per host over the last 5 minutes, so a container that was just replaced counts twice for up to 5 minutes.
 - Uptime is `avg_over_time` of a gauge `pharmacy_ops_probe_up` that ops-console exports after probing every service each 15 s. It counts only the time ops-console itself ran, so it starts again after a restart of that service.
-- Access is checked three times: the edge Lambda policy (`/api/system` is in `platformAdminPaths`), the service (HMAC-verified identity context, role `Platform Admin`, employee), and the staff-web menu.
-- Required environment (no defaults): `PORT`, `INTERNAL_IDENTITY_SECRET`, the eight `*_SERVICE_URL`, `PROMETHEUS_URL`, `RABBITMQ_MANAGEMENT_URL`, `RABBITMQ_MANAGEMENT_USER`, `RABBITMQ_MANAGEMENT_PASSWORD`, `TYPESENSE_URL`, `TYPESENSE_API_KEY`, `GRAFANA_PUBLIC_URL`.
+- Access is checked twice: the service (verified access token, role `Platform Admin`, employee), and the staff-web menu.
+- Required environment (no defaults): `PORT`, `IDENTITY_JWKS_URL`, the eight `*_SERVICE_URL`, `PROMETHEUS_URL`, `RABBITMQ_MANAGEMENT_URL`, `RABBITMQ_MANAGEMENT_USER`, `RABBITMQ_MANAGEMENT_PASSWORD`, `TYPESENSE_URL`, `TYPESENSE_API_KEY`, `GRAFANA_PUBLIC_URL`.
 - The page is read only: no replay of dead letters, no reindex.
-- The service catalog (`GET /api/system/catalog`) and the route table (`GET /api/system/routes`) are constants of the service, in `src/modules/system/service-manifest.ts`, `probed-services.ts` and `route-table.ts`. The service reads nothing from `deploy/` at runtime. When a gateway path, a platform-admin path, an ALB rule or a service dependency changes, change the table or the manifest too. `route-table.test.ts` fails when `deploy/local/gateway/routes.conf`, `deploy/aws/main.tf` or `deploy/aws/lambda/policy.mjs` disagree with the table. `service-manifest.test.ts` checks that every probed service has an entry, that every `dependsOn` names a known service, that every consumed event is published, and that every runbook anchor is a heading of this file. The dependencies and events come from the code (`*_SERVICE_URL` use, `fetch` calls, outbox writes, queue bindings), so update them when those change.
+- The service catalog (`GET /api/system/catalog`) and the route table (`GET /api/system/routes`) are constants of the service, in `src/modules/system/service-manifest.ts`, `probed-services.ts` and `route-table.ts`. The service reads nothing from `deploy/` at runtime. When a gateway path, a platform-admin path, an ALB rule or a service dependency changes, change the table or the manifest too. `route-table.test.ts` fails when `deploy/local/gateway/routes.conf`, or `deploy/aws/main.tf` disagree with the table. `service-manifest.test.ts` checks that every probed service has an entry, that every `dependsOn` names a known service, that every consumed event is published, and that every runbook anchor is a heading of this file. The dependencies and events come from the code (`*_SERVICE_URL` use, `fetch` calls, outbox writes, queue bindings), so update them when those change.
 - **Limits on AWS:** Amazon Managed Prometheus accepts only SigV4-signed queries and `ops-console-service` does not sign, so the overview's load numbers need a signing proxy (for example `aws-sigv4-proxy`) in front of the workspace and `PROMETHEUS_URL` pointing at it. The RabbitMQ section needs the management endpoint of Amazon MQ, which was not tested.
 
 ### Grafana bookmarks for the System page

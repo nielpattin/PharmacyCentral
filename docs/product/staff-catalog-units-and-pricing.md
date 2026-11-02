@@ -16,8 +16,8 @@ Tags: `[owner]` a recorded owner decision (ADR 0016); `[observed]` a code fact r
 ## Users and entry points
 
 - Role gate: `catalog`, `units` and `pricing` are open to **Platform Admin** (read only) and **Pharmacy Manager** (`sectionRoles` in `apps/staff-web/src/permissions/section-access.ts`; [user guide](../user-guide.md#catalog-units-and-pricing)). Pharmacist and Warehouse Staff see none of these items. A direct URL falls back to the first section the user can see (`activeSection`, `App.tsx`). Platform Admin gets no create, edit, archive or publish control (BR-AUTH-010). `[observed]`
-- Server gate: non-GET requests to `/api/products` (including units and images) and `/api/pricing/prices` need Pharmacy Manager; a Platform Admin write is refused `role_forbidden` (`employeeRoleRules`, `catalogWritePrefixes`, `deploy/aws/lambda/policy.mjs`). `[observed]`
-- Reads: `GET /api/products` and `GET /api/products/{id}/units` are public, and so is `GET /api/pricing/active`. `GET /api/pricing/prices?status=Published` is public (`isPublishedPriceRead`). Other `GET /api/pricing/prices` reads are staff reads, and `GET /api/pricing/base-prices` needs a session only (`publicPrefixes`, `employeePrefixes`, `policy.mjs`). `[observed]`
+- Server gate: non-GET requests to `/api/products` (including units and images) and `/api/pricing/prices` need Pharmacy Manager; a Platform Admin write is refused `role_forbidden` (the `trusted-request.ts` of each service). `[observed]`
+- Reads: `GET /api/products` and `GET /api/products/{id}/units` are public, and so is `GET /api/pricing/active`. `GET /api/pricing/prices?status=Published` is public (`isPublishedPriceRead`). Other `GET /api/pricing/prices` reads are staff reads, and `GET /api/pricing/base-prices` needs a session only (`publicPrefixes`, `employeePrefixes`, `trusted-request.ts`). `[observed]`
 - Scope: the catalog and its prices are chain-wide, not site data. The site rule (BR-AUTH-004) narrows site lists only, so these pages have no site selector. `[standard]`
 - Entry: the sidebar; `N` (create) on each page; `/` (focus search) on Catalog and Pricing. `[observed]`
 

@@ -110,11 +110,12 @@ None. The cache is an in-memory `Map` in the service process holding only the fo
 
 None. The cache holds a derived read; integration events, their outbox rows and their consumers are unchanged ([ADR 0003](../adr/0003-transactional-outbox-and-integration-events.md), [design 0001](0001-operations-query-reads-only-events.md)).
 
-### Security and CSRF
+### Security
+<!-- anchor: security-and-csrf -->
 
-- **Who may call.** `sectionRoles.analytics` at the edge and in the service ([ADR 0017](../adr/0017-roles-checked-at-the-edge-and-in-each-service.md)): Pharmacy Manager and Platform Admin, the latter read-only ([ADR 0019](../adr/0019-platform-admin-reads-and-administers.md)). Every other role is refused.
-- **Site scope.** The service resolves the caller's sites from the edge identity, and a named site outside them answers `403`. On the analytical sections the scope is part of the cache key, so a cache hit can never widen a caller's scope; the key holds no identity, so a hit is not an authorization shortcut either, because the role and the scope are checked before the cache is consulted. **Mục tiêu** is read from sales-service on every request with the same scope rules and no cache in between.
-- **No writes.** Both routes are `GET`, so no CSRF token applies; the only write on the page is `PUT /api/sales-targets`, which keeps its rule.
+- **Who may call.** `sectionRoles.analytics` in the service ([ADR 0017](../adr/0017-roles-checked-in-every-service.md)): Pharmacy Manager and Platform Admin, the latter read-only ([ADR 0019](../adr/0019-platform-admin-reads-and-administers.md)). Every other role is refused.
+- **Site scope.** The service resolves the caller's sites from the verified access token, and a named site outside them answers `403`. On the analytical sections the scope is part of the cache key, so a cache hit can never widen a caller's scope; the key holds no identity, so a hit is not an authorization shortcut either, because the role and the scope are checked before the cache is consulted. **Mục tiêu** is read from sales-service on every request with the same scope rules and no cache in between.
+- **No writes.** Both routes are `GET`, so nothing changes state; the only write on the page is `PUT /api/sales-targets`, which keeps its rule.
 - **No new secret.** The cache adds no credential or external service.
 
 ### Observability
@@ -158,5 +159,5 @@ None. The cache holds a derived read; integration events, their outbox rows and 
 ## Related ADRs
 
 - [ADR 0003](../adr/0003-transactional-outbox-and-integration-events.md): the events the read model is built from, unchanged.
-- [ADR 0017](../adr/0017-roles-checked-at-the-edge-and-in-each-service.md): the role check the section route keeps.
+- [ADR 0017](../adr/0017-roles-checked-in-every-service.md): the role check the section route keeps.
 - [ADR 0019](../adr/0019-platform-admin-reads-and-administers.md): Platform Admin reads every section and writes no target.

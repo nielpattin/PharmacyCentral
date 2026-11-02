@@ -46,7 +46,7 @@ Tags: `[observed]` a code fact read on 2026-10-30; `[standard]` a decision from 
   - The form holds **Current password**, **New password** (12 to 200 characters, BR-USER-005) and **Confirm new password**.
   - A short, too long or unconfirmed new password is refused before the request.
   - A wrong current password shows the server message in a danger alert and the employee stays signed in.
-  - On success identity ends the session, and the shell shows the sign-in card with "Đã đổi mật khẩu. Hãy đăng nhập lại bằng mật khẩu mới.".
+  - On success identity answers a fresh access token, the shell stores it, and the employee stays signed in.
 
 ## Contents and behavior
 
@@ -60,7 +60,7 @@ Two cards. **Profile** holds the avatar with initials, the read-only facts (US1)
 
 ## Out of scope
 
-- Changing the email, the roles or the sites. Deactivating one's own account. Listing or ending individual sessions. Multi-factor sign-in.
+- Changing the email, the roles or the sites. Deactivating one's own account. Listing individual sign-ins. Multi-factor sign-in.
 - Language and the sidebar state stay where they are: **Switch language** in the profile menu, `[` for the sidebar.
 
 ## Rules and designs

@@ -56,7 +56,7 @@ page contains, for whom, and why belongs in a [product spec](../product/README.m
 | --- | --- | --- | --- | --- |
 | [0001](0001-operations-query-reads-only-events.md) | Operations query reads only through events | Draft | TBD (unclaimed) | 2026-10-26 |
 | [0002](0002-close-fail-fast-configuration-gaps.md) | Close the fail-fast configuration gaps | Draft | TBD (unclaimed) | 2026-10-26 |
-| [0003](0003-harden-guest-cart-cookie-and-trusted-headers.md) | Harden the guest cart cookie and edge identity headers | Implemented | TBD (unclaimed) | 2026-10-26 |
+| [0003](0003-harden-guest-cart-cookie-and-trusted-headers.md) | Strip client actor headers and add the anonymous actor type | Implemented | TBD (unclaimed) | 2026-10-26 |
 | [0004](0004-order-from-selected-cart-lines.md) | Order from the selected cart lines on the server | Implemented | TBD (unclaimed) | 2026-10-26 |
 | [0005](0005-client-only-guest-cart.md) | Keep the signed-out cart in the browser only | Implemented | TBD (unclaimed) | 2026-10-26 |
 | [0008](0008-disposal-records.md) | Disposal records for expired, damaged and recalled stock | Implemented | @nielpattin | 2026-10-30 |

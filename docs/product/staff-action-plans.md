@@ -83,7 +83,7 @@ One list ([API guide](../api-guide.md)), a create drawer shared by the four entr
 | 5 | Who creates the plans? | `[owner]` 2026-10-29: the system, in `inventory-service`, at boot and every 15 minutes. Plans carry `createdBy` = the nil UUID and an audit entry `inventory.action-plan.created` with `automatic: true`. | Nobody has to remember to click. The sweep is idempotent through the live-source unique index. |
 | 6 | Fallback when a site has no Pharmacist | `[owner]` 2026-10-29: the site's active Pharmacy Manager. The owner may change it. | A plan with nobody at the site cannot be owned (BR-PLAN-001). |
 | 7 | A plan was just done and the alert persists | `[standard]` No new automatic plan for 7 days (the due period). | Otherwise a done plan would be replaced at the next run. |
-| 4 | Employees with no site | `[observed]` The site-scoped prefix refuses them at the edge, so the page shows the no-site message instead of a list or a bare 403. | Same rule as every site-scoped list; the message says why. |
+| 4 | Employees with no site | `[observed]` The site-scoped prefix refuses them in the service, so the page shows the no-site message instead of a list or a bare 403. | Same rule as every site-scoped list; the message says why. |
 
 ## Gaps against the code (2026-10-28)
 

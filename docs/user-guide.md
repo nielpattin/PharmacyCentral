@@ -57,7 +57,7 @@ Browsing and searching work without an account. Checkout, orders, prescription i
 
 ### Your account (Staff Web)
 
-Open the profile menu in the top bar and choose **Account settings**. The page shows your email, status, roles and sites, which only an administrator can change. You can edit your display name and phone number, and change your password. After a password change every session of the account ends, so you sign in again with the new password.
+Open the profile menu in the top bar and choose **Account settings**. The page shows your email, status, roles and sites, which only an administrator can change. You can edit your display name and phone number, and change your password. After a password change you stay signed in with a fresh one-day token.
 
 ### Demo credentials
 
@@ -314,7 +314,7 @@ Per row:
 
 - **Edit profile** (in the **More actions** menu, for every account except your own) corrects another employee's display name and phone, for example after they change number or leave. Both are required.
 - **Edit access** opens a drawer with the account's roles and site access as checkboxes. Choose at least one role, and a site for every role except Platform Admin, then **Save access**.
-- The **More actions** menu (three dots) holds **Reset password** (a new password of at least 12 characters) and **Revoke sessions** (signs the account out everywhere, for example after a security incident; asks to confirm).
+- The **More actions** menu (three dots) holds **Reset password** (a new password of at least 12 characters). A token already issued works until it expires (at most one day), so to cut off a leaver, deactivate the account.
 
 **Create user** (or press `n`) opens the drawer "Create employee account": email, display name, password, roles and site access, then choose **Create employee**. The same site rule applies. The new account must change its password at its first sign-in. Leaving a drawer with unsaved input asks first; Ctrl+S saves.
 

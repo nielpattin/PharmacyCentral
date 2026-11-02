@@ -18,7 +18,7 @@
 | 4 | `EMAIL_PROVIDER` defaults from `NODE_ENV`; unknown values silently become SMTP; `log` writes the single-use `token` to logs | `identity-service/src/bootstrap/dependencies.ts:78-84`; `verification-email-sender.ts:14,89-94` |
 | 5 | No `API_BASE_URL`: the web image starts and answers 502 | `apps/nginx-entrypoint.sh:4,48`, copied by `apps/Dockerfile.web` to `40-api-proxy.sh` |
 | 6 | Dev proxy silently skipped without `API_BASE_URL` | `apps/{customer,staff}-web/vite.config.ts:8` |
-| 7 | Identity signing secret unchecked at boot; `/api/auth/context` fails later with 503 | `identity-service/src/modules/accounts/presentation/http/account-routes.ts:114-117` |
+| 7 | Access token signing key unchecked at boot; a sign-in would fail later when it signs a token | `identity-service/src/bootstrap/access-token.ts` |
 | 8 | Trusted-request middleware reads secrets from `process.env` per request | `identity-service/src/middleware/trusted-request.ts:379-381`, same in each service |
 | 9 | SePay settings read per payment, not at boot | `payment-service/src/modules/payment-repository.ts:398-413` |
 | 10 | `RETAIL_STORE_COORDINATES_JSON ?? "[]"`, malformed JSON only warned; ORS base URL defaulted in client | `sales-service/src/main.ts:105,111-113`; `open-route-service-client.ts:11,13` |
@@ -56,17 +56,17 @@ Already right, and the pattern to copy: chatbot requires `DATABASE_URL` (`chatbo
 
 | Service | Required at boot (existing) | New |
 |---|---|---|
-| identity | PORT, RABBITMQ_URL, TRUST_PROXY_HOPS, REDIS_URL, AUTH_RATE_LIMIT_*, EMAIL_FROM, PUBLIC_APP_URL, SMTP_*, ARGON2_*, OTEL endpoint | DATABASE_URL, INTERNAL_IDENTITY_SECRET, EMAIL_PROVIDER, RESEND_API_KEY (when `resend`), LOG_LEVEL |
-| catalog | PORT, RABBITMQ_URL, TYPESENSE_*, S3 media settings (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `MEDIA_BUCKET`, `PUBLIC_MEDIA_URL`), INTERNAL_IDENTITY_SECRET, AI embedding group | DATABASE_URL, SECRETS_ENCRYPTION_KEY (now unconditional), LOG_LEVEL |
-| inventory | PORT, CATALOG_SERVICE_URL, INTERNAL_SERVICE_SECRET, RABBITMQ_URL | DATABASE_URL, INTERNAL_IDENTITY_SECRET, LOG_LEVEL |
-| sales | PORT, INTERNAL_IDENTITY_SECRET, INTERNAL_SERVICE_SECRET, CATALOG/INVENTORY/IDENTITY_SERVICE_URL, RABBITMQ_URL, VIETMAP_*, AI prescription-reader group | DATABASE_URL, SECRETS_ENCRYPTION_KEY, LOG_LEVEL; if `OPENROUTESERVICE_API_KEY` is set, also its base URL and `DELIVERY_*` |
-| payment | PORT, SEPAY_WEBHOOK_SECRET, SALES/CATALOG_SERVICE_URL, INTERNAL_SERVICE_SECRET, RABBITMQ_URL | DATABASE_URL, INTERNAL_IDENTITY_SECRET, LOG_LEVEL, `PHARMACY_PAYMENT_SEPAY_BANK`, `_ACCOUNT_NUMBER`, `_QR_BASE_URL` (moved from request time) |
-| operations-query | PORT, CATALOG/INVENTORY/SALES_SERVICE_URL, INTERNAL_SERVICE_SECRET, RABBITMQ_URL | DATABASE_URL, INTERNAL_IDENTITY_SECRET, LOG_LEVEL |
-| chatbot | PORT, DATABASE_URL, INTERNAL_IDENTITY_SECRET, SECRETS_ENCRYPTION_KEY, CATALOG_SERVICE_URL, AI groups (all-or-none, may be absent) | LOG_LEVEL |
-| ops-console | PORT, PROMETHEUS_URL, RABBITMQ_MANAGEMENT_*, TYPESENSE_*, INTERNAL_IDENTITY_SECRET, GRAFANA_PUBLIC_URL, eight `*_SERVICE_URL` probes | LOG_LEVEL; add missing keys to `.env.example` |
+| identity | PORT, RABBITMQ_URL, TRUST_PROXY_HOPS, REDIS_URL, AUTH_RATE_LIMIT_*, EMAIL_FROM, PUBLIC_APP_URL, SMTP_*, ARGON2_*, OTEL endpoint | DATABASE_URL, ACCESS_TOKEN_PRIVATE_KEY, ACCESS_TOKEN_PUBLIC_JWK, ACCESS_TOKEN_KEY_ID, EMAIL_PROVIDER, RESEND_API_KEY (when `resend`), LOG_LEVEL |
+| catalog | PORT, RABBITMQ_URL, TYPESENSE_*, S3 media settings (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `MEDIA_BUCKET`, `PUBLIC_MEDIA_URL`), IDENTITY_JWKS_URL, AI embedding group | DATABASE_URL, SECRETS_ENCRYPTION_KEY (now unconditional), LOG_LEVEL |
+| inventory | PORT, CATALOG_SERVICE_URL, INTERNAL_SERVICE_SECRET, RABBITMQ_URL | DATABASE_URL, IDENTITY_JWKS_URL, LOG_LEVEL |
+| sales | PORT, IDENTITY_JWKS_URL, INTERNAL_SERVICE_SECRET, CATALOG/INVENTORY/IDENTITY_SERVICE_URL, RABBITMQ_URL, VIETMAP_*, AI prescription-reader group | DATABASE_URL, SECRETS_ENCRYPTION_KEY, LOG_LEVEL; if `OPENROUTESERVICE_API_KEY` is set, also its base URL and `DELIVERY_*` |
+| payment | PORT, SEPAY_WEBHOOK_SECRET, SALES/CATALOG_SERVICE_URL, INTERNAL_SERVICE_SECRET, RABBITMQ_URL | DATABASE_URL, IDENTITY_JWKS_URL, LOG_LEVEL, `PHARMACY_PAYMENT_SEPAY_BANK`, `_ACCOUNT_NUMBER`, `_QR_BASE_URL` (moved from request time) |
+| operations-query | PORT, CATALOG/INVENTORY/SALES_SERVICE_URL, INTERNAL_SERVICE_SECRET, RABBITMQ_URL | DATABASE_URL, IDENTITY_JWKS_URL, LOG_LEVEL |
+| chatbot | PORT, DATABASE_URL, IDENTITY_JWKS_URL, SECRETS_ENCRYPTION_KEY, CATALOG_SERVICE_URL, AI groups (all-or-none, may be absent) | LOG_LEVEL |
+| ops-console | PORT, PROMETHEUS_URL, RABBITMQ_MANAGEMENT_*, TYPESENSE_*, IDENTITY_JWKS_URL, GRAFANA_PUBLIC_URL, eight `*_SERVICE_URL` probes | LOG_LEVEL; add missing keys to `.env.example` |
 | customer-web, staff-web | `API_BASE_URL` at container start and at `vite serve` | both |
 
-Optional, empty means unset, documented in `.env.example`: `OPENROUTESERVICE_API_KEY` (absent: no delivery calculator), `REDIS_URL` (absent: in-memory cache; photo intake answers 503 per [ADR 0005](../adr/0005-opaque-sessions-and-csrf.md)), `RETAIL_STORE_COORDINATES_JSON` (absent: none; malformed: boot error), `GOOGLE_CLIENT_ID`/`_SECRET` (both or neither).
+Optional, empty means unset, documented in `.env.example`: `OPENROUTESERVICE_API_KEY` (absent: no delivery calculator), `REDIS_URL` (absent: in-memory cache; photo intake answers 503 per [ADR 0005](../adr/0005-jwt-only-authentication-no-sessions-or-csrf.md)), `RETAIL_STORE_COORDINATES_JSON` (absent: none; malformed: boot error), `GOOGLE_CLIENT_ID`/`_SECRET` (both or neither).
 
 ### Decisions: LOG_LEVEL, EMAIL_PROVIDER, adapters
 
@@ -96,15 +96,16 @@ A new script of about 80 lines, run in CI and by developers as `node tools/env-c
 
 ### Contracts
 
-- No HTTP route, request, response, or event change. `/api/auth/context` loses its 503 `identity_unconfigured` path because the secret is checked at boot.
+- No HTTP route, request, response, or event change. Sign-in cannot fail on an unset signing key because the key is checked at boot.
 
 ### Data model and events
 
 - None: no schema, migration, outbox, or integration event change.
 
-### Security and CSRF
+### Security
+<!-- anchor: security-and-csrf -->
 
-- No new endpoint or CSRF surface. Removing `log` stops writing single-use verification and reset tokens to logs (`EmailInput.token`). Removing `DATABASE_USER`/`DATABASE_PASSWORD` stops giving the admin password to every backend container. New AWS secrets go only in Secrets Manager maps.
+- No new endpoint. Removing `log` stops writing single-use verification and reset tokens to logs (`EmailInput.token`). Removing `DATABASE_USER`/`DATABASE_PASSWORD` stops giving the admin password to every backend container. New AWS secrets go only in Secrets Manager maps.
 
 ### Observability
 
@@ -122,12 +123,12 @@ A new script of about 80 lines, run in CI and by developers as `node tools/env-c
 
 1. Configuration surface first, no behavior change: `.env.example`, Compose, `deploy/aws/main.tf`, and real Secrets Manager values (open question 1) before step 3.
 2. Helper, `env-contract`, CI. In `ci.yml` add `node tools/env-contract.mjs`; replace the bare compose check with `docker compose --env-file .env.example config --quiet` failing when its output contains `variable is not set`.
-3. Service code per the table: DB required (seven), `LOG_LEVEL` (eight), `EMAIL_PROVIDER`, identity secret, payment boot reads, sales optionals, ORS default removed, trusted-middleware env reads removed, adapter guards aligned.
+3. Service code per the table: DB required (seven), `LOG_LEVEL` (eight), `EMAIL_PROVIDER`, access token signing key, payment boot reads, sales optionals, ORS default removed, trusted-middleware env reads removed, adapter guards aligned.
 4. Drizzle configs, `migrate.ts`, `migrate-all.mjs` text, `seed.mjs`, root `DATABASE_URL` removed. Nginx entrypoint and Vite configs.
-5. Delete dead code: `DRIZZLE_MIGRATIONS_DIR`, `LoggingVerificationEmailSender`, `INTERNAL_IDENTITY_AUDIENCE`, the ORS default, the RETAIL try/catch, `database ?` branches.
+5. Delete dead code: `DRIZZLE_MIGRATIONS_DIR`, `LoggingVerificationEmailSender`, the ORS default, the RETAIL try/catch, `database ?` branches.
 6. Docs: [runbook](../runbook.md) (Run migrations, Database roles, Troubleshooting), CHANGELOG under `Unreleased`, and a new ADR for the decision; point ADR 0010's deviation list and ADR 0009 line 31 to it.
 
-AWS: identity's task needs `EMAIL_PROVIDER` and `RESEND_API_KEY` before the new image, or identity fails at boot; payment's task needs the three `PHARMACY_PAYMENT_SEPAY_*` values first, or it crash-loops. Deploy identity first, since the authorizer depends on it. Rollback: revert each task revision; added variables are harmless.
+AWS: identity's task needs `EMAIL_PROVIDER` and `RESEND_API_KEY` before the new image, or identity fails at boot; payment's task needs the three `PHARMACY_PAYMENT_SEPAY_*` values first, or it crash-loops. Deploy identity first, since every other service reads its JWKS. Rollback: revert each task revision; added variables are harmless.
 
 Risk to `pnpm dev`: a `.env` without the new keys fails at boot and names the key (`env-contract --env .env` lists them). Bypass runs fail clearly instead of using the catalog database. `.env.dev` files do not change. Existing `.env` copies can delete the root `DATABASE_URL` line.
 
@@ -145,7 +146,7 @@ Risk to the container stack: low, since all seven `DATABASE_URL`s exist. Rebuild
 
 ## Open questions
 
-1. Real AWS tfvars (not in the repo): are `RESEND_API_KEY`, identity's `INTERNAL_IDENTITY_SECRET`, and `PHARMACY_PAYMENT_SEPAY_*` set? Owner: deploy owner. Blocks rollout step 3 for identity and payment.
+1. Real AWS tfvars (not in the repo): are `RESEND_API_KEY`, identity's `ACCESS_TOKEN_*` values, and `PHARMACY_PAYMENT_SEPAY_*` set? Owner: deploy owner. Blocks rollout step 3 for identity and payment.
 2. Copies of the helper, or `packages/config`? Owner: maintainers, before step 2.
 3. Should `db:generate` need `DATABASE_URL`? Proposed yes. Owner: maintainers.
 4. Should readiness check the database, and should an unsupported stored AI provider surface beyond logs, for example in the credential view? Catalog always returns 200; identity and sales only check presence. Owners: ops and chatbot.
@@ -156,7 +157,7 @@ Risk to the container stack: low, since all seven `DATABASE_URL`s exist. Rebuild
 ## Related ADRs
 
 - [0010](../adr/0010-fail-fast-environment-configuration.md): primary; this closes its deviation list. [0002](../adr/0002-service-owned-databases.md): migrations, roles, drizzle fallback.
-- [0009](../adr/0009-ai-feature-settings-in-database.md): adapter rule; line 31 needs correcting. [0005](../adr/0005-opaque-sessions-and-csrf.md): fail-closed Redis limits.
-- [0006](../adr/0006-edge-identity-context.md): `INTERNAL_IDENTITY_SECRET`. [0007](../adr/0007-gateway-path-routing-and-two-topologies.md): Compose and AWS topologies. [0012](../adr/0012-local-development-modes-and-named-urls.md): `.env.dev` and bypass runs.
+- [0009](../adr/0009-ai-feature-settings-in-database.md): adapter rule; line 31 needs correcting. [0005](../adr/0005-jwt-only-authentication-no-sessions-or-csrf.md): fail-closed Redis limits.
+- [0006](../adr/0006-jwt-access-tokens-verified-by-every-service.md): `IDENTITY_JWKS_URL`. [0007](../adr/0007-gateway-path-routing-and-two-topologies.md): Compose and AWS topologies. [0012](../adr/0012-local-development-modes-and-named-urls.md): `.env.dev` and bypass runs.
 
-Business rules: BR-AUTH-008 (trusted context), BR-USER-009 (verified email before sign-in, which depends on `EMAIL_PROVIDER`), BR-PAY-005 (the payment code carried in the SePay QR). Runbook: [Database roles](../runbook.md#database-roles), [Run migrations](../runbook.md#run-migrations), [Identity rate limits](../runbook.md#identity-rate-limits-and-client-address), [Rollback and deployment](../runbook.md#rollback-and-deployment). API: [API guide](../api-guide.md), no contract changes.
+Business rules: BR-AUTH-008 (verified token), BR-USER-009 (verified email before sign-in, which depends on `EMAIL_PROVIDER`), BR-PAY-005 (the payment code carried in the SePay QR). Runbook: [Database roles](../runbook.md#database-roles), [Run migrations](../runbook.md#run-migrations), [Identity rate limits](../runbook.md#identity-rate-limits-and-client-address), [Rollback and deployment](../runbook.md#rollback-and-deployment). API: [API guide](../api-guide.md), no contract changes.

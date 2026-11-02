@@ -27,7 +27,7 @@ purpose. The diagram below shows the logical architecture and is the only Mermai
 ```mermaid
 flowchart LR
   browsers["Browsers<br/>customer-web and staff-web SPAs"]
-  gateway["Edge<br/>local: nginx gateway :8080<br/>AWS: API Gateway, Lambda authorizer, internal ALB"]
+  gateway["Edge<br/>local: nginx gateway :8080<br/>AWS: API Gateway, internal ALB"]
 
   browsers -->|"/api calls"| gateway
 
@@ -87,6 +87,7 @@ flowchart LR
   search -.->|"fallback for GET /api/products"| catalog
   inventory -.->|HTTP| catalog
   sales -.->|HTTP| catalog & inventory & identity
+  catalog & inventory & sales & payment & opsquery & chatbot & ops -.->|"JWKS"| identity
   payment -.->|HTTP| sales & catalog
   chatbot -.->|HTTP| catalog
   opsquery -.->|"HTTP reads, see Data ownership"| catalog & inventory & sales
@@ -126,7 +127,7 @@ Module-level detail is in the [LikeC4 domain views](diagrams/README.md#the-views
 
 | Service | Port | Owns | Talks to |
 | --- | --- | --- | --- |
-| `identity-service` | 3001 | Customer and employee accounts, opaque sessions, password security, email verification, Google OIDC. Schema `identity_service`. | PostgreSQL, Redis (auth rate limits), SMTP (Mailpit locally), RabbitMQ (outbox), Google OIDC |
+| `identity-service` | 3001 | Customer and employee accounts, ES256 JWT access tokens (one day, no sessions) and JWKS, password security, email verification, Google OIDC. Schema `identity_service`. | PostgreSQL, Redis (auth rate limits), SMTP (Mailpit locally), RabbitMQ (outbox), Google OIDC |
 | `catalog-service` | 3002 | Products, units, suppliers, sites, storage locations, prices, availability projections, the product search index, product media. Schema `catalog_service`. | PostgreSQL with PostGIS, Typesense (writes the index), S3 media bucket (Floci locally), embedder, RabbitMQ (outbox; consumes `inventory.availability.changed.v1`) |
 | `search-service` | 3009 | The read path of `GET /api/products` only. No database. | Typesense, embedder, `catalog-service` (fallback when Typesense cannot answer) |
 | `inventory-service` | 3004 | Batches, stock, FEFO reservations, movements, transfers, returns, stocktakes, disposal records, purchase orders, goods receipts, availability events. Schema `inventory_service`. | PostgreSQL, RabbitMQ (outbox), `catalog-service` (HTTP) |
@@ -161,10 +162,12 @@ The rules below apply to every change. The non-negotiable form is in [AGENTS.md]
   calls `catalog-service`, `inventory-service`, and `sales-service`). The events-only rule is the target,
   and that HTTP usage is a known deviation to remove.
 - **The browser is never authoritative.** Prices, stock quantities, delivery fees, distances, and the identity of
-  the caller are recalculated by the owning service. Browser mutating requests need a valid CSRF token, except for
-  the HMAC-verified SePay webhook.
-- **The edge forwards identity, and services verify it.** The gateway forwards a signed internal identity
-  context, as described in [README.md](../README.md#architecture). Role and site rules are in
+  the caller are recalculated by the owning service. Authentication is one one-day JWT with no session,
+  cookie or CSRF token ([ADR 0005](adr/0005-jwt-only-authentication-no-sessions-or-csrf.md)). The HMAC-verified
+  SePay webhook carries no token.
+- **The edge forwards the access token, and services verify it.** The gateway forwards the `Authorization` header
+  untouched, and every service verifies the ES256 JWT access token against the identity-service JWKS
+  ([ADR 0006](adr/0006-jwt-access-tokens-verified-by-every-service.md), [ADR 0021](adr/0021-es256-jwt-access-tokens.md)). Role and site rules are in
   [docs/business-rules.md](business-rules.md) (BR-AUTH-*).
 
 ## Integration events
@@ -205,7 +208,7 @@ Both topologies run the same Docker images and the same contracts. Details are i
 
 | Aspect | Local Docker Compose | AWS ECS Fargate |
 | --- | --- | --- |
-| Entry | `customer-web` and `staff-web` containers, Nginx `gateway` on `GATEWAY_PORT`. `gateway-dev` (host network) replaces it while services run through `pnpm dev`. | API Gateway HTTP API with a Lambda authorizer and a CSRF Lambda, a VPC Link, and an internal ALB |
+| Entry | `customer-web` and `staff-web` containers, Nginx `gateway` on `GATEWAY_PORT`. `gateway-dev` (host network) replaces it while services run through `pnpm dev`. | API Gateway HTTP API, a VPC Link, and an internal ALB |
 | Compute | One container per backend service, built from `apps/Dockerfile.service` (`apps/search-service/Dockerfile` for `search-service`). Migrations run before each service starts. | One ECS Fargate service per backend, one embedder task, and one-shot migration tasks |
 | Data | PostgreSQL (PostGIS 18), RabbitMQ 4.3, Redis 8.10, Typesense 31.0, Floci (S3 and ECR emulator), embedder, Mailpit | RDS PostgreSQL, ElastiCache Redis, Amazon MQ for RabbitMQ, a Typesense cluster or Typesense Cloud, and Secrets Manager. The first stack does not provision these data services. |
 | Telemetry | `otel-collector` with Tempo, Prometheus, Loki, and Grafana | An ADOT collector task that forwards to Amazon Managed Service for Prometheus, AWS X-Ray, and CloudWatch Logs |

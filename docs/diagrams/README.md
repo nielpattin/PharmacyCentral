@@ -73,7 +73,7 @@ two things in 1.60.0:
 | `dataOwnership` | Which service owns which database, and the role that owns it. |
 | `eventFlow` | Who publishes on `pharmacy.events`, and who consumes what. |
 | `aiFeatures` | The three AI features, their owner and their provider. |
-| `securityModel` | The trust boundary: the session, the roles, the site scope, the CSRF. |
+| `securityModel` | The trust boundary: the access token, the roles, the site scope. |
 | `identityDetail`, `catalogDetail`, `searchDetail`, `inventoryDetail`, `salesDetail`, `paymentDetail`, `operationsDetail`, `opsConsoleDetail`, `chatbotDetail` | The modules of a service and the services it depends on. |
 | `checkoutFlow` | From the cart to the paid invoice. |
 | `prescriptionIntake` | From the photo of a prescription to the consultation. |
@@ -84,14 +84,14 @@ two things in 1.60.0:
 | `traceThroughOutbox` | One trace from the request, through the outbox and the broker, to the consumers and Tempo. |
 | `asyncReliability` | What the relay and the consumer do when the broker is down, a payload is bad, or a handler keeps failing. |
 | `localCompose` | The local stack: the gateway, the eight services, the infrastructure. |
-| `awsEcs` | The production stack: the API Gateway, the authorizer, the ALB, the Fargate tasks. |
+| `awsEcs` | The production stack: the API Gateway, the ALB, the Fargate tasks. |
 | `observability` | The telemetry: the OTLP edges of the services, the collector and its backends, Grafana. |
 
 ## Notes on the model
 
 - **The edge is deployment specific.** The logical model goes from the web tier straight to the
   services, because the routing map is the same in both topologies. The Nginx gateway of Compose
-  and the API Gateway with the Lambda authorizer of AWS appear in the deployment views.
+  and the API Gateway of AWS appear in the deployment views.
 - **The data tier is owned by the platform.** Every service owns one database and never reads
   another one. `operations-query-service` is the only reader, and it reads through the events and
   through the HTTP API of the owning service.

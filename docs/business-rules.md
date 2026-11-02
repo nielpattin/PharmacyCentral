@@ -1,6 +1,6 @@
 # Quy tắc nghiệp vụ PharmacyCentral
 
-> Tài liệu này ghi lại các quy tắc nghiệp vụ đang thể hiện trong code hiện tại (`apps/*-service/src` và chính sách biên `deploy/aws/lambda/policy.mjs`).
+> Tài liệu này ghi lại các quy tắc nghiệp vụ đang thể hiện trong code hiện tại (`apps/*-service/src`).
 > Mục tiêu: giúp product owner, developer, QA và người vận hành hiểu hệ thống cho phép gì, chặn gì, trạng thái nào được chuyển tiếp, và dữ liệu nào được xem là hợp lệ.
 
 Phần còn lại của tài liệu trong repo được viết bằng tiếng Anh. Các mã `BR-*` được tham chiếu từ `docs/architecture.md` và từ mục "Related business rules" của các ADR 0003, 0004, 0005, 0006, 0008 và 0009 trong `docs/adr/`, nên không được đánh số lại.
@@ -26,7 +26,7 @@ Tài liệu này **không phải API guide** và **không thay thế code**. Khi
 
 ## 2. Nguồn code đã scan
 
-Quy tắc được lấy từ code trong `apps/*-service/src` (contracts, routes, repositories và domain modules) và chính sách biên `deploy/aws/lambda/policy.mjs`. Code là nguồn chuẩn: khi tài liệu và code khác nhau, hãy tin code.
+Quy tắc được lấy từ code trong `apps/*-service/src` (contracts, routes, repositories và domain modules). Code là nguồn chuẩn: khi tài liệu và code khác nhau, hãy tin code.
 
 ## 3. Quy ước chung
 
@@ -59,9 +59,9 @@ Quy tắc được lấy từ code trong `apps/*-service/src` (contracts, routes
 
 Tài khoản khách (`customer`) không có role nhân viên.
 
-### BR-AUTH-002. Ma trận role theo đường dẫn nằm ở chính sách biên
+### BR-AUTH-002. Ma trận role theo đường dẫn nằm ở từng service
 
-Authorizer dùng `employeeRolesForRequest` và `isEmployeeRoleAllowed` trong `deploy/aws/lambda/policy.mjs`. Platform Admin đọc được mọi đường dẫn nhân viên (GET, HEAD, OPTIONS) và chỉ ghi ở đường dẫn có quy tắc nêu tên Platform Admin (BR-AUTH-010).
+Mỗi service kiểm tra role của access token bằng bảng role trong `src/middleware/trusted-request.ts` (`roleRefusal`); gateway không kiểm tra role. Platform Admin đọc được mọi đường dẫn nhân viên (GET, HEAD, OPTIONS) và chỉ ghi ở đường dẫn có quy tắc nêu tên Platform Admin (BR-AUTH-010).
 
 | Đường dẫn | Role yêu cầu |
 | --- | --- |
@@ -92,9 +92,9 @@ Authorizer dùng `employeeRolesForRequest` và `isEmployeeRoleAllowed` trong `de
 | `PATCH /api/inventory/action-plans/*` | Platform Admin, Pharmacist, Pharmacy Manager, Warehouse Staff; dịch vụ chỉ cho Platform Admin và Pharmacy Manager đổi chủ sở hữu (BR-PLAN-002) |
 | Các đường dẫn nhân viên còn lại (đọc sản phẩm, site, kho, nhà cung cấp, giá đã xuất bản, `GET /api/inventory/balances`) | Mọi nhân viên đã đăng nhập; phạm vi site theo BR-AUTH-004 |
 
-Quyết định kiểm định nằm ở `/api/inventory/batches/{id}/quality`. Bảng này được chép lại trong `src/middleware/trusted-request.ts` của từng service (ADR 0017).
+Quyết định kiểm định nằm ở `/api/inventory/batches/{id}/quality`. Bảng này nằm trong `src/middleware/trusted-request.ts` của từng service (ADR 0017).
 
-`staff-web` ẩn menu theo role, nhưng đó chỉ là hiển thị. Chặn thật nằm ở chính sách biên và backend.
+`staff-web` ẩn menu theo role, nhưng đó chỉ là hiển thị. Chặn thật nằm ở backend.
 
 ### BR-AUTH-003. Platform Admin xem mọi site
 
@@ -106,22 +106,22 @@ Trong `trusted-request`, Platform Admin không bị giới hạn theo site. Vì 
 - Request có `siteId` ngoài phạm vi: 403 `site_access_denied`.
 - Nhân viên không có site nào mà gọi route theo site: 403 `site_access_denied` ("No site access assigned").
 
-### BR-AUTH-005. Người thực hiện lấy từ ngữ cảnh đã xác thực, không lấy từ body
+### BR-AUTH-005. Người thực hiện lấy từ access token đã xác thực, không lấy từ body
 
-Gateway ký ngữ cảnh danh tính; service đọc `X-Actor-Id` và `X-Actor-Type` từ ngữ cảnh đó. Người tạo đơn, người duyệt, người nhận hàng, người cấp phát và người thanh toán đều lấy từ actor này.
+Identity-service ký access token JWT (ES256, hiệu lực một ngày). Mỗi service tự xác thực token từ header `Authorization: Bearer`, rồi đặt `X-Actor-Id` và `X-Actor-Type` từ token, ghi đè giá trị client gửi. Người tạo đơn, người duyệt, người nhận hàng, người cấp phát và người thanh toán đều lấy từ actor này.
 
 ### BR-AUTH-006. Khách không vào được route nhân viên
 
 - Tài khoản khách gọi đường dẫn nhân viên: 403 `employee_required`.
-- Một số đường dẫn dùng chung được mở cho khách có điều kiện (`customerPrescriptionRequests`, `customerPaymentRequests` trong `policy.mjs`): tiếp nhận đơn thuốc, gửi yêu cầu tư vấn, đọc danh sách đơn của chính mình, tạo hóa đơn cho đơn của mình, đọc hóa đơn của mình.
+- Một số đường dẫn dùng chung được mở cho khách có điều kiện (`DEFAULT_CUSTOMER_REQUEST_EXCEPTIONS` trong `src/middleware/trusted-request.ts`): tiếp nhận đơn thuốc, gửi yêu cầu tư vấn, đọc danh sách đơn của chính mình, tạo hóa đơn cho đơn của mình, đọc hóa đơn của mình.
 
 ### BR-AUTH-007. Cấu hình AI chỉ dành cho Platform Admin
 
 Các đường dẫn `/api/chatbot/credential`, `/api/chatbot/intent-gate-credential`, `/api/prescriptions/intake-credential`, `/api/products/search-credential` chỉ cho Platform Admin, kể cả khi nằm dưới tiền tố công khai `/api/products`.
 
-### BR-AUTH-008. Route nội bộ phải có ngữ cảnh tin cậy
+### BR-AUTH-008. Route nội bộ phải có access token hợp lệ
 
-Request không có ngữ cảnh tin cậy (và không phải route health/public) nhận 401 `trusted_request_required`.
+Request không có access token hợp lệ hoặc service secret (và không phải route health/public) nhận 401 `trusted_request_required`.
 
 ### BR-AUTH-009. Người tạo không tự duyệt bản ghi của mình
 
@@ -135,17 +135,17 @@ Người tạo vẫn được hủy điều chuyển và yêu cầu bổ sung c�
 
 ### BR-AUTH-010. Platform Admin chỉ đọc dữ liệu vận hành và chỉ ghi phần quản trị
 
-Platform Admin không làm thay Pharmacist, Pharmacy Manager hay Warehouse Staff. Ở biên và ở từng service, Platform Admin:
+Platform Admin không làm thay Pharmacist, Pharmacy Manager hay Warehouse Staff. Ở từng service, Platform Admin:
 
 - Đọc được mọi đường dẫn nhân viên (dashboard, phân tích, tài chính, báo cáo, đơn online, đơn thuốc, hóa đơn, tồn kho, lô, biến động, nhận hàng, đơn mua, gợi ý bổ sung, điều chuyển, kiểm kê, trả hàng, điều chỉnh, kiểm định, danh mục, giá, nhà cung cấp, kho, site, từ đồng nghĩa) và không bị giới hạn theo site (BR-AUTH-003).
 - Ghi được đúng các việc không role nào khác làm: quản lý người dùng, role và site access (`/api/admin`), audit, cấu hình AI (BR-AUTH-007), trang System, tạo và xóa site, và đổi chủ sở hữu, hạn và tiêu đề của kế hoạch hành động (BR-PLAN-002).
 - Bị từ chối mọi ghi còn lại với 403 `role_forbidden`: sửa danh mục, giá, nhà cung cấp, kho, sửa site, nhập dữ liệu, đơn mua và nhận hàng, mọi ghi tồn kho, duyệt hay từ chối bổ sung hàng, kiểm định lô, chuyển trạng thái và hoàn tiền đơn online, thao tác quầy, biên tập hay duyệt từ đồng nghĩa, đổi trạng thái kế hoạch hành động.
 
-Quy tắc nằm ở `isEmployeeRoleAllowed` (biên) và `roleRefusal` (mỗi service), và được chép giữ nguyên giữa hai nơi (ADR 0017, ADR 0019). Tài khoản vừa có Platform Admin vừa có role khác vẫn dùng được quyền của role khác.
+Quy tắc nằm ở `roleRefusal` của mỗi service, và được giữ giống nhau ở mọi service (ADR 0017, ADR 0019). Tài khoản vừa có Platform Admin vừa có role khác vẫn dùng được quyền của role khác.
 
 ### BR-AUTH-011. Đăng nhập nhân viên chỉ dành cho tài khoản nhân viên
 
-- Staff Web gửi `audience: "employee"` khi đăng nhập. Tài khoản khách nhận 403 `employee_required` trước khi có phiên; không có cookie `pharmacy_session`.
+- Staff Web gửi `audience: "employee"` khi đăng nhập. Tài khoản khách nhận 403 `employee_required` trước khi cấp token; không có access token nào được cấp.
 - Tài khoản nhân viên không đăng nhập bằng Google (403 `password_sign_in_required`).
 - Đăng nhập nhân viên thất bại (sai mật khẩu, email chưa xác thực, tài khoản vô hiệu hóa, tài khoản khách) được ghi nhật ký `identity.auth.login-failed` kèm lý do, không kèm mật khẩu; nếu email khớp một tài khoản thì ghi cả mã tài khoản. Đăng nhập thành công ghi `identity.auth.login`.
 
@@ -526,7 +526,7 @@ Giao diện quầy hiển thị giao dịch trong phạm vi site, lọc theo hô
 
 ### BR-RX-019. Khách chỉ thấy đơn thuốc gắn với tài khoản của mình
 
-Danh sách đơn thuốc cho khách chỉ trả đơn gắn `customerId` là tài khoản của họ (theo ghi chú trong `policy.mjs`).
+Danh sách đơn thuốc cho khách chỉ trả đơn gắn `customerId` là tài khoản của họ.
 
 ### BR-RX-020. Nhờ dược sĩ tư vấn chỉ do khách hàng gửi
 
@@ -1005,7 +1005,7 @@ Lọc theo `actorId`, site, `action` (chứa chuỗi), `entityType`, `entityId`,
 
 ### BR-USER-001. Chỉ Platform Admin quản lý nhân viên
 
-Các route `/api/admin/*` (tạo nhân viên, đổi role và site, đặt lại mật khẩu, thu hồi phiên, vô hiệu hóa và kích hoạt lại) thuộc Platform Admin. Quản trị viên không tự đổi quyền, tự đặt lại mật khẩu, tự thu hồi phiên hay tự vô hiệu hóa tài khoản của mình tại các route này: 403 `self_change_forbidden`.
+Các route `/api/admin/*` (tạo nhân viên, đổi role và site, đặt lại mật khẩu, vô hiệu hóa và kích hoạt lại) thuộc Platform Admin. Quản trị viên không tự đổi quyền, tự đặt lại mật khẩu hay tự vô hiệu hóa tài khoản của mình tại các route này: 403 `self_change_forbidden`.
 
 ### BR-USER-002. Tạo nhân viên yêu cầu email, tên, số điện thoại và mật khẩu từ 12 ký tự
 
@@ -1044,9 +1044,9 @@ Tài khoản được tạo với `roles = [Platform Admin]` và `siteIds = []`.
 ### BR-USER-009. Đăng nhập cần email đã xác thực và mật khẩu đúng
 
 - Email chưa xác thực: từ chối đăng nhập ("Email address is not verified").
-- Phiên đăng nhập hiệu lực 7 ngày.
+- Access token (ES256 JWT) hiệu lực một ngày (86 400 giây). Không có refresh token, cookie phiên, bảng phiên hay CSRF token. Đăng xuất do client thực hiện bằng cách bỏ token; thu hồi diễn ra khi token hết hạn, tối đa một ngày.
 - Token xác thực email và token đặt lại mật khẩu hiệu lực 1 giờ và chỉ dùng được một lần.
-- Tài khoản vô hiệu hóa đăng nhập như sai mật khẩu, và các phiên của tài khoản đó kết thúc (BR-USER-012).
+- Tài khoản vô hiệu hóa đăng nhập như sai mật khẩu, nhưng token đã cấp vẫn dùng được đến khi hết hạn, tối đa một ngày (BR-USER-012).
 
 ### BR-USER-010. Số điện thoại hồ sơ có định dạng cho phép
 
@@ -1062,7 +1062,7 @@ Chỉ trả tài khoản khách, không trả nhân viên (BR-AUTH-002).
 
 ### BR-USER-012. Vô hiệu hóa và kích hoạt lại nhân viên
 
-- `POST /api/admin/users/{id}/deactivate` đặt tài khoản thành không hoạt động: tài khoản không đăng nhập được, các phiên của nó kết thúc trong cùng giao dịch, và không xóa dữ liệu nào.
+- `POST /api/admin/users/{id}/deactivate` đặt tài khoản thành không hoạt động: tài khoản không đăng nhập được, token đã cấp vẫn dùng được đến khi hết hạn (tối đa một ngày), và không xóa dữ liệu nào.
 - `POST /api/admin/users/{id}/activate` mở lại tài khoản.
 - Không tự vô hiệu hóa mình (403 `self_change_forbidden`). Không vô hiệu hóa Platform Admin hoạt động cuối cùng (409 `last_platform_admin`).
 - Đặt lại mật khẩu cho tài khoản đang vô hiệu hóa bị từ chối (409 `account_deactivated`).
@@ -1070,9 +1070,9 @@ Chỉ trả tài khoản khách, không trả nhân viên (BR-AUTH-002).
 ### BR-USER-013. Mật khẩu do quản trị viên đặt phải đổi trước khi làm việc
 
 - Tạo nhân viên hoặc đặt lại mật khẩu đặt cờ `mustChangePassword`.
-- Khi cờ còn bật, edge chỉ cho qua các đường dẫn xác thực; identity trả 403 `password_change_required` cho `GET /api/auth/context`, `PATCH /api/auth/me`, mọi route quản trị và tra cứu khách.
-- `POST /api/auth/change-password` với mật khẩu mới 12–200 ký tự xóa cờ và xóa cookie phiên, nên người dùng đăng nhập lại.
-- Đặt lại mật khẩu thu hồi mọi phiên của tài khoản.
+- Khi cờ còn bật, access token mang `pcr: true` và mọi service từ chối với 403 `password_change_required`, trừ các đường dẫn xác thực của identity-service; identity-service cũng trả 403 `password_change_required` cho `PATCH /api/auth/me`, mọi route quản trị và tra cứu khách.
+- `POST /api/auth/change-password` với mật khẩu mới 12–200 ký tự xóa cờ và trả access token mới (không còn `pcr`), nên người dùng không phải đăng nhập lại.
+- Đặt lại mật khẩu không thu hồi token đã cấp; token đó hết hạn sau tối đa một ngày.
 
 ## 19. Đơn hàng online và giao hàng
 
@@ -1491,7 +1491,7 @@ Khi thêm hoặc sửa feature, nên kiểm tra:
 4. Phạm vi site đã được kiểm tra ở backend, không chỉ ở giao diện.
 5. Danh tính (`X-Actor-Id`, role) có lấy từ ngữ cảnh đã xác thực không.
 6. Hành động có cần audit hoặc phát sự kiện qua outbox không.
-7. Ma trận role trong `deploy/aws/lambda/policy.mjs` và bảng role trong `src/middleware/trusted-request.ts` của từng service đã phản ánh quyền mới chưa (ADR 0017).
+7. Bảng role trong `src/middleware/trusted-request.ts` của từng service đã phản ánh quyền mới chưa (ADR 0017).
 8. Quy tắc mới hoặc đổi đều được cập nhật vào `docs/business-rules.md` cùng thay đổi code.
 
 ## 26. Giới hạn đã biết

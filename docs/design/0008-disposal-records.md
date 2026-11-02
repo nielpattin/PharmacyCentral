@@ -43,7 +43,7 @@ Browser routes under the existing `/api/inventory` prefix. The local gateway (`r
 
 `GET` answers one page as a plain array, newest first, with `X-Next-Cursor` while another page follows, like every inventory list. Each row carries its `lines`, and each line carries the batch number. A malformed cursor answers `400 invalid_cursor`; a bad body answers `400 invalid_request`; an out-of-site record or self-approval answers `403`; a stale quantity or an already-decided record answers `409`.
 
-The edge policy (`deploy/aws/lambda/policy.mjs`) adds `/api/inventory/disposals` to the site-scoped list prefixes and names the roles above; the service restates the same rules in `middleware/trusted-request.ts`, and each route checks roles, site scope and self-approval again.
+The service adds `/api/inventory/disposals` to the site-scoped list prefixes and names the roles above in `middleware/trusted-request.ts`, and each route checks roles, site scope and self-approval again.
 
 ### Data model
 

@@ -17,7 +17,7 @@ model {
   }
 
   // ── Path routing map, the same in the local gateway and in the AWS ALB ───────────
-  pharmacyCentral.web.customerWeb -> pharmacyCentral.services.identityService "Sign in, session, profile (/api/auth, /api/customers)" {
+  pharmacyCentral.web.customerWeb -> pharmacyCentral.services.identityService "Sign in, profile (/api/auth, /api/customers)" {
     technology "HTTPS"
   }
   pharmacyCentral.web.customerWeb -> pharmacyCentral.services.catalogService "Products, stores, prices (/api/products, /api/stores, /api/pricing)" {
@@ -61,8 +61,8 @@ model {
     technology "HTTPS"
   }
 
-  // ── Edge and access control ──────────────────────────────────────────────────────
-  pharmacyCentral.security.sessionAuthorizer -> pharmacyCentral.services.identityService "GET /auth/me, resolve the session, the role and the site scope" {
+  // ── Access control ───────────────────────────────────────────────────────────────
+  pharmacyCentral.security.accessTokenVerifier -> pharmacyCentral.services.identityService "GET /.well-known/jwks.json, the public keys of the access tokens" {
     technology "HTTP"
   }
 
@@ -108,7 +108,7 @@ model {
   }
 
   // ── Own data ─────────────────────────────────────────────────────────────────────
-  pharmacyCentral.services.identityService -> pharmacyCentral.data.postgres.identityDb "Accounts, sessions, tokens, employee access" {
+  pharmacyCentral.services.identityService -> pharmacyCentral.data.postgres.identityDb "Accounts, verification tokens, employee access" {
     technology "SQL"
   }
   pharmacyCentral.services.catalogService -> pharmacyCentral.data.postgres.catalogDb "Master data, prices, synonyms, AI credentials" {

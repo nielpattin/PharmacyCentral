@@ -1,4 +1,4 @@
-# 0006. Edge-verified identity context forwarded to services
+# 0006. JWT access tokens verified by every service
 
 Status: Accepted
 
@@ -6,27 +6,28 @@ Date: 2026-09-10
 
 ## Context
 
-Backend services need the caller's identity, roles, and sites, but they hold no session state. In AWS, an API Gateway HTTP API runs a REQUEST Lambda authorizer (`deploy/aws/lambda/authorizer.mjs`, added in commit `121a585`, 2026-09-10). It resolves the session by calling identity-service `/auth/me` with the cookie, enforces the route policy in `deploy/aws/lambda/policy.mjs`, and signs an identity context. The local Compose stack has no authorizer. The repository does not record why identity-service also mints contexts locally. The comment in `trusted-request.ts` describes the local topology as one that "hands every shopper a signed context", but it does not give the reason. The rules are in [runbook.md](../runbook.md#edge-routing-and-security) and the contract is in [api-guide.md](../api-guide.md).
+Backend services need the caller's identity, roles, and sites, but they hold no per-caller state. The browser holds one JWT access token that identity-service issued ([ADR 0005](0005-jwt-only-authentication-no-sessions-or-csrf.md), [ADR 0021](0021-es256-jwt-access-tokens.md)). The edge, an Nginx gateway locally and an API Gateway HTTP API in AWS, only routes: it resolves no caller and signs nothing. The same token reaches every service, so the same verification runs in the local and the AWS topology. The rules are in [runbook.md](../runbook.md#edge-routing-and-security) and the contract is in [api-guide.md](../api-guide.md).
 
 ## Decision
 
-- The edge is the only component that resolves a browser session for a backend call. It sets four headers from its own result: `x-internal-identity-context`, `x-actor-id`, `x-actor-type`, and `x-request-id`. The integration's `overwrite:header.*` parameters replace any client value on `/api/{proxy+}` (`aws_apigatewayv2_integration.services` in `deploy/aws/main.tf`).
-- The context is JSON signed with HMAC-SHA256 under `INTERNAL_IDENTITY_SECRET`. It carries the actor id and type, roles, site ids, request and correlation ids, audience, and a 30-second expiry (`deploy/aws/lambda/identity.mjs`, `deploy/aws/lambda/authorizer.mjs`).
-- Each service verifies the signature with `timingSafeEqual`, then the expiry, the issue time, and that the audience is its own name (`apps/*/src/middleware/trusted-request.ts`; identity-service sets `expectedAudience: serviceName`). It copies `x-actor-id`, `x-actor-type`, and `x-request-id` from the verified context, and deletes `x-actor-id` when the context has none. Without a valid context it answers `401 trusted_request_required`, unless the path is public or a health check, or the request carries a valid `x-internal-service-secret`.
-- identity-service signs the same format on `GET /api/auth/context` for seven audiences, with a 5-minute expiry (`apps/identity-service/src/modules/accounts/presentation/http/account-routes.ts`). The web apps attach these tokens (`apps/customer-web/src/customer-api.ts`, `apps/staff-web/src/staff-api.ts`). At the edge the overwrite replaces them. Locally they are the only context.
-- Locally the nginx gateway neither validates sessions nor overwrites identity headers. The services enforce the route rules themselves: `isEmployeePath` and `DEFAULT_EMPLOYEE_PREFIXES` in `trusted-request.ts` restate `policy.mjs`, and `credential-routes.ts` checks Platform Admin directly.
+- The browser sends `Authorization: Bearer <access token>` on every call to a service. Both edges forward that header untouched. The API Gateway integration keeps only `overwrite:path` and `overwrite:header.x-request-id` on `/api/{proxy+}` (`aws_apigatewayv2_integration.services` in `deploy/aws/main.tf`). The local gateways clear client-supplied `X-Actor-Id`, `X-Actor-Type` and `X-Actor-Site-Ids` (`deploy/local/gateway/nginx.conf`).
+- Each service verifies the token itself in `apps/*/src/middleware/trusted-request.ts`, through `createAccessTokenVerifier` of `@pharmacy/auth`. The verifier checks the ES256 signature against the identity-service JWKS (`IDENTITY_JWKS_URL`, required), the issuer `pharmacy-central`, the audience `pharmacy-api` and the expiry.
+- From a valid token the service sets `x-actor-id`, `x-actor-type`, `x-actor-roles` and the site ids on the request, and always overwrites or deletes any client-supplied value of those headers. Code below the middleware reads those fields and never the token.
+- Without a valid token the request is anonymous. On a public path or a health check it proceeds with `x-actor-id` and `x-actor-type` removed. On any other path the service answers `401 trusted_request_required`, unless the request carries a valid `x-internal-service-secret` (calls between services with no user).
+- A valid token for an account that must change its password carries `pcr: true`. Every service refuses it with `403 password_change_required`, except on the identity-service auth routes.
+- A service that calls another service for a user forwards the caller `Authorization` header. A call with no user uses `x-internal-service-secret`.
+- The route rules (public paths, employee prefixes, role rules, site rules) live in the `trusted-request.ts` of each service and are enforced there ([ADR 0017](0017-roles-checked-in-every-service.md)). `credential-routes.ts` checks Platform Admin directly.
 
 ## Consequences
 
-- The shared secret is the root of trust. Whoever holds `INTERNAL_IDENTITY_SECRET` can mint any identity. The authorizer reads it from Secrets Manager (`deploy/aws/lambda/secrets.mjs`, `authorizer_secret_arns` in `deploy/aws/main.tf`). [observed]
-- A signed context can be replayed until it expires: 30 seconds from the authorizer, 5 minutes from `/auth/context`. The verifier keeps no nonce store. [observed]
-- The local topology depends on the route rules copied into several services. Drift between `trusted-request.ts` and `policy.mjs` is caught only where a test compares them, for example the platform-admin list in `apps/ops-console-service/src/modules/system/route-table.test.ts`. [observed]
-- Anonymous callers on public routes get a context with `actorType` `anonymous` and no actor id (the default in `identity.mjs`; it was `system` before design 0003). No service treats `anonymous` as `employee` or `system`. A request with no verified context and no service secret reaches a service with `x-actor-id` and `x-actor-type` removed, and both local gateways strip them from clients.
-- Locally, a client's own `x-actor-id` or `x-actor-type` survives on a public route that carries no context, because the trusted middleware overwrites those headers only when a context verifies. In AWS the overwrite removes them first. [observed]
-- The SePay webhook route bypasses the authorizer. Its integration overwrites only the path and `x-request-id` (`aws_apigatewayv2_integration.sepay_webhook`), and the webhook handler does not read identity headers. [observed]
-- Each authenticated request makes one identity-service call from the authorizer, with a 3-second timeout after which the request is denied (`IDENTITY_LOOKUP_TIMEOUT_MS`). [observed]
-- No AWS resources were deployed (README.md), so the edge path has not run in AWS.
+- The private signing key is the root of trust, and only identity-service holds it (`ACCESS_TOKEN_PRIVATE_KEY`). Other services hold no secret for user identity; they fetch the public key set. [observed]
+- A token can be replayed until it expires, at most one day. The verifier keeps no nonce store and no revocation list, so a token lives out its lifetime whatever happens to the account. [observed]
+- A service that cannot reach the JWKS endpoint cannot verify a token signed by a key it has not cached. The verifier caches the key set and refetches it when it meets an unknown key id. [INFERENCE]
+- The route rules are copied into several services. Drift between the copies is caught only where a test compares them, for example the platform-admin list in `apps/ops-console-service/src/modules/system/route-table.test.ts`. [observed]
+- Anonymous callers on public routes carry no actor id. No service treats `anonymous` as `employee` or `system`. A request with no verified token and no service secret reaches a service with `x-actor-id`, `x-actor-type`, the roles header and the site-ids header removed.
+- The SePay webhook route carries no token. Its integration overwrites only the path and `x-request-id` (`aws_apigatewayv2_integration.sepay_webhook`), and the webhook handler does not read identity headers. [observed]
+- No AWS resources were deployed (README.md), so the AWS path has not run in AWS.
 
 ## Related business rules
 
-In [business-rules.md](../business-rules.md) (Vietnamese): BR-AUTH-002 to BR-AUTH-006 (role matrix, site scope, actor identity, customers), BR-AUTH-008 (trusted context required).
+In [business-rules.md](../business-rules.md) (Vietnamese): BR-AUTH-002 to BR-AUTH-006 (role matrix, site scope, actor identity, customers), BR-AUTH-008 (verified token required).

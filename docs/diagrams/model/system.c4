@@ -18,12 +18,12 @@ model {
       }
     }
 
-    security = container "Edge and access control" {
-      summary "The components in front of the services that decide who the caller is."
+    security = container "Access control" {
+      summary "The shared code that decides who the caller is."
 
-      sessionAuthorizer = function "Session and CSRF authorizer" {
-        technology "AWS Lambda (Node.js 22)"
-        summary "Lambda authorizer: session, role, site scope, CSRF, and the signed identity context."
+      accessTokenVerifier = function "Access token verifier" {
+        technology "TypeScript (@pharmacy/auth, jose)"
+        summary "Runs in the trusted-request middleware of every service: verifies the ES256 JWT access token against the identity-service JWKS, then applies the role and site rules."
       }
     }
 
@@ -44,7 +44,7 @@ model {
         summary "One database per service, and one Postgres role per service that owns only that database. Each service owns its schema, its migrations and its write model."
 
         identityDb = database "identity_service" {
-          summary "Accounts, sessions, verification tokens, employee roles and site access."
+          summary "Accounts, verification tokens, employee roles and site access."
         }
         catalogDb = database "catalog_service" {
           summary "Sites, storage locations, products, units, suppliers, prices, synonyms, AI credentials."

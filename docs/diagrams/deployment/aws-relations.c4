@@ -12,12 +12,6 @@ deployment {
     technology "HTTPS"
   }
 
-  aws.edge.apiGateway -> aws.edge.authorizer "Session, role, site scope and CSRF" {
-    technology "Lambda invoke"
-  }
-  aws.edge.apiGateway -> aws.edge.csrfLambda "GET /api/auth/csrf" {
-    technology "Lambda invoke"
-  }
   aws.edge.apiGateway -> aws.edge.vpcLink "HTTP /api" {
     technology "HTTP"
   }

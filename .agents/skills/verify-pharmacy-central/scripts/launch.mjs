@@ -127,8 +127,8 @@ const statusLine = async () => {
     if (!health.ok) ready = false;
   }
   if (ready && identityNeeded) {
-    const csrf = await httpGet(`${gatewayUrl()}/api/auth/csrf`);
-    const routed = csrf.status === 200 && csrf.body.includes("csrfToken");
+    const me = await httpGet(`${gatewayUrl()}/api/auth/me`);
+    const routed = me.status === 401;
     parts.push(`gateway->identity=${routed ? "ok" : "wait"}`);
     if (!routed) ready = false;
   }

@@ -18,7 +18,7 @@ Signed-in staff only. Sign-in and the sidebar are in the [shell spec](staff-shel
 
 | Section | Route | Who may open it (target) | Code today |
 | --- | --- | --- | --- |
-| Dashboard | `/` | Platform Admin, Pharmacy Manager, Warehouse Staff | Same in `sectionRoles` (`permissions/section-access.ts`); the edge and the API admit the same roles. |
+| Dashboard | `/` | Platform Admin, Pharmacy Manager, Warehouse Staff | Same in `sectionRoles` (`permissions/section-access.ts`); the API admits the same roles. |
 | Counter overview | `/pharmacist-overview` | Pharmacist acts; Pharmacy Manager reads only; no entry for the other roles | Pharmacist only (`sectionRoles`); Pharmacy Manager has no entry (G25). Platform Admin has no entry either, as BR-AUTH-010 requires. The attention block is not rendered (G14). |
 | Reporting | `/reporting` | Platform Admin and Pharmacy Manager (all types); Warehouse Staff (`inventory` types) | Platform Admin and Pharmacy Manager (`sectionRoles`, `REPORT_ROLES`). Warehouse Staff are refused (G18). |
 
@@ -113,7 +113,7 @@ Signed-in staff only. Sign-in and the sidebar are in the [shell spec](staff-shel
 | Screen | Request | Answered by today | Target |
 | --- | --- | --- | --- |
 | Dashboard | `GET /api/dashboard/summary` | operations-query-service `:3007`: projections plus HTTP reads (G24) | Projections only, with `projectionLag` shown (decision 7) |
-| Counter overview, attention | `GET /api/inventory/balances`, `GET /api/inventory/replenishment` | inventory-service, site-scoped by the edge | Unchanged |
+| Counter overview, attention | `GET /api/inventory/balances`, `GET /api/inventory/replenishment` | inventory-service, site-scoped by the service | Unchanged |
 | Counter transactions | `GET /api/payments/invoices` | payment-service | Unchanged |
 | Reporting | `GET /api/reports` | operations-query-service, `report_rows` with no site column (G17) | Rows carry `siteId` and are filtered by it |
 
@@ -136,7 +136,7 @@ Signed-in staff only. Sign-in and the sidebar are in the [shell spec](staff-shel
 
 ## Rules and designs
 
-- Business rules: [BR-REPORT-001 to 007](../business-rules.md); [BR-FIN-001 to 003](../business-rules.md); [BR-AUDIT-001 to 004](../business-rules.md); [BR-AUTH-001 and 004](../business-rules.md) (roles, site scope; menus are display only, the edge and backend are the control); [BR-RX-000](../business-rules.md) (Pharmacist counter workspace).
+- Business rules: [BR-REPORT-001 to 007](../business-rules.md); [BR-FIN-001 to 003](../business-rules.md); [BR-AUDIT-001 to 004](../business-rules.md); [BR-AUTH-001 and 004](../business-rules.md) (roles, site scope; menus are display only, the backend is the control); [BR-RX-000](../business-rules.md) (Pharmacist counter workspace).
 - [ADR 0003](../adr/0003-transactional-outbox-and-integration-events.md) (Accepted) and [design 0001](../design/0001-operations-query-reads-only-events.md) (Draft, not implemented): operations-query reads only through events. [Architecture](../architecture.md) lists the HTTP reads as a known deviation.
 - [API guide, query projections](../api-guide.md#query-projections): response shapes of `GET /api/dashboard/summary` and `GET /api/reports`.
 - [User guide, Dashboard and Reporting](../user-guide.md#dashboard-and-reporting).
@@ -166,7 +166,7 @@ Rows 1 to 11 answer the questions of the earlier draft. Rows 12 to 21 settle beh
 | 16 | (new) Who confirms cash and refunds at the counter? | `[standard]` Pharmacist only. A Pharmacy Manager reads the list; Platform Admin does not open the Counter overview (BR-AUTH-010). Owner may change: who may take cash is a policy choice. | Segregation of duties: the person who runs the platform does not handle the cash drawer. |
 | 17 | (new) Site scope of reports | `[standard]` Each report row carries the site of its event. Site-scoped employees see their sites' rows; rows with no site are for Platform Admin only. | Site scope (BR-AUTH-004) applies to every figure, reports included. |
 | 18 | (new) Product count | `[standard]` Active products only, the same filter as the product list. | Products are deactivated, not deleted; the count matches what staff and customers see. |
-| 19 | (new) Which roles may call the APIs? | `[standard]` The dashboard and report APIs admit only the roles their screens admit, enforced at the edge. | Hiding a menu is not a control (least privilege). |
+| 19 | (new) Which roles may call the APIs? | `[standard]` The dashboard and report APIs admit only the roles their screens admit, enforced in the service. | Hiding a menu is not a control (least privilege). |
 | 20 | (new) Name of the page | `[standard]` "Counter overview" (Vietnamese "Tổng quan quầy") everywhere. The route `/pharmacist-overview` stays, so bookmarks keep working. | Pharmacy Managers read this page too, so "Pharmacist" is the wrong name. |
 | 21 | (new) Report families for Warehouse Staff | `[standard]` `inventory.*` rows only. Platform Admin reads every family at every site; a Pharmacy Manager at their sites. | Warehouse Staff have no sales or payment duty (least privilege). |
 
@@ -187,7 +187,7 @@ Rows 1 to 11 answer the questions of the earlier draft. Rows 12 to 21 settle beh
 | G14 | The attention block of the Counter overview (US5). | Not rendered. The `pharmacistOverview.*` keys in `i18n.ts` are used by no component. | `apps/staff-web/src/App.tsx` (`case "pharmacistOverview"`); `apps/staff-web/src/i18n.ts` |
 | G15 | One name for the page: "Counter overview" / "Tổng quan quầy" (decision 20). | Sidebar "Pharmacist overview" (`App.tsx`); Vietnamese "Tổng quan quầy" (`i18n/shell.ts`); English key `nav.pharmacistOverview` reads "Counter overview" (`i18n.ts`). The [user guide](../user-guide.md) Roles table, landing note and walkthrough step 6 say "Pharmacist overview". | `App.tsx`; `i18n/shell.ts`; `i18n.ts`; `docs/user-guide.md` |
 | G17 | Every report row has a site; site-scoped employees see their sites (decision 17). | `report_rows` has no site column. `report()` takes no site filter, though `/reports` is a site-scoped prefix, so an employee sees every site's rows. | `operations-query-service/src/shared/infrastructure/schema.ts` (`reportRows`); `operations-repository.ts` (`report()`); `operations-routes.ts`; `docs/api-guide.md` |
-| G18 | Warehouse Staff see only `inventory.*` rows (decision 21). | Warehouse Staff are refused the whole report: `REPORT_ROLES` and `policy.mjs` `/api/reports` admit Platform Admin and Pharmacy Manager only, and `sectionRoles.reporting` has no Warehouse Staff entry. The shell role table also gives Warehouse Staff "—" for Reporting, which conflicts with decision 21. | `apps/operations-query-service/src/modules/operations-access.ts` (`REPORT_ROLES`); `deploy/aws/lambda/policy.mjs`; [shell spec](staff-shell-sign-in-and-navigation.md) role table. |
+| G18 | Warehouse Staff see only `inventory.*` rows (decision 21). | Warehouse Staff are refused the whole report: `REPORT_ROLES` and the `/api/reports` rule of `trusted-request.ts` admit Platform Admin and Pharmacy Manager only, and `sectionRoles.reporting` has no Warehouse Staff entry. The shell role table also gives Warehouse Staff "—" for Reporting, which conflicts with decision 21. | `apps/operations-query-service/src/modules/operations-access.ts` (`REPORT_ROLES`); the `trusted-request.ts` of each service; [shell spec](staff-shell-sign-in-and-navigation.md) role table. |
 | G20 | Report type suggestions and a default per role (decision 9, 21). | Free text; `LIST_DEFAULTS` sets `sales` for every role. | `apps/staff-web/src/sections/finance/reports-tab.tsx` (`LIST_DEFAULTS`) |
 | G21 | Unused `dashboard.*` copy is removed (decision 10). | The `dashboard.*` keys are still in `i18n.ts` in both languages. `dashboard-section.tsx` uses none of them. | `apps/staff-web/src/i18n.ts` |
 | G22 | The data-integrity rule is in business-rules.md section 17 (decision 11). | Section 17 has no rule that admin screens show real data or that a failed figure is shown as failed. | `docs/business-rules.md` section 17 |

@@ -94,9 +94,10 @@ Routing: the state and movement families write projection rows only, with no `au
 
 Backfill: a one-off owner command (`pnpm --dir apps/<service> backfill:operations-projection`, run as the owning role) reads each table by primary key in batches of 500, and inserts one `*.changed.v1` outbox row per record in each batch transaction, with `origin: "backfill"` in the payload. The relay publishes them like live rows. There is no cross-database read and no new route, and versions make live and backfilled events safe to interleave.
 
-### Security and CSRF
+### Security
+<!-- anchor: security-and-csrf -->
 
-- No browser mutation and no CSRF change. The trusted-request middleware still gates every read, and `listSiteIds(request)` remains the only scope input (BR-AUTH-004, BR-REPORT-001).
+- No browser mutation and no authentication change. The trusted-request middleware still gates every read, and `listSiteIds(request)` remains the only scope input (BR-AUTH-004, BR-REPORT-001).
 - Site columns on every projected row: balances, ledger, stocktakes, adjustments, receipts, prescriptions and storage locations by `site_id`; transfers by source or destination; sites by `id`. Prices are site-less and visible to every reader. Products and suppliers stay network-wide, and batches are narrowed to those with balances at the reader's sites, as today.
 - Removing the outbound calls also removes the internal system identity that operations-query presents to sales, which `readsEveryOrder` ([sales-routes.ts](../../apps/sales-service/src/modules/sales-routes.ts), line 47) treats as reading every order. `INTERNAL_SERVICE_SECRET` stays required, because the middleware verifies inbound `x-internal-service-secret` calls; only the outbound helper `internal-service-headers.ts` goes.
 - No new secret or external credential.

@@ -113,16 +113,15 @@ views {
     include geminiApi
     include typesafeApi
     include openaiCompatibleApi
-    include pharmacyCentral.security.sessionAuthorizer
+    include pharmacyCentral.security.accessTokenVerifier
   }
 
   view securityModel {
     title "Trust boundary and access control"
     description """
-      The session cookie is the only credential of the browser. The edge authorizer resolves it
-      against identity-service and hands the services a short lived signed identity context, and
-      every mutating request needs the CSRF token. The edge and each service check the role of the
-      caller again, and nobody approves a record they created.
+      The browser holds one one-day access token in localStorage, with no session cookie, refresh
+      token or CSRF token. Every service verifies the token against the identity-service keys and
+      checks the role of the caller, and nobody approves a record they created.
     """
     include customer
     include pharmacist

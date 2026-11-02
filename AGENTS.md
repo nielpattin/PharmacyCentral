@@ -23,7 +23,7 @@ Pharmacy Central is an Express 5 TypeScript microservices monorepo managed with 
 
 ```text
 apps/
-  identity-service/         # Authentication, users, sessions, Google OIDC
+  identity-service/         # Authentication, users, JWT access tokens, Google OIDC
   catalog-service/          # Products, units, sites, suppliers, pricing
   search-service/           # Product search read path in Go: GET /api/products from Typesense, falls back to catalog-service
   inventory-service/        # Stock, batches, movements, procurement
@@ -49,7 +49,8 @@ packages/ui/                 # Shared Tailwind theme plus Button, Input, Card, T
 - `search-service` owns no database. It reads only Typesense, never PostgreSQL.
 - `operations-query-service` reads data only through integration events emitted over RabbitMQ.
 - Client input is never authoritative for prices, stock quantities, delivery fees, or identity.
-- Browser mutating requests require a valid CSRF token, except for the HMAC-verified SePay webhook.
+- Services take identity only from the `Authorization: Bearer` ES256 JWT access token that `identity-service` issues (valid one day; keys at `/.well-known/jwks.json`, `IDENTITY_JWKS_URL` in every other service). There is no refresh token, session cookie, sessions table or CSRF token: browsers keep the token in `localStorage` and send it as a bearer header, sign-out is client-side, and revocation is by expiry (at most one day). The HMAC-verified SePay webhook carries no token.
+- Run `pnpm run auth:keygen` once and put its three `ACCESS_TOKEN_*` lines in `.env`.
 
 ## Search service (Go)
 
@@ -83,12 +84,12 @@ The system supports two runtime topologies sharing the same Docker images and co
 - Two local Nginx services in `docker-compose.yml` split `/api/...` across backends like the ALB does: `gateway` forwards to the app containers, and `gateway-dev` (profile `dev`, host networking, upstreams on `127.0.0.1:${<SVC>_PORT}`) forwards to the apps that `pnpm dev` runs on the host. Both are dev-only and never run in production.
 - Both share `GATEWAY_PORT` (8080), so only one runs at a time, and both include `deploy/local/gateway/routes.conf`, so path rules are edited in one place.
 - Web clients and Vite `dev` proxy send `/api/...` to the gateway. Set `API_BASE_URL=http://localhost:8080` once in `.env`.
-- Open the apps through the named URLs from `pnpm run urls:up` (portless, plain HTTP on port 80): `http://customer.pharmacy.localhost`, `http://staff.pharmacy.localhost`, `http://api.pharmacy.localhost`. On `localhost` the two web apps share one cookie jar and sign each other out. Do not give the web apps `localhost` URLs in browser tests.
+- Open the apps through the named URLs from `pnpm run urls:up` (portless, plain HTTP on port 80): `http://customer.pharmacy.localhost`, `http://staff.pharmacy.localhost`, `http://api.pharmacy.localhost`. Each name is its own browser origin, so each app keeps its own `localStorage` token. Do not give the web apps `localhost` URLs in browser tests.
 
 ### 2. Production (AWS ECS Fargate)
 
 - Runs container tasks on AWS ECS Fargate defined in `deploy/aws/main.tf`.
-- AWS API Gateway HTTP API and a Lambda authorizer provide edge ingress.
+- AWS API Gateway HTTP API provides edge ingress and forwards the `Authorization` header untouched; every service verifies the access token itself.
 - An internal Application Load Balancer (ALB) routes paths to ECS services.
 
 ### Path routing map
@@ -169,7 +170,7 @@ docker compose ps
 
 ### Browser testing
 
-- Open the apps at `http://customer.pharmacy.localhost` and `http://staff.pharmacy.localhost` (run `pnpm run urls:up` first), never at `localhost`: on `localhost` the two apps share one cookie jar and sign each other out.
+- Open the apps at `http://customer.pharmacy.localhost` and `http://staff.pharmacy.localhost` (run `pnpm run urls:up` first), never at `localhost`: each named URL is its own browser origin with its own `localStorage` token.
 - Use a 16:9 viewport of 1920x1080 for every browser test and screenshot.
 - Use the browser tool's default browser: `browser.open({ name, url, viewport, app: { tern: false, relay: false } })`. Never pass `app.path` or launch Edge or Chrome yourself.
 - A signed-in role is a saved state file under `~/.omp/browser-profiles/<role>.json`, not a browser profile directory. Restore it with `tab.loadState(path)` on a fresh tab, then `goto` the app, and confirm `GET /api/auth/me` returns the expected email before trusting the screen. A browser holds one session per host, so one customer and one staff account can be signed in at once, but not two staff accounts:
@@ -178,7 +179,7 @@ docker compose ps
   - `staff-manager` -> staff-web (`manager@pharmacycentral.vn`, `SITE-RTL`)
   - `staff-pharmacist` -> staff-web (`pharmacist@pharmacycentral.vn`, `SITE-RTL`)
   - `staff-warehouse` -> staff-web (`warehouse@pharmacycentral.vn`, `SITE-WH`)
-- Recreate a state file after a reseed or a password change: sign in on a clean tab (`tab.clearCookies()` first), then `tab.saveState(path)`. Clear the cookies and close the tab when done so the next role starts clean.
+- Recreate a state file after a reseed or a password change: sign in on a clean tab (clear its storage first), then `tab.saveState(path)`. Clear the storage and close the tab when done so the next role starts clean.
 
 ## Documentation map
 

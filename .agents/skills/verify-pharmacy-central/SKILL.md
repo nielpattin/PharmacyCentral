@@ -9,7 +9,7 @@ Drives the real local stack the way a shopper or an employee does, then records 
 
 Surfaces, through the named URLs that `pnpm run urls:up` registers (portless, plain HTTP on port 80): `customer-web`, the shopper SPA, at `http://customer.pharmacy.localhost` (port 5301); `staff-web`, the staff portal, at `http://staff.pharmacy.localhost` (port 5302); and the gateway for API calls at `http://api.pharmacy.localhost` (port 8080).
 
-Both webs call `/api/...` through the gateway (`gateway-dev` in dev mode, `gateway` in container mode). Browser tests never use `localhost` for the web apps, because they then share one cookie jar. Node scripts may keep `http://localhost:<port>`.
+Both webs call `/api/...` through the gateway (`gateway-dev` in dev mode, `gateway` in container mode). Browser tests never use `localhost` for the web apps, because each web app needs its own named origin and `localStorage` token. Node scripts may keep `http://localhost:<port>`.
 
 Feature map: [features/README.md](features/README.md). Open the feature file that matches the request and follow its steps.
 
@@ -42,7 +42,7 @@ node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-s
 
 - `--need` takes `identity-service`, `catalog-service`, `inventory-service`, `sales-service`, `payment-service`, `operations-query-service`, `chatbot-service`, `customer-web`, `staff-web`. `--ai-approved` is required for `catalog-service` and `chatbot-service`, and omitted otherwise.
 - Launch runs Nx under `node` directly (`NX_DAEMON=false`). A `pnpm` or `cmd` shim as the root exits early and orphans its tree. Nx loads `apps/<svc>-service/.env.dev`, so each service gets its own port.
-- Launch refuses a needed port that already has a listener. Readiness: a service answers `GET /health/ready` with its own name, a web app answers `GET /` with the `root` div, and identity returns a token from `GET /api/auth/csrf` through the gateway. Wait is up to 240 seconds. On timeout it cleans up the run and exits `1`.
+- Launch refuses a needed port that already has a listener. Readiness: a service answers `GET /health/ready` with its own name, a web app answers `GET /` with the `root` div, and identity answers `GET /api/auth/me` with 401 through the gateway. Wait is up to 240 seconds. On timeout it cleans up the run and exits `1`.
 - Output lines: `START`, `WAIT`, `READY`, `URL`, `PIDS`, `STOP`. The run id is in `.tmp/verify/current`; `--run <id>` selects another run.
 
 From an empty database: `pnpm run infra:up`, `pnpm run db:migrate`, then `launch.mjs`. `pnpm run seed:default` then `pnpm run seed:demo`. The demo seed needs the services it calls running, catalog-service included, so it needs `--ai-approved`. Not proven on this machine.

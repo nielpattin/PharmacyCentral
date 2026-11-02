@@ -15,7 +15,7 @@ Tags: `[observed]` a code or doc fact read on 2026-10-26. `[standard]` a decisio
 ## Users and entry points
 
 - `[observed]` Platform Admin only. The sidebar item **System** (`Hệ thống`) sits in the Governance group; `sectionRoles.system` is `["Platform Admin"]` in `apps/staff-web/src/permissions/section-access.ts`. Another user who opens `/system` is redirected to the first section they can see.
-- `[observed]` Three checks: the edge policy (`/api/system` is in `platformAdminPaths`, `deploy/aws/lambda/policy.mjs`); the service (`requirePlatformAdmin`: a verified identity context with `actorType` `employee` and role `Platform Admin`, else 401 `trusted_request_required` or 403 `platform_admin_required`; `/health/*` stays open); and the menu.
+- `[observed]` Two checks: the service (`requirePlatformAdmin`: a verified access token with `actorType` `employee` and role `Platform Admin`, else 401 `trusted_request_required` or 403 `platform_admin_required`; `/health/*` stays open); and the menu.
 - `[standard]` The page is not site-scoped. Platform Admin sees all data ([BR-AUTH-003](../business-rules.md)). It has no approval or write action (Decision 19).
 
 ## User stories and acceptance criteria
@@ -80,7 +80,7 @@ Tags: `[observed]` a code or doc fact read on 2026-10-26. `[standard]` a decisio
 - Source: `[observed]` for access; `[standard]` for the session rule (D6).
 - Accepted when:
   - The System item is absent from the sidebar for every role without Platform Admin (`canAccessSection`).
-  - `GET /api/system/overview` answers 403 `platform_admin_required` for a customer, a Pharmacy Manager and a system actor, and 401 `trusted_request_required` without a trusted context (`system-routes.test.ts`, "access").
+  - `GET /api/system/overview` answers 403 `platform_admin_required` for a customer, a Pharmacy Manager and a system actor, and 401 `trusted_request_required` without a verified access token (`system-routes.test.ts`, "access").
   - A 401 on any System request shows a Vietnamese notice, sends the user to sign-in, and returns them to the same tab afterwards (smoke run).
   - A failed section shows a Vietnamese message from a fixed mapping, never the raw English error (unit test on the mapping) (gap G18).
 
@@ -145,7 +145,7 @@ The Prometheus series are listed in `prometheus.ts` and `promql.ts`; they are no
 
 ## Rules and designs
 
-- Business rules: [BR-AUTH-001](../business-rules.md) (Platform Admin), [BR-AUTH-002](../business-rules.md) (route matrix), [BR-AUTH-003](../business-rules.md) (all sites), [BR-AUTH-008](../business-rules.md) (trusted context), [BR-EVT-002](../business-rules.md) (outbox relay), [BR-EVT-003](../business-rules.md) and [BR-EVT-004](../business-rules.md) (what a `.dead` queue means).
+- Business rules: [BR-AUTH-001](../business-rules.md) (Platform Admin), [BR-AUTH-002](../business-rules.md) (route matrix), [BR-AUTH-003](../business-rules.md) (all sites), [BR-AUTH-008](../business-rules.md) (verified token), [BR-EVT-002](../business-rules.md) (outbox relay), [BR-EVT-003](../business-rules.md) and [BR-EVT-004](../business-rules.md) (what a `.dead` queue means).
 - [ADR 0013](../adr/0013-observability-and-system-console.md): the System console and what stays in Grafana; its Consequences are amended by this spec (G16). [ADR 0002](../adr/0002-service-owned-databases.md): ops-console owns no database. [ADR 0007](../adr/0007-gateway-path-routing-and-two-topologies.md): `/api/system` routes to ops-console.
 - [Runbook, System page](../runbook.md#system-page-ops-console-service), [Grafana bookmarks](../runbook.md#grafana-bookmarks-for-the-system-page), [Messaging operations](../runbook.md#messaging-operations) (queue names and `.dead`), and [API guide, System overview](../api-guide.md#system-overview).
 
@@ -160,7 +160,7 @@ The Prometheus series are listed in `prometheus.ts` and `promql.ts`; they are no
 | 5 | Probe path: `/healthz` or `/health/ready`? | Every probed service answers `/health/ready` and `/health/live`, search-service included (G7). | `[standard]` One readiness endpoint per service (D14). ADR 0013 decision 5 and the probe loop already say `/health/ready`; search-service is the outlier. |
 | 6 | Probe rate: each overview request probes every service, and the page refetches on every tab. | The probe loop checks readiness and liveness of each service every 15 s and stores each result with its time. The overview returns stored results and never probes on request. A result older than 30 s is Unknown. | `[standard]` Monitoring load must not grow with the number of viewers. This replaces "one extra readiness request" in ADR 0013 (G16). |
 | 7 | Summary step: "15 s for 15 minutes" or "at least 60 s"? | At least 60 s, at most 60 points; a 15-minute window has 15 points. The API guide is corrected to say so (G10). | Metrics are pushed once a minute (ADR 0013 Consequences), so a finer step only repeats values. The range charts already floor the step at 60 s. |
-| 8 | Add `/api/system` to the route matrix in BR-AUTH-002? | Yes, as Platform Admin only, next to `/api/admin` and `/api/audit`. | `deploy/aws/lambda/policy.mjs` already enforces it. A rule missing from the matrix is an unrecorded rule (`[standard]` least privilege, D1 and D2). |
+| 8 | Add `/api/system` to the route matrix in BR-AUTH-002? | Yes, as Platform Admin only, next to `/api/admin` and `/api/audit`. | `requirePlatformAdmin` of ops-console-service already enforces it. A rule missing from the matrix is an unrecorded rule (`[standard]` least privilege, D1 and D2). |
 | 9 | Queue scope: every queue of every vhost? | Only queues named `<owner>.<topic>.v<n>` and their `<queue>.dead` are listed. Other queues are counted as "N hàng đợi khác đã ẩn". | `[standard]` Keeps the list about the project's events, keeps an abandoned `.v1` queue visible (it has no consumers, so it warns), and fails visibly, not silently. |
 | 10 | Retired collections: hide them? | No. Every existing collection is listed. A retired collection is deleted in the cutover step the runbook gives (`catalog_products_v2` once `catalog_products_v3` answers). | Clean cutover: nothing obsolete is kept as a shim, and a hidden collection still uses storage. |
 | 11 | Sheet window: its picker does not change the page's, and it resets on the next open. | Keep. The sheet opens with the page window; its own picker changes only the sheet charts; reopening starts from the page window. | `[standard]` A detail view must not move the strips the operator is comparing. |

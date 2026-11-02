@@ -2,15 +2,15 @@ model {
   extend pharmacyCentral.services {
     identityService = service "identity-service" {
       technology "Express 5 + Drizzle"
-      summary "Owns the accounts, the sessions, the tokens, the Google sign-in and the employee access data."
+      summary "Owns the accounts, the access token signing, the Google sign-in and the employee access data."
       metadata { port "3001"; package "@pharmacy/identity-service" }
 
       accounts = component "Accounts and registration" {
         summary "Registration, email verification, password reset and the Argon2id hashing."
       }
 
-      sessions = component "Sessions and cookies" {
-        summary "Opaque and revocable session cookies, the only credential the browser keeps."
+      tokens = component "Access tokens" {
+        summary "Signs the one-day ES256 access token, the only credential the browser keeps, and publishes the JWKS. It keeps no per-sign-in state."
       }
 
       admin = component "Employee administration" {

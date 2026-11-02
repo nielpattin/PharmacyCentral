@@ -42,9 +42,10 @@ the existing contract that changes. -->
 <!-- Integration events on pharmacy.events: routing key, version (.v1), payload, producer, consumers, queue names,
 and what happens on failure (retry, .dead queue). Describe the outbox row if the event is published. -->
 
-### Security and CSRF
+### Security
+<!-- anchor: security-and-csrf -->
 
-<!-- Who may call the change, how the caller is authenticated and authorized, site scope, CSRF for browser mutations,
+<!-- Who may call the change, how the caller is authenticated and authorized, site scope,
 and any new secret or external credential. -->
 
 ### Observability

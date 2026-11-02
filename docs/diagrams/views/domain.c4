@@ -1,7 +1,7 @@
 views {
   view identityDetail {
     title "identity-service"
-    description "Accounts, sessions, employee access and the customer directory."
+    description "Accounts, access tokens, employee access and the customer directory."
     include pharmacyCentral.services.identityService
     include pharmacyCentral.services.identityService.*
     include pharmacyCentral.data.postgres.identityDb

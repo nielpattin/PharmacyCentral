@@ -8,7 +8,7 @@ Date: 2026-10-08
 
 Commit 01e90dc (2026-09-10) added the local Compose topology and an Nginx gateway (`gateway`), with the apps running as containers. Commit 97c163b (2026-10-08) added a day-to-day mode in which the apps run on the host. Its message says the host-run gateway, `gateway-dev`, uses host networking, because a container on the Compose bridge cannot reach host ports through ufw.
 
-On `localhost`, the customer and staff apps share one cookie jar because cookies ignore the port. Signing in to one signed out the other. Commit 067148e (2026-10-26) fixed this with portless names.
+On `localhost`, the customer and staff apps have no stable origin of their own. Commit 067148e (2026-10-26) gave each app a portless name.
 
 ## Decision
 
@@ -21,7 +21,7 @@ On `localhost`, the customer and staff apps share one cookie jar because cookies
 
 ## Alternatives considered
 
-- Plain `localhost` ports (`http://localhost:5301`, `http://localhost:5302`). The README still lists them as fallback endpoints. They share cookies, which is the problem commit 067148e fixed.
+- Plain `localhost` ports (`http://localhost:5301`, `http://localhost:5302`). The README still lists them as fallback endpoints. They give the apps no stable named origin, which commit 067148e added.
 
 ## Consequences
 

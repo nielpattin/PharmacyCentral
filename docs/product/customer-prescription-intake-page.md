@@ -156,7 +156,7 @@ Tags: `[owner]` a recorded owner decision (ADR 0016, 2026-10-26); `[observed]` a
 ## Rules and designs
 
 - Business rules: [BR-INTAKE-001 to 007](../business-rules.md), [BR-MATCH-001 and 002](../business-rules.md), [BR-RX-020 and 021](../business-rules.md), [BR-AUTH-004](../business-rules.md) (site scope of pharmacists), [BR-AUTH-006](../business-rules.md) (customer access to the intake and consultation routes), [BR-AUTH-007](../business-rules.md), [BR-CRED-005](../business-rules.md), [BR-CART-001](../business-rules.md), [BR-ORD-011](../business-rules.md), [BR-PAY-001](../business-rules.md).
-- [ADR 0005](../adr/0005-opaque-sessions-and-csrf.md): the photo limiter fails closed (503 `rate_limit_unavailable`).
+- [ADR 0005](../adr/0005-jwt-only-authentication-no-sessions-or-csrf.md): the photo limiter fails closed (503 `rate_limit_unavailable`).
 - [ADR 0009](../adr/0009-ai-feature-settings-in-database.md): the reader's settings live in the database, so the reader can be off (503 `reader_unavailable`) without a redeploy.
 - [ADR 0016](../adr/0016-prescription-only-products-are-not-sold-online.md): prescription-only products.
 - [API guide, Prescription intake](../api-guide.md#prescription-intake) and [Prescription consultations](../api-guide.md#prescription-consultations); [User guide, Prescription intake](../user-guide.md#prescription-intake).

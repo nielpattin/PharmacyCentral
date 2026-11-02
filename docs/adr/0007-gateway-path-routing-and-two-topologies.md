@@ -18,9 +18,9 @@ Browsers call `/api/...` and never reach a service directly. Locally, an Nginx g
 
 ## Consequences
 
-- A new prefix means editing `routes.conf`, `path_rules` in `main.tf`, the audience map `selectTargetService` in `deploy/aws/lambda/policy.mjs`, and the constant in `apps/ops-console-service/src/modules/system/route-table.ts`. The route-table test compares the prefixes and exact rules of `routes.conf` and the ALB, and the platform-admin list with `policy.mjs`. It does not compare `selectTargetService`. [observed]
+- A new prefix means editing `routes.conf`, `path_rules` in `main.tf`, and the constant in `apps/ops-console-service/src/modules/system/route-table.ts`. The route-table test compares the prefixes and exact rules of `routes.conf` and the ALB, [observed]
 - The edges differ on body limits. `routes.conf` sets 25 MB and 10 MB (prescription intake) limits per location, and `deploy/aws/main.tf` sets no body-size value for the ALB. [observed]
-- The local gateways carry no authorizer, CSRF check, or identity-header overwrite. Those differences are covered in [0005](0005-opaque-sessions-and-csrf.md) and [0006](0006-edge-identity-context.md).
+- Neither edge authenticates or checks roles. Both forward `Authorization` untouched and the services verify the access token. Those rules are covered in [0005](0005-jwt-only-authentication-no-sessions-or-csrf.md) and [0006](0006-jwt-access-tokens-verified-by-every-service.md).
 - The local gateways are development-only, and AWS is configuration only: no AWS resources were deployed (README.md). The AWS path table has not been exercised against a live environment.
 
 ## Alternatives considered

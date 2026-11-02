@@ -17,7 +17,7 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
 - `[observed]` **Warehouse Staff**: records goods receipts and reads purchase orders for assigned sites, read-only, to receive against them. Opens `/receiving` (Goods receipts is the default tab). Cannot approve or cancel.
 - `[observed]` **Platform Admin**: reads both pages for every site (BR-AUTH-003). It creates, approves and cancels no purchase order and records no receipt (BR-AUTH-010).
 - `[standard]` **Pharmacist**: no access to these pages. Batch quality is decided on the Quality page (see US4).
-- `[observed]` Sign-in is required. Lists and writes are limited to the employee's sites (BR-AUTH-004). Role gates are enforced at the edge (`deploy/aws/lambda/policy.mjs`) and in the service.
+- `[observed]` Sign-in is required. Lists and writes are limited to the employee's sites (BR-AUTH-004). Role gates are enforced in the `trusted-request.ts` of each service and again in its routes.
 - `[observed]` Create buttons open a side drawer: **Tạo đơn đặt hàng** on Purchase orders, **Nhận hàng** on Goods receipts, each also on key **N**.
 
 ## User stories and acceptance criteria
@@ -201,7 +201,7 @@ The two pages record what the pharmacy orders from a supplier (purchase orders, 
 | G14 | Quantities are whole numbers (US1, US3). | The contract accepts any positive number. The columns are `integer`, so a decimal fails in the database and answers 500. | `contracts/procurement.ts`; `apps/inventory-service/src/shared/infrastructure/schema.ts` (`orderedQuantity`, receipt line `quantity`). |
 | G15 | Numbers are unique and a duplicate answers 409 in Vietnamese (Decision 13). | Unique indexes exist (`purchase_orders_number_unique`, `goods_receipts_number_unique`), but the duplicate reaches the handler as an unmapped error, so it answers 500. The generated number uses three random digits per second, so it can collide. | `schema.ts`; `procurement-routes.ts`; `procurement-repository.ts` (`createPurchaseOrder`). |
 | G16 | The receiver enters the receipt date within the window (Decision 12). | The drawer sends `new Date().toISOString()` from the browser. The API accepts any datetime with an offset. | `apps/staff-web/src/sections/procurement/receive-goods-drawer.tsx`; `contracts/procurement.ts` (`receivedAt`). |
-| G18 | A History tab on each purchase order and receipt, from an entity-scoped history (Decision 16, US5). | Neither drawer has a History tab. `EntityDrawer` supports one. `SalesAuditHistory` reads `/api/audit/logs`, which is Platform Admin only, so it cannot be reused here. No entity history route exists for procurement. | `apps/staff-web/src/sections/procurement/purchase-order-drawer.tsx`; `goods-receipt-drawer.tsx`; `apps/staff-web/src/components/entity-drawer.tsx`; `apps/staff-web/src/sections/sales/shared.tsx`; `policy.mjs` (`platformAdminPaths`). |
+| G18 | A History tab on each purchase order and receipt, from an entity-scoped history (Decision 16, US5). | Neither drawer has a History tab. `EntityDrawer` supports one. `SalesAuditHistory` reads `/api/audit/logs`, which is Platform Admin only, so it cannot be reused here. No entity history route exists for procurement. | `apps/staff-web/src/sections/procurement/purchase-order-drawer.tsx`; `goods-receipt-drawer.tsx`; `apps/staff-web/src/components/entity-drawer.tsx`; `apps/staff-web/src/sections/sales/shared.tsx`; `trusted-request.ts`. |
 
 ### US7. As a Warehouse Staff member, I record the purchase cost of received goods, so that Analytics can show real gross profit
 

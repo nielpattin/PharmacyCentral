@@ -4,8 +4,8 @@ Pharmacy Central is a Node.js 24 pharmacy platform split into an Express 5 micro
 
 ## Architecture
 
-- AWS API Gateway HTTP API + Lambda authorizer manages public `/api` routes, sessions, CSRF, CORS, signed internal identity context forwarding, and routing through VPC Link and an internal Application Load Balancer to ECS Fargate backend services. The AWS configuration under `deploy/aws` is configuration-only. Local Compose retains a development-only Nginx gateway for the same path map.
-- `apps/identity-service`: customer and employee accounts, opaque sessions, password security, verification, and Google OIDC.
+- AWS API Gateway HTTP API manages public `/api` routes, CORS and `Authorization` header forwarding (every service verifies the ES256 JWT access token against the identity-service JWKS), and routing through VPC Link and an internal Application Load Balancer to ECS Fargate backend services. The AWS configuration under `deploy/aws` is configuration-only. Local Compose retains a development-only Nginx gateway for the same path map.
+- `apps/identity-service`: customer and employee accounts, ES256 JWT access tokens (one day, no sessions) and JWKS, password security, verification, and Google OIDC.
 - `apps/catalog-service`: products, units, suppliers, prices, retail sites, PostGIS coordinates, and availability projections. It also owns the product search index that `search-service` reads.
 - `apps/search-service`: Go read path of `GET /api/products` (the product list only). It answers from the Typesense index, falls back to `catalog-service` when Typesense is unavailable, and never reads PostgreSQL.
 - `apps/inventory-service`: batches, quality, FEFO reservations, movements, transfers, returns, replenishment, stocktakes, purchase orders, goods receipts, and availability events.
@@ -60,9 +60,11 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+Run `pnpm run auth:keygen` and replace the three `ACCESS_TOKEN_*` placeholders in `.env` with its output before the first start; identity-service refuses to start without them.
+
 The Compose web containers proxy `/api` requests through the local Nginx gateway. AWS deployment configuration is separate and remains configuration-only until provisioned.
 
-Run `pnpm run urls:up` once per session to get the named URLs (see Named local URLs in `docs/runbook.md`). Use them rather than `localhost`: the customer and staff sessions then live in separate browser origins.
+Run `pnpm run urls:up` once per session to get the named URLs (see Named local URLs in `docs/runbook.md`). Use them rather than `localhost`: the customer and staff apps then live in separate browser origins, each with its own stored token.
 
 The default endpoints are:
 
@@ -133,6 +135,6 @@ pnpm run stack:aws-like                                         # container stac
 
 Copy `.env.example` to a local environment file and replace development secrets. Do not reuse demo secrets in production. Container startup runs `node dist/migrate.js` before `node dist/main.js`, and production deploys immutable digest-addressed GHCR images to ECS Fargate.
 
-AWS deployment configuration is located under `deploy/aws`, defining AWS API Gateway HTTP API, Lambda authorizer, VPC Link, internal Application Load Balancer, and ECS Fargate services. This AWS configuration is configuration-only and no AWS resources were deployed.
+AWS deployment configuration is located under `deploy/aws`, defining AWS API Gateway HTTP API, VPC Link, internal Application Load Balancer, and ECS Fargate services. This AWS configuration is configuration-only and no AWS resources were deployed.
 
 GitHub Actions validates affected projects on pull requests and on demand through the `Workspace validation` workflow. Releases run on demand through the `Release application images` workflow, which validates the workspace and publishes digest-addressed GHCR application images for the requested version.

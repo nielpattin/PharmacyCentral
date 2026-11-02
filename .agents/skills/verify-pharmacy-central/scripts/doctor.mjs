@@ -270,11 +270,11 @@ const devMode = async () => {
   }
 
   if (identityAnswers) {
-    const csrf = await httpGet(`${gatewayUrl()}/api/auth/csrf`);
-    if (csrf.status === 200 && csrf.body.includes("csrfToken")) {
-      line("OK", "gateway -> identity", "GET /api/auth/csrf 200");
+    const me = await httpGet(`${gatewayUrl()}/api/auth/me`);
+    if (me.status === 401) {
+      line("OK", "gateway -> identity", "GET /api/auth/me 401 (identity answers)");
     } else {
-      line("FAIL", "gateway -> identity", `GET /api/auth/csrf ${csrf.status}. Gateway cannot reach identity-service`);
+      line("FAIL", "gateway -> identity", `GET /api/auth/me ${me.status}. Gateway cannot reach identity-service`);
     }
   }
 };

@@ -19,7 +19,7 @@ The decision is in [design 0005](../design/0005-client-only-guest-cart.md).
 ## Decision
 
 - A signed-out shopper's cart lives in the browser, in `localStorage` under `pharmacy.guest-cart.v1`, holding only product and unit ids, quantities and ticks. Prices, stock and fees stay the server's ([ADR 0004](0004-server-authoritative-pricing-stock-and-fees.md)).
-- `sales-service` stores carts of signed-in customers only. It sets no guest cookie. Every `/api/carts*` route needs a verified customer context, at the service, at the AWS authorizer and in the ops-console route table.
+- `sales-service` stores carts of signed-in customers only. It sets no guest cookie. Every `/api/carts*` route needs a verified customer access token at the service and a matching entry in the ops-console route table.
 - On sign-in, customer-web sends the local lines to `POST /api/carts/merge` in the request body. The server sums quantities of lines that match an account line, keeps the account line's tick, and adds the other lines with the tick they were sent with. The browser clears its copy only after the server accepts it.
 - `COOKIE_SECURE` is required by `identity-service` only.
 
@@ -30,7 +30,7 @@ The decision is in [design 0005](../design/0005-client-only-guest-cart.md).
 - The guest-cart exposures in design 0003 (a), (b) and the guest part of (d) no longer exist. The actor-header stripping and the `anonymous` actor stay.
 - The browser cart is user-editable. That only changes the shopper's own cart: the merge request is bounded by its schema and 200 lines, and an order resolves and prices its lines again.
 - If a merge response is lost after the server committed, the next load sends the same lines again and duplicates are summed twice ([BR-GAP-007](../business-rules.md)).
-- This supersedes the guest cart bullets of [ADR 0005](0005-opaque-sessions-and-csrf.md).
+- This supersedes the guest cart bullets of [ADR 0005](0005-jwt-only-authentication-no-sessions-or-csrf.md).
 
 ## Related business rules
 

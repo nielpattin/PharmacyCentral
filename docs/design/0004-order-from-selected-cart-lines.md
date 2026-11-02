@@ -58,10 +58,11 @@ None. `cart_lines.selected` already exists (migration `0012_cart_line_selected`)
 
 None. The order outbox rows are written by `createOrder` as before.
 
-### Security and CSRF
+### Security
+<!-- anchor: security-and-csrf -->
 
 - The route stays signed-in only (`unauthorized` without an actor). The cart is looked up by the verified customer id, never by a request field.
-- Browser mutations keep the CSRF rules. No new secret.
+- Browser mutations authenticate with the bearer token only. No new secret.
 - Because the lines come from the cart, a client can no longer order a line the shopper did not tick by naming it in the request, when it uses the new shape.
 
 ### Observability
@@ -104,5 +105,5 @@ No migration and no data backfill. Rollback is reverting step 2; step 1 is inert
 ## Related ADRs
 
 - [0004](../adr/0004-server-authoritative-pricing-stock-and-fees.md): this design extends "the server is authoritative" from prices, stock and fees to which lines are ordered. If accepted, it is a candidate for an amendment to 0004 or a new ADR, written after the review, as [docs/adr/README.md](../adr/README.md) asks.
-- [0005](../adr/0005-opaque-sessions-and-csrf.md): the guest cart cookie and merge. This design reads only a signed-in customer's cart, so [design 0005](0005-client-only-guest-cart.md) (Implemented), which moves the signed-out cart into the browser, does not affect it.
+- [0005](../adr/0005-jwt-only-authentication-no-sessions-or-csrf.md): the guest cart cookie and merge. This design reads only a signed-in customer's cart, so [design 0005](0005-client-only-guest-cart.md) (Implemented), which moves the signed-out cart into the browser, does not affect it.
 - [Product spec: Orders page](../product/customer-orders-page.md): what the page must do (US1). This design changes how the server decides which lines are ordered, not what the page contains.

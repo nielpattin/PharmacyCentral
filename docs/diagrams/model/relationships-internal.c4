@@ -1,6 +1,6 @@
 model {
   // ── Inside identity-service ──────────────────────────────────────────────────────
-  pharmacyCentral.services.identityService.sessions -> pharmacyCentral.services.identityService.accounts "Resolve the account behind a session" {
+  pharmacyCentral.services.identityService.tokens -> pharmacyCentral.services.identityService.accounts "Load the account a token is signed for" {
     technology "in-process"
   }
   pharmacyCentral.services.identityService.admin -> pharmacyCentral.services.identityService.accounts "Grant roles and site access" {
