@@ -1,7 +1,7 @@
 # Sizes the container stack like deploy/aws, one container per ECS service, as `terraform.tfvars` runs it
 # (`desired_count = 1`, autoscaling off). Layer it over the main file:
 #
-#   pnpm run aws
+#   pnpm run local:up
 #
 # Limits mirror the Fargate task sizes and the managed data tier of deploy/aws:
 # - Backend services: `task_cpu` 512 / `task_memory` 2048 (0.5 vCPU, 2 GiB). sales-service has no override.

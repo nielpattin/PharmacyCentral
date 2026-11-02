@@ -87,7 +87,7 @@ None. The ledger entry is the durable record; availability is recomputed through
 
 ## Rollout
 
-Apply inventory migration `0015` with `pnpm run db:migrate` (Compose does not run it), rebuild with `pnpm run aws`, restart the gateway if its routes were cached. No backfill and no seed change: the demo seed leaves expiring batches on purpose, so the flow has data.
+Apply inventory migration `0015` with `pnpm run db:migrate` (Compose does not run it), rebuild with `pnpm run local:up`, restart the gateway if its routes were cached. No backfill and no seed change: the demo seed leaves expiring batches on purpose, so the flow has data.
 
 ## Open questions
 

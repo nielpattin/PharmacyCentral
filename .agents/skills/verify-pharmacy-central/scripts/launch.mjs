@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // DEV MODE ONLY. Starts only the Nx dev targets a feature needs, waits until they are usable, and records every PID it
-// started. Container mode (pnpm run aws) is never launched here: check it with doctor.mjs --mode container.
+// started. Container mode (pnpm run local:up) is never launched here: check it with doctor.mjs --mode container.
 // Usage (repo root):
 //   node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-service,staff-web [--run <id>] [--ai-approved]
 // Add --ai-approved only with the user's explicit approval for that run (catalog-service and chatbot-service call paid AI).

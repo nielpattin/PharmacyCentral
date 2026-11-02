@@ -93,7 +93,7 @@ No new metric. Guest cart changes no longer appear as `sales-service` requests, 
 
 ## Rollout and migration
 
-This is a development environment and dev data is disposable ([AGENTS.md](../../AGENTS.md)), so there is no rollout order, no compatibility code and no data to carry over. One change ships `customer-web`, `sales-service` and the ops-console route table together. `pnpm run aws` rebuilds the images and `pnpm run db:migrate` applies `0013`, which deletes the guest carts and drops the guest column. Compose does not run migrations.
+This is a development environment and dev data is disposable ([AGENTS.md](../../AGENTS.md)), so there is no rollout order, no compatibility code and no data to carry over. One change ships `customer-web`, `sales-service` and the ops-console route table together. `pnpm run local:up` rebuilds the images and `pnpm run db:migrate` applies `0013`, which deletes the guest carts and drops the guest column. Compose does not run migrations.
 
 If this ever ships to an environment with live shoppers, a rolling update needs a different order (web first, then `sales-service`, then the migration), because an old `sales-service` instance selects `guest_token_digest` and fails once the column is dropped. That case is not designed here.
 

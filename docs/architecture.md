@@ -215,7 +215,7 @@ Both topologies run the same Docker images and the same contracts. Details are i
 | Status | Development and integration | Configuration only. No AWS resource has been created. |
 
 The local stack is started with `pnpm run dev:infra` (infrastructure plus `gateway-dev`) or
-`pnpm run aws` (full container stack). Commands are listed in the [runbook](runbook.md).
+`pnpm run local:up` (full container stack). Commands are listed in the [runbook](runbook.md).
 
 ## Observability
 

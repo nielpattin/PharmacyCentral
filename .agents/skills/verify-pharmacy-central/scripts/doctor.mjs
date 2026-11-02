@@ -62,7 +62,7 @@ try {
 }
 
 if (!values.mode) {
-  usage("--mode is required: dev (apps on the host, pnpm run dev:infra + pnpm dev) or container (pnpm run aws)");
+  usage("--mode is required: dev (apps on the host, pnpm run dev:infra + pnpm dev) or container (pnpm run local:up)");
 }
 if (values.mode !== "dev" && values.mode !== "container")
   usage(`--mode must be dev or container, got "${values.mode}"`);
@@ -159,7 +159,7 @@ const containerChecks = async () => {
   for (const service of services) {
     const container = byService.get(service);
     if (!container) {
-      problems.push(`${service}: not created. Run pnpm run aws`);
+      problems.push(`${service}: not created. Run pnpm run local:up`);
       continue;
     }
     const state = container.State ?? "";
@@ -196,7 +196,7 @@ const containerMode = async () => {
   if (gateway.status === 200) {
     line("OK", "gateway", `${gatewayUrl()} /healthz 200`);
   } else {
-    line("FAIL", "gateway", `${gatewayUrl()} /healthz ${gateway.status} ${gateway.error ?? ""}. Run pnpm run aws`);
+    line("FAIL", "gateway", `${gatewayUrl()} /healthz ${gateway.status} ${gateway.error ?? ""}. Run pnpm run local:up`);
   }
 
   await containerChecks();

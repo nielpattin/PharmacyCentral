@@ -1,19 +1,25 @@
 FROM node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS build
 
+WORKDIR /workspace
+
+RUN npm install --global pnpm@12.3.4
+# `pnpm fetch` needs only the lockfile and workspace settings, so this layer is identical for every app and is
+# rebuilt only when the lockfile changes. Its store stays in the layer (no cache mount), so `install --offline` below
+# works even after the BuildKit cache is pruned. The ARGs come after it so their values do not change its cache key.
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm fetch
+
 ARG APP_NAME
 ARG APP_DIR
 # Vite inlines `import.meta.env.VITE_*` into the bundle at build time, and `.dockerignore` keeps `.env` out of
 # the build context, so the map key has to arrive as a build argument rather than as a file this stage could read.
 ARG VITE_VIETMAP_TILEMAP_KEY
 ENV VITE_VIETMAP_TILEMAP_KEY=${VITE_VIETMAP_TILEMAP_KEY}
-WORKDIR /workspace
-
-RUN npm install --global pnpm@12.3.4
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json tsconfig.json nx.json ./
+COPY package.json tsconfig.base.json tsconfig.json nx.json ./
 COPY apps ./apps
 COPY packages ./packages
 COPY tools ./tools
-RUN --mount=type=cache,id=pharmacy-central-pnpm-store,target=/root/.local/share/pnpm/store/v11 pnpm install --frozen-lockfile
+RUN pnpm install --offline --frozen-lockfile
 RUN pnpm exec nx run "${APP_NAME}:build"
 
 FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS runtime

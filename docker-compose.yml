@@ -671,7 +671,7 @@ services:
 
   # Load runs (`pnpm run load -- <script>`). The profile keeps it out of `up`: it exists to be run on demand.
   # It sits on the compose network to write results to Prometheus, and reaches the gateway at LOAD_TARGET_URL:
-  # http://host.docker.internal:${GATEWAY_PORT} against `pnpm dev`, http://gateway:8080 against `aws`, or at the public URL of the cloud stack.
+  # http://host.docker.internal:${GATEWAY_PORT} against `pnpm dev`, http://gateway:8080 against `pnpm run local:up`, or at the public URL of the cloud stack.
   k6:
     image: grafana/k6:2.3.0@sha256:9c2dee7f8ed74d317e4027c06a10f169b625638189de8d4555d0b3486a5aeb34
     profiles: ["loadtest"]

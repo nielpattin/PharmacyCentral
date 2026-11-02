@@ -1,7 +1,7 @@
 // Demo seed (B): the demo and reference dataset, opt-in. Run it after the default seed (A, `pnpm run seed:default`),
 // which creates the one admin this signs in as. It never creates or changes that admin.
-// Development only. Refuses NODE_ENV=production and any API_BASE_URL that is not a loopback host, so it cannot write
-// to a deployed stack.
+// Development and the AWS demo stack only. Refuses NODE_ENV=production and any API_BASE_URL that is not a loopback host,
+// unless DEMO_SEED_TARGET=cloud (set by tools/aws-seed.mjs, `pnpm run cloud:seed`) says it is the AWS demo stack.
 import { spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -11,6 +11,8 @@ import { datasets, csvRows } from "../apps/staff-web/src/import-datasets.ts";
 import { uploadProductImages } from "../apps/catalog-service/scripts/upload-product-images.mjs";
 import { seedHistory, seedWarehouseActivity } from "./seed-demo-history.mjs";
 import { pendingSynonymGroup, searchSynonymGroups } from "./lib/demo-synonyms.mjs";
+import { awsSqlRunner, runOpsTask } from "./lib/aws-ops.mjs";
+import { localSqlRunner } from "./lib/sql-batch.mjs";
 
 const requireEnv = (name) => {
   const value = process.env[name];
@@ -23,8 +25,15 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const baseUrl = new URL(requireEnv("API_BASE_URL"));
-if (!["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname)) {
-  throw new Error(`Refusing to import sample data into ${baseUrl.origin}: only a local gateway is allowed.`);
+// The AWS demo stack is reached over HTTPS, its database through the ops ECS task, its images through the real bucket.
+const remote = process.env.DEMO_SEED_TARGET === "cloud";
+if (remote) {
+  if (baseUrl.protocol !== "https:")
+    throw new Error(`DEMO_SEED_TARGET=cloud needs an https API_BASE_URL, got ${baseUrl.origin}.`);
+} else if (!["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname)) {
+  throw new Error(
+    `Refusing to import sample data into ${baseUrl.origin}: only a local gateway is allowed. For the AWS demo stack run pnpm run cloud:seed.`,
+  );
 }
 const adminEmail = "admin@pharmacycentral.vn";
 const pharmacistEmail = "pharmacist@pharmacycentral.vn";
@@ -103,8 +112,16 @@ const synonymKey = (terms) => JSON.stringify([...new Set(terms.map(foldSearchTer
 const pnpm = process.env.npm_execpath;
 // The one place that seeds the demo accounts: the identity-service demo seed, run through the same pnpm.
 const seedArgs = ["--dir", "apps/identity-service", "seed:demo"];
-if (!pnpm) throw new Error("Run this through pnpm: pnpm run seed:demo");
-const seedAccounts = ({ show = false } = {}) => {
+if (!pnpm && !remote) throw new Error("Run this through pnpm: pnpm run seed:demo");
+const seedAccounts = async ({ show = false } = {}) => {
+  if (remote) {
+    const { exitCode, text } = await runOpsTask({ label: "accounts", command: ["node", "/ops/seed-demo.mjs"] });
+    if (show) console.log(text);
+    if (exitCode !== 0)
+      throw new Error(`seeding the accounts failed (exit ${exitCode})
+${text}`);
+    return;
+  }
   // pnpm 12 ships as a native binary. Older installs set npm_execpath to a .js file that node must run.
   const [command, args] = /\.[cm]?js$/.test(pnpm) ? [process.execPath, [pnpm, ...seedArgs]] : [pnpm, seedArgs];
   const result = spawnSync(command, args, { encoding: "utf8", stdio: show ? "inherit" : "pipe" });
@@ -123,12 +140,27 @@ const admin = await signIn({ email: adminEmail }).catch((error) => {
     { cause: error },
   );
 });
-console.log("Uploading product images to Floci S3...");
-const uploadedImageUrls = new Set(
-  (await uploadProductImages(fileURLToPath(new URL("../data/product-images/images", import.meta.url)))).map(
-    ({ imageUrl }) => imageUrl,
-  ),
-);
+// Locally the images go to the Floci bucket. On AWS, aws-upload-media.mjs puts them in the real bucket and writes a copy of
+// products.csv whose image URLs point there (tmp/aws-demo/products.csv), which the catalog import below reads.
+let uploadedImageUrls;
+if (remote) {
+  console.log("Uploading product images to the AWS media bucket...");
+  const upload = spawnSync(process.execPath, ["tools/aws-upload-media.mjs"], {
+    encoding: "utf8",
+    env: { ...process.env, AWS_ENDPOINT_URL_S3: "" },
+  });
+  if (upload.status !== 0)
+    throw new Error(`Uploading the product images failed:
+${upload.stdout}${upload.stderr}`);
+} else {
+  console.log("Uploading product images to Floci S3...");
+  uploadedImageUrls = new Set(
+    (await uploadProductImages(fileURLToPath(new URL("../data/product-images/images", import.meta.url)))).map(
+      ({ imageUrl }) => imageUrl,
+    ),
+  );
+}
+const runSql = remote ? awsSqlRunner() : localSqlRunner({ postgresUser: requireEnv("POSTGRES_USER") });
 
 // Who imports each dataset, as in the app: Platform Admin only creates the sites (it has no import), the Pharmacy
 // Manager imports master data and Warehouse Staff imports opening stock. The two accounts exist once the sites do.
@@ -150,7 +182,10 @@ const createSites = async (sites) => {
 const order = ["sites", "storageLocations", "suppliers", "catalog", "openingBalances"];
 for (const id of order) {
   const dataset = datasets[id];
-  const file = new URL(`../data/import-samples/${dataset.fileBase}.csv`, import.meta.url);
+  const file =
+    remote && id === "catalog"
+      ? new URL("../tmp/aws-demo/products.csv", import.meta.url)
+      : new URL(`../data/import-samples/${dataset.fileBase}.csv`, import.meta.url);
   const payload = dataset.fromCsv(csvRows(await readFile(file, "utf8")));
   if (id === "openingBalances") {
     for (const row of payload.balances) {
@@ -164,7 +199,7 @@ for (const id of order) {
       admin,
       payload.balances.map((row) => row.productSku),
     );
-  if (id === "catalog") {
+  if (id === "catalog" && uploadedImageUrls) {
     const missing = payload.products.filter((row) => row.imageUrl && !uploadedImageUrls.has(row.imageUrl));
     if (missing.length > 0) {
       console.warn(
@@ -176,7 +211,7 @@ for (const id of order) {
     console.log(`${dataset.label}: ${JSON.stringify(await createSites(payload.sites))}`);
     // Right after the sites exist, so each account is created with its site access in one pass.
     console.log("Seeding demo accounts...");
-    seedAccounts({ show: true });
+    await seedAccounts({ show: true });
     importers.storageLocations = importers.suppliers = importers.catalog = await signIn({ email: managerEmail });
     importers.openingBalances = await signIn({ email: warehouseEmail });
     continue;
@@ -207,7 +242,7 @@ await seedSearchSynonyms(await signIn({ email: managerEmail }));
 console.log("Seeding demo activity (transfers, adjustments, purchase orders, orders)...");
 await seedActivity();
 console.log("Seeding demo history (receipts with costs, 60 days of sales, expiring and dead stock)...");
-await seedHistory({ baseUrl, admin, signIn, requireEnv });
+await seedHistory({ baseUrl, admin, signIn, requireEnv, runSql });
 console.log("Seeding warehouse activity (receiving, replenishment, returns, stocktakes, adjustments)...");
 await seedWarehouseActivity({ admin, signIn });
 console.log("Done. Every step is idempotent, so running this again is safe.");
@@ -477,19 +512,27 @@ async function seedActivity() {
         await sePayWebhook(invoice, transactionNumber);
         await untilOrder(shopper, created.id, (order) => order.paymentStatus === "Paid");
       }
+      // The pharmacist takes the cash at the counter; a refund is the manager's or the pharmacist's. An order cannot
+      // be completed before its cash is recorded, so the cash is taken just before the Completed step (or after the
+      // last step when the order is not completed).
+      let cashTaken = false;
+      const takeCash = async () => {
+        if (paid !== "cash" || cashTaken) return;
+        cashTaken = true;
+        await pharmacist.call(`/api/payments/${invoice.id}/confirm-counter`, {
+          method: "POST",
+          body: {},
+        });
+        await untilOrder(shopper, created.id, (order) => order.paymentStatus === "Paid");
+      };
       for (const next of steps) {
+        if (next === "Completed") await takeCash();
         await manager.call(`/api/orders/${created.id}/transition`, {
           method: "POST",
           body: { status: next },
         });
       }
-      if (paid === "cash") {
-        // The pharmacist takes the cash at the counter; a refund is the manager's or the pharmacist's.
-        await pharmacist.call(`/api/payments/${invoice.id}/confirm-counter`, {
-          method: "POST",
-          body: {},
-        });
-      }
+      await takeCash();
       if (refunded) {
         await manager.call(`/api/payments/${invoice.id}/refund`, {
           method: "POST",

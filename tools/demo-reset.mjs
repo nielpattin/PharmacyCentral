@@ -1,6 +1,6 @@
 // Demo reset: wipes the data of every service and seeds it again, so the whole dataset is dated today.
 // `pnpm run demo:reset` before a presentation is the one command that makes the shelves, the 60-day trend, the expiry
-// countdowns and the action plans agree with the clock. Container mode only (the stack from `pnpm run aws`).
+// countdowns and the action plans agree with the clock. Container mode only (the stack from `pnpm run local:up`).
 //
 // It is destructive on purpose: the seven service databases are dropped and recreated, and the Typesense volume is
 // removed. It refuses NODE_ENV=production and any API_BASE_URL that is not a loopback host, like the demo seed.

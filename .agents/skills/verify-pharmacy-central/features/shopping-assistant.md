@@ -25,7 +25,7 @@ Preconditions:
 - Mode chosen with the user.
   - Dev mode, UI-only stub: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need identity-service,sales-service,customer-web`. Chatbot is not started.
   - Dev mode, live path: add `chatbot-service` and `catalog-service` and `--ai-approved`. Chatbot calls the chat model for every question the intent gate lets through, and catalog answers its product lookups. The gate is a second AI provider (`typesafe`, `ai-provider-config.ts`) and can end a turn without a model call.
-  - Container mode: `pnpm run aws` is healthy with the user's approval recorded for the live path. No launch. For the UI-only stub, the stub still replaces `/api/chatbot/*` in the browser, so chatbot's container being up does not matter.
+  - Container mode: `pnpm run local:up` is healthy with the user's approval recorded for the live path. No launch. For the UI-only stub, the stub still replaces `/api/chatbot/*` in the browser, so chatbot's container being up does not matter.
 - `node .agents/skills/verify-pharmacy-central/scripts/doctor.mjs --mode <dev|container> --need identity-service,sales-service,customer-web --role customer` reports `RESULT ready`.
 
 UI-only stub recipe (label the evidence `ui-only-stub`, never a live result):

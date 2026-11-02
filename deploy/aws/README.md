@@ -70,11 +70,14 @@ A release with a new tag repeats the push, a `plan` review, the migration tasks 
 
 ## Loading data
 
-The demo seed (B, `pnpm run seed:demo`) refuses a non-loopback `API_BASE_URL`, so it cannot load AWS. Use these steps, after the default seed (A):
+`pnpm run cloud:seed` (`tools/aws-seed.mjs`) loads the whole demo dataset into the stack, after the default seed (A) and with the services running. It is `tools/seed-demo.mjs` pointed at the deployed stack (`DEMO_SEED_TARGET=cloud`):
 
-1. `node tools/aws-upload-media.mjs` (no `--env-file`: `.env` holds the local Floci dummy keys, and the script refuses to run with `AWS_ENDPOINT_URL_S3` set) uploads `data/product-images/images` to the media bucket under `product-images/<SKU>/<sha256>.<ext>` and writes `tmp/aws-demo/products.csv` with the image URLs moved to the public media base URL.
-2. In staff-web, Data import: sites, storage locations, suppliers, `tmp/aws-demo/products.csv` (not the original), then the opening balances once the products are searchable.
-3. Run the `ops` task with the command `node /ops/seed-demo.mjs` (needs `DEMO_ACCOUNT_PASSWORD`): it creates the demo staff and shopper accounts with their site access, so the sites must be imported first. Then run `node --env-file=.env tools/aws-seed-synonyms.mjs` (`CHAOS_BASE_URL` in `.env` is the staff site): the manager proposes the demo search synonym groups and the pharmacist approves them. It skips a group that is already approved.
+- The API calls go to `https://staff.<domain>/api`, the path the browser uses. The passwords and the SePay secret come from the root `.env`, the values the stack was deployed with.
+- `tools/aws-upload-media.mjs` puts `data/product-images/images` in the media bucket and writes `tmp/aws-demo/products.csv` with the image URLs moved to the public media base URL. The seed imports that copy.
+- RDS is private, so the demo accounts (`ops` task, `node /ops/seed-demo.mjs`) and the SQL that backdates the sales history (`tools/lib/aws-ops.mjs`) run in the one-shot `ops` task, sized 0.25 vCPU so it fits next to the running stack in the 6 vCPU quota. The SQL goes through a short-lived presigned URL on the media bucket, and its output comes back from CloudWatch Logs.
+- It is safe to run again: every step is idempotent, and a history that exists is left as it is. To start from empty data, `terraform destroy` the database or recreate the databases with the `ops` task, then seed again.
+
+`pnpm run cloud:deploy:fresh` runs it as its last step.
 
 ## Outputs
 

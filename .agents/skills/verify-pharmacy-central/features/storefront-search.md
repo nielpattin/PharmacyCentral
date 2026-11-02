@@ -20,7 +20,7 @@ A shopper searches the catalog from the storefront header, browses the results, 
 
 Preconditions:
 
-- Mode chosen with the user. Dev mode: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need catalog-service,customer-web --ai-approved`. The `--ai-approved` flag is required because catalog-service starts an embedding sweep. Container mode: the user's approval is recorded before `pnpm run aws`, because the sweep runs when the catalog container starts. No launch.
+- Mode chosen with the user. Dev mode: `node .agents/skills/verify-pharmacy-central/scripts/launch.mjs --need catalog-service,customer-web --ai-approved`. The `--ai-approved` flag is required because catalog-service starts an embedding sweep. Container mode: the user's approval is recorded before `pnpm run local:up`, because the sweep runs when the catalog container starts. No launch.
 - `node .agents/skills/verify-pharmacy-central/scripts/doctor.mjs --mode <dev|container> --need catalog-service,customer-web` reports `RESULT ready`.
 - Typesense is healthy: `docker compose ps` lists `typesense` as healthy. The search index lives there.
 - Products exist. A fresh database has none. The committed sample is `data/import-samples/products.csv`, and `pnpm run seed:demo` imports it, which also needs identity-service, catalog-service, and inventory-service running.

@@ -13,7 +13,7 @@ Screens are described as the code renders them. A workspace or page lists only f
 
 ### Staff Web
 
-1. Start the local system: `pnpm run aws` for the full stack in containers, or `pnpm dev` for development mode. Run `pnpm run urls:up` once per session to enable the named URLs.
+1. Start the local system: `pnpm run local:up` for the full stack in containers, or `pnpm dev` for development mode. Run `pnpm run urls:up` once per session to enable the named URLs.
 2. Open `http://staff.pharmacy.localhost/`.
 3. Enter your employee email and password, then choose **Sign in**.
 4. The sidebar shows only the workspaces and pages permitted for your roles.

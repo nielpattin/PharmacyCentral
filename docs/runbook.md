@@ -45,8 +45,8 @@ Infra always runs in Docker. The two modes differ only in where the apps and the
 | 2 webs | Host, Vite HMR | Containers |
 | Gateway on `:8080` | `gateway-dev` container on the host network | `gateway` container |
 | Infra | Containers | The same containers |
-| Start | `pnpm dev` (starts infra, migrates, runs the apps) | Stop `pnpm dev`, then `pnpm run aws` (sized like the ECS tasks, migrates) |
-| Back to dev mode | | `pnpm run aws:down`, then `pnpm dev` |
+| Start | `pnpm dev` (starts infra, migrates, runs the apps) | Stop `pnpm dev`, then `pnpm run local:up` (sized like the ECS tasks, migrates) |
+| Back to dev mode | | `pnpm run local:down`, then `pnpm dev` |
 | Stop everything | `pnpm run dev:down` | `pnpm run dev:down` |
 
 Use dev mode for fast iteration and container mode to check what ships. An agent session asks which mode to use before it starts ([AGENTS.md](../AGENTS.md#change-workflow)). Run container mode before opening a pull request, and always after changing a Dockerfile, `docker-compose.yml`, environment variables, dependencies, or migrations; every container in `docker compose ps` must be healthy.
@@ -93,9 +93,9 @@ On Docker Desktop (Windows and macOS), host networking runs inside the Docker VM
 
 ```bash
 # Stop `pnpm dev` first: the app containers publish the same host ports.
-pnpm run aws   # stops gateway-dev, rebuilds the images, starts everything, migrates, waits until healthy
+pnpm run local:up   # stops gateway-dev, rebuilds the images, starts everything, migrates, waits until healthy
 docker compose ps     # every container must be healthy
-pnpm run aws:down   # back to dev mode: stops gateway and the app containers, starts gateway-dev again
+pnpm run local:down   # back to dev mode: stops gateway and the app containers, starts gateway-dev again
 ```
 
 `gateway` and `gateway-dev` share `GATEWAY_PORT` (8080), so only one runs at a time; the two scripts swap them. On a small machine, building all eight images at once can exhaust memory; build them one at a time first with `docker compose build <name>`.
@@ -175,7 +175,7 @@ pnpm run dev:down
 
 | Symptom | Fix |
 | --- | --- |
-| `localhost:8080` refused or 502 from `/api/...` | Start the gateway for your mode: `pnpm run dev:infra` for dev mode, or `pnpm run aws` for containers. Only one of the two can hold port 8080 |
+| `localhost:8080` refused or 502 from `/api/...` | Start the gateway for your mode: `pnpm run dev:infra` for dev mode, or `pnpm run local:up` for containers. Only one of the two can hold port 8080 |
 | Vite logs `http proxy error: /api/... ECONNREFUSED` while `gateway-dev` is healthy (Docker Desktop) | Host networking is off, so port 8080 never reaches the host. Enable it as described under Dev mode, then rerun `pnpm run dev:infra` |
 | Gateway 404 on `/api/...` | Check the path against the routing map above |
 | `/api/...` returns 401 `trusted_request_required` | The path needs an access token. Sign in and send the `accessToken` as `Authorization: Bearer <token>`; a token lives one day |
@@ -324,7 +324,7 @@ Without the script, run `pnpm run seed:default`, then upload the same files by h
 
 Every date in the demo dataset is relative to the day it is seeded: the opening-balance expiry dates in `data/import-samples/opening-balances.csv` are written against 2026-10-29 and `seed:demo` moves each one by the days since, and the history, receipts and expiry countdowns count back or forward from the seed time. The data then ages with the clock (an expiry countdown drops by a day each day, the newest sale gets older), so reseed on the day you present.
 
-`pnpm run demo:reset` (`tools/demo-reset.mjs`) does that in one command, in container mode: it stops the services, drops and recreates the seven service databases, removes the Typesense volume, runs `db:migrate`, starts the services (`--no-deps`, so an unhealthy Typesense does not block them), runs `seed:default` and `seed:demo`, then restarts `inventory-service` so the automatic action plans are raised against the fresh stock, and prints how many exist. It takes about three minutes. It is destructive: it refuses `NODE_ENV=production` and any `API_BASE_URL` that is not a loopback host, and needs the stack from `pnpm run aws` (or at least `postgres`, `rabbitmq`, `redis`, `floci` and the gateway) to be up. `pnpm run seed:demo` alone is idempotent but never refreshes the dates of data it already created; it warns when the history is a day old. The presenter's script is [Demo walkthrough](demo-walkthrough.md).
+`pnpm run demo:reset` (`tools/demo-reset.mjs`) does that in one command, in container mode: it stops the services, drops and recreates the seven service databases, removes the Typesense volume, runs `db:migrate`, starts the services (`--no-deps`, so an unhealthy Typesense does not block them), runs `seed:default` and `seed:demo`, then restarts `inventory-service` so the automatic action plans are raised against the fresh stock, and prints how many exist. It takes about three minutes. It is destructive: it refuses `NODE_ENV=production` and any `API_BASE_URL` that is not a loopback host, and needs the stack from `pnpm run local:up` (or at least `postgres`, `rabbitmq`, `redis`, `floci` and the gateway) to be up. `pnpm run seed:demo` alone is idempotent but never refreshes the dates of data it already created; it warns when the history is a day old. The presenter's script is [Demo walkthrough](demo-walkthrough.md).
 
 ### Product images
 
@@ -622,7 +622,7 @@ Queues stay on the System page, and Business Health (row Consumers and queues) h
 
 ## Self-hosted product search embeddings
 
-Semantic product search needs a text-embedding model. The default is the `embedder` service of Compose: HuggingFace text-embeddings-inference on CPU, model `intfloat/multilingual-e5-small` (384 dimensions), ONNX weights. `pnpm run dev:infra` and `pnpm run aws` start it with the rest of the infrastructure, so search needs no quota and no key from a provider. The first start downloads the model into a volume (about 2 minutes here), and until it is healthy search matches keywords only.
+Semantic product search needs a text-embedding model. The default is the `embedder` service of Compose: HuggingFace text-embeddings-inference on CPU, model `intfloat/multilingual-e5-small` (384 dimensions), ONNX weights. `pnpm run dev:infra` and `pnpm run local:up` start it with the rest of the infrastructure, so search needs no quota and no key from a provider. The first start downloads the model into a volume (about 2 minutes here), and until it is healthy search matches keywords only.
 
 `.env` holds the settings that `catalog-service` reads (`.env.example` has them ready): `AI_EMBEDDING_PROVIDER=openai-compatible`, `AI_EMBEDDING_BASE_URL=http://localhost:8109/v1`, and `AI_EMBEDDING_MODEL` and `AI_EMBEDDING_API_KEY` equal to `EMBEDDER_MODEL` and `EMBEDDER_API_KEY`. The container stack ignores the base URL and calls `http://embedder:80/v1`, like it does for Typesense. A Platform Admin can still save other settings in staff-web (AI integrations); saved settings win over `.env`, and a saved base URL must be https. `search-service` reads the same four variables and cannot see the saved settings, so its values must match those of `catalog-service` (see the search service section).
 
@@ -778,7 +778,7 @@ To point k6 at the deployed stack, set `LOAD_TARGET_URL` in `.env` to the public
 
 ### Capacity on an ECS-sized stack
 
-`pnpm run aws` layers `docker-compose.aws-like.yml` over the container stack and sizes it like `deploy/aws` as `terraform.tfvars` runs it: one container per service (`desired_count = 1`, autoscaling off). Backend services get 0.5 vCPU and 2 GiB (`task_cpu` 512, `task_memory` 2048), `customer-web` and `staff-web` 0.25 vCPU and 512 MiB, RabbitMQ and Typesense 0.25 vCPU and 512 MiB (their Fargate tasks in `data.tf`), and the embedder 2 vCPU and 4 GiB. PostgreSQL (RDS `db.t4g.micro`) gets 2 CPUs and 1 GiB and Redis (ElastiCache `cache.t4g.micro`) 2 CPUs and 512 MiB. Change the compose file when `variables.tf` or `data.tf` changes.
+`pnpm run local:up` layers `docker-compose.aws-like.yml` over the container stack and sizes it like `deploy/aws` as `terraform.tfvars` runs it: one container per service (`desired_count = 1`, autoscaling off). Backend services get 0.5 vCPU and 2 GiB (`task_cpu` 512, `task_memory` 2048), `customer-web` and `staff-web` 0.25 vCPU and 512 MiB, RabbitMQ and Typesense 0.25 vCPU and 512 MiB (their Fargate tasks in `data.tf`), and the embedder 2 vCPU and 4 GiB. PostgreSQL (RDS `db.t4g.micro`) gets 2 CPUs and 1 GiB and Redis (ElastiCache `cache.t4g.micro`) 2 CPUs and 512 MiB. Change the compose file when `variables.tf` or `data.tf` changes.
 
 ## Online order stock
 

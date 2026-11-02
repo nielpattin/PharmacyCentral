@@ -126,10 +126,8 @@ async function main() {
   console.log("=== Step 3: Default seed (Platform Admin) ===");
   runTask(cluster, opsDef, "ops", ["node", "/ops/seed.mjs"], subnets, sgs);
 
-  console.log("=== Step 4: Demo seed (accounts) ===");
-  runTask(cluster, opsDef, "ops", ["node", "/ops/seed-demo.mjs"], subnets, sgs);
-
-  console.log("All migrations and seeds completed successfully!");
+  // The demo accounts need the sites to exist first, so they are seeded by `pnpm run cloud:seed` once the stack is up.
+  console.log("All migrations and the default seed completed successfully!");
 }
 
 main().catch((err) => {

@@ -27,7 +27,7 @@ node .agents/skills/verify-pharmacy-central/scripts/messaging-proof.mjs [--run <
 
 Preconditions:
 
-- `docker compose ps` lists `rabbitmq` and `postgres` healthy. In dev mode that is `pnpm run dev:infra`; in container mode they are part of `pnpm run aws`. No service has to run, and none is started.
+- `docker compose ps` lists `rabbitmq` and `postgres` healthy. In dev mode that is `pnpm run dev:infra`; in container mode they are part of `pnpm run local:up`. No service has to run, and none is started.
 - In dev mode, `.tmp/verify/current` names a run, or pass `--run <id>`. In container mode, pass `--run container-<YYYYMMDD-HHMMSS>` if the run has one. Without either, the helper creates its own run folder.
 
 It runs 15 checks, about 75 seconds, and prints `PASS` or `FAIL` for each:

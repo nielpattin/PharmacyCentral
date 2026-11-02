@@ -14,7 +14,7 @@ On `localhost`, the customer and staff apps have no stable origin of their own. 
 
 1. Infrastructure always runs in Docker Compose. The apps run in one of two modes:
    - Dev mode: `pnpm run dev:infra` starts the infrastructure and `gateway-dev`. `pnpm dev` runs every service with `node --watch` and both webs with Vite HMR through Nx.
-   - Container mode: `pnpm run aws` stops `gateway-dev`, rebuilds the images and waits until they are healthy. `pnpm run aws:down` returns to dev mode.
+   - Container mode: `pnpm run local:up` stops `gateway-dev`, rebuilds the images and waits until they are healthy. `pnpm run local:down` returns to dev mode.
 2. `gateway` and `gateway-dev` share `GATEWAY_PORT`, so only one of them runs. Both include `deploy/local/gateway/routes.conf`, so the path rules are written once.
 3. `pnpm run urls:up` runs `tools/urls.mjs`. It starts a portless proxy on plain HTTP port 80 and aliases `customer.pharmacy.localhost` to `CUSTOMER_WEB_PORT`, `staff.pharmacy.localhost` to `STAFF_WEB_PORT`, and `api.pharmacy.localhost` to `GATEWAY_PORT`. Each name is its own browser origin. The names work the same in both modes, and browser tests use them (see [AGENTS.md](../../AGENTS.md), Browser testing).
 4. Web clients call `/api/...` on the same origin. The Vite dev proxy forwards those calls to `API_BASE_URL` (see `apps/customer-web/vite.config.ts`).
@@ -26,7 +26,7 @@ On `localhost`, the customer and staff apps have no stable origin of their own. 
 ## Consequences
 
 - The two modes differ only in where the apps run. The runbook asks for container mode before a pull request, and after any change to a Dockerfile, `docker-compose.yml`, environment variables, dependencies or migrations ([runbook](../runbook.md), Two local modes).
-- Switching modes requires stopping the other side first. `pnpm dev` must stop before `aws`, because the app containers publish the same host ports.
+- Switching modes requires stopping the other side first. `pnpm dev` must stop before `pnpm run local:up`, because the app containers publish the same host ports.
 - `urls:up` fails when another program holds port 80. The named URLs are plain HTTP. HTTPS needs an extra portless step.
 - Node scripts and Safari may not resolve `*.localhost`, so `API_BASE_URL` stays `http://localhost:8080` ([runbook](../runbook.md)).
 - Docker Desktop needs host networking enabled for `gateway-dev` to work.

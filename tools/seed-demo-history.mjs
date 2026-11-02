@@ -3,21 +3,19 @@
 // orders), then backdates those documents so the trend charts, gross profit, stock health and replenishment
 // suggestions have something to show. It also leaves batches near and past expiry and a few dead-stock products.
 //
-// No API accepts a past creation time for an order or a payment, so the backdating is SQL against the local compose
-// Postgres. That is the one thing this file does outside the HTTP API, and it is why this step is development only
-// (seed-demo already refuses NODE_ENV=production and any non-loopback API_BASE_URL).
+// No API accepts a past creation time for an order or a payment, so the backdating is SQL, run by the `runSql` the
+// caller passes in: the compose Postgres locally, the ops ECS task on the AWS demo stack (tools/lib/sql-batch.mjs and
+// tools/lib/aws-ops.mjs). That is the one thing this file does outside the HTTP API, and seed-demo refuses
+// NODE_ENV=production and any remote API_BASE_URL unless DEMO_SEED_TARGET=cloud says it is the AWS demo stack.
 // It runs once: a database that already has goods receipt GR-HIST-001 is left as it is, with a warning when the
 // history has aged. `pnpm run demo:reset` wipes the service databases and seeds again, so everything is dated today.
-import { spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 
 import { datasets, csvRows } from "../apps/staff-web/src/import-datasets.ts";
 
 const DAY = 86_400_000;
 const HISTORY_DAYS = 60;
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 // Products the history sells: [sku, weight, smallest quantity, largest quantity, step]. Quantities are in the product's
 // sale unit. Prescription-only medicines are sold at the counter only (online orders refuse them).
@@ -125,7 +123,7 @@ const isoDay = (millis) => new Date(millis).toISOString().slice(0, 10);
 const inDays = (days) => isoDay(Date.now() + days * DAY);
 const uuidList = (ids) => ids.map((id) => `'${id}'`).join(",");
 
-export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
+export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }) {
   const random = randomFrom(20261029);
   const pick = (items, weightOf) => {
     let roll = random() * items.reduce((sum, item) => sum + weightOf(item), 0);
@@ -444,13 +442,15 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
       : ["Preparing", "Ready", "Completed"];
     for (const status of document.payment === "cash" ? ["Confirmed", ...steps] : steps) {
       if (document.fate === "refunded" && status !== "Confirmed" && status !== "Preparing") break;
+      // An order cannot be completed before its cash is recorded, so the cash is taken just before Completed.
+      if (status === "Completed" && document.payment === "cash" && document.fate === "completed") {
+        await call(pharmacist, `/api/payments/${invoice.id}/confirm-counter`, {
+          method: "POST",
+          body: {},
+        });
+        await untilOrder(shopper, created.id, (order) => order.paymentStatus === "Paid");
+      }
       await transition(created.id, status);
-    }
-    if (document.payment === "cash" && document.fate === "completed") {
-      await call(pharmacist, `/api/payments/${invoice.id}/confirm-counter`, {
-        method: "POST",
-        body: {},
-      });
     }
     if (document.fate === "refunded") {
       if (document.payment === "cash")
@@ -465,23 +465,33 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
       await untilOrder(shopper, created.id, (order) => order.status === "Cancelled");
     }
   };
-  const stockOf = (sku) => {
-    const rows = balances
+  // What can still be sold from a batch: on hand minus what open orders and prescriptions have reserved.
+  const availableOf = ({ balance }) => Number(balance.quantityOnHand) - Number(balance.quantityReserved ?? 0);
+  const eligibleRows = (sku) =>
+    balances
       .filter(
         ({ balance, batch }) =>
           batch.productId === products.get(sku).id &&
           batch.qualityStatus === "Released" &&
           balance.siteId === retail.id &&
           balance.storageLocationId === front.id &&
-          Number(balance.quantityOnHand) > 0 &&
           new Date(batch.expiryDate).getTime() > now,
       )
       .sort((a, b) => a.batch.expiryDate.localeCompare(b.batch.expiryDate));
-    return rows[0];
+  const stockOf = (sku, quantity = 1) => eligibleRows(sku).find((row) => availableOf(row) >= quantity);
+  // A counter sale dispenses from one batch; an online order can draw on all of them.
+  const capacityOf = (sku, counter) => {
+    const available = eligibleRows(sku).map(availableOf);
+    return counter
+      ? Math.max(0, ...available)
+      : Math.max(
+          0,
+          available.reduce((sum, value) => sum + value, 0),
+        );
   };
   const sellAtCounter = async (document) => {
-    const rows = document.lines.map(([sku, quantity]) => ({ sku, quantity, row: stockOf(sku) }));
-    if (rows.some(({ row, quantity }) => !row || Number(row.balance.quantityOnHand) < quantity)) {
+    const rows = document.lines.map(([sku, quantity]) => ({ sku, quantity, row: stockOf(sku, quantity) }));
+    if (rows.some(({ row }) => !row)) {
       skipped += 1;
       return;
     }
@@ -531,7 +541,19 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
   };
 
   let done = 0;
+  let unfilled = 0;
   for (const document of documents) {
+    // Fresh balances, then fit the sale to the stock that is really free: a line is cut down to what is available and
+    // dropped when nothing is, so a sale never asks for stock the shelf does not have.
+    await reload();
+    document.lines = document.lines
+      .map(([sku, quantity]) => [sku, Math.min(quantity, capacityOf(sku, document.kind === "counter"))])
+      .filter(([, quantity]) => quantity > 0);
+    if (document.lines.length === 0) {
+      unfilled += 1;
+      done += 1;
+      continue;
+    }
     try {
       if (document.kind === "online") await sellOnline(document);
       else await sellAtCounter(document);
@@ -598,23 +620,15 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
   ]);
 
   // 5. Backdate. Wait for the read models to catch up with the events first, so their rows move too.
-  const postgresUser = requireEnv("POSTGRES_USER");
-  const sql = (database, script) => {
-    const result = spawnSync(
-      "docker",
-      ["compose", "exec", "-T", "postgres", "psql", "-U", postgresUser, "-d", database, "-v", "ON_ERROR_STOP=1", "-At"],
-      { cwd: repoRoot, input: script, encoding: "utf8" },
+  const auditCount = async () =>
+    Number(
+      (
+        await runSql([{ database: "operations_query_service", script: "select count(*) from audit_events;" }])
+      )[0].trim(),
     );
-    if (result.status !== 0)
-      throw new Error(
-        `Backdating needs the compose Postgres (docker compose exec postgres psql) and it failed on ${database}: ` +
-          `${result.stderr || result.error?.message || "no output"}`,
-      );
-    return result.stdout;
-  };
   let previous = -1;
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    const count = Number(sql("operations_query_service", "select count(*) from audit_events;").trim());
+    const count = await auditCount();
     if (count === previous) break;
     previous = count;
     await sleep(2_500);
@@ -623,44 +637,49 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
   const targetOf = new Map(placed.map(({ id, at }) => [id, at]));
   const ids = [...targetOf.keys()];
   const anchors = new Map();
+  const shiftTable = (map) =>
+    `create temp table s(id uuid primary key, d interval);
+       insert into s values ${[...map].map(([id, millis]) => `('${id}', '${millis} milliseconds'::interval)`).join(",")};`;
+  // Everything that rewrites dates goes out as one batch (one SQL session), after one batch that reads what to shift.
+  const writes = [];
   if (ids.length > 0) {
-    const rows = sql(
-      "sales_service",
-      `select id, (extract(epoch from created_at) * 1000)::bigint from orders where id in (${uuidList(ids)})
+    const [rows, invoiceRows] = await runSql([
+      {
+        database: "sales_service",
+        script: `select id, (extract(epoch from created_at) * 1000)::bigint from orders where id in (${uuidList(ids)})
        union all select id, (extract(epoch from created_at) * 1000)::bigint from prescriptions where id in (${uuidList(ids)});`,
-    );
+      },
+      {
+        database: "payment_service",
+        script: `select id, coalesce(order_id, prescription_id) from payment_invoices
+       where order_id in (${uuidList(ids)}) or prescription_id in (${uuidList(ids)});`,
+      },
+    ]);
     for (const line of rows.trim().split("\n").filter(Boolean)) {
       const [id, millis] = line.split("|");
       anchors.set(id, Number(millis));
     }
     const shifts = new Map([...anchors].map(([id, anchor]) => [id, anchor - targetOf.get(id)]));
-    const invoiceRows = sql(
-      "payment_service",
-      `select id, coalesce(order_id, prescription_id) from payment_invoices
-       where order_id in (${uuidList(ids)}) or prescription_id in (${uuidList(ids)});`,
-    );
     const shiftsWithInvoices = new Map(shifts);
     for (const line of invoiceRows.trim().split("\n").filter(Boolean)) {
       const [invoiceId, documentId] = line.split("|");
       shiftsWithInvoices.set(invoiceId, shifts.get(documentId));
     }
-    const shiftTable = (map) =>
-      `create temp table s(id uuid primary key, d interval);
-       insert into s values ${[...map].map(([id, millis]) => `('${id}', '${millis} milliseconds'::interval)`).join(",")};`;
-    sql(
-      "sales_service",
-      `${shiftTable(shifts)}
+    const ofInvoice = "(i.order_id = s.id or i.prescription_id = s.id)";
+    writes.push(
+      {
+        database: "sales_service",
+        script: `${shiftTable(shifts)}
        update orders o set created_at = o.created_at - s.d, updated_at = o.updated_at - s.d,
          paid_at = case when o.paid_at is null then null else o.paid_at - s.d end from s where o.id = s.id;
        update order_delivery_snapshots x set created_at = x.created_at - s.d from s where x.order_id = s.id;
        update prescriptions p set created_at = p.created_at - s.d, updated_at = p.updated_at - s.d,
          dispensed_at = p.dispensed_at - s.d,
          paid_at = case when p.paid_at is null then null else p.paid_at - s.d end from s where p.id = s.id;`,
-    );
-    const ofInvoice = "(i.order_id = s.id or i.prescription_id = s.id)";
-    sql(
-      "payment_service",
-      `${shiftTable(shifts)}
+      },
+      {
+        database: "payment_service",
+        script: `${shiftTable(shifts)}
        update payment_invoices i set created_at = i.created_at - s.d, updated_at = i.updated_at - s.d from s where ${ofInvoice};
        update payment_attempts a set created_at = a.created_at - s.d, updated_at = a.updated_at - s.d
          from s join payment_invoices i on ${ofInvoice} where a.payment_invoice_id = i.id;
@@ -668,22 +687,23 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
          from s join payment_invoices i on ${ofInvoice} where t.payment_invoice_id = i.id;
        update payment_refunds r set created_at = r.created_at - s.d
          from s join payment_invoices i on ${ofInvoice} where r.payment_invoice_id = i.id;`,
-    );
-    sql(
-      "inventory_service",
-      `${shiftTable(shifts)}
+      },
+      {
+        database: "inventory_service",
+        script: `${shiftTable(shifts)}
        update stock_ledger_entries e set occurred_at = e.occurred_at - s.d, created_at = e.created_at - s.d
          from s where e.reference_id = s.id;
        update stock_reservations r set created_at = r.created_at - s.d, updated_at = r.updated_at - s.d
          from s where r.owner_id = s.id;`,
-    );
-    sql(
-      "operations_query_service",
-      `${shiftTable(shiftsWithInvoices)}
+      },
+      {
+        database: "operations_query_service",
+        script: `${shiftTable(shiftsWithInvoices)}
        update audit_events a set occurred_at = a.occurred_at - s.d from s where a.entity_id = s.id;
        update finance_entries f set occurred_at = f.occurred_at - s.d from s where f.payload like '%' || s.id::text || '%';
        update report_rows r set occurred_at = r.occurred_at - s.d
          from s where r.subject_id = s.id or r.payload like '%' || s.id::text || '%';`,
+      },
     );
   }
 
@@ -703,34 +723,36 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv }) {
             select product_id, batch_number from goods_receipt_lines where goods_receipt_id = '${id}');`,
     ),
   ].join("\n");
-  sql("inventory_service", purchaseSql);
   const purchaseIds = [...purchaseOrders.map(({ id }) => id), ...receipts.map(({ id }) => id)];
-  sql(
-    "operations_query_service",
-    `update audit_events set occurred_at = ${stamp(now - 60 * DAY)} where entity_id in (${uuidList(purchaseIds)});`,
-  );
-
   // Opening stock was counted a while ago. The dead-stock products were counted longest ago and never moved since.
   const deadIds = deadStockSkus.map((sku) => need(products.get(sku), `product ${sku}`).id);
-  sql(
-    "inventory_service",
-    `update stock_ledger_entries set occurred_at = ${stamp(now - 130 * DAY)}, created_at = ${stamp(now - 130 * DAY)}
+  writes.push(
+    { database: "inventory_service", script: purchaseSql },
+    {
+      database: "operations_query_service",
+      script: `update audit_events set occurred_at = ${stamp(now - 60 * DAY)} where entity_id in (${uuidList(purchaseIds)});`,
+    },
+    {
+      database: "inventory_service",
+      script: `update stock_ledger_entries set occurred_at = ${stamp(now - 130 * DAY)}, created_at = ${stamp(now - 130 * DAY)}
        where movement_type = 'OpeningBalance' and product_id in (${uuidList(deadIds)});
      update stock_ledger_entries set occurred_at = ${stamp(now - 78 * DAY)}, created_at = ${stamp(now - 78 * DAY)}
        where movement_type = 'OpeningBalance' and product_id not in (${uuidList(deadIds)});`,
+    },
+    // Expiry dates last, so the sales above never ran into a batch that was about to be unavailable.
+    {
+      database: "inventory_service",
+      script: expiringBatches
+        .map(
+          ([, batch, days]) =>
+            `update product_batches set expiry_date = current_date + ${days} where batch_number = '${batch}';`,
+        )
+        .join("\n"),
+    },
   );
-  // Expiry dates last, so the sales above never ran into a batch that was about to be unavailable.
-  sql(
-    "inventory_service",
-    expiringBatches
-      .map(
-        ([, batch, days]) =>
-          `update product_batches set expiry_date = current_date + ${days} where batch_number = '${batch}';`,
-      )
-      .join("\n"),
-  );
+  await runSql(writes);
   console.log(
-    `demo history: ${placed.length} sales documents backdated over ${HISTORY_DAYS} days (${skipped} skipped), ` +
+    `demo history: ${placed.length} sales documents backdated over ${HISTORY_DAYS} days (${skipped} skipped, ${unfilled} not sold for lack of stock), ` +
       `${purchaseOrders.length} purchase orders and ${receipts.length} goods receipts with unit costs, ` +
       `${expiringBatches.length} batches near or past expiry, ${deadStockSkus.length} dead-stock products`,
   );

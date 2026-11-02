@@ -126,12 +126,27 @@ pnpm run build
 pnpm test
 ```
 
-Load tests use k6 in Docker and can target the local stack (`pnpm run aws`) or the deployed one (set `LOAD_TARGET_URL`). Fault injection runs against the deployed stack. Both are described in `docs/runbook.md`:
+Load tests use k6 in Docker and can target the local stack (`pnpm run local:up`) or the deployed one (set `LOAD_TARGET_URL`). Fault injection runs against the deployed stack. Both are described in `docs/runbook.md`:
 
 ```bash
 pnpm run load -e PROFILE=smoke /scripts/scenarios/checkout.js   # k6 in Docker, results in Grafana
 pnpm run chaos:aws typesense-outage                             # one fault under load on the AWS stack
 ```
+
+## Run it: local and cloud
+
+| Where | Command | What it does |
+| --- | --- | --- |
+| Local | `pnpm run local:up` | Full container stack sized like AWS, then migrates. |
+| Local | `pnpm run seed:demo` | Loads demo data into the local stack (loopback only). |
+| Local | `pnpm run local:down` | Stops the app containers and goes back to dev mode. |
+| Cloud (AWS) | `pnpm run cloud:deploy` | Resumes or updates the existing AWS stack: starts RDS if stopped, pushes images for a new tag, starts services. |
+| Cloud (AWS) | `pnpm run cloud:deploy:fresh` | First deploy of a new stack: infrastructure, images, databases and migrations, services, then the demo data. |
+| Cloud (AWS) | `pnpm run cloud:seed` | Loads the full demo dataset (accounts, catalog, 60 days of history) into the running AWS stack. |
+| Cloud (AWS) | `pnpm run cloud:pause` | Stops RDS and removes only what bills by the hour (NAT, ALBs, ElastiCache, services, DNS). Data stays. |
+| Cloud (AWS) | `pnpm run cloud:destroy` | Deletes everything including the database (asks you to type `destroy`). |
+
+Local URLs: customer http://localhost:5301, staff http://localhost:5302. Cloud URLs come from the Terraform `web` output (`shop.` and `staff.` on the configured domain).
 
 ## Configuration and deployment
 
