@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProcurementRepository } from "./procurement-repository.ts";
 import { createProcurementRouter } from "./procurement-routes.ts";
 
+import { bearerHeaders } from "../test-support/access-tokens.ts";
+
 const httpFetch = globalThis.fetch.bind(globalThis);
 
 const ids = {
@@ -18,10 +20,11 @@ const ids = {
   productB: "00000000-0000-4000-8000-000000000006",
 };
 
+const caller = await bearerHeaders({ actorType: "employee", actorId: ids.actor });
+
 const createTestServer = async (repository: ProcurementRepository): Promise<{ server: Server; url: string }> => {
-  // The catalog reference check reads the shared internal secret and signs the caller for the catalog.
+  // The catalog reference check reads the shared internal secret and forwards the caller's Authorization to the catalog.
   vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-internal-secret");
-  vi.stubEnv("INTERNAL_IDENTITY_SECRET", "test-identity-secret");
   const app = express();
   app.use(express.json());
   // The edge forwards the verified roles; a call without them acts as every staff role at once, which passes every role check.
@@ -67,7 +70,7 @@ describe("procurement API", () => {
 
     const response = await httpFetch(`${testServer.url}/procurement/purchase-orders`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...caller },
       body: JSON.stringify({
         purchaseOrderNumber: "PO-API-001",
         supplierId: ids.supplier,
@@ -96,7 +99,7 @@ describe("procurement API", () => {
 
     const response = await httpFetch(`${testServer.url}/procurement/purchase-orders`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...caller },
       body: JSON.stringify({
         supplierId: ids.supplier,
         siteId: ids.site,
@@ -120,9 +123,9 @@ describe("procurement API", () => {
       .fn()
       .mockResolvedValue({ id: "00000000-0000-4000-8000-000000000007", status: "Draft" });
     const repository = { createPurchaseOrder } as unknown as ProcurementRepository;
-    // The catalog answers 401 to a lookup that carries no signed employee.
+    // The catalog answers 401 to a lookup that carries no Authorization.
     const catalog = vi.fn(async (_url: string, init?: { headers?: Record<string, string> }) => ({
-      ok: Boolean(init?.headers?.["x-internal-identity-context"]),
+      ok: Boolean(init?.headers?.Authorization),
     }));
     vi.stubGlobal("fetch", catalog);
     const testServer = await createTestServer(repository);
@@ -130,7 +133,7 @@ describe("procurement API", () => {
 
     const response = await httpFetch(`${testServer.url}/procurement/purchase-orders`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...caller },
       body: JSON.stringify({
         supplierId: ids.supplier,
         siteId: ids.site,
@@ -162,7 +165,7 @@ describe("procurement API", () => {
     const postAction = (action: "approve" | "cancel") =>
       httpFetch(`${testServer.url}/procurement/purchase-orders/00000000-0000-4000-8000-000000000007/action`, {
         method: "POST",
-        headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+        headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...caller },
         body: JSON.stringify({ action }),
       });
 
@@ -188,7 +191,7 @@ describe("procurement API", () => {
 
     const createResponse = await httpFetch(`${testServer.url}/procurement/goods-receipts`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...caller },
       body: JSON.stringify({
         receiptNumber: "GR-API-DETAIL-001",
         supplierId: ids.supplier,
@@ -234,7 +237,7 @@ describe("procurement API", () => {
 
     const response = await httpFetch(`${testServer.url}/procurement/goods-receipts`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor },
+      headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...caller },
       body: JSON.stringify({
         receiptNumber: "GR-API-001",
         supplierId: ids.supplier,

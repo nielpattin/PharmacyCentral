@@ -7,7 +7,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import type { ReplaceCredentialRequest } from "../../contracts/credentials.ts";
 import { SecretBox } from "../../infrastructure/secret-box.ts";
 import { createLogger } from "../../logger.ts";
-import { createTrustedRequestMiddleware, signInternalIdentityContext } from "../../middleware/trusted-request.ts";
+import { createTrustedRequestMiddleware } from "../../middleware/trusted-request.ts";
+import { accessToken, testAccessTokenVerifier } from "../../test-access-tokens.ts";
 import type { AiProviderSettings } from "../../infrastructure/ai-provider-config.ts";
 import { ConfiguredPrescriptionReader } from "../prescriptions/infrastructure/configured-prescription-reader.ts";
 import { GeminiPrescriptionReader } from "../prescriptions/infrastructure/gemini-prescription-reader.ts";
@@ -19,7 +20,6 @@ import { createCredentialRouter } from "./credential-routes.ts";
 import { createMemoryCredentialStore } from "./memory-credential-store.ts";
 
 const httpFetch = globalThis.fetch.bind(globalThis);
-const SECRET = "test-internal-identity-secret";
 const ADMIN = "55555555-5555-4555-8555-555555555555";
 const MANAGER = "66666666-6666-4666-8666-666666666666";
 const CUSTOMER = "11111111-1111-4111-8111-111111111111";
@@ -37,28 +37,12 @@ const SAVED_BODY = {
   apiKey: "AIzaSyExampleKey1234",
 } satisfies ReplaceCredentialRequest;
 
-const signedHeader = (actorType: "customer" | "employee", actorId: string, roles: string[]): string => {
-  const now = Date.now();
-  return signInternalIdentityContext(
-    {
-      version: "v1",
-      requestId: "request-1",
-      correlationId: "correlation-1",
-      actorId,
-      actorType,
-      roles,
-      siteIds: [],
-      issuedAt: new Date(now - 1_000).toISOString(),
-      expiresAt: new Date(now + 300_000).toISOString(),
-      audience: "sales-service",
-    },
-    SECRET,
-  );
-};
+const bearer = (actorType: "customer" | "employee", actorId: string, roles: string[]): Promise<string> =>
+  accessToken({ actorType, actorId, roles });
 
-const as = (actorType: "customer" | "employee", actorId: string, roles: string[]) => ({
+const as = async (actorType: "customer" | "employee", actorId: string, roles: string[]) => ({
   "content-type": "application/json",
-  "x-internal-identity-context": signedHeader(actorType, actorId, roles),
+  authorization: await bearer(actorType, actorId, roles),
 });
 
 const buildVault = (overrides: { purpose?: string; fallback?: AiProviderSettings } = {}): AiCredentialVault =>
@@ -73,8 +57,8 @@ const buildVault = (overrides: { purpose?: string; fallback?: AiProviderSettings
 const startApp = async (vault: AiCredentialVault, extra?: (app: express.Express) => void) => {
   const app = express();
   app.use(express.json({ limit: "32kb" }));
-  app.use(createTrustedRequestMiddleware({ identitySecret: SECRET, expectedAudience: "sales-service" }));
-  app.use(createCredentialRouter({ vault, identitySecret: SECRET, audience: "sales-service" }));
+  app.use(createTrustedRequestMiddleware({ verifier: testAccessTokenVerifier }));
+  app.use(createCredentialRouter({ vault }));
   extra?.(app);
   app.use(createErrorHandler(createLogger({ level: "silent" })));
   const server = createServer(app);
@@ -101,9 +85,9 @@ describe("sales credential routes", () => {
 
   it("refuses everyone but a Platform Admin", async () => {
     const attempts = [
-      as("customer", CUSTOMER, []),
-      as("employee", MANAGER, ["Pharmacy Manager"]),
-      as("employee", MANAGER, []),
+      await as("customer", CUSTOMER, []),
+      await as("employee", MANAGER, ["Pharmacy Manager"]),
+      await as("employee", MANAGER, []),
     ];
 
     for (const headers of attempts) {
@@ -126,7 +110,7 @@ describe("sales credential routes", () => {
   });
 
   it("lets a Platform Admin set, read and clear the key without ever returning it", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
 
     const empty = await httpFetch(`${baseUrl}${PATH}`, { headers });
     expect(await empty.json()).toMatchObject({ current: { configured: false } });
@@ -163,7 +147,7 @@ describe("sales credential routes", () => {
   });
 
   it("rejects a key that is missing or too short", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
 
     for (const body of [
       {},
@@ -177,7 +161,7 @@ describe("sales credential routes", () => {
   });
 
   it("lists the supported providers with their catalog entries in the view", async () => {
-    const response = await httpFetch(`${baseUrl}${PATH}`, { headers: as("employee", ADMIN, ["Platform Admin"]) });
+    const response = await httpFetch(`${baseUrl}${PATH}`, { headers: await as("employee", ADMIN, ["Platform Admin"]) });
 
     expect(await response.json()).toMatchObject({
       providers: [
@@ -187,7 +171,7 @@ describe("sales credential routes", () => {
   });
 
   it("rejects a provider it does not know, a model that is blank and a base URL that is not https", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
 
     for (const body of [
       { ...SAVED_BODY, provider: "openai" },
@@ -205,7 +189,7 @@ describe("sales credential routes", () => {
   });
 
   it("asks for an API key when none is saved for the provider, and keeps the saved key when the provider is unchanged", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
     const withoutKey = await httpFetch(`${baseUrl}${PATH}`, {
       method: "PUT",
       headers,
@@ -232,7 +216,7 @@ describe("sales credential routes", () => {
   it("answers with the environment settings once the saved row is deleted", async () => {
     const environmentVault = buildVault({ fallback: ENVIRONMENT });
     const started = await startApp(environmentVault);
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
     try {
       await httpFetch(`${started.url}${PATH}`, { method: "PUT", headers, body: JSON.stringify(SAVED_BODY) });
       expect(await environmentVault.current()).toMatchObject({ model: "gemini-test-model" });
@@ -295,12 +279,12 @@ describe("credential route to prescription reader", () => {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   });
 
-  const postImage = () =>
+  const postImage = async () =>
     httpFetch(`${baseUrl}/prescriptions/intake/image`, {
       method: "POST",
       headers: {
         "content-type": "image/jpeg",
-        "x-internal-identity-context": signedHeader("customer", CUSTOMER, []),
+        authorization: await bearer("customer", CUSTOMER, []),
       },
       body: jpeg,
     });
@@ -310,14 +294,14 @@ describe("credential route to prescription reader", () => {
 
     const forbidden = await httpFetch(`${baseUrl}${PATH}`, {
       method: "PUT",
-      headers: as("employee", MANAGER, ["Pharmacy Manager"]),
+      headers: await as("employee", MANAGER, ["Pharmacy Manager"]),
       body: JSON.stringify({ apiKey: "AIzaSyExampleKey1234" }),
     });
     expect(forbidden.status).toBe(403);
 
     const stored = await httpFetch(`${baseUrl}${PATH}`, {
       method: "PUT",
-      headers: as("employee", ADMIN, ["Platform Admin"]),
+      headers: await as("employee", ADMIN, ["Platform Admin"]),
       body: JSON.stringify(SAVED_BODY),
     });
     expect(stored.status).toBe(200);

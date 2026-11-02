@@ -3,11 +3,10 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { InternalIdentityContext } from "../contracts/common.ts";
+import { accessToken, testAccessTokenVerifier } from "../test-access-tokens.ts";
 
-import { createTrustedRequestMiddleware, signInternalIdentityContext } from "./trusted-request.ts";
+import { createTrustedRequestMiddleware } from "./trusted-request.ts";
 
-const identitySecret = "test-identity-secret-1234567890123456";
 const serviceSecret = "test-service-secret-1234567890123456";
 const spoofedActorId = "00000000-0000-4000-8000-000000000099";
 
@@ -30,12 +29,12 @@ describe("trusted request actor headers", () => {
     await promise;
   });
 
-  it("drops client actor headers on a public request without a verified context", async () => {
+  it("drops client actor headers on a public request without a verified token", async () => {
     const app = express();
     let capturedActorId: string | undefined;
     let capturedActorType: string | undefined;
 
-    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret, isPublic: () => true }));
+    app.use(createTrustedRequestMiddleware({ verifier: testAccessTokenVerifier, serviceSecret, isPublic: () => true }));
     app.get("/public-check", (req, res) => {
       capturedActorId = req.header("x-actor-id") ?? undefined;
       capturedActorType = req.header("x-actor-type") ?? undefined;
@@ -53,9 +52,9 @@ describe("trusted request actor headers", () => {
     expect(capturedActorType).toBeUndefined();
   });
 
-  it("refuses a non-public request that carries actor headers but no verified context", async () => {
+  it("refuses a non-public request that carries actor headers but no verified token", async () => {
     const app = express();
-    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+    app.use(createTrustedRequestMiddleware({ verifier: testAccessTokenVerifier, serviceSecret }));
     app.get("/private-check", (_req, res) => {
       res.json({ ok: true });
     });
@@ -81,7 +80,7 @@ describe("trusted request role restatement", () => {
     await promise;
   });
 
-  // Mirrors the employee and shopper cases of policy.mjs. A request the middleware admits reaches the fallback (200).
+  // A request the middleware admits reaches the fallback (200).
   const callAs = async (
     actorType: "employee" | "customer",
     roles: string[],
@@ -90,26 +89,19 @@ describe("trusted request role restatement", () => {
   ): Promise<Response> => {
     const app = express();
     app.use(express.json());
-    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+    app.use(createTrustedRequestMiddleware({ verifier: testAccessTokenVerifier, serviceSecret }));
     app.use((_request, response) => response.json({ ok: true }));
     const { server, url } = await startServer(app);
     activeServer = server;
-    const context: InternalIdentityContext = {
-      version: "v1",
-      requestId: "req-role",
-      correlationId: "corr-role",
-      actorId: "00000000-0000-4000-8000-000000000001",
+    const authorization = await accessToken({
       actorType,
       roles,
       siteIds: ["00000000-0000-4000-8000-000000000010"],
-      issuedAt: new Date(Date.now() - 1000).toISOString(),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      audience: "payment-service",
-    };
+    });
     return fetch(`${url}${path}`, {
       method,
       headers: {
-        "x-internal-identity-context": signInternalIdentityContext(context, identitySecret),
+        authorization,
         "content-type": "application/json",
       },
       ...(method === "GET" ? {} : { body: "{}" }),

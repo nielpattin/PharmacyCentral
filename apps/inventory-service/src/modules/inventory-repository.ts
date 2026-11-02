@@ -1080,6 +1080,12 @@ export class InventoryRepository {
     return result;
   }
 
+  /**
+   * Holds the lines against the site. The reservation id is the idempotency key: a repeated call for an id inventory
+   * already knows answers the allocations that first call made (the lines still held) and moves no stock, whatever
+   * state the reservation is in, so a released hold is never taken again. The insert waits for a concurrent first
+   * call to commit, so two racing calls cannot both hold.
+   */
   public async reserve(input: {
     reservationId: string;
     ownerId: string;
@@ -1089,13 +1095,23 @@ export class InventoryRepository {
     lines: Array<{ productId: string; quantity: number }>;
   }) {
     const result = await this.database.db.transaction(async (transaction) => {
-      await transaction
+      const [created] = await transaction
         .insert(stockReservations)
         .values({ id: input.reservationId, ownerId: input.ownerId, status: "active" })
-        .onConflictDoUpdate({
-          target: stockReservations.id,
-          set: { ownerId: input.ownerId, status: "active", updatedAt: new Date() },
-        });
+        .onConflictDoNothing({ target: stockReservations.id })
+        .returning({ id: stockReservations.id });
+      if (!created) {
+        const held = await transaction
+          .select()
+          .from(stockReservationLines)
+          .where(eq(stockReservationLines.reservationId, input.reservationId));
+        return held.map((line) => ({
+          productId: line.productId,
+          productBatchId: line.productBatchId,
+          storageLocationId: line.storageLocationId,
+          quantity: Number(line.quantity),
+        }));
+      }
       const allocations: Array<{
         productId: string;
         productBatchId: string;

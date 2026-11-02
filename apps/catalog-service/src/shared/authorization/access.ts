@@ -1,12 +1,13 @@
+import type { AccessTokenVerifier } from "@pharmacy/auth";
 import type { RequestHandler, Response } from "express";
 
-import { verifyInternalIdentityContext } from "../../middleware/trusted-request.ts";
+import { verifyRequestIdentity } from "../../middleware/trusted-request.ts";
 import type { Refusal } from "../refusal.ts";
 import { PLATFORM_ADMIN, holdsRole, type RoleRule } from "./policy.ts";
 
-export type IdentityOptions = { identitySecret: string; audience: string };
+export type IdentityOptions = { verifier: AccessTokenVerifier };
 
-/** The employee a route verified from the signed context: who they are, what they may do, and where. */
+/** The employee a route verified from the access token: who they are, what they may do, and where. */
 export type StaffActor = { actorId: string; roles: readonly string[]; siteIds: readonly string[] };
 
 const STAFF_ACTOR = "staffActor";
@@ -49,20 +50,15 @@ export const SITE_ACCESS_DENIED: Refusal = {
 };
 
 /**
- * Verifies the signed identity context on this request and requires an employee. With `rule`, the employee must also
+ * Verifies the access token on this request and requires an employee. With `rule`, the employee must also
  * hold one of its roles (Platform Admin on a read). The verified actor is kept for the handler, so a route never trusts a client-sent header.
  */
 export const requireEmployee =
   (identity: IdentityOptions, rule?: RoleRule): RequestHandler =>
-  (request, response, next) => {
-    const context = verifyInternalIdentityContext(
-      request.header("x-internal-identity-context"),
-      identity.identitySecret,
-      new Date(),
-      identity.audience,
-    );
+  async (request, response, next) => {
+    const context = await verifyRequestIdentity(request, identity.verifier);
     if (!context) return refuse(response, SIGN_IN_REQUIRED);
-    if (context.actorType !== "employee" || !context.actorId) return refuse(response, EMPLOYEE_REQUIRED);
+    if (context.actorType !== "employee") return refuse(response, EMPLOYEE_REQUIRED);
     const isRead = request.method === "GET" || request.method === "HEAD";
     if (rule && !holdsRole(context.roles, rule, isRead)) return refuse(response, ROLE_FORBIDDEN);
     const actor: StaffActor = { actorId: context.actorId, roles: context.roles, siteIds: context.siteIds };

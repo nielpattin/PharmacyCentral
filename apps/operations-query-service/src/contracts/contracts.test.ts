@@ -5,27 +5,11 @@ import {
   dashboardSummarySchema,
   eventEnvelopeSchema,
   eventMetadataSchema,
-  internalIdentityContextSchema,
   operationsQueryContractVersion,
   siteScopeQuerySchema,
 } from "./index.ts";
 
 describe("operations-query-service contracts", () => {
-  it("accepts the anonymous actor type in internal identity context", () => {
-    const anonymous = internalIdentityContextSchema.safeParse({
-      version: "v1",
-      requestId: "req-1",
-      correlationId: "corr-1",
-      actorType: "anonymous",
-      roles: [],
-      siteIds: [],
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      audience: "operations-query-service",
-    });
-    expect(anonymous.success).toBe(true);
-  });
-
   it("exports operations-query contract version v1", () => {
     expect(operationsQueryContractVersion).toBe("v1");
   });
@@ -66,19 +50,6 @@ describe("operations-query-service contracts", () => {
       entityId: "00000000-0000-4000-8000-000000000099",
     });
     expect(validAudit.success).toBe(true);
-
-    const validIdentity = internalIdentityContextSchema.safeParse({
-      version: "v1",
-      requestId: "req-1",
-      correlationId: "corr-1",
-      actorType: "system",
-      roles: [],
-      siteIds: [],
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      audience: "operations-query-service",
-    });
-    expect(validIdentity.success).toBe(true);
 
     const validEnvelope = eventEnvelopeSchema.safeParse({
       metadata: eventMetadataSchema.parse({

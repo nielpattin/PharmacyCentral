@@ -11,11 +11,10 @@ import { aiProviderCatalog, chatModelProviders, intentGateProviders } from "../.
 import { createApp } from "../../app.ts";
 import type { AiProviderSettings } from "../../infrastructure/ai-provider-config.ts";
 import { SecretBox } from "../../infrastructure/secret-box.ts";
-import { signInternalIdentityContext } from "../../middleware/trusted-request.ts";
+import { bearerHeaders, testVerifier } from "../../test-support/access-tokens.ts";
 import { AiCredentialVault } from "./ai-credential-vault.ts";
 import { createMemoryCredentialStore } from "./memory-credential-store.ts";
 
-const SECRET = "test-internal-identity-secret";
 const ADMIN = "55555555-5555-4555-8555-555555555555";
 const MANAGER = "66666666-6666-4666-8666-666666666666";
 const CUSTOMER = "11111111-1111-4111-8111-111111111111";
@@ -43,28 +42,9 @@ const credentialViewSchema = z.object({
   current: z.record(z.string(), z.unknown()),
 });
 
-const signedHeader = (actorType: "customer" | "employee", actorId: string, roles: string[]): string => {
-  const now = Date.now();
-  return signInternalIdentityContext(
-    {
-      version: "v1",
-      requestId: "request-1",
-      correlationId: "correlation-1",
-      actorId,
-      actorType,
-      roles,
-      siteIds: [],
-      issuedAt: new Date(now - 1_000).toISOString(),
-      expiresAt: new Date(now + 300_000).toISOString(),
-      audience: "chatbot-service",
-    },
-    SECRET,
-  );
-};
-
-const as = (actorType: "customer" | "employee", actorId: string, roles: string[]) => ({
+const as = async (actorType: "customer" | "employee", actorId: string, roles: string[]) => ({
   "content-type": "application/json",
-  "x-internal-identity-context": signedHeader(actorType, actorId, roles),
+  ...(await bearerHeaders({ actorType, actorId, roles })),
 });
 
 const startServer = async (app: Express): Promise<{ server: Server; baseUrl: string }> => {
@@ -91,6 +71,7 @@ const buildApp = (fallback: AiProviderSettings | undefined) => {
     cacheMs: 60_000,
   });
   const app = createApp({
+    verifier: testVerifier,
     deps: {
       model: { complete: async () => ({ text: "ok", usage: undefined, modelCalls: 1 }) },
       products: { search: async () => [], details: async () => undefined },
@@ -100,13 +81,11 @@ const buildApp = (fallback: AiProviderSettings | undefined) => {
       reportGate: () => undefined,
     },
     credentials: [
-      { path: PATH, providers: chatModelProviders, vault, identitySecret: SECRET, audience: "chatbot-service" },
+      { path: PATH, providers: chatModelProviders, vault },
       {
         path: GATE_PATH,
         providers: intentGateProviders,
         vault: gateVault,
-        identitySecret: SECRET,
-        audience: "chatbot-service",
       },
     ],
     logger: pino({ level: "silent" }),
@@ -120,21 +99,19 @@ describe("chatbot credential routes", () => {
   let server: Server;
 
   beforeAll(async () => {
-    process.env.INTERNAL_IDENTITY_SECRET = SECRET;
     ({ server, baseUrl } = await startServer(app));
   });
 
   afterAll(async () => {
-    delete process.env.INTERNAL_IDENTITY_SECRET;
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   });
 
   it("refuses everyone but a Platform Admin", async () => {
-    const attempts = [
+    const attempts = await Promise.all([
       as("customer", CUSTOMER, []),
       as("employee", MANAGER, ["Pharmacy Manager"]),
       as("employee", MANAGER, []),
-    ];
+    ]);
 
     for (const headers of attempts) {
       const read = await fetch(`${baseUrl}${PATH}`, { headers });
@@ -156,7 +133,7 @@ describe("chatbot credential routes", () => {
   });
 
   it("lists the providers and reports no settings before an admin saves any", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
 
     const response = await fetch(`${baseUrl}${PATH}`, { headers });
 
@@ -165,7 +142,7 @@ describe("chatbot credential routes", () => {
   });
 
   it("lets a Platform Admin set, read and clear the settings without ever returning the key", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
 
     const set = await fetch(`${baseUrl}${PATH}`, {
       method: "PUT",
@@ -205,7 +182,7 @@ describe("chatbot credential routes", () => {
   });
 
   it("keeps the saved key when a PUT omits it for the same provider", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
     await fetch(`${baseUrl}${PATH}`, {
       method: "PUT",
       headers,
@@ -224,7 +201,7 @@ describe("chatbot credential routes", () => {
   });
 
   it("answers 400 api_key_required when a PUT omits the key and nothing is saved", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
     await fetch(`${baseUrl}${PATH}`, { method: "DELETE", headers });
 
     const response = await fetch(`${baseUrl}${PATH}`, {
@@ -243,7 +220,7 @@ describe("chatbot credential routes", () => {
   });
 
   it("rejects a body that is incomplete, has a short key, or uses a non-https base URL", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
     const invalid = [
       {},
       { ...SETTINGS, apiKey: "short" },
@@ -268,7 +245,7 @@ describe("chatbot credential routes", () => {
   });
 
   it("refuses typesafe, which only the intent gate uses, and saves nothing", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
     await fetch(`${baseUrl}${PATH}`, { method: "DELETE", headers });
 
     const response = await fetch(`${baseUrl}${PATH}`, {
@@ -289,17 +266,15 @@ describe("chatbot credential routes with an openai-compatible provider", () => {
   let server: Server;
 
   beforeAll(async () => {
-    process.env.INTERNAL_IDENTITY_SECRET = SECRET;
     ({ server, baseUrl } = await startServer(app));
   });
 
   afterAll(async () => {
-    delete process.env.INTERNAL_IDENTITY_SECRET;
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   });
 
   it("accepts an openai-compatible setting with a versioned https base URL and never returns the key", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
     const settings = {
       provider: "openai-compatible",
       model: "example-model",
@@ -327,21 +302,19 @@ describe("intent gate credential routes", () => {
   let server: Server;
 
   beforeAll(async () => {
-    process.env.INTERNAL_IDENTITY_SECRET = SECRET;
     ({ server, baseUrl } = await startServer(app));
   });
 
   afterAll(async () => {
-    delete process.env.INTERNAL_IDENTITY_SECRET;
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   });
 
   it("refuses everyone but a Platform Admin", async () => {
-    const attempts = [
+    const attempts = await Promise.all([
       as("customer", CUSTOMER, []),
       as("employee", MANAGER, ["Pharmacy Manager"]),
       as("employee", MANAGER, []),
-    ];
+    ]);
 
     for (const headers of attempts) {
       const read = await fetch(`${baseUrl}${GATE_PATH}`, { headers });
@@ -357,7 +330,7 @@ describe("intent gate credential routes", () => {
   });
 
   it("lists only the intent gate provider and reports no settings before an admin saves any", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
 
     const response = await fetch(`${baseUrl}${GATE_PATH}`, { headers });
 
@@ -366,7 +339,7 @@ describe("intent gate credential routes", () => {
   });
 
   it("saves a typesafe setting and never returns the key", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
 
     const response = await fetch(`${baseUrl}${GATE_PATH}`, {
       method: "PUT",
@@ -382,7 +355,7 @@ describe("intent gate credential routes", () => {
   });
 
   it("refuses gemini, which only the chat model uses, and saves nothing", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
     await fetch(`${baseUrl}${GATE_PATH}`, { method: "DELETE", headers });
 
     const response = await fetch(`${baseUrl}${GATE_PATH}`, {
@@ -397,7 +370,7 @@ describe("intent gate credential routes", () => {
   });
 
   it("refuses openai-compatible, which only the chat model uses, and saves nothing", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
     await fetch(`${baseUrl}${GATE_PATH}`, { method: "DELETE", headers });
 
     const response = await fetch(`${baseUrl}${GATE_PATH}`, {
@@ -423,17 +396,15 @@ describe("chatbot credential routes with environment settings", () => {
   let server: Server;
 
   beforeAll(async () => {
-    process.env.INTERNAL_IDENTITY_SECRET = SECRET;
     ({ server, baseUrl } = await startServer(app));
   });
 
   afterAll(async () => {
-    delete process.env.INTERNAL_IDENTITY_SECRET;
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   });
 
   it("reports the environment settings again once the saved ones are deleted", async () => {
-    const headers = as("employee", ADMIN, ["Platform Admin"]);
+    const headers = await as("employee", ADMIN, ["Platform Admin"]);
     await fetch(`${baseUrl}${PATH}`, {
       method: "PUT",
       headers,

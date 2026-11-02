@@ -5,12 +5,10 @@ import pino from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../../app.ts";
-import { signedIdentityHeader } from "../../middleware/platform-admin.test.ts";
+import { accessToken, testAccessTokenVerifier } from "../../test-access-tokens.ts";
 import type { Probes } from "./probes.ts";
 
-const SECRET = "test-internal-identity-secret";
-const AUDIENCE = "ops-console-service";
-const admin = { "x-internal-identity-context": signedIdentityHeader(SECRET, AUDIENCE, "employee", ["Platform Admin"]) };
+const admin = { authorization: await accessToken({ roles: ["Platform Admin"] }) };
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -95,8 +93,7 @@ const baseProbes: Probes = {
 
 const startServer = async (probes: Probes): Promise<{ base: string; close: () => Promise<void> }> => {
   const app = createApp({
-    identitySecret: SECRET,
-    audience: AUDIENCE,
+    verifier: testAccessTokenVerifier,
     probes,
     links: [{ label: "Grafana", url: "http://grafana.test" }],
     logger: pino({ level: "silent" }),
@@ -296,7 +293,7 @@ describe("GET /system/metrics/range", () => {
 });
 
 describe("access", () => {
-  it("refuses a request without a trusted identity", async () => {
+  it("refuses a request without an access token", async () => {
     expect((await get(configured.base, "/system/overview", {})).status).toBe(401);
   });
 
@@ -307,7 +304,7 @@ describe("access", () => {
       ["system", ["Platform Admin"]],
     ] as const) {
       const response = await get(configured.base, "/system/overview", {
-        "x-internal-identity-context": signedIdentityHeader(SECRET, AUDIENCE, actorType, [...roles]),
+        authorization: await accessToken({ actorType, roles: [...roles] }),
       });
       expect(response.status, `${actorType} ${roles.join()}`).toBe(403);
     }

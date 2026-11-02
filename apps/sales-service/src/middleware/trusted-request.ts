@@ -1,35 +1,20 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { trace } from "@opentelemetry/api";
+import { bearerToken, type AccessIdentity, type AccessTokenVerifier } from "@pharmacy/auth";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
-import {
-  internalIdentityContextSchema,
-  signedInternalIdentityContextSchema,
-  type InternalIdentityContext,
-  type SignedInternalIdentityContext,
-} from "../contracts/common.ts";
 import { createLogger } from "../logger.ts";
 
 const logger = createLogger({ name: "sales-service" });
 
 export interface TrustedRequestEnforcementOptions {
-  /**
-   * Secret used to verify HMAC signed internal identity context.
-   * Defaults to process.env.INTERNAL_IDENTITY_SECRET.
-   */
-  identitySecret?: string | undefined;
+  /** Verifies the bearer access token (keys from IDENTITY_JWKS_URL). */
+  verifier: AccessTokenVerifier;
 
   /**
    * Secret used for direct inter-service authentication.
    * Defaults to process.env.INTERNAL_SERVICE_SECRET.
    */
   serviceSecret?: string | undefined;
-
-  /**
-   * Expected audience for the signed internal identity context.
-   * Defaults to process.env.INTERNAL_IDENTITY_AUDIENCE.
-   */
-  expectedAudience?: string | string[] | undefined;
 
   /**
    * Health check path prefixes exempt from trusted gateway checks.
@@ -76,8 +61,8 @@ export const DEFAULT_SITE_SCOPED_PREFIXES: readonly string[] = [
 ];
 
 /**
- * The counter's own prefixes. `deploy/aws/lambda/policy.mjs` refuses a shopper on the same paths at the edge, but the
- * local topology has no authorizer and hands every shopper a signed context, so the split has to hold here too.
+ * The counter's own prefixes. A shopper holds a valid access token too, so the split between the counter and the
+ * shopper is enforced here.
  */
 export const DEFAULT_EMPLOYEE_PREFIXES: readonly string[] = [
   "/procurement",
@@ -112,9 +97,8 @@ export type CustomerRequestException = {
 
 /**
  * Requests a shopper may keep making on a path the employee prefixes would otherwise refuse. The prescription entries
- * mirror `customerPrescriptionRequests` and the invoice entries mirror payment's customer carve-outs in
- * `deploy/aws/lambda/policy.mjs`; the invoice read is a shopper's own receipt, served with an owner check by
- * payment-service, so this service-side list keeps it reachable where the edge policy is stricter.
+ * are the shopper's own prescription requests; the invoice read is a shopper's own receipt, served with an owner
+ * check by payment-service, so it stays reachable here.
  */
 export const DEFAULT_CUSTOMER_REQUEST_EXCEPTIONS: readonly CustomerRequestException[] = [
   { method: "GET", path: "/prescriptions", match: "exact" },
@@ -184,8 +168,8 @@ const matchesCustomerException = (exception: CustomerRequestException, path: str
 };
 
 /**
- * True when the path belongs behind the counter rather than to the shopper, the same split
- * `deploy/aws/lambda/policy.mjs` makes with `employeePrefixes`, `catalogWritePrefixes` and its payment carve-outs.
+ * True when the path belongs behind the counter rather than to the shopper, the split
+ * between the employee prefixes, the catalog write prefixes and the payment carve-outs.
  * The exemptions are checked first, so a shared path such as the prescription list stays the shopper's.
  */
 export const isEmployeePath = (path: string, method: string): boolean => {
@@ -201,7 +185,7 @@ export const isEmployeePath = (path: string, method: string): boolean => {
 
 export const ACTOR_ROLES_HEADER = "x-actor-roles";
 
-// Restates `employeeRoleRules` of deploy/aws/lambda/policy.mjs for this service.
+// Role rules for the routes of this service.
 // Methods: "*", "READ" (GET, HEAD), "WRITE" (other methods) or a method name. A rule with no roles admits any employee.
 type Route = { methods: readonly string[]; path: string; exact?: boolean };
 type RoleRule = Route & { roles: readonly string[] };
@@ -251,7 +235,7 @@ const roleRefusal = (path: string, method: string, roles: readonly string[]): st
 
 /**
  * What this layer can and cannot check. It reads the `siteId`, `sourceSiteId` and `destinationSiteId` keys of the query
- * and the body. It does not resolve a `siteCode`, because the identity context carries site ids only, and it does not
+ * and the body. It does not resolve a `siteCode`, because the access token carries site ids only, and it does not
  * load a record named by an id in the path: a by-id route is checked against the record's site by the owning service,
  * before it writes.
  */
@@ -294,53 +278,6 @@ export const findOutOfScopeSiteIds = (value: unknown, allowedSiteIds: readonly s
   };
   visit(value);
   return [...offenders];
-};
-
-export const verifyInternalIdentityContext = (
-  header: string | undefined,
-  secret: string | undefined,
-  now = new Date(),
-  expectedAudience?: string | string[],
-): InternalIdentityContext | undefined => {
-  if (!header || !secret) return undefined;
-  try {
-    const rawJson = Buffer.from(header, "base64url").toString("utf8");
-    const signed = signedInternalIdentityContextSchema.parse(JSON.parse(rawJson));
-    const serialized = JSON.stringify(signed.context);
-    const expected = createHmac("sha256", secret).update(serialized).digest("hex");
-    const expectedBytes = Buffer.from(expected, "utf8");
-    const providedBytes = Buffer.from(signed.signature, "utf8");
-    if (expectedBytes.length !== providedBytes.length || !timingSafeEqual(expectedBytes, providedBytes)) {
-      return undefined;
-    }
-    const context = internalIdentityContextSchema.parse(signed.context);
-    if (new Date(context.expiresAt).getTime() <= now.getTime()) {
-      return undefined;
-    }
-    if (new Date(context.issuedAt).getTime() > now.getTime()) {
-      return undefined;
-    }
-    if (expectedAudience !== undefined) {
-      const allowedAudiences = Array.isArray(expectedAudience) ? expectedAudience : [expectedAudience];
-      if (!allowedAudiences.includes(context.audience)) {
-        return undefined;
-      }
-    }
-    return context;
-  } catch {
-    return undefined;
-  }
-};
-
-export const signInternalIdentityContext = (context: InternalIdentityContext, secret: string): string => {
-  const serialized = JSON.stringify(context);
-  const signature = createHmac("sha256", secret).update(serialized).digest("hex");
-  const signed: SignedInternalIdentityContext = {
-    context,
-    algorithm: "hmac-sha256",
-    signature,
-  };
-  return Buffer.from(JSON.stringify(signed), "utf8").toString("base64url");
 };
 
 const injectDefaultSiteQuery = (request: Request, siteId: string): void => {
@@ -431,38 +368,41 @@ const interceptResponseForSiteSecurity = (response: Response, allowedSiteIds: st
   };
 };
 
-export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcementOptions = {}): RequestHandler => {
+export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcementOptions): RequestHandler => {
   const healthPrefixes = options.healthPaths ?? DEFAULT_HEALTH_PREFIXES;
   const publicPrefixes = options.publicPaths ?? [];
   const siteScopedPrefixes = [...DEFAULT_SITE_SCOPED_PREFIXES, ...(options.siteScopedPaths ?? [])];
 
-  return (request: Request, response: Response, next: NextFunction): void => {
+  return async (request: Request, response: Response, next: NextFunction): Promise<void> => {
     const isHealth = healthPrefixes.some((prefix) => matchesPathPrefix(request.path, prefix));
     const isPublic =
       publicPrefixes.some((prefix) => matchesPathPrefix(request.path, prefix)) ||
       (options.isPublic ? options.isPublic(request) : false);
 
-    const identitySecret = options.identitySecret ?? process.env.INTERNAL_IDENTITY_SECRET;
     const serviceSecret = options.serviceSecret ?? process.env.INTERNAL_SERVICE_SECRET;
-    const expectedAudience = options.expectedAudience ?? process.env.INTERNAL_IDENTITY_AUDIENCE;
 
-    const rawIdentityHeader = request.header("x-internal-identity-context");
-    const verifiedContext = verifyInternalIdentityContext(
-      rawIdentityHeader,
-      identitySecret,
-      new Date(),
-      expectedAudience,
+    const identity: AccessIdentity | undefined = await options.verifier.verify(
+      bearerToken(request.header("authorization")),
     );
 
     const rawServiceSecret = request.header("x-internal-service-secret");
     const isServiceSecretValid =
       Boolean(serviceSecret) && Boolean(rawServiceSecret) && rawServiceSecret === serviceSecret;
 
-    if (!isHealth && !isPublic && !verifiedContext && !isServiceSecretValid) {
+    if (!isHealth && !isPublic && !identity && !isServiceSecretValid) {
       response.status(401).json({
         title: "Trusted gateway request required",
         status: 401,
         code: "trusted_request_required",
+      });
+      return;
+    }
+
+    if (!isHealth && identity?.passwordChangeRequired) {
+      response.status(403).json({
+        title: "Password change required",
+        status: 403,
+        code: "password_change_required",
       });
       return;
     }
@@ -478,22 +418,15 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       return;
     }
 
-    if (verifiedContext) {
-      // Lets an operator find the trace of a request from the correlation id shown to a user (System page, Traces).
-      const span = trace.getActiveSpan();
-      span?.setAttribute("correlation_id", verifiedContext.correlationId);
-      span?.setAttribute("request_id", verifiedContext.requestId);
-      if (verifiedContext.actorId) {
-        request.headers["x-actor-id"] = verifiedContext.actorId;
-      } else {
-        delete request.headers["x-actor-id"];
-      }
-      request.headers["x-actor-type"] = verifiedContext.actorType;
-      request.headers["x-request-id"] = verifiedContext.requestId;
-      request.headers["x-correlation-id"] = verifiedContext.correlationId;
-      // Route handlers see the roles of an employee only; a shopper or anonymous caller has none to carry.
-      if (verifiedContext.actorType === "employee") {
-        request.headers[ACTOR_ROLES_HEADER] = verifiedContext.roles.join(",");
+    if (identity) {
+      // Lets an operator find the trace of a request from the request id shown to a user (System page, Traces).
+      const requestId = request.header("x-request-id");
+      if (requestId) trace.getActiveSpan()?.setAttribute("request_id", requestId);
+      request.headers["x-actor-id"] = identity.actorId;
+      request.headers["x-actor-type"] = identity.actorType;
+      // Route handlers see the roles of an employee only; a shopper has none to carry.
+      if (identity.actorType === "employee") {
+        request.headers[ACTOR_ROLES_HEADER] = identity.roles.join(",");
       } else {
         delete request.headers[ACTOR_ROLES_HEADER];
       }
@@ -502,12 +435,12 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
         request.headers["x-actor-type"] = "system";
       }
     } else {
-      // Nothing vouches for this caller (a public or health route with no valid context or secret), so the actor
+      // Nothing vouches for this caller (a public or health route with no valid token or secret), so the actor
       // headers it sent are dropped before any handler can act for the actor it names.
       if (request.headers["x-actor-id"] !== undefined) {
         logger.warn(
           { requestId: request.header("x-request-id") },
-          "dropped client x-actor-id on a request without verified context",
+          "dropped client x-actor-id on a request without a verified token",
         );
       }
       delete request.headers["x-actor-id"];
@@ -519,16 +452,16 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
     // did not vouch for as `system`, is refused before a handler runs.
     if (
       SERVICE_ONLY_PREFIXES.some((prefix) => matchesPathPrefix(request.path, prefix)) &&
-      (verifiedContext || request.headers["x-actor-type"] !== "system")
+      (identity || request.headers["x-actor-type"] !== "system")
     ) {
       response.status(403).json({ title: "Service access required", status: 403, code: "service_required" });
       return;
     }
 
-    // A shopper's own paths stay open; anything behind the counter stops here even though the context verifies.
+    // A shopper's own paths stay open; anything behind the counter stops here even though the token verifies.
     if (
-      verifiedContext &&
-      (verifiedContext.actorType === "customer" || verifiedContext.actorType === "anonymous") &&
+      identity &&
+      (identity.actorType === "customer" || identity.actorType === "anonymous") &&
       isEmployeePath(request.path, request.method)
     ) {
       response.status(403).json({
@@ -539,10 +472,10 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       return;
     }
 
-    // The roles a verified employee holds are checked here as the edge checks them: Platform Admin reads every
-    // route and writes only where a rule names it, and any other employee needs one of the roles the rule names.
-    if (verifiedContext && verifiedContext.actorType === "employee") {
-      const detail = roleRefusal(request.path, request.method, verifiedContext.roles);
+    // The roles a verified employee holds are checked here: Platform Admin reads every route and writes only where a
+    // rule names it, and any other employee needs one of the roles the rule names.
+    if (identity && identity.actorType === "employee") {
+      const detail = roleRefusal(request.path, request.method, identity.roles);
       if (detail !== undefined) {
         response.status(403).json({ title: "Role forbidden", status: 403, code: "role_forbidden", detail });
         return;
@@ -550,15 +483,11 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
     }
 
     // Only this middleware states an employee's sites, so a browser can never claim a scope. An internal service
-    // calling without an identity context may forward the scope of the employee it acts for.
-    if (verifiedContext || !isServiceSecretValid) delete request.headers[ACTOR_SITE_IDS_HEADER];
+    // calling without a token may forward the scope of the employee it acts for.
+    if (identity || !isServiceSecretValid) delete request.headers[ACTOR_SITE_IDS_HEADER];
 
-    if (
-      verifiedContext &&
-      verifiedContext.actorType === "employee" &&
-      !verifiedContext.roles.includes("Platform Admin")
-    ) {
-      const employeeSiteIds = verifiedContext.siteIds ?? [];
+    if (identity && identity.actorType === "employee" && !identity.roles.includes("Platform Admin")) {
+      const employeeSiteIds = identity.siteIds;
       request.headers[ACTOR_SITE_IDS_HEADER] = employeeSiteIds.join(",");
 
       if (employeeSiteIds.length === 0) {

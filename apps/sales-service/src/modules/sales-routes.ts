@@ -15,6 +15,7 @@ import {
   salesTargetMonthSchema,
   setSalesTargetSchema,
 } from "../contracts/sales.ts";
+import { idempotencyKeySchema } from "../contracts/common.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { actorSiteIds, listSiteIds } from "../middleware/trusted-request.ts";
 import { readCursorParam } from "../shared/page-cursor.ts";
@@ -28,6 +29,7 @@ import {
 } from "./delivery/domain/delivery-calculator.ts";
 import { CustomerContactUnavailableError, lookupCustomerContacts } from "./customer-contact.ts";
 import type { OrderStock } from "./orders/application/order-stock.ts";
+import { orderRequestFingerprint } from "./orders/domain/order-request-fingerprint.ts";
 import {
   InvalidOrderTransition,
   staffMoveRefusal,
@@ -35,7 +37,12 @@ import {
   type OrderStatus,
 } from "./orders/domain/order-status.ts";
 import { InsufficientStockError, InventoryRequestError } from "./orders/infrastructure/inventory-reservations.ts";
-import { PrescriptionDispenseError, SalesRepository, type PrescriptionStockDispense } from "./sales-repository.ts";
+import {
+  IdempotencyKeyInUseError,
+  PrescriptionDispenseError,
+  SalesRepository,
+  type PrescriptionStockDispense,
+} from "./sales-repository.ts";
 import { actorMaySeeSite, siteAccessDenied } from "./staff-access.ts";
 
 const idSchema = z.object({ id: z.string().uuid() });
@@ -335,7 +342,15 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     const parsed = createOrderRequestSchema.safeParse(request.body);
     if (!customerId) return unauthorized(response);
     if (!parsed.success) return invalid(response);
+    // The Idempotency-Key is optional. Sent, a repeat of it answers the order it created (see answerRepeatedOrder).
+    const keyHeader = request.header("Idempotency-Key");
+    const keyParsed = keyHeader === undefined ? undefined : idempotencyKeySchema.safeParse(keyHeader);
+    if (keyParsed && !keyParsed.success) return invalid(response);
+    const idempotency = keyParsed?.success
+      ? { key: keyParsed.data, requestHash: orderRequestFingerprint(parsed.data) }
+      : undefined;
     try {
+      if (idempotency && (await answerRepeatedOrder(response, repository, customerId, idempotency))) return;
       // An order made from the cart takes its lines from the server's copy, never from the request (BR-CART-002).
       const cartLines = parsed.data.fromCart ? await repository.getSelectedCartLines(customerId) : undefined;
       if (cartLines?.length === 0)
@@ -371,11 +386,19 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
         paymentMethod: parsed.data.paymentMethod,
         lines,
         ...(delivery ? { delivery: toDeliverySnapshot(delivery) } : {}),
+        idempotency,
       });
-      await orderStock.hold(
-        order,
-        lines.map((line) => ({ productId: line.productId, quantity: line.quantity })),
-      );
+      try {
+        await orderStock.hold(
+          order,
+          lines.map((line) => ({ productId: line.productId, quantity: line.quantity })),
+        );
+      } catch (error) {
+        // The order was cancelled because its stock was refused. Its key must not replay that cancelled order, so a
+        // retry with the same key places a new one.
+        if (idempotency) await repository.deleteOrderIdempotencyKey(customerId, idempotency.key, order.id);
+        throw error;
+      }
       // Only after the stock is held: a refused order leaves the cart as it was. The lines that were not ticked stay.
       if (cartLines)
         await repository.clearCart(
@@ -384,6 +407,16 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
         );
       return response.status(201).json(await repository.getOrder(order.id));
     } catch (error) {
+      // A concurrent duplicate lost the race for its key: its order insert was rolled back, so the winner's order is
+      // the answer.
+      if (error instanceof IdempotencyKeyInUseError && idempotency) {
+        if (await answerRepeatedOrder(response, repository, customerId, idempotency)) return;
+        return response.status(409).json({
+          title: "The Idempotency-Key is in use, try again",
+          status: 409,
+          code: "idempotency_key_in_progress",
+        });
+      }
       if (error instanceof InsufficientStockError)
         return response
           .status(409)
@@ -392,6 +425,10 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
         return response
           .status(503)
           .json({ title: "Stock could not be checked, try again", status: 503, code: "stock_unavailable" });
+      if (error instanceof CatalogUnavailableError)
+        return response
+          .status(503)
+          .json({ title: "Catalog is unavailable, try again", status: 503, code: "catalog_unavailable" });
       if (error instanceof DeliveryOutOfRangeError)
         return response.status(422).json({
           title: error.message,
@@ -777,6 +814,49 @@ const verifyCustomerAccount = async (customerId: string, baseUrl?: string): Prom
   }
 };
 
+/**
+ * Answers a repeat of an Idempotency-Key. The same request gets the order the key created, with the 201 of the first
+ * answer and no catalog, stock or cart work. A different request under the same key gets 422 `idempotency_key_reuse`.
+ * Returns false when the key is unknown, so the caller places the order.
+ */
+const answerRepeatedOrder = async (
+  response: Response,
+  repository: SalesRepository,
+  customerId: string,
+  idempotency: { key: string; requestHash: string },
+): Promise<boolean> => {
+  const existing = await repository.getOrderIdempotencyKey(customerId, idempotency.key);
+  if (!existing) return false;
+  if (existing.requestHash !== idempotency.requestHash)
+    response.status(422).json({
+      title: "Idempotency-Key was already used for a different order",
+      status: 422,
+      code: "idempotency_key_reuse",
+    });
+  else response.status(201).json(await repository.getOrder(existing.orderId));
+  return true;
+};
+
+/** Catalog-service did not answer in time, could not be reached, or failed with a server error. */
+class CatalogUnavailableError extends Error {
+  constructor(options?: ErrorOptions) {
+    super("Catalog-service is unavailable", options);
+    this.name = "CatalogUnavailableError";
+  }
+}
+
+/** A catalog call that turns a timeout, a network failure or a 5xx answer into {@link CatalogUnavailableError}. */
+const fetchCatalog = async (url: string): Promise<globalThis.Response> => {
+  let response: globalThis.Response;
+  try {
+    response = await fetch(url, { headers: internalServiceHeaders(), signal: AbortSignal.timeout(2_000) });
+  } catch (error) {
+    throw new CatalogUnavailableError({ cause: error });
+  }
+  if (response.status >= 500) throw new CatalogUnavailableError();
+  return response;
+};
+
 class UnpricedProductError extends Error {
   constructor(public readonly productId: string) {
     super("Product has no published price and cannot be ordered online");
@@ -808,10 +888,7 @@ const findPrescriptionProductIds = async (productIds: string[], baseUrl: string)
   const flagged = new Set<string>();
   await Promise.all(
     [...new Set(productIds)].map(async (productId) => {
-      const response = await fetch(`${baseUrl}/products/${productId}`, {
-        headers: internalServiceHeaders(),
-        signal: AbortSignal.timeout(2_000),
-      });
+      const response = await fetchCatalog(`${baseUrl}/products/${productId}`);
       if (response.status === 404) return;
       if (!response.ok) throw new Error("Product is unavailable");
       const product = (await response.json()) as { prescriptionRequired?: boolean };
@@ -836,13 +913,9 @@ const resolveOrderLines = async (
   return Promise.all(
     lines.map(async (line) => {
       const [productResponse, priceResponse] = await Promise.all([
-        fetch(`${baseUrl}/products/${line.productId}`, {
-          headers: internalServiceHeaders(),
-          signal: AbortSignal.timeout(2_000),
-        }),
-        fetch(
+        fetchCatalog(`${baseUrl}/products/${line.productId}`),
+        fetchCatalog(
           `${baseUrl}/pricing/active?productId=${line.productId}&productUnitId=${line.productUnitId}&effectiveDate=${new Date().toISOString().slice(0, 10)}`,
-          { headers: internalServiceHeaders(), signal: AbortSignal.timeout(2_000) },
         ),
       ]);
       if (!productResponse.ok) throw new Error("Product or active price is unavailable");

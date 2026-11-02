@@ -4,7 +4,6 @@ import {
   catalogContractVersion,
   eventEnvelopeSchema,
   eventMetadataSchema,
-  internalIdentityContextSchema,
   problemDetailsSchema,
   productChangedEventSchema,
   productSearchQuerySchema,
@@ -13,21 +12,6 @@ import {
 } from "./index.ts";
 
 describe("catalog-service contracts", () => {
-  it("accepts the anonymous actor type in internal identity context", () => {
-    const anonymous = internalIdentityContextSchema.safeParse({
-      version: "v1",
-      requestId: "req-1",
-      correlationId: "corr-1",
-      actorType: "anonymous",
-      roles: [],
-      siteIds: [],
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      audience: "catalog-service",
-    });
-    expect(anonymous.success).toBe(true);
-  });
-
   it("exports catalog contract version v1", () => {
     expect(catalogContractVersion).toBe("v1");
   });
@@ -80,19 +64,6 @@ describe("catalog-service contracts", () => {
       active: true,
     });
     expect(validEvent.success).toBe(true);
-
-    const validIdentity = internalIdentityContextSchema.safeParse({
-      version: "v1",
-      requestId: "req-1",
-      correlationId: "corr-1",
-      actorType: "system",
-      roles: [],
-      siteIds: [],
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      audience: "catalog-service",
-    });
-    expect(validIdentity.success).toBe(true);
 
     const validProblem = problemDetailsSchema.safeParse({
       type: "https://example.com/probs/not-found",

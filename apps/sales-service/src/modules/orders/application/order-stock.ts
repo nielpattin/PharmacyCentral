@@ -8,6 +8,15 @@ export const QR_ORDER_TTL_MS = 30 * 60 * 1000;
 export const CASH_ORDER_TTL_MS = 24 * 60 * 60 * 1000;
 const SWEEP_INTERVAL_MS = 60 * 1000;
 const RELEASE_BATCH_SIZE = 50;
+/**
+ * An order is only checked against inventory once it is older than the longest a placement can still be in flight
+ * (inventory's own timeout is 5 s), and only if it is younger than the lookback: each order is checked about once,
+ * and a restart still covers the orders a crash left behind.
+ */
+export const RECONCILE_GRACE_MS = 2 * 60 * 1000;
+export const RECONCILE_LOOKBACK_MS = 10 * 60 * 1000;
+/** An Idempotency-Key replays the order it created for this long; after that the same key places a new order. */
+export const IDEMPOTENCY_KEY_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * The stock side of an online order. An order holds stock in inventory-service from the moment it is placed until it
@@ -16,6 +25,9 @@ const RELEASE_BATCH_SIZE = 50;
  * a failure between two steps be repaired later: a cancelled order that still says `held` is released by a sweep.
  */
 export class OrderStock {
+  /** Orders created before this moment have been checked against inventory by this process. */
+  private reconciledUpTo: Date | undefined;
+
   public constructor(
     private readonly repository: SalesRepository,
     private readonly inventory: InventoryReservations,
@@ -81,12 +93,54 @@ export class OrderStock {
     await this.repository.endStockHold(orderId, "consumed");
   }
 
-  /** Cancels the orders nobody paid for in time, then gives back the hold of every cancelled order that kept one. */
+  /**
+   * Cancels the orders nobody paid for in time, then gives back the hold of every cancelled order that kept one. It
+   * also forgets the Idempotency-Keys older than their replay window.
+   */
   public async sweep(now = new Date()): Promise<void> {
     const expired = await this.repository.cancelExpiredUnpaidOrders(now, QR_ORDER_TTL_MS, CASH_ORDER_TTL_MS);
     if (expired.length > 0) this.logger.info({ orders: expired.length }, "unpaid orders expired");
     for (const { id } of await this.repository.listCancelledOrdersWithHold(RELEASE_BATCH_SIZE))
       await this.releaseQuietly(id);
+    try {
+      await this.reconcile(now);
+    } catch (error) {
+      this.logger.warn({ error }, "order stock reconciliation failed, the next sweep will retry");
+    }
+    await this.repository.deleteOrderIdempotencyKeysCreatedBefore(new Date(now.getTime() - IDEMPOTENCY_KEY_TTL_MS));
+  }
+
+  /**
+   * Checks each order of the window against inventory, once the window is old enough for any placement to have
+   * finished. Two things can be wrong, and both are repaired here:
+   * - An unpaid order says `held` while inventory holds nothing, because the process died before the reservation. It
+   *   is cancelled, the same outcome as a refused reservation, so a shopper cannot pay for goods nobody set aside.
+   * - A cancelled order was released before its reservation arrived (a late answer after a timed-out hold), which left
+   *   an active hold that no other sweep reaches. That active hold is released.
+   * The window moves forward only after every order in it was checked.
+   */
+  public async reconcile(now = new Date()): Promise<void> {
+    const to = new Date(now.getTime() - RECONCILE_GRACE_MS);
+    const from = this.reconciledUpTo ?? new Date(now.getTime() - RECONCILE_LOOKBACK_MS);
+    if (from >= to) return;
+    const candidates = await this.repository.listOrdersToReconcileCreatedBetween(from, to, RELEASE_BATCH_SIZE);
+    for (const order of candidates) {
+      const reservation = await this.inventory.reservationStatus(order.id);
+      if (order.status === "Cancelled") {
+        if (reservation !== "active") continue;
+        await this.inventory.release(order.id);
+        await this.repository.endStockHold(order.id, "released");
+        this.logger.warn({ orderId: order.id }, "cancelled order had a late stock reservation, it was released");
+        continue;
+      }
+      if (reservation !== undefined) continue;
+      if (await this.repository.cancelUnpaidOrder(order.id, now)) {
+        this.logger.warn({ orderId: order.id }, "unpaid order had no stock reservation and was cancelled");
+        await this.releaseQuietly(order.id);
+      }
+    }
+    const last = candidates[candidates.length - 1];
+    this.reconciledUpTo = candidates.length === RELEASE_BATCH_SIZE && last ? last.createdAt : to;
   }
 }
 

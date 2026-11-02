@@ -1,3 +1,4 @@
+import type { AccessTokenVerifier } from "@pharmacy/auth";
 import { Router, type Request, type Response } from "express";
 
 import {
@@ -6,7 +7,7 @@ import {
   type AiProviderList,
   type CredentialView,
 } from "../../contracts/credentials.ts";
-import { verifyInternalIdentityContext } from "../../middleware/trusted-request.ts";
+import { verifyRequestIdentity } from "../../middleware/trusted-request.ts";
 import { ApiKeyRequiredError, type AiCredentialVault } from "./ai-credential-vault.ts";
 
 export const CHATBOT_CREDENTIAL_PATH = "/chatbot/credential";
@@ -17,8 +18,7 @@ export type CredentialRouteOptions = {
   /** The providers this feature may use. The view lists them and the PUT body must name one of them. */
   providers: AiProviderList;
   vault: AiCredentialVault;
-  identitySecret: string;
-  audience: string;
+  verifier: AccessTokenVerifier;
 };
 
 const FORBIDDEN = {
@@ -43,17 +43,16 @@ const API_KEY_REQUIRED = {
 };
 
 /**
- * The trusted middleware only proves a signed-in caller. The local gateway has no authorizer, so this route reads the
- * signed context itself and requires Platform Admin.
+ * The trusted middleware only proves a signed-in caller, so this route reads the access token itself and requires
+ * Platform Admin.
  */
-const platformAdminId = (request: Request, response: Response, options: CredentialRouteOptions): string | undefined => {
-  const context = verifyInternalIdentityContext(
-    request.header("x-internal-identity-context"),
-    options.identitySecret,
-    new Date(),
-    options.audience,
-  );
-  if (context?.actorType !== "employee" || !context.actorId || !context.roles.includes("Platform Admin")) {
+export const platformAdminId = async (
+  request: Request,
+  response: Response,
+  options: Pick<CredentialRouteOptions, "verifier">,
+): Promise<string | undefined> => {
+  const context = await verifyRequestIdentity(request, options.verifier);
+  if (context?.actorType !== "employee" || !context.roles.includes("Platform Admin")) {
     response.status(403).json(FORBIDDEN);
     return undefined;
   }
@@ -70,12 +69,12 @@ export const createCredentialRouter = (options: CredentialRouteOptions): Router 
   });
 
   router.get(options.path, async (request, response) => {
-    if (!platformAdminId(request, response, options)) return;
+    if (!(await platformAdminId(request, response, options))) return;
     response.json(await view());
   });
 
   router.put(options.path, async (request, response) => {
-    const actorId = platformAdminId(request, response, options);
+    const actorId = await platformAdminId(request, response, options);
     if (!actorId) return;
     const body = requestSchema.safeParse(request.body);
     if (!body.success) {
@@ -93,7 +92,7 @@ export const createCredentialRouter = (options: CredentialRouteOptions): Router 
   });
 
   router.delete(options.path, async (request, response) => {
-    if (!platformAdminId(request, response, options)) return;
+    if (!(await platformAdminId(request, response, options))) return;
     await options.vault.clear();
     response.status(204).end();
   });

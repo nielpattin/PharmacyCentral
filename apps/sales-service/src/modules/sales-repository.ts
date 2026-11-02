@@ -38,6 +38,7 @@ import {
   prescriptions,
   salesTargets,
   idempotencyRecords,
+  orderIdempotencyKeys,
 } from "../shared/infrastructure/schema.ts";
 import { transitionOrder, type OrderStatus } from "./orders/domain/order-status.ts";
 import { transitionPrescription, type PrescriptionStatus } from "./prescriptions/domain/prescription-status.ts";
@@ -57,6 +58,17 @@ type DeliverySnapshotInput = Omit<typeof orderDeliverySnapshots.$inferInsert, "o
 
 /** A dispense the prescription cannot take: it is closed, names a line it lacks, or exceeds what was prescribed. */
 export class PrescriptionDispenseError extends Error {}
+
+/**
+ * The shopper's Idempotency-Key already belongs to an order. The order insert that raised it is rolled back, so the
+ * caller answers with the order that owns the key instead.
+ */
+export class IdempotencyKeyInUseError extends Error {
+  public constructor() {
+    super("Idempotency-Key already belongs to an order");
+    this.name = "IdempotencyKeyInUseError";
+  }
+}
 
 /** A prescription header with the lines it was written for, as the prescription list answers it. */
 export type PrescriptionWithLines = typeof prescriptions.$inferSelect & {
@@ -252,6 +264,8 @@ export class SalesRepository {
     paymentMethod?: string | undefined;
     lines: OrderLineInput[];
     delivery?: DeliverySnapshotInput;
+    /** The shopper's Idempotency-Key and the fingerprint of the request it came with. */
+    idempotency?: { key: string; requestHash: string } | undefined;
   }) {
     return this.database.db.transaction(async (transaction) => {
       const [order] = await transaction
@@ -282,6 +296,20 @@ export class SalesRepository {
       );
       if (input.delivery)
         await transaction.insert(orderDeliverySnapshots).values({ ...input.delivery, orderId: order.id });
+      if (input.idempotency) {
+        // Concurrent duplicates race on this unique key: the loser gets no row back, and rolls its order back too.
+        const claimed = await transaction
+          .insert(orderIdempotencyKeys)
+          .values({
+            customerId: input.customerId,
+            key: input.idempotency.key,
+            requestHash: input.idempotency.requestHash,
+            orderId: order.id,
+          })
+          .onConflictDoNothing({ target: [orderIdempotencyKeys.customerId, orderIdempotencyKeys.key] })
+          .returning({ orderId: orderIdempotencyKeys.orderId });
+        if (claimed.length === 0) throw new IdempotencyKeyInUseError();
+      }
       await transaction.insert(outboxMessages).values({
         eventType: "sales.order.created.v1",
         aggregateId: order.id,
@@ -295,6 +323,37 @@ export class SalesRepository {
       });
       return order;
     });
+  }
+
+  /** The order a shopper's Idempotency-Key was used for, with the fingerprint of the request it came with. */
+  public async getOrderIdempotencyKey(customerId: string, key: string) {
+    const [record] = await this.database.db
+      .select({ requestHash: orderIdempotencyKeys.requestHash, orderId: orderIdempotencyKeys.orderId })
+      .from(orderIdempotencyKeys)
+      .where(and(eq(orderIdempotencyKeys.customerId, customerId), eq(orderIdempotencyKeys.key, key)))
+      .limit(1);
+    return record;
+  }
+
+  /**
+   * Forgets the key of an order that was refused for stock, so a retry with the same key places a new order rather
+   * than replaying a cancelled one. Only the record of that order is removed.
+   */
+  public async deleteOrderIdempotencyKey(customerId: string, key: string, orderId: string): Promise<void> {
+    await this.database.db
+      .delete(orderIdempotencyKeys)
+      .where(
+        and(
+          eq(orderIdempotencyKeys.customerId, customerId),
+          eq(orderIdempotencyKeys.key, key),
+          eq(orderIdempotencyKeys.orderId, orderId),
+        ),
+      );
+  }
+
+  /** Forgets the keys created before `cutoff`. A key that is older than the replay window places a new order. */
+  public async deleteOrderIdempotencyKeysCreatedBefore(cutoff: Date): Promise<void> {
+    await this.database.db.delete(orderIdempotencyKeys).where(lt(orderIdempotencyKeys.createdAt, cutoff));
   }
 
   public async listOrders(input: {
@@ -383,6 +442,56 @@ export class SalesRepository {
       .where(and(eq(orders.status, "Cancelled"), eq(orders.stockHold, "held")))
       .orderBy(asc(orders.updatedAt))
       .limit(limit);
+  }
+
+  /**
+   * Orders created in [from, to) whose stock may still be held by inventory, oldest first: unpaid orders that say
+   * `held`, and cancelled orders whose hold was not consumed. Reconciliation asks inventory about each one. An unpaid
+   * order whose process died before the reservation says `held` while inventory holds nothing; a cancelled order can
+   * have a reservation that arrived after its release.
+   */
+  public async listOrdersToReconcileCreatedBetween(from: Date, to: Date, limit: number) {
+    return this.database.db
+      .select({
+        id: orders.id,
+        createdAt: orders.createdAt,
+        status: orders.status,
+      })
+      .from(orders)
+      .where(
+        and(
+          gte(orders.createdAt, from),
+          lt(orders.createdAt, to),
+          or(
+            and(eq(orders.status, "Pending"), eq(orders.paymentStatus, "Pending"), eq(orders.stockHold, "held")),
+            and(eq(orders.status, "Cancelled"), inArray(orders.stockHold, ["held", "released"])),
+          ),
+        ),
+      )
+      .orderBy(asc(orders.createdAt))
+      .limit(limit);
+  }
+
+  /**
+   * Cancels one unpaid order whose stock was never held. The update is conditional on the order still being unpaid,
+   * so a payment that lands meanwhile is never cancelled; the status event commits with the status. `false` when the
+   * order was no longer unpaid.
+   */
+  public async cancelUnpaidOrder(id: string, now: Date): Promise<boolean> {
+    return this.database.db.transaction(async (transaction) => {
+      const [cancelled] = await transaction
+        .update(orders)
+        .set({ status: "Cancelled", updatedAt: now })
+        .where(and(eq(orders.id, id), eq(orders.status, "Pending"), eq(orders.paymentStatus, "Pending")))
+        .returning({ id: orders.id });
+      if (!cancelled) return false;
+      await transaction.insert(outboxMessages).values({
+        eventType: "sales.order.status-changed.v1",
+        aggregateId: id,
+        payload: JSON.stringify({ orderId: id, status: "Cancelled" }),
+      });
+      return true;
+    });
   }
 
   /**

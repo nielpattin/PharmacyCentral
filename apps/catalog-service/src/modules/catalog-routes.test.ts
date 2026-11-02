@@ -6,16 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProductMediaStore } from "./catalog/product-media-store.ts";
 import { createCatalogRouter } from "./catalog-routes.ts";
 import { DrizzleStoreRepository } from "./stores/infrastructure/drizzle-store-repository.ts";
-import {
-  createTrustedRequestMiddleware,
-  matchesPathPrefix,
-  signInternalIdentityContext,
-} from "../middleware/trusted-request.ts";
+import { createTrustedRequestMiddleware, matchesPathPrefix } from "../middleware/trusted-request.ts";
+import { bearerHeaders, testVerifier } from "../test-support/access-tokens.ts";
 import { encodePageCursor } from "../shared/pagination/page-cursor.ts";
 
-const SECRET = "test-internal-identity-secret";
 const SERVICE_SECRET = "test-internal-service-secret";
-const CATALOG = "catalog-service";
 const ids = {
   site: "00000000-0000-4000-8000-000000000001",
   product: "00000000-0000-4000-8000-000000000002",
@@ -23,7 +18,7 @@ const ids = {
   supplier: "00000000-0000-4000-8000-000000000004",
 };
 
-/** The same public catalog reads as `main.ts`: anything else needs a signed identity context. */
+/** The same public catalog reads as `main.ts`: anything else needs an access token. */
 const PUBLIC_CATALOG_PATHS = ["/products", "/pricing/active", "/pricing/prices", "/stores", "/availability"];
 
 const signedHeaders = (
@@ -31,37 +26,18 @@ const signedHeaders = (
   actorId: string,
   roles: string[],
   siteIds: string[] = [],
-): Record<string, string> => {
-  const now = Date.now();
-  return {
-    "x-internal-identity-context": signInternalIdentityContext(
-      {
-        version: "v1",
-        requestId: "request-1",
-        correlationId: "correlation-1",
-        actorId,
-        actorType,
-        roles,
-        siteIds,
-        issuedAt: new Date(now - 1_000).toISOString(),
-        expiresAt: new Date(now + 300_000).toISOString(),
-        audience: CATALOG,
-      },
-      SECRET,
-    ),
-  };
-};
+): Promise<Record<string, string>> => bearerHeaders({ actorType, actorId, roles, siteIds });
 
 const actors = {
-  customer: { headers: signedHeaders("customer", "11111111-1111-4111-8111-111111111111", []) },
+  customer: { headers: await signedHeaders("customer", "11111111-1111-4111-8111-111111111111", []) },
   warehouse: {
-    headers: signedHeaders("employee", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", ["Warehouse Staff"]),
+    headers: await signedHeaders("employee", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", ["Warehouse Staff"]),
   },
   manager: {
-    headers: signedHeaders("employee", "66666666-6666-4666-8666-666666666666", ["Pharmacy Manager"]),
+    headers: await signedHeaders("employee", "66666666-6666-4666-8666-666666666666", ["Pharmacy Manager"]),
   },
   admin: {
-    headers: signedHeaders("employee", "55555555-5555-4555-8555-555555555555", ["Platform Admin"]),
+    headers: await signedHeaders("employee", "55555555-5555-4555-8555-555555555555", ["Platform Admin"]),
   },
 } as const;
 
@@ -76,15 +52,14 @@ const createTestServer = async (
   app.use(express.json());
   app.use(
     createTrustedRequestMiddleware({
-      identitySecret: SECRET,
+      verifier: testVerifier,
       serviceSecret: SERVICE_SECRET,
-      expectedAudience: CATALOG,
       isPublic: (request) =>
         ["GET", "HEAD"].includes(request.method) &&
         PUBLIC_CATALOG_PATHS.some((prefix) => matchesPathPrefix(request.path, prefix)),
     }),
   );
-  app.use(createCatalogRouter(repository, mediaStore, { identitySecret: SECRET, audience: CATALOG }));
+  app.use(createCatalogRouter(repository, mediaStore, { verifier: testVerifier }));
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
     response.status(500).json({ error: String(error) }),
   );
@@ -240,7 +215,7 @@ describe("catalog API", () => {
       method: "POST",
       headers: {
         ...JSON_HEADERS,
-        ...signedHeaders("employee", "66666666-6666-4666-8666-666666666666", ["Pharmacy Manager"], [ids.site]),
+        ...(await signedHeaders("employee", "66666666-6666-4666-8666-666666666666", ["Pharmacy Manager"], [ids.site])),
       },
       body: JSON.stringify({
         productId: ids.product,

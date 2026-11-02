@@ -21,14 +21,14 @@ export type OpeningBalanceReferenceResolver = {
   resolve(row: OpeningBalanceImportRow): Promise<OpeningBalanceReference>;
 };
 
-/** Makes the resolver for one import. `identity` signs the importing employee for catalog-service, once per lookup. */
-export type OpeningBalanceResolverFactory = (identity: () => string) => OpeningBalanceReferenceResolver;
+/** Makes the resolver for one import. `authorization` is the importing employee's `Authorization` header, sent with every catalog lookup. */
+export type OpeningBalanceResolverFactory = (authorization: string) => OpeningBalanceReferenceResolver;
 
 /** A row names a site the importing user is not assigned to. Nothing is written when one is found. */
 export class ImportSiteAccessError extends Error {}
 
 export type OpeningBalanceImportOptions = {
-  catalogIdentity: () => string;
+  catalogAuthorization: string;
   /** The user importing; recorded as the creator of each batch the import creates. */
   actorId: string | null;
   /** The sites the importer may write to; undefined for Platform Admin, which has no site limit. */
@@ -45,7 +45,7 @@ export class InventoryImportService {
     input: OpeningBalanceImport,
     options: OpeningBalanceImportOptions,
   ): Promise<OpeningBalanceImportResult> {
-    const resolver = this.createResolver(options.catalogIdentity);
+    const resolver = this.createResolver(options.catalogAuthorization);
     const resolved: Array<{ row: OpeningBalanceImportRow; reference: OpeningBalanceReference }> = [];
     for (const row of input.balances) {
       resolved.push({ row, reference: await resolver.resolve(row) });

@@ -4,7 +4,6 @@ import {
   createInvoiceRequestSchema,
   eventEnvelopeSchema,
   eventMetadataSchema,
-  internalIdentityContextSchema,
   invoiceLineSchema,
   paymentChangedEventSchema,
   paymentContractVersion,
@@ -13,21 +12,6 @@ import {
 } from "./index.ts";
 
 describe("payment-service contracts", () => {
-  it("accepts the anonymous actor type in internal identity context", () => {
-    const anonymous = internalIdentityContextSchema.safeParse({
-      version: "v1",
-      requestId: "req-1",
-      correlationId: "corr-1",
-      actorType: "anonymous",
-      roles: [],
-      siteIds: [],
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      audience: "payment-service",
-    });
-    expect(anonymous.success).toBe(true);
-  });
-
   it("exports payment contract version v1", () => {
     expect(paymentContractVersion).toBe("v1");
   });
@@ -78,19 +62,6 @@ describe("payment-service contracts", () => {
       currency: "VND",
     });
     expect(validResponse.success).toBe(true);
-
-    const validIdentity = internalIdentityContextSchema.safeParse({
-      version: "v1",
-      requestId: "req-1",
-      correlationId: "corr-1",
-      actorType: "system",
-      roles: [],
-      siteIds: [],
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      audience: "payment-service",
-    });
-    expect(validIdentity.success).toBe(true);
 
     const validEnvelope = eventEnvelopeSchema.safeParse({
       metadata: eventMetadataSchema.parse({

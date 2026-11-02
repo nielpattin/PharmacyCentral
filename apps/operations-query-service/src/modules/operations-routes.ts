@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Response } from "express";
 import { z } from "zod";
 
 import { listSiteIds } from "../middleware/trusted-request.ts";
-import { signCatalogIdentity } from "./catalog-identity.ts";
+import { callerAuthorization } from "./catalog-identity.ts";
 import { analyticsQuerySchema, salesTargetQuerySchema } from "./analytics.ts";
 import { AnalyticsCache } from "./analytics-cache.ts";
 import { ANALYTICS_ROLES, DASHBOARD_ROLES, REPORT_ROLES, roleRefusal } from "./operations-access.ts";
@@ -87,7 +87,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       return;
     }
     try {
-      response.json(await repository.dashboard(() => signCatalogIdentity(request), listSiteIds(request)));
+      response.json(await repository.dashboard(() => callerAuthorization(request), listSiteIds(request)));
     } catch (error) {
       next(error);
     }
@@ -148,7 +148,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
     try {
       response.json(
         await repository.financeSummary(
-          () => signCatalogIdentity(request),
+          () => callerAuthorization(request),
           queryString(request.query.from),
           queryString(request.query.to),
           listSiteIds(request),
@@ -203,7 +203,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
         () =>
           operations.dashboardAnalytics(
             { section, from: new Date(from), to: new Date(to), siteId, channel },
-            () => signCatalogIdentity(request),
+            () => callerAuthorization(request),
             siteIds,
           ),
       );
@@ -245,7 +245,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       response.json(
         await operations.salesTargetsReport(
           { month, from: new Date(from), to: new Date(to), siteId },
-          () => signCatalogIdentity(request),
+          () => callerAuthorization(request),
           siteIds,
         ),
       );

@@ -1,3 +1,4 @@
+import type { AccessTokenVerifier } from "@pharmacy/auth";
 import { Router, type Response } from "express";
 import { z } from "zod";
 
@@ -13,8 +14,7 @@ import { SearchSynonymError, type SearchSynonymService } from "./search-synonym-
 export type SearchSynonymRouteOptions = {
   /** Undefined when no database is configured. Every route then answers 503 after the role check. */
   service: SearchSynonymService | undefined;
-  identitySecret: string;
-  audience: string;
+  verifier: AccessTokenVerifier;
 };
 
 export type ProblemBody = { type: string; title: string; status: number; code: string; detail?: string };
@@ -62,8 +62,8 @@ const sendServiceError = (error: unknown, response: Response): void => {
 
 export const createSearchSynonymRouter = (options: SearchSynonymRouteOptions): Router => {
   const router = Router();
-  const identity = { identitySecret: options.identitySecret, audience: options.audience };
-  // The trusted middleware lets GET /products through without identity, so every route checks the signed context and
+  const identity = { verifier: options.verifier };
+  // The trusted middleware lets GET /products through without identity, so every route checks the access token and
   // its role here. Platform Admin reads the groups and changes none (see ROLE_RULES).
   const editor = requireEmployee(identity, ROLE_RULES.searchSynonymEditor);
   const approver = requireEmployee(identity, ROLE_RULES.searchSynonymApprover);

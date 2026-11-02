@@ -34,13 +34,13 @@ const createFetch = () => {
   return { fetchImplementation, productsSearch };
 };
 
-const identity = vi.fn(() => "signed-for-catalog");
+const authorization = "Bearer signed-for-catalog";
 
 const resolverFor = (fetchImplementation: typeof fetch) =>
-  new CatalogServiceReferenceResolver("http://catalog.local", identity, fetchImplementation);
+  new CatalogServiceReferenceResolver("http://catalog.local", authorization, fetchImplementation);
 
 describe("CatalogServiceReferenceResolver", () => {
-  it("sends the importing employee's signed identity with every catalog lookup", async () => {
+  it("forwards the importing employee's authorization with every catalog lookup", async () => {
     const { fetchImplementation } = createFetch();
     await resolverFor(fetchImplementation).resolve({
       productId: ids.product,
@@ -55,7 +55,7 @@ describe("CatalogServiceReferenceResolver", () => {
     const calls = fetchImplementation.mock.calls;
     expect(calls.length).toBeGreaterThan(0);
     for (const [, init] of calls)
-      expect(init?.headers).toMatchObject({ "x-internal-identity-context": "signed-for-catalog" });
+      expect(init?.headers).toMatchObject({ Authorization: authorization });
   });
 
   it("resolves natural keys and caches catalog lookups", async () => {

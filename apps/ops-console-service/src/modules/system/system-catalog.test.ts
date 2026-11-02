@@ -6,12 +6,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../../app.ts";
 import { routeTableSchema, serviceCatalogSchema } from "../../contracts/system.ts";
-import { signedIdentityHeader } from "../../middleware/platform-admin.test.ts";
+import { accessToken, testAccessTokenVerifier } from "../../test-access-tokens.ts";
 import type { Probes } from "./probes.ts";
 
-const SECRET = "test-internal-identity-secret";
-const AUDIENCE = "ops-console-service";
-const admin = { "x-internal-identity-context": signedIdentityHeader(SECRET, AUDIENCE, "employee", ["Platform Admin"]) };
+const admin = { authorization: await accessToken({ roles: ["Platform Admin"] }) };
 
 // The catalog and the routes read no probe, so the probes here are never called.
 const unusedProbes: Probes = {
@@ -29,8 +27,7 @@ let base: string;
 
 beforeAll(async () => {
   const app = createApp({
-    identitySecret: SECRET,
-    audience: AUDIENCE,
+    verifier: testAccessTokenVerifier,
     probes: unusedProbes,
     links: [],
     logger: pino({ level: "silent" }),
@@ -56,10 +53,10 @@ describe("GET /system/catalog", () => {
     expect(body.services.map((service) => service.name)).toContain("sales-service");
   });
 
-  it("refuses a request without a trusted identity and a signed-in manager", async () => {
+  it("refuses a request without an access token and a signed-in manager", async () => {
     expect((await fetch(`${base}/system/catalog`)).status).toBe(401);
-    const manager = signedIdentityHeader(SECRET, AUDIENCE, "employee", ["Pharmacy Manager"]);
-    const response = await fetch(`${base}/system/catalog`, { headers: { "x-internal-identity-context": manager } });
+    const manager = await accessToken({ roles: ["Pharmacy Manager"] });
+    const response = await fetch(`${base}/system/catalog`, { headers: { authorization: manager } });
     expect(response.status).toBe(403);
   });
 });
@@ -73,10 +70,10 @@ describe("GET /system/routes", () => {
     expect(body.routes.length).toBeGreaterThan(0);
   });
 
-  it("refuses a request without a trusted identity and a signed-in manager", async () => {
+  it("refuses a request without an access token and a signed-in manager", async () => {
     expect((await fetch(`${base}/system/routes`)).status).toBe(401);
-    const manager = signedIdentityHeader(SECRET, AUDIENCE, "employee", ["Pharmacy Manager"]);
-    const response = await fetch(`${base}/system/routes`, { headers: { "x-internal-identity-context": manager } });
+    const manager = await accessToken({ roles: ["Pharmacy Manager"] });
+    const response = await fetch(`${base}/system/routes`, { headers: { authorization: manager } });
     expect(response.status).toBe(403);
   });
 });

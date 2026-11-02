@@ -3,6 +3,7 @@ import "./telemetry.ts";
 import express from "express";
 import { createServer } from "node:http";
 
+import { createAccessTokenVerifier } from "@pharmacy/auth";
 import { Redis } from "ioredis";
 import { z } from "zod";
 
@@ -50,7 +51,7 @@ const app = express();
 const portResult = z.coerce.number().int().min(1).max(65535).safeParse(requireEnv("PORT"));
 if (!portResult.success) throw new Error("PORT must be an integer from 1 to 65535.");
 const port = portResult.data;
-const identitySecret = requireEnv("INTERNAL_IDENTITY_SECRET");
+const accessTokenVerifier = createAccessTokenVerifier({ jwks: requireEnv("IDENTITY_JWKS_URL") });
 /**
  * Every URL this service calls out to is required at boot, so a missing one stops the service instead of sending
  * the request to a hard-coded localhost. The same goes for the shared secret of the outbound internal headers.
@@ -113,10 +114,10 @@ try {
 }
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
-// Delivery estimates and address lookups are public. Carts, orders and staff routes need a signed identity context.
+// Delivery estimates and address lookups are public. Carts, orders and staff routes need a bearer access token.
 app.use(
   createTrustedRequestMiddleware({
-    expectedAudience: serviceName,
+    verifier: accessTokenVerifier,
     isPublic: (request) =>
       matchesPathPrefix(request.path, "/delivery/calculate") ||
       matchesPathPrefix(request.path, "/delivery/reverse-geocode") ||
@@ -151,7 +152,7 @@ const prescriptionReader = new ConfiguredPrescriptionReader(
 );
 const prescriptionIntakeLimiter = new RedisIntakeRateLimiter(redisClient);
 const prescriptionConsultationRepository = database ? new PrescriptionConsultationRepository(database) : undefined;
-app.use(createCredentialRouter({ vault, identitySecret, audience: serviceName }));
+app.use(createCredentialRouter({ vault }));
 app.use(
   createPrescriptionIntakeRouter({
     reader: prescriptionReader,

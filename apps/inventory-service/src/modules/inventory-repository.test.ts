@@ -852,3 +852,104 @@ describe("InventoryRepository list paging", () => {
     await expect(repository.countAdjustments({ siteIds: [site], statuses: ["Approved"] })).resolves.toBe(0);
   });
 });
+
+/**
+ * A hold is keyed by its reservation id: a repeated reserve must answer the first call's allocations and move no
+ * stock, including after the hold was released, and a refused first call must leave nothing behind to repeat.
+ */
+describe("InventoryRepository reserve idempotency", () => {
+  const client = new PGlite();
+  const db = drizzle({ client, schema });
+  const repository = new InventoryRepository({ db, pool: undefined } as unknown as InventoryDatabase);
+
+  const site = "00000000-0000-4000-8000-00000000000a";
+  const location = "00000000-0000-4000-8000-00000000001a";
+  const product = "00000000-0000-4000-8000-00000000002a";
+  const owner = "00000000-0000-4000-8000-00000000003a";
+  const earlyBatch = "00000000-0000-4000-8000-00000000004a";
+  const lateBatch = "00000000-0000-4000-8000-00000000004b";
+  const orderHold = "00000000-0000-4000-8000-00000000005a";
+  const refusedHold = "00000000-0000-4000-8000-00000000005b";
+  const raceHold = "00000000-0000-4000-8000-00000000005c";
+
+  const balanceOf = async (productBatchId: string) => {
+    const [row] = await db
+      .select()
+      .from(schema.inventoryBalances)
+      .where(eq(schema.inventoryBalances.productBatchId, productBatchId));
+    return { onHand: Number(row?.quantityOnHand), reserved: Number(row?.quantityReserved) };
+  };
+  const linesOf = (reservationId: string) =>
+    db.select().from(schema.stockReservationLines).where(eq(schema.stockReservationLines.reservationId, reservationId));
+  const hold = (reservationId: string, quantity: number) =>
+    repository.reserve({
+      reservationId,
+      ownerId: owner,
+      siteId: site,
+      storageLocationId: location,
+      lines: [{ productId: product, quantity }],
+    });
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder });
+    await db.insert(schema.productBatches).values([
+      { id: earlyBatch, productId: product, batchNumber: "EARLY", expiryDate: "2099-01-31", qualityStatus: "Released" },
+      { id: lateBatch, productId: product, batchNumber: "LATE", expiryDate: "2099-12-31", qualityStatus: "Released" },
+    ]);
+    await db.insert(schema.inventoryBalances).values(
+      [earlyBatch, lateBatch].map((productBatchId) => ({
+        productBatchId,
+        siteId: site,
+        storageLocationId: location,
+        quantityOnHand: "10",
+      })),
+    );
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it("answers a repeated reserve with the first allocations and holds nothing more", async () => {
+    const first = await hold(orderHold, 4);
+    const repeated = await hold(orderHold, 4);
+
+    expect(first.reduce((total, allocation) => total + allocation.quantity, 0)).toBe(4);
+    expect(repeated).toEqual(first);
+    await expect(balanceOf(earlyBatch)).resolves.toEqual({ onHand: 10, reserved: 4 });
+    await expect(balanceOf(lateBatch)).resolves.toEqual({ onHand: 10, reserved: 0 });
+    await expect(linesOf(orderHold)).resolves.toHaveLength(1);
+  });
+
+  it("does not hold again for a repeat after the hold was released", async () => {
+    await repository.releaseReservation(orderHold);
+    const repeated = await hold(orderHold, 4);
+
+    expect(repeated.every((allocation) => allocation.quantity === 0)).toBe(true);
+    await expect(balanceOf(earlyBatch)).resolves.toEqual({ onHand: 10, reserved: 0 });
+    const [reservation] = await db
+      .select()
+      .from(schema.stockReservations)
+      .where(eq(schema.stockReservations.id, orderHold));
+    expect(reservation?.status).toBe("released");
+  });
+
+  it("holds once when two calls for the same reservation race", async () => {
+    const results = await Promise.all([hold(raceHold, 2), hold(raceHold, 2)]);
+
+    expect(results[0]).toEqual(results[1]);
+    await expect(linesOf(raceHold)).resolves.toHaveLength(1);
+    await expect(balanceOf(earlyBatch)).resolves.toEqual({ onHand: 10, reserved: 2 });
+  });
+
+  it("leaves no reservation behind when the first call is refused, so a later call can hold", async () => {
+    await expect(hold(refusedHold, 999)).rejects.toBeInstanceOf(InsufficientStockError);
+    await expect(
+      db.select().from(schema.stockReservations).where(eq(schema.stockReservations.id, refusedHold)),
+    ).resolves.toHaveLength(0);
+
+    const later = await hold(refusedHold, 1);
+
+    expect(later.reduce((total, allocation) => total + allocation.quantity, 0)).toBe(1);
+  });
+});

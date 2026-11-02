@@ -24,6 +24,7 @@
     "@opentelemetry/sdk-logs": "catalog:",
     "@opentelemetry/sdk-metrics": "catalog:",
     "@opentelemetry/sdk-node": "catalog:",
+    "@pharmacy/auth": "workspace:*",
     "express": "catalog:",
     "pino": "catalog:",
     "zod": "catalog:"

@@ -24,25 +24,8 @@ describe("payment-service internalServiceHeaders", () => {
     });
   });
 
-  it("includes x-actor-id header when actorId is provided", () => {
-    const headers = internalServiceHeaders("usr-123");
-    expect(headers).toEqual({
-      "x-internal-service-secret": "test-internal-secret",
-      "x-actor-id": "usr-123",
-    });
-  });
-
-  it("omits x-actor-id when actorId is undefined or empty", () => {
-    expect(internalServiceHeaders(undefined)).toEqual({
-      "x-internal-service-secret": "test-internal-secret",
-    });
-    expect(internalServiceHeaders("")).toEqual({
-      "x-internal-service-secret": "test-internal-secret",
-    });
-  });
-
   it("throws when INTERNAL_SERVICE_SECRET is unset instead of sending an empty secret", () => {
     delete process.env.INTERNAL_SERVICE_SECRET;
-    expect(() => internalServiceHeaders("usr-456")).toThrow(/INTERNAL_SERVICE_SECRET/);
+    expect(() => internalServiceHeaders()).toThrow(/INTERNAL_SERVICE_SECRET/);
   });
 });

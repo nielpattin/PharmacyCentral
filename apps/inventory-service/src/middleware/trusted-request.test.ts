@@ -3,11 +3,9 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { InternalIdentityContext } from "../contracts/common.ts";
+import { bearerHeaders, testVerifier } from "../test-support/access-tokens.ts";
+import { createTrustedRequestMiddleware } from "./trusted-request.ts";
 
-import { createTrustedRequestMiddleware, signInternalIdentityContext } from "./trusted-request.ts";
-
-const identitySecret = "test-identity-secret-1234567890123456";
 const serviceSecret = "test-service-secret-1234567890123456";
 const spoofedActorId = "00000000-0000-4000-8000-000000000099";
 
@@ -30,12 +28,12 @@ describe("trusted request actor headers", () => {
     await promise;
   });
 
-  it("drops client actor headers on a public request without a verified context", async () => {
+  it("drops client actor headers on a public request without a valid access token", async () => {
     const app = express();
     let capturedActorId: string | undefined;
     let capturedActorType: string | undefined;
 
-    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret, isPublic: () => true }));
+    app.use(createTrustedRequestMiddleware({ verifier: testVerifier, serviceSecret, isPublic: () => true }));
     app.get("/public-check", (req, res) => {
       capturedActorId = req.header("x-actor-id") ?? undefined;
       capturedActorType = req.header("x-actor-type") ?? undefined;
@@ -53,9 +51,9 @@ describe("trusted request actor headers", () => {
     expect(capturedActorType).toBeUndefined();
   });
 
-  it("refuses a non-public request that carries actor headers but no verified context", async () => {
+  it("refuses a non-public request that carries actor headers but no valid access token", async () => {
     const app = express();
-    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+    app.use(createTrustedRequestMiddleware({ verifier: testVerifier, serviceSecret }));
     app.get("/private-check", (_req, res) => {
       res.json({ ok: true });
     });
@@ -81,30 +79,24 @@ describe("trusted request role restatement", () => {
     await promise;
   });
 
-  // Mirrors the employee cases of policy.mjs. A request the middleware admits reaches the fallback (200).
+  // A request the middleware admits reaches the fallback (200).
   const callAs = async (roles: string[], path: string, method: string): Promise<Response> => {
     const app = express();
     app.use(express.json());
-    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret }));
+    app.use(createTrustedRequestMiddleware({ verifier: testVerifier, serviceSecret }));
     app.use((_request, response) => response.json({ ok: true }));
     const { server, url } = await startServer(app);
     activeServer = server;
-    const context: InternalIdentityContext = {
-      version: "v1",
-      requestId: "req-role",
-      correlationId: "corr-role",
+    const authorization = await bearerHeaders({
       actorId: "00000000-0000-4000-8000-000000000001",
       actorType: "employee",
       roles,
       siteIds: ["00000000-0000-4000-8000-000000000010"],
-      issuedAt: new Date(Date.now() - 1000).toISOString(),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      audience: "inventory-service",
-    };
+    });
     return fetch(`${url}${path}`, {
       method,
       headers: {
-        "x-internal-identity-context": signInternalIdentityContext(context, identitySecret),
+        ...authorization,
         "content-type": "application/json",
       },
       ...(method === "GET" ? {} : { body: "{}" }),
@@ -175,5 +167,68 @@ describe("trusted request role restatement", () => {
     expect((await callAs(["Pharmacist"], planPath, "PATCH")).status).toBe(200);
     expect((await callAs(["Warehouse Staff"], planPath, "PATCH")).status).toBe(200);
     expect((await callAs(["Pharmacy Manager"], planPath, "PATCH")).status).toBe(200);
+  });
+
+  it("sets the actor headers from a valid token and overwrites what the client sent", async () => {
+    const app = express();
+    let seen: Record<string, string | undefined> = {};
+    app.use(createTrustedRequestMiddleware({ verifier: testVerifier, serviceSecret }));
+    app.use((req, res) => {
+      seen = { actorId: req.header("x-actor-id"), actorType: req.header("x-actor-type"), roles: req.header("x-actor-roles") };
+      res.json({ ok: true });
+    });
+    const { server, url } = await startServer(app);
+    activeServer = server;
+
+    const response = await fetch(`${url}/inventory/balances`, {
+      headers: {
+        ...(await bearerHeaders({
+          actorId: "00000000-0000-4000-8000-000000000001",
+          actorType: "employee",
+          roles: ["Warehouse Staff"],
+          siteIds: ["00000000-0000-4000-8000-000000000010"],
+        })),
+        "x-actor-id": spoofedActorId,
+        "x-actor-roles": "Platform Admin",
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(seen).toEqual({
+      actorId: "00000000-0000-4000-8000-000000000001",
+      actorType: "employee",
+      roles: "Warehouse Staff",
+    });
+  });
+
+  it("refuses an expired token", async () => {
+    const app = express();
+    app.use(createTrustedRequestMiddleware({ verifier: testVerifier, serviceSecret }));
+    app.use((_req, res) => res.json({ ok: true }));
+    const { server, url } = await startServer(app);
+    activeServer = server;
+
+    const headers = await bearerHeaders(
+      { actorId: "00000000-0000-4000-8000-000000000001", actorType: "employee", roles: ["Warehouse Staff"] },
+      new Date(Date.now() - 2 * 86_400_000),
+    );
+    expect((await fetch(`${url}/inventory/balances`, { headers })).status).toBe(401);
+  });
+
+  it("refuses a token whose account must change its password", async () => {
+    const app = express();
+    app.use(createTrustedRequestMiddleware({ verifier: testVerifier, serviceSecret }));
+    app.use((_req, res) => res.json({ ok: true }));
+    const { server, url } = await startServer(app);
+    activeServer = server;
+
+    const headers = await bearerHeaders({
+      actorId: "00000000-0000-4000-8000-000000000001",
+      actorType: "employee",
+      roles: ["Warehouse Staff"],
+      passwordChangeRequired: true,
+    });
+    const response = await fetch(`${url}/inventory/balances`, { headers });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "password_change_required" });
   });
 });

@@ -37,7 +37,6 @@ describe("stripIdentityHeaders", () => {
           actorId: req.header("x-actor-id"),
           actorType: req.header("x-actor-type"),
           actorSiteIds: req.header("x-actor-site-ids"),
-          identityContext: req.header("x-internal-identity-context"),
           sepaySignature: req.header("x-sepay-signature"),
         };
         res.json({ success: true });
@@ -54,7 +53,6 @@ describe("stripIdentityHeaders", () => {
         "x-actor-id": "00000000-0000-4000-8000-000000000099",
         "x-actor-type": "employee",
         "x-actor-site-ids": "00000000-0000-4000-8000-000000000010",
-        "x-internal-identity-context": "forged",
         "x-sepay-signature": "sig",
       },
       body: "{}",
@@ -64,7 +62,6 @@ describe("stripIdentityHeaders", () => {
       actorId: undefined,
       actorType: undefined,
       actorSiteIds: undefined,
-      identityContext: undefined,
       sepaySignature: "sig",
     });
   });

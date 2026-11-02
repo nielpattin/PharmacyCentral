@@ -29,6 +29,7 @@
     "@opentelemetry/sdk-logs": "catalog:",
     "@opentelemetry/sdk-metrics": "catalog:",
     "@opentelemetry/sdk-node": "catalog:",
+    "@pharmacy/auth": "workspace:*",
     "amqplib": "catalog:",
     "drizzle-orm": "catalog:",
     "express": "catalog:",

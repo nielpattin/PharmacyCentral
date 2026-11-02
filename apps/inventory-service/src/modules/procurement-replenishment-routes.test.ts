@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProcurementRepository } from "./procurement-repository.ts";
 import { createProcurementRouter } from "./procurement-routes.ts";
 
+import { bearerHeaders } from "../test-support/access-tokens.ts";
+
 const httpFetch = globalThis.fetch.bind(globalThis);
 
 const ids = {
@@ -17,6 +19,8 @@ const ids = {
   otherSupplier: "00000000-0000-4000-8000-000000000098",
   otherSite: "00000000-0000-4000-8000-000000000099",
 };
+
+const caller = await bearerHeaders({ actorType: "employee", actorId: ids.actor });
 
 const DAY = 24 * 60 * 60 * 1000;
 const suggestionsPath = "/procurement/replenishment-suggestions";
@@ -41,9 +45,8 @@ const validDrafts = {
 };
 
 const startServer = async (repository: ProcurementRepository): Promise<{ server: Server; url: string }> => {
-  // The catalog reference check reads the shared internal secret and signs the caller for the catalog.
+  // The catalog reference check reads the shared internal secret and forwards the caller's Authorization to the catalog.
   vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-internal-secret");
-  vi.stubEnv("INTERNAL_IDENTITY_SECRET", "test-identity-secret");
   const app = express();
   app.use(express.json());
   // The edge forwards the verified roles; a call without them acts as Platform Admin, which passes every role check.
@@ -72,12 +75,12 @@ const closeServer = async (server: Server): Promise<void> => {
 };
 
 const getSuggestions = (url: string, query: string, headers: Record<string, string> = {}) =>
-  httpFetch(`${url}${suggestionsPath}?${query}`, { headers: { "X-Actor-Id": ids.actor, ...headers } });
+  httpFetch(`${url}${suggestionsPath}?${query}`, { headers: { "X-Actor-Id": ids.actor, ...caller, ...headers } });
 
 const postDrafts = (url: string, body: unknown, headers: Record<string, string> = {}) =>
   httpFetch(`${url}${draftsPath}`, {
     method: "POST",
-    headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...headers },
+    headers: { "content-type": "application/json", "X-Actor-Id": ids.actor, ...caller, ...headers },
     body: JSON.stringify(body),
   });
 

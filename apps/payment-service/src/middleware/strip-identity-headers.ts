@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
 
-const IDENTITY_HEADERS = ["x-actor-id", "x-actor-type", "x-actor-site-ids", "x-internal-identity-context"];
+const IDENTITY_HEADERS = ["x-actor-id", "x-actor-type", "x-actor-site-ids"];
 
 /**
  * The SePay webhook is called by an external provider, never by an identity-carrying gateway, so no identity header

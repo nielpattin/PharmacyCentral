@@ -1,5 +1,6 @@
 // telemetry.ts must load first so the OpenTelemetry instrumentations can patch libraries before they are imported.
 import "./telemetry.ts";
+import { createAccessTokenVerifier } from "@pharmacy/auth";
 import express from "express";
 import { createServer } from "node:http";
 
@@ -41,6 +42,11 @@ if (!catalogServiceUrl)
 const identityServiceUrl = process.env.IDENTITY_SERVICE_URL;
 if (!identityServiceUrl)
   throw new Error("Missing required environment variable: IDENTITY_SERVICE_URL. Please set it in your .env file.");
+// Every request is checked against the identity-service key set, so a missing URL stops the service here.
+const identityJwksUrl = process.env.IDENTITY_JWKS_URL;
+if (!identityJwksUrl)
+  throw new Error("Missing required environment variable: IDENTITY_JWKS_URL. Please set it in your .env file.");
+const accessTokenVerifier = createAccessTokenVerifier({ jwks: identityJwksUrl });
 // Procurement calls the catalog with the shared internal service secret, so a missing one stops the service here.
 if (!process.env.INTERNAL_SERVICE_SECRET)
   throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
@@ -57,7 +63,7 @@ const employeeDirectory = new IdentityEmployeeClient(identityServiceUrl);
 const expiryAvailabilitySweeper = repository ? new ExpiryAvailabilitySweeper(repository, logger) : undefined;
 expiryAvailabilitySweeper?.start();
 const inventoryImportService = database
-  ? new InventoryImportService(database, (identity) => new CatalogServiceReferenceResolver(catalogServiceUrl, identity))
+  ? new InventoryImportService(database, (authorization) => new CatalogServiceReferenceResolver(catalogServiceUrl, authorization))
   : undefined;
 const procurementRepository = database
   ? new ProcurementRepository(database, async (input) => {
@@ -126,8 +132,8 @@ actionPlanAutoSweeper?.start();
 app.disable("x-powered-by");
 app.use("/inventory/imports", express.json({ limit: "25mb" }));
 app.use(express.json({ limit: "1mb" }));
-// Inventory and procurement routes require a signed identity context minted by identity-service (/auth/context).
-app.use(createTrustedRequestMiddleware({ expectedAudience: serviceName }));
+// Inventory and procurement routes require the access token identity-service issues, verified against its JWKS.
+app.use(createTrustedRequestMiddleware({ verifier: accessTokenVerifier }));
 if (database) app.use(createAuditMiddleware(INVENTORY_AUDIT_RULES, createAuditRecorder(database, logger)));
 app.get("/health/live", (_request, response) => response.json({ status: "ok", service: serviceName }));
 app.get("/health/ready", (_request, response) =>

@@ -988,6 +988,23 @@ describe("sales order stock API", () => {
     expect(await response.json()).toMatchObject({ code });
   });
 
+  it.each([
+    ["times out", () => Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError"))],
+    ["answers 502", () => Promise.resolve(new Response("{}", { status: 502 }))],
+  ])("answers 503 catalog_unavailable, and creates no order, when catalog-service %s", async (_label, failure) => {
+    const createOrder = vi.fn();
+    const repository = { createOrder, getOrder: vi.fn() } as unknown as SalesRepository;
+    vi.stubGlobal("fetch", vi.fn(failure));
+    const testServer = await createTestServer(repository, { hold: vi.fn() });
+    server = testServer.server;
+
+    const response = await placeOrder(testServer.url);
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: "catalog_unavailable" });
+    expect(createOrder).not.toHaveBeenCalled();
+  });
+
   const transition = (url: string, body: unknown, headers: Record<string, string>) =>
     httpFetch(`${url}/orders/${ids.prescription}/transition`, {
       method: "POST",

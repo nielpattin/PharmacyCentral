@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import type { ReadThroughCache } from "@pharmacy/cache";
 import { z } from "zod";
 
 import { productMatchRequestSchema, productSearchQuerySchema } from "../contracts/catalog.ts";
@@ -20,6 +21,7 @@ import { decodePageCursor, encodePageCursor } from "../shared/pagination/page-cu
 
 import { ProductMediaStore } from "./catalog/product-media-store.ts";
 import { rankCandidates } from "./catalog/product-matching.ts";
+import { CATALOG_CACHE_TTL_SECONDS, type CatalogCacheGroup } from "./catalog/read-cache.ts";
 import { databaseProductPage, searchCatalogProducts } from "./catalog/search/hybrid-search.ts";
 import { decodeCursor, encodeCursor } from "./catalog/search/page-cursor.ts";
 import type { ProductSearchIndex } from "./catalog/search/product-search-index.ts";
@@ -165,6 +167,8 @@ export type CatalogRouterOptions = IdentityOptions & {
   search?: { index: ProductSearchIndex; embedders?: TextEmbedderSource | undefined };
   onProductsChanged?: (() => void) | undefined;
   warn?: ((error: unknown) => void) | undefined;
+  /** Shared Redis read cache. Without it every read goes to the database. */
+  cache?: ReadThroughCache | undefined;
 };
 
 export const createCatalogRouter = (
@@ -173,13 +177,23 @@ export const createCatalogRouter = (
   options: CatalogRouterOptions,
 ): Router => {
   const router = Router();
-  const identity: IdentityOptions = { identitySecret: options.identitySecret, audience: options.audience };
+  const identity: IdentityOptions = { verifier: options.verifier };
   const searchCache = createSearchResponseCache();
-  // Whatever changes a product also drops the remembered list answers of this replica.
-  const productsChanged = (): void => {
+  // Whatever changes a product also drops the remembered list answers of this replica, and the shared cache entries
+  // of the product and its prices. The shared drop is awaited so the caller's next read sees the change.
+  const productsChanged = async (): Promise<void> => {
     searchCache.clear();
     options.onProductsChanged?.();
+    await dropCached("products", "prices");
   };
+  // Drops shared read-cache groups after a committed write. Never throws: a Redis failure only delays the drop to the
+  // entries' TTL (see ReadThroughCache).
+  const dropCached = async (...groups: CatalogCacheGroup[]): Promise<void> => {
+    if (!options.cache) return;
+    for (const group of groups) await options.cache.invalidate(group);
+  };
+  const readThrough = <T>(group: CatalogCacheGroup, key: string, loader: () => Promise<T>): Promise<T> =>
+    options.cache ? options.cache.load(group, key, CATALOG_CACHE_TTL_SECONDS[group], loader) : loader();
   // Each write route names the rule it needs; Platform Admin reads and writes only where the rule names it (ROLE_RULES).
   const managers = requireEmployee(identity, ROLE_RULES.pharmacyManager);
   const platformAdminOnly = requireEmployee(identity, ROLE_RULES.platformAdminOnly);
@@ -207,7 +221,9 @@ export const createCatalogRouter = (
     const parsed = siteInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidRequest(response);
     try {
-      response.status(201).json(await repository.createSite(parsed.data));
+      const site = await repository.createSite(parsed.data);
+      await dropCached("stores");
+      response.status(201).json(site);
     } catch (error) {
       writeError(response, error);
     }
@@ -224,6 +240,7 @@ export const createCatalogRouter = (
     try {
       const site = await repository.updateSite(id.data.id, parsed.data);
       if (!site) return response.status(404).json({ title: "Site not found", status: 404 });
+      await dropCached("stores");
       response.json(site);
     } catch (error) {
       writeError(response, error);
@@ -240,6 +257,7 @@ export const createCatalogRouter = (
     const outcome = await repository.deleteSite(id.data.id);
     if (outcome === "in_use") return refuse(response, REFUSALS.siteInUse);
     if (outcome === "not_found") return response.status(404).json({ title: "Site not found", status: 404 });
+    await dropCached("stores");
     response.status(204).end();
   });
 
@@ -425,9 +443,12 @@ export const createCatalogRouter = (
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);
-    const product = await repository.getProduct(id.data.id);
+    const product = await readThrough("products", `id|${id.data.id}`, async () => {
+      const found = await repository.getProduct(id.data.id);
+      return found ? withProductUnits(repository, found) : undefined;
+    });
     if (!product) return response.status(404).json({ title: "Product not found", status: 404 });
-    response.json(await withProductUnits(repository, product));
+    response.json(product);
   });
 
   router.put("/products/:id/image", managers, async (request, response) => {
@@ -444,6 +465,7 @@ export const createCatalogRouter = (
       const stored = await mediaStore.store(id.data.id, request.body);
       const product = await repository.updateProduct(id.data.id, { imageUrl: stored.imageUrl });
       if (!product) return response.status(404).json({ title: "Product not found", status: 404 });
+      await dropCached("products");
       response.json({ ...product, media: stored });
     } catch (error) {
       response.status(400).json({
@@ -467,13 +489,13 @@ export const createCatalogRouter = (
     const parsed = productUnitInputSchema.omit({ productId: true }).safeParse(request.body);
     if (!id.success || !parsed.success) return invalidRequest(response);
     try {
-      response.status(201).json(
-        await repository.createProductUnit({
-          ...parsed.data,
-          productId: id.data.id,
-          conversionFactorToBaseUnit: String(parsed.data.conversionFactorToBaseUnit),
-        }),
-      );
+      const unit = await repository.createProductUnit({
+        ...parsed.data,
+        productId: id.data.id,
+        conversionFactorToBaseUnit: String(parsed.data.conversionFactorToBaseUnit),
+      });
+      await dropCached("products", "prices");
+      response.status(201).json(unit);
     } catch (error) {
       writeError(response, error);
     }
@@ -487,6 +509,7 @@ export const createCatalogRouter = (
     try {
       const unit = await repository.updateProductUnit(ids.data.id, parsed.data);
       if (!unit) return response.status(404).json({ title: "Product unit not found", status: 404 });
+      await dropCached("products", "prices");
       response.json(unit);
     } catch (error) {
       writeError(response, error);
@@ -498,6 +521,7 @@ export const createCatalogRouter = (
     const ids = z.object({ productId: z.string().uuid(), id: z.string().uuid() }).safeParse(request.params);
     if (!ids.success) return invalidRequest(response);
     await repository.deleteProductUnit(ids.data.id);
+    await dropCached("products", "prices");
     response.status(204).end();
   });
 
@@ -520,8 +544,8 @@ export const createCatalogRouter = (
             ),
           )
         : [];
+      await productsChanged();
       response.status(201).json({ ...created, units: savedUnits });
-      productsChanged();
     } catch (error) {
       writeError(response, error);
     }
@@ -550,8 +574,8 @@ export const createCatalogRouter = (
             ),
           )
         : await repository.listProductUnits(id.data.id);
+      await productsChanged();
       response.json({ ...product, units: savedUnits });
-      productsChanged();
     } catch (error) {
       writeError(response, error);
     }
@@ -564,8 +588,8 @@ export const createCatalogRouter = (
     const outcome = await repository.deleteProduct(id.data.id);
     if (outcome === "in_use") return refuse(response, REFUSALS.productInUse);
     if (outcome === "not_found") return response.status(404).json({ title: "Product not found", status: 404 });
+    await productsChanged();
     response.status(204).end();
-    productsChanged();
   });
 
   router.get("/pricing/prices", async (request, response) => {
@@ -617,10 +641,9 @@ export const createCatalogRouter = (
     if (!repository) return databaseUnavailable(response);
     const parsed = activePriceQuerySchema.safeParse(request.query);
     if (!parsed.success) return invalidRequest(response);
-    const price = await repository.getActivePrice(
-      parsed.data.productId,
-      parsed.data.productUnitId,
-      parsed.data.effectiveDate,
+    const { productId, productUnitId, effectiveDate } = parsed.data;
+    const price = await readThrough("prices", `active|${productId}|${productUnitId}|${effectiveDate}`, () =>
+      repository.getActivePrice(productId, productUnitId, effectiveDate),
     );
     if (!price) return response.status(404).json({ title: "Active price not found", status: 404 });
     response.json(price);
@@ -631,14 +654,14 @@ export const createCatalogRouter = (
     const parsed = priceInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidRequest(response);
     try {
-      response.status(201).json(
-        await repository.createPrice({
-          ...parsed.data,
-          currency: parsed.data.currency.toUpperCase(),
-          unitPrice: String(parsed.data.unitPrice),
-          createdBy: staffActorOf(response).actorId,
-        }),
-      );
+      const price = await repository.createPrice({
+        ...parsed.data,
+        currency: parsed.data.currency.toUpperCase(),
+        unitPrice: String(parsed.data.unitPrice),
+        createdBy: staffActorOf(response).actorId,
+      });
+      await dropCached("prices");
+      response.status(201).json(price);
     } catch (error) {
       writeError(response, error);
     }
@@ -658,6 +681,7 @@ export const createCatalogRouter = (
         body.data.notes,
       );
       if (!price) return response.status(404).json({ title: "Price not found", status: 404 });
+      await dropCached("prices");
       response.json(price);
     } catch (error) {
       writeError(response, error);
@@ -667,7 +691,13 @@ export const createCatalogRouter = (
   router.get("/availability", async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const productId = typeof request.query.productId === "string" ? request.query.productId : undefined;
-    response.json(await repository.listAvailability(productId, publicListSiteIds(request)));
+    const siteIds = publicListSiteIds(request);
+    // The rows depend only on the product and the sites asked for, never on who asks, so those two make the key.
+    const scope = siteIds ? [...siteIds].sort().join(",") : "*";
+    const rows = await readThrough("availability", `product|${productId ?? "*"}|sites|${scope}`, () =>
+      repository.listAvailability(productId, siteIds),
+    );
+    response.json(rows);
   });
 
   router.get("/stores", async (request, response) => {
@@ -678,9 +708,20 @@ export const createCatalogRouter = (
     const after =
       parsed.data.cursor === undefined ? undefined : decodePageCursor(parsed.data.cursor, storeCursorSortValue);
     if (parsed.data.cursor !== undefined && after === undefined) return invalidCursor(response);
-    const page = await repository.listActiveStores(Number.isFinite(limit) ? limit : 50, after);
-    const last = page.rows.at(-1);
-    if (page.hasMore && last) response.set("X-Next-Cursor", encodePageCursor({ sortValue: last.code, id: last.id }));
+    const pageSize = Number.isFinite(limit) ? limit : 50;
+    const page = await readThrough(
+      "stores",
+      `list|${JSON.stringify([pageSize, parsed.data.cursor ?? null])}`,
+      async () => {
+        const found = await repository.listActiveStores(pageSize, after);
+        const last = found.rows.at(-1);
+        return {
+          rows: found.rows,
+          nextCursor: found.hasMore && last ? encodePageCursor({ sortValue: last.code, id: last.id }) : undefined,
+        };
+      },
+    );
+    if (page.nextCursor !== undefined) response.set("X-Next-Cursor", page.nextCursor);
     response.json(page.rows);
   });
 
@@ -707,7 +748,7 @@ export const createCatalogRouter = (
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);
-    const store = await repository.findActiveStore(id.data.id);
+    const store = await readThrough("stores", `id|${id.data.id}`, () => repository.findActiveStore(id.data.id));
     if (!store) return response.status(404).json({ title: "Store not found", status: 404 });
     response.json(store);
   });

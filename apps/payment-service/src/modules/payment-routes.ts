@@ -11,7 +11,7 @@ import {
   actorRoles,
   cashConfirmationRefusal,
   counterInvoiceRefusal,
-  forwardedActorHeaders,
+  forwardedAuthorization,
   refundRefusal,
   siteScopeRefusal,
 } from "./payment-access.ts";
@@ -49,7 +49,7 @@ export const createPaymentRouter = (
     if (roleRefusal) return response.status(roleRefusal.status).json(roleRefusal);
     try {
       const salesResponse = await fetch(`${options.salesServiceUrl}/prescriptions/${prescriptionId.data}`, {
-        headers: { ...internalServiceHeaders(createdBy), ...forwardedActorHeaders(request) },
+        headers: forwardedAuthorization(request),
         signal: AbortSignal.timeout(2_000),
       });
       if (!salesResponse.ok)
@@ -123,7 +123,7 @@ export const createPaymentRouter = (
         body: parsed.data,
         actorId: actor(request),
         isEmployee,
-        loadOrder: (orderId, actorId) => loadOrderOf(options.salesServiceUrl, orderId, actorId),
+        loadOrder: (orderId) => loadOrderOf(options.salesServiceUrl, orderId, forwardedAuthorization(request)),
       });
       const invoice = await repository.createInvoice({
         ...priced,
@@ -369,10 +369,10 @@ const extractPaymentCodes = (value: Record<string, unknown>): string[] => {
 const loadOrderOf = async (
   salesServiceUrl: string,
   orderId: string,
-  actorId: string,
+  headers: Record<string, string>,
 ): Promise<PayableOrder | undefined> => {
   const upstream = await fetch(`${salesServiceUrl}/orders/${orderId}`, {
-    headers: internalServiceHeaders(actorId),
+    headers,
     signal: AbortSignal.timeout(2_000),
   });
   if (upstream.status === 404) return undefined;

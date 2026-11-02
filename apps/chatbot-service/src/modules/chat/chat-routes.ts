@@ -3,6 +3,7 @@ import { Router, type Request, type Response } from "express";
 import { chatSessionParamsSchema, sendChatMessageRequestSchema } from "../../contracts/chat.ts";
 import { ChatModelError, ProductLookupError } from "../../domain/chat-model.ts";
 import { IntentGateError } from "../../domain/intent-gate.ts";
+import { AiBudgetExceededError, AiCapacityError, AiPricingMissingError } from "../ai-budget/ai-budget-errors.ts";
 import type { Logger } from "../../logger.ts";
 import { ChatRateLimitedError, ChatSessionFullError } from "./chat-session-store.ts";
 import { ChatSessionNotFoundError, sendChatMessage, startChatSession, type ChatDependencies } from "./chat-service.ts";
@@ -39,6 +40,20 @@ const SESSION_FULL = {
   title: "Chat session is full",
   status: 409,
   code: "session_full",
+};
+
+const AI_BUDGET_EXCEEDED = {
+  type: "https://api.pharmacycentral.local/problems/ai-budget-exceeded",
+  title: "AI budget exceeded",
+  status: 429,
+  code: "ai_budget_exceeded",
+};
+
+const ASSISTANT_BUSY = {
+  type: "https://api.pharmacycentral.local/problems/assistant-busy",
+  title: "Assistant busy",
+  status: 503,
+  code: "assistant_busy",
 };
 
 /** Model and catalog failures answer 503 with a fixed code. The provider's wording never reaches the widget. */
@@ -88,6 +103,21 @@ export const createChatRouter = ({ deps, logger }: { deps: ChatDependencies; log
           status: 429,
           code: "rate_limited",
         });
+        return;
+      }
+      if (error instanceof AiBudgetExceededError) {
+        response.status(429).json(AI_BUDGET_EXCEEDED);
+        return;
+      }
+      if (error instanceof AiCapacityError) {
+        response.set("Retry-After", "5");
+        response.status(503).json(ASSISTANT_BUSY);
+        return;
+      }
+      if (error instanceof AiPricingMissingError) {
+        // An admin must price the model before a spend limit can be enforced. Customers see the usual outage text.
+        logger.error({ name: error.name, message: error.message }, "AI spend limit cannot be enforced");
+        response.status(503).json({ title: "Assistant unavailable", status: 503, code: "assistant_unavailable" });
         return;
       }
       if (error instanceof ChatModelError || error instanceof ProductLookupError || error instanceof IntentGateError) {

@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createInventoryImportRouter } from "./inventory-import-routes.ts";
 import type { InventoryImportService } from "./inventory-import-service.ts";
+import { bearerHeaders } from "../test-support/access-tokens.ts";
+
+const caller = await bearerHeaders({ actorType: "employee", actorId: "00000000-0000-4000-8000-000000000001" });
 
 const createTestServer = async (importService: InventoryImportService | undefined) => {
   const app = express();
@@ -54,7 +57,7 @@ describe("inventory opening balance import API", () => {
 
     const response = await fetch(`${testServer.url}/inventory/imports/opening-balances`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...caller },
       body: JSON.stringify({
         schemaVersion: 1,
         balances: [
@@ -76,7 +79,7 @@ describe("inventory opening balance import API", () => {
       expect.objectContaining({
         balances: [expect.objectContaining({ productSku: "THU-0001", qualityStatus: "Released" })],
       }),
-      expect.objectContaining({ actorId: null, allowedSiteIds: undefined, catalogIdentity: expect.any(Function) }),
+      expect.objectContaining({ actorId: null, allowedSiteIds: undefined, catalogAuthorization: expect.any(String) }),
     );
   });
 
@@ -88,7 +91,7 @@ describe("inventory opening balance import API", () => {
 
     const response = await fetch(`${testServer.url}/inventory/imports/opening-balances`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...caller },
       body: JSON.stringify({
         schemaVersion: 1,
         balances: [
@@ -120,7 +123,7 @@ describe("inventory opening balance import API", () => {
 
     const response = await fetch(`${testServer.url}/inventory/imports/opening-balances`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...caller },
       body: JSON.stringify({
         schemaVersion: 1,
         balances: [
@@ -149,7 +152,7 @@ describe("inventory opening balance import API", () => {
 
     const response = await fetch(`${testServer.url}/inventory/imports/opening-balances`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...caller },
       body: JSON.stringify({
         schemaVersion: 1,
         balances: [

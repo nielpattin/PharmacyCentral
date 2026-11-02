@@ -3,40 +3,21 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createTrustedRequestMiddleware, signInternalIdentityContext } from "../middleware/trusted-request.ts";
+import { createTrustedRequestMiddleware } from "../middleware/trusted-request.ts";
+import { bearerHeaders, testVerifier } from "../test-support/access-tokens.ts";
 import { createCatalogImportRouter } from "./catalog-import-routes.ts";
 import type { CatalogImportService } from "./catalog-import-service.ts";
 
-const SECRET = "test-internal-identity-secret";
+const signedHeaders = (roles: string[]): Promise<Record<string, string>> =>
+  bearerHeaders({ actorType: "employee", actorId: "66666666-6666-4666-8666-666666666666", roles });
 
-const signedHeaders = (roles: string[]): Record<string, string> => {
-  const now = Date.now();
-  return {
-    "x-internal-identity-context": signInternalIdentityContext(
-      {
-        version: "v1",
-        requestId: "request-1",
-        correlationId: "correlation-1",
-        actorId: "66666666-6666-4666-8666-666666666666",
-        actorType: "employee",
-        roles,
-        siteIds: [],
-        issuedAt: new Date(now - 1_000).toISOString(),
-        expiresAt: new Date(now + 300_000).toISOString(),
-        audience: "catalog-service",
-      },
-      SECRET,
-    ),
-  };
-};
-
-const MANAGER = signedHeaders(["Pharmacy Manager"]);
+const MANAGER = await signedHeaders(["Pharmacy Manager"]);
 
 const createTestServer = async (importService: CatalogImportService | undefined) => {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
-  app.use(createTrustedRequestMiddleware({ identitySecret: SECRET, expectedAudience: "catalog-service" }));
-  app.use(createCatalogImportRouter(importService, { identitySecret: SECRET, audience: "catalog-service" }));
+  app.use(createTrustedRequestMiddleware({ verifier: testVerifier }));
+  app.use(createCatalogImportRouter(importService, { verifier: testVerifier }));
   const server: Server = createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -100,7 +81,7 @@ describe("catalog import API", () => {
 
     const response = await fetch(`${testServer.url}/products/imports`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...signedHeaders(["Pharmacist"]) },
+      headers: { "content-type": "application/json", ...(await signedHeaders(["Pharmacist"])) },
       body: JSON.stringify({ schemaVersion: 1, suppliers: [{ code: "SUP", name: "Supplier" }] }),
     });
 

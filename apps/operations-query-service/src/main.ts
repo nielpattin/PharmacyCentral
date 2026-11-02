@@ -1,4 +1,5 @@
 import "./telemetry.ts"; // Must load first so the OpenTelemetry instrumentations can patch libraries.
+import { createAccessTokenVerifier } from "@pharmacy/auth";
 import express from "express";
 import { createServer } from "node:http";
 
@@ -28,6 +29,10 @@ if (!salesUrl)
 const paymentUrl = process.env.PAYMENT_SERVICE_URL;
 if (!paymentUrl)
   throw new Error("Missing required environment variable: PAYMENT_SERVICE_URL. Please set it in your .env file.");
+const identityJwksUrl = process.env.IDENTITY_JWKS_URL;
+if (!identityJwksUrl)
+  throw new Error("Missing required environment variable: IDENTITY_JWKS_URL. Please set it in your .env file.");
+const accessTokenVerifier = createAccessTokenVerifier({ jwks: identityJwksUrl });
 // The live dashboard reads the other services with the shared internal service secret.
 if (!process.env.INTERNAL_SERVICE_SECRET)
   throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
@@ -43,8 +48,8 @@ eventConsumer?.start();
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
-// Operational query routes require a signed identity context minted by identity-service (/auth/context).
-app.use(createTrustedRequestMiddleware({ expectedAudience: serviceName }));
+// Operational query routes require a bearer access token issued by identity-service.
+app.use(createTrustedRequestMiddleware({ verifier: accessTokenVerifier }));
 app.get("/health/live", (_request, response) => response.json({ status: "ok", service: serviceName }));
 app.get("/health/ready", (_request, response) =>
   response.status(database ? 200 : 503).json({ status: database ? "ok" : "degraded", service: serviceName }),

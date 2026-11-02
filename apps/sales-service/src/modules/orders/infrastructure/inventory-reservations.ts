@@ -29,6 +29,25 @@ export class InventoryReservations {
     throw new InventoryRequestError(`Inventory refused the reservation with status ${response.status}`);
   }
 
+  /**
+   * The state of the reservation inventory holds under this id, or `undefined` when it never saw one. The order id is
+   * the owner id, as no actor is sent, so the lookup is by owner and matched on the id.
+   */
+  public async reservationStatus(reservationId: string): Promise<string | undefined> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/inventory/reservations?ownerId=${encodeURIComponent(reservationId)}`, {
+        headers: internalServiceHeaders(),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      throw new InventoryRequestError("Inventory-service could not be reached", { cause: error });
+    }
+    if (!response.ok) throw new InventoryRequestError(`Inventory refused the lookup with status ${response.status}`);
+    const reservations = (await response.json()) as Array<{ id: string; status: string }>;
+    return reservations.find((reservation) => reservation.id === reservationId)?.status;
+  }
+
   public async release(reservationId: string): Promise<void> {
     const response = await this.post(`/inventory/reservations/${reservationId}/release`);
     if (!response.ok && response.status !== 404)

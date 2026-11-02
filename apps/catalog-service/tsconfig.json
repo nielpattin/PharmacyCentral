@@ -8,5 +8,12 @@
     "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
-  "references": []
+  "references": [
+    {
+      "path": "../../packages/cache"
+    },
+    {
+      "path": "../../packages/auth"
+    }
+  ]
 }

@@ -1,6 +1,7 @@
 // Must load first so the OpenTelemetry instrumentations can patch libraries imported below.
 import "./telemetry.ts";
 
+import { createAccessTokenVerifier } from "@pharmacy/auth";
 import express from "express";
 import { createServer } from "node:http";
 
@@ -38,6 +39,10 @@ if (!catalogServiceUrl)
   throw new Error("Missing required environment variable: CATALOG_SERVICE_URL. Please set it in your .env file.");
 if (!process.env.INTERNAL_SERVICE_SECRET)
   throw new Error("Missing required environment variable: INTERNAL_SERVICE_SECRET. Please set it in your .env file.");
+const identityJwksUrl = process.env.IDENTITY_JWKS_URL;
+if (!identityJwksUrl)
+  throw new Error("Missing required environment variable: IDENTITY_JWKS_URL. Please set it in your .env file.");
+const accessTokenVerifier = createAccessTokenVerifier({ jwks: identityJwksUrl });
 const database = createPaymentDatabase();
 const repository = database ? new PaymentRepository(database) : undefined;
 const rabbitmqUrl = process.env.RABBITMQ_URL;
@@ -86,8 +91,8 @@ app.post(
   },
 );
 app.use(express.json({ limit: "1mb" }));
-// Payment browser routes require a signed identity context. The verified SePay webhook is registered above.
-app.use(createTrustedRequestMiddleware({ expectedAudience: serviceName }));
+// Payment browser routes require a bearer access token. The verified SePay webhook is registered above.
+app.use(createTrustedRequestMiddleware({ verifier: accessTokenVerifier }));
 app.use(createPaymentRouter(repository, { salesServiceUrl, catalogServiceUrl }));
 app.get("/health/live", (_request, response) => response.json({ status: "ok", service: serviceName }));
 app.get("/health/ready", (_request, response) =>

@@ -98,7 +98,7 @@ describe("OperationsRepository.dashboardAnalytics", () => {
   const readPaths = () => seen.map((request) => `${request.url.host}${request.url.pathname}`).sort();
 
   it("answers the overview from the sales, their paid invoices and their cost, and reads nothing else", async () => {
-    const answer = await repository.dashboardAnalytics(queryOf("overview"), () => "signed-for-catalog", [SITE], NOW);
+    const answer = await repository.dashboardAnalytics(queryOf("overview"), () => "Bearer employee-token", [SITE], NOW);
 
     expect(answer.section).toBe("overview");
     expect(answer.currency).toBe("VND");
@@ -142,7 +142,7 @@ describe("OperationsRepository.dashboardAnalytics", () => {
   });
 
   it("answers the revenue tab from the period's sales and the catalog, and reads no stock nor customer source", async () => {
-    const answer = await repository.dashboardAnalytics(queryOf("revenue"), () => "signed-for-catalog", [SITE], NOW);
+    const answer = await repository.dashboardAnalytics(queryOf("revenue"), () => "Bearer employee-token", [SITE], NOW);
 
     expect(answer.section).toBe("revenue");
     expect(answer).not.toHaveProperty("kpis");
@@ -173,7 +173,7 @@ describe("OperationsRepository.dashboardAnalytics", () => {
     expect(requestTo("payment.test", "/internal/analytics/paid-invoices")?.url.searchParams.get("since")).toBe(
       "2026-10-08T00:00:00.000Z",
     );
-    expect(requestTo("catalog.test", "/sites")?.headers.get("x-internal-identity-context")).toBe("signed-for-catalog");
+    expect(requestTo("catalog.test", "/sites")?.headers.get("authorization")).toBe("Bearer employee-token");
   });
 
   it("answers the customers tab from the period's sales and their first payment, and reads no stock nor catalog", async () => {
@@ -235,7 +235,12 @@ describe("OperationsRepository.dashboardAnalytics", () => {
     answers["catalog.test/pricing/base-prices"] = () =>
       json([{ productId: PRODUCT, productName: "Paracetamol", unitPrice: 1_000 }]);
 
-    const answer = await repository.dashboardAnalytics(queryOf("inventory"), () => "signed-for-catalog", [SITE], NOW);
+    const answer = await repository.dashboardAnalytics(
+      queryOf("inventory"),
+      () => "Bearer employee-token",
+      [SITE],
+      NOW,
+    );
 
     expect(answer.section).toBe("inventory");
     expect(answer).not.toHaveProperty("kpis");
@@ -252,13 +257,13 @@ describe("OperationsRepository.dashboardAnalytics", () => {
     expect(stock?.url.searchParams.get("from")).toBe("2026-10-08T00:00:00.000Z");
     expect(stock?.headers.get("x-actor-site-ids")).toBe(SITE);
     expect(requestTo("catalog.test", "/pricing/base-prices")?.url.searchParams.get("day")).toBe("2026-10-28");
-    expect(requestTo("catalog.test", "/sites")?.headers.get("x-internal-identity-context")).toBe("signed-for-catalog");
+    expect(requestTo("catalog.test", "/sites")?.headers.get("authorization")).toBe("Bearer employee-token");
   });
 
   it("still answers the month's revenue against each site's target", async () => {
     const targetReport = await repository.salesTargetsReport(
       { month: "2026-10", from: new Date("2026-10-01T00:00:00.000Z"), to: new Date("2026-11-01T00:00:00.000Z") },
-      () => "signed-for-catalog",
+      () => "Bearer employee-token",
       [SITE],
     );
     expect(targetReport.sites).toStrictEqual([

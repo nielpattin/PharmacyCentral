@@ -14,7 +14,7 @@ import {
   InventoryRequestError,
   type InventoryReservations,
 } from "../infrastructure/inventory-reservations.ts";
-import { CASH_ORDER_TTL_MS, OrderStock, QR_ORDER_TTL_MS } from "./order-stock.ts";
+import { CASH_ORDER_TTL_MS, OrderStock, QR_ORDER_TTL_MS, RECONCILE_GRACE_MS } from "./order-stock.ts";
 
 const migrationsFolder = fileURLToPath(new URL("../../../../drizzle/migrations", import.meta.url));
 
@@ -29,6 +29,11 @@ class FakeInventory {
     if (this.shortage) return Promise.reject(new InsufficientStockError());
     this.holds.set(id, "held");
     return Promise.resolve();
+  }
+  public reservationStatus(id: string): Promise<string | undefined> {
+    if (this.down) return Promise.reject(new InventoryRequestError("inventory is down"));
+    const state = this.holds.get(id);
+    return Promise.resolve(state === "held" ? "active" : state);
   }
   public release(id: string): Promise<void> {
     if (this.down) return Promise.reject(new InventoryRequestError("inventory is down"));
@@ -51,11 +56,9 @@ describe("OrderStock", () => {
   const db = drizzle({ client, schema });
   const repository = new SalesRepository({ db, pool: undefined } as unknown as SalesDatabase);
   const inventory = new FakeInventory();
-  const orderStock = new OrderStock(
-    repository,
-    inventory as unknown as InventoryReservations,
-    createLogger({ level: "silent" }),
-  );
+  const newOrderStock = () =>
+    new OrderStock(repository, inventory as unknown as InventoryReservations, createLogger({ level: "silent" }));
+  let orderStock = newOrderStock();
 
   const customer = "00000000-0000-4000-8000-00000000000a";
   const store = "00000000-0000-4000-8000-00000000000b";
@@ -98,6 +101,7 @@ describe("OrderStock", () => {
 
   beforeEach(async () => {
     await client.exec("TRUNCATE orders, order_lines, order_delivery_snapshots, outbox_messages CASCADE;");
+    orderStock = newOrderStock();
     inventory.holds.clear();
     inventory.down = false;
     inventory.shortage = false;
@@ -169,6 +173,94 @@ describe("OrderStock", () => {
 
     await expect(row(waiting)).resolves.toMatchObject({ status: "Pending" });
     await expect(row(abandoned)).resolves.toMatchObject({ status: "Cancelled" });
+  });
+
+  it("cancels an unpaid order whose process died before inventory held its stock, and only that order", async () => {
+    const orphan = await place("sepay_qr");
+    const held = await place("sepay_qr");
+    const paid = await place("sepay_qr");
+    const young = await place("sepay_qr");
+    inventory.holds.set(held, "held");
+    await db
+      .update(schema.orders)
+      .set({ paymentStatus: "Paid", status: "Confirmed" })
+      .where(eq(schema.orders.id, paid));
+    const aged = minutesAgo(RECONCILE_GRACE_MS / 60_000 + 1);
+    for (const id of [orphan, held, paid]) await age(id, aged);
+    await age(young, minutesAgo(RECONCILE_GRACE_MS / 60_000 - 1));
+
+    await orderStock.sweep(now);
+
+    await expect(row(orphan)).resolves.toEqual({ status: "Cancelled", stockHold: "released" });
+    await expect(row(held)).resolves.toEqual({ status: "Pending", stockHold: "held" });
+    await expect(row(paid)).resolves.toEqual({ status: "Confirmed", stockHold: "held" });
+    await expect(row(young)).resolves.toEqual({ status: "Pending", stockHold: "held" });
+  });
+
+  it("keeps the window open while inventory is down, then checks the same orders once it answers", async () => {
+    const orphan = await place("sepay_qr");
+    await age(orphan, minutesAgo(RECONCILE_GRACE_MS / 60_000 + 1));
+    inventory.down = true;
+
+    await orderStock.sweep(now);
+    await expect(row(orphan)).resolves.toMatchObject({ status: "Pending" });
+
+    inventory.down = false;
+    await orderStock.sweep(now);
+    await expect(row(orphan)).resolves.toMatchObject({ status: "Cancelled" });
+  });
+
+  it("checks an order once: a second sweep does not ask inventory again", async () => {
+    const id = await place("sepay_qr");
+    inventory.holds.set(id, "held");
+    await age(id, minutesAgo(RECONCILE_GRACE_MS / 60_000 + 1));
+    await orderStock.sweep(now);
+    inventory.holds.delete(id);
+
+    await orderStock.sweep(now);
+
+    await expect(row(id)).resolves.toMatchObject({ status: "Pending" });
+  });
+
+  it("releases a reservation that arrives after its order was cancelled and its hold already released", async () => {
+    const id = await place("sepay_qr");
+    inventory.shortage = true;
+    await expect(
+      orderStock.hold({ id, selectedStoreId: store }, [{ productId: product, quantity: 2 }]),
+    ).rejects.toBeInstanceOf(InsufficientStockError);
+    inventory.shortage = false;
+    // The reserve that timed out on sales-service's side reaches inventory after the release already ran.
+    inventory.holds.set(id, "held");
+    await expect(row(id)).resolves.toEqual({ status: "Cancelled", stockHold: "released" });
+    expect(inventory.holds.get(id)).toBe("held");
+
+    await age(id, minutesAgo(RECONCILE_GRACE_MS / 60_000 + 1));
+    await orderStock.sweep(now);
+
+    expect(inventory.holds.get(id)).toBe("released");
+    await expect(row(id)).resolves.toEqual({ status: "Cancelled", stockHold: "released" });
+  });
+
+  it("leaves a cancelled order with no reservation, or a consumed one, untouched", async () => {
+    const none = await place("sepay_qr");
+    const consumed = await place("sepay_qr");
+    inventory.holds.set(consumed, "consumed");
+    await db
+      .update(schema.orders)
+      .set({ status: "Cancelled", stockHold: "consumed" })
+      .where(eq(schema.orders.id, consumed));
+    await db
+      .update(schema.orders)
+      .set({ status: "Cancelled", stockHold: "released" })
+      .where(eq(schema.orders.id, none));
+    await age(none, minutesAgo(RECONCILE_GRACE_MS / 60_000 + 1));
+    await age(consumed, minutesAgo(RECONCILE_GRACE_MS / 60_000 + 1));
+
+    await orderStock.sweep(now);
+
+    expect(inventory.holds.get(none)).toBeUndefined();
+    expect(inventory.holds.get(consumed)).toBe("consumed");
+    await expect(row(consumed)).resolves.toEqual({ status: "Cancelled", stockHold: "consumed" });
   });
 
   it("never expires an order that was paid, or one from before stock was held", async () => {

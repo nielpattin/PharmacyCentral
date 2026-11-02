@@ -4,6 +4,9 @@ import express from "express";
 import { createServer } from "node:http";
 import { z } from "zod";
 
+import { createAccessTokenVerifier } from "@pharmacy/auth";
+import { ReadThroughCache, RedisCacheStore, createRedisCacheClient } from "@pharmacy/cache";
+
 import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware, matchesPathPrefix } from "./middleware/trusted-request.ts";
 import { BusinessRuleError } from "./shared/business-rule-error.ts";
@@ -33,6 +36,7 @@ import { SecretBox } from "./infrastructure/secret-box.ts";
 import { createAdapterSource } from "./modules/credentials/ai-adapters.ts";
 import { AiCredentialVault } from "./modules/credentials/ai-credential-vault.ts";
 import { createCredentialRouter } from "./modules/credentials/credential-routes.ts";
+import { CATALOG_CACHE_NAMESPACE } from "./modules/catalog/read-cache.ts";
 import { DrizzleStoreRepository } from "./modules/stores/infrastructure/drizzle-store-repository.ts";
 import { createCatalogDatabase } from "./shared/infrastructure/database.ts";
 
@@ -52,6 +56,14 @@ const requireEnv = (name: string): string => {
 };
 
 const rabbitmqUrl = requireEnv("RABBITMQ_URL");
+const redis = createRedisCacheClient(requireEnv("REDIS_URL"), {
+  onError: (error: unknown) => logger.warn({ error }, "Redis client error"),
+});
+// Shared by every replica: a write on one replica drops the entries the others would read.
+const readCache = new ReadThroughCache(new RedisCacheStore(redis), {
+  namespace: CATALOG_CACHE_NAMESPACE,
+  warn: (error, operation) => logger.warn({ error, operation }, "catalog read cache degraded"),
+});
 const database = createCatalogDatabase();
 const outboxPublisher = database ? new CatalogOutboxPublisher(database, logger, rabbitmqUrl) : undefined;
 outboxPublisher?.start();
@@ -97,7 +109,11 @@ const searchIndexer = database
   : undefined;
 void searchIndexer?.requestSweep();
 const availabilityConsumer = database
-  ? new RabbitMqAvailabilityConsumer(new AvailabilityProjection(database), logger, rabbitmqUrl)
+  ? new RabbitMqAvailabilityConsumer(
+      new AvailabilityProjection(database, { onApplied: () => readCache.invalidate("availability") }),
+      logger,
+      rabbitmqUrl,
+    )
   : undefined;
 availabilityConsumer?.start();
 
@@ -105,10 +121,10 @@ app.disable("x-powered-by");
 app.use("/products", express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "5mb" }));
 app.use("/products/imports", express.json({ limit: "25mb" }));
 app.use(express.json({ limit: "1mb" }));
-// Browser routes authenticate with the signed identity context minted by identity-service
-// (/auth/context); handlers enforce the remaining session and role rules. Only these reads answer without a session:
+// Browser routes authenticate with the access token identity-service issues (verified against its JWKS);
+// handlers enforce the remaining session and role rules. Only these reads answer without a session:
 // the published price list is public and its handler narrows a non-staff caller to Published rows.
-const identity = { identitySecret: requireEnv("INTERNAL_IDENTITY_SECRET"), audience: serviceName };
+const identity = { verifier: createAccessTokenVerifier({ jwks: requireEnv("IDENTITY_JWKS_URL") }) };
 const publicCatalogPaths: readonly string[] = [
   "/products",
   "/pricing/active",
@@ -118,7 +134,7 @@ const publicCatalogPaths: readonly string[] = [
 ];
 app.use(
   createTrustedRequestMiddleware({
-    expectedAudience: serviceName,
+    verifier: identity.verifier,
     isPublic: (request) =>
       ["GET", "HEAD"].includes(request.method) &&
       publicCatalogPaths.some((prefix) => matchesPathPrefix(request.path, prefix)),
@@ -132,8 +148,7 @@ if (vault) {
   app.use(
     createCredentialRouter({
       vault,
-      identitySecret: requireEnv("INTERNAL_IDENTITY_SECRET"),
-      audience: serviceName,
+      verifier: identity.verifier,
       onSettingsChanged: requestSearchSweep,
     }),
   );
@@ -142,7 +157,12 @@ if (vault) {
     response.status(503).json({ title: "Credential storage is not configured", status: 503 }),
   );
 }
-app.use("/", createCatalogImportRouter(catalogImportService, identity, requestSearchSweep));
+const catalogImported = async (): Promise<void> => {
+  requestSearchSweep();
+  await readCache.invalidate("products");
+  await readCache.invalidate("prices");
+};
+app.use("/", createCatalogImportRouter(catalogImportService, identity, catalogImported));
 app.use(
   "/",
   createSearchSynonymRouter({
@@ -156,6 +176,7 @@ app.use(
     ...identity,
     search: { index: searchIndex, embedders: withQueryEmbeddingCache(embedders) },
     onProductsChanged: requestSearchSweep,
+    cache: readCache,
     warn: (error) => logger.warn({ error }, "product search degraded"),
   }),
 );
@@ -173,6 +194,7 @@ server.on("close", () => {
   void availabilityConsumer?.close();
   void outboxPublisher?.close();
   void database?.pool.end();
+  redis.disconnect();
 });
 const shutdown = (signal: string): void => {
   logger.info({ signal }, "shutting down");

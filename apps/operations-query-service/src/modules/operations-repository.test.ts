@@ -11,7 +11,7 @@ import { OperationsRepository } from "./operations-repository.ts";
 const migrationsFolder = fileURLToPath(new URL("../../drizzle/migrations", import.meta.url));
 const scopeHeader = "x-actor-site-ids";
 
-const identity = () => "signed-for-catalog";
+const identity = () => "Bearer employee-token";
 const siteA = "00000000-0000-4000-8000-00000000000a";
 const siteB = "00000000-0000-4000-8000-00000000000b";
 const batchA = "00000000-0000-4000-8000-00000000001a";
@@ -54,11 +54,8 @@ describe("OperationsRepository dashboard site scope", () => {
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
       const scope = new Headers(init?.headers).get(scopeHeader)?.split(",") ?? [];
-      // The catalog lists these to a signed employee only; the service secret alone is answered 401.
-      if (
-        staffOnlyCatalogPaths.includes(url.pathname) &&
-        !new Headers(init?.headers).get("x-internal-identity-context")
-      ) {
+      // The catalog lists these to a signed-in employee only; the service secret alone is answered 401.
+      if (staffOnlyCatalogPaths.includes(url.pathname) && !new Headers(init?.headers).get("authorization")) {
         return new Response("{}", { status: 401 });
       }
       if (url.pathname.endsWith("/count")) {
@@ -127,7 +124,7 @@ describe("OperationsRepository dashboard site scope", () => {
     });
     const fetchStub = globalThis.fetch;
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
-      const header = new Headers(init?.headers).get("x-internal-identity-context");
+      const header = new Headers(init?.headers).get("authorization");
       if (header) sentIdentity.push(header);
       return fetchStub(input, init);
     });
@@ -138,7 +135,7 @@ describe("OperationsRepository dashboard site scope", () => {
       totalStorageLocations: 1,
       totalSuppliers: 2,
     });
-    expect(sentIdentity).toEqual(["signed-for-catalog", "signed-for-catalog", "signed-for-catalog"]);
+    expect(sentIdentity).toEqual(["Bearer employee-token", "Bearer employee-token", "Bearer employee-token"]);
   });
 
   it("answers a scoped dashboard from the catalog instead of failing on its storage locations", async () => {

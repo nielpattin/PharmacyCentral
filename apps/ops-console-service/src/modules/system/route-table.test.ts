@@ -14,7 +14,6 @@ type Row = { path: string; service: string; method?: string | undefined };
 
 const key = (row: Row): string => `${row.method ?? "*"} ${row.path} ${row.service}`;
 const sorted = (values: readonly string[]): string[] => [...values].sort();
-const stripStar = (path: string): string => path.replace(/\*$/, "");
 
 // The nginx variable each gateway location proxies to, and the service behind it (see the upstream map in AGENTS.md).
 const UPSTREAM_SERVICE: Record<string, string> = {
@@ -98,18 +97,8 @@ const parseAlb = (text: string): { prefixes: Row[]; exact: Row[] } => {
   return { prefixes, exact: [{ path: `/api${path}`, method, service }] };
 };
 
-/** Reads a top-level `export const name = [ ... ];` array, with spreads of other arrays resolved. */
-const policyArray = (source: string, name: string): string[] => {
-  const body = new RegExp(`export const ${name} = \\[([\\s\\S]*?)\\];`).exec(source)?.[1];
-  if (body === undefined) throw new Error(`policy.mjs has no ${name}`);
-  const spreads = [...body.matchAll(/\.\.\.(\w+)/g)].map((match) => match[1] ?? "");
-  const literals = [...body.replace(/\.\.\.\w+/g, "").matchAll(/"([^"]+)"/g)].map((match) => match[1] ?? "");
-  return [...literals, ...spreads.flatMap((spread) => policyArray(source, spread))];
-};
-
 const routesConf = readDeploy("deploy", "local", "gateway", "routes.conf");
 const mainTf = readDeploy("deploy", "aws", "main.tf");
-const policy = readDeploy("deploy", "aws", "lambda", "policy.mjs");
 
 const gateway = parseGateway(routesConf);
 const alb = parseAlb(mainTf);
@@ -132,15 +121,6 @@ describe("ROUTE_TABLE against the deploy files", () => {
       const group = ROUTE_TABLE.find((row) => row.path === `/api/${sub.prefix.split("/")[2] ?? ""}*`);
       expect(group?.service, sub.prefix).toBe(sub.service);
     }
-  });
-
-  it("marks as platform-admin exactly the paths that policy.mjs lists in platformAdminPaths", () => {
-    const policyPaths = policyArray(policy, "platformAdminPaths").map(stripStar);
-    const tablePaths = ROUTE_TABLE.filter((row) => row.access.kind === "platform-admin").map((row) =>
-      stripStar(row.path),
-    );
-    expect(policyPaths).toHaveLength(7);
-    expect(sorted(tablePaths)).toEqual(sorted(policyPaths));
   });
 
   it("serves each platform-admin path from the same service as the prefix it sits under", () => {

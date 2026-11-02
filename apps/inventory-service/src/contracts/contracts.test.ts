@@ -7,7 +7,6 @@ import {
   eventEnvelopeSchema,
   eventMetadataSchema,
   goodsReceiptPostedEventSchema,
-  internalIdentityContextSchema,
   inventoryContractVersion,
   procurementContractVersion,
   purchaseOrderActionSchema,
@@ -44,21 +43,6 @@ describe("goods receipt line unit cost", () => {
 });
 
 describe("inventory-service contracts", () => {
-  it("accepts the anonymous actor type in internal identity context", () => {
-    const anonymous = internalIdentityContextSchema.safeParse({
-      version: "v1",
-      requestId: "req-1",
-      correlationId: "corr-1",
-      actorType: "anonymous",
-      roles: [],
-      siteIds: [],
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      audience: "inventory-service",
-    });
-    expect(anonymous.success).toBe(true);
-  });
-
   it("exports contract versions v1", () => {
     expect(inventoryContractVersion).toBe("v1");
     expect(procurementContractVersion).toBe("v1");
@@ -153,19 +137,6 @@ describe("inventory-service contracts", () => {
       lineCount: 1,
     });
     expect(validReceiptEvent.success).toBe(true);
-
-    const validIdentity = internalIdentityContextSchema.safeParse({
-      version: "v1",
-      requestId: "req-1",
-      correlationId: "corr-1",
-      actorType: "employee",
-      roles: ["InventoryClerk"],
-      siteIds: ["00000000-0000-4000-8000-000000000010"],
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      audience: "inventory-service",
-    });
-    expect(validIdentity.success).toBe(true);
 
     const validEnvelope = eventEnvelopeSchema.safeParse({
       metadata: eventMetadataSchema.parse({

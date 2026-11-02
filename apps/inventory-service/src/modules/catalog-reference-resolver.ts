@@ -11,10 +11,10 @@ export class CatalogServiceReferenceResolver implements OpeningBalanceReferenceR
   private suppliers: Promise<Map<string, string>> | undefined;
   private readonly products = new Map<string, string>();
 
-  /** One resolver serves one import: its lookups carry that import's identity and its caches die with it. */
+  /** One resolver serves one import: its lookups carry that import's authorization and its caches die with it. */
   public constructor(
     baseUrl: string,
-    private readonly identity: () => string,
+    private readonly authorization: string,
     private readonly fetchImplementation: typeof fetch = fetch,
   ) {
     this.baseUrl = baseUrl.trim().replace(/\/+$/, "");
@@ -38,7 +38,7 @@ export class CatalogServiceReferenceResolver implements OpeningBalanceReferenceR
 
   private async getJson<T>(path: string): Promise<T> {
     const response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
-      headers: { Accept: "application/json", "x-internal-identity-context": this.identity() },
+      headers: { Accept: "application/json", Authorization: this.authorization },
     });
     if (!response.ok) throw new Error(`Catalog service request failed with status ${response.status} for ${path}`);
     return (await response.json()) as T;

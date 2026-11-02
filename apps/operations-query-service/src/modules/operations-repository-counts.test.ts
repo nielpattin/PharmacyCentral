@@ -10,7 +10,7 @@ import { OperationsRepository } from "./operations-repository.ts";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle/migrations", import.meta.url));
 const scopeHeader = "x-actor-site-ids";
-const identity = () => "signed-for-catalog";
+const identity = () => "Bearer employee-token";
 const siteA = "00000000-0000-4000-8000-00000000005a";
 
 const json = (body: unknown): Response =>

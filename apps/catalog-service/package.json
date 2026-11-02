@@ -30,9 +30,12 @@
     "@opentelemetry/sdk-logs": "catalog:",
     "@opentelemetry/sdk-metrics": "catalog:",
     "@opentelemetry/sdk-node": "catalog:",
+    "@pharmacy/auth": "workspace:*",
+    "@pharmacy/cache": "workspace:*",
     "amqplib": "catalog:",
     "drizzle-orm": "catalog:",
     "express": "catalog:",
+    "ioredis": "catalog:",
     "pg": "catalog:",
     "pino": "catalog:",
     "zod": "catalog:"

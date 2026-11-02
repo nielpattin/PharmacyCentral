@@ -1,8 +1,8 @@
 import type { Request } from "express";
 
 /**
- * Role gates for the staff reads, restated for the local stack (see `deploy/aws/lambda/policy.mjs`). The edge admits
- * these roles; this module refuses everyone else before the handler reads anything. Platform Admin passes every
+ * Role gates for the staff reads. The trusted-request middleware admits these roles; this module refuses everyone
+ * else before the handler reads anything. Platform Admin passes every
  * check, so it is listed explicitly wherever a screen admits it.
  */
 

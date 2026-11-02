@@ -8,7 +8,6 @@ import {
   dispensePrescriptionRequestSchema,
   eventEnvelopeSchema,
   eventMetadataSchema,
-  internalIdentityContextSchema,
   mergeCartRequestSchema,
   orderChangedEventSchema,
   orderTransitionSchema,
@@ -117,19 +116,6 @@ describe("sales-service contracts", () => {
     });
     expect(validDispense.success).toBe(true);
 
-    const validIdentity = internalIdentityContextSchema.safeParse({
-      version: "v1",
-      requestId: "req-1",
-      correlationId: "corr-1",
-      actorType: "customer",
-      roles: [],
-      siteIds: [],
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      audience: "sales-service",
-    });
-    expect(validIdentity.success).toBe(true);
-
     const validEnvelope = eventEnvelopeSchema.safeParse({
       metadata: eventMetadataSchema.parse({
         eventId: "00000000-0000-4000-8000-000000000001",
@@ -142,21 +128,5 @@ describe("sales-service contracts", () => {
       payload: { orderId: "00000000-0000-4000-8000-000000000001", status: "confirmed" },
     });
     expect(validEnvelope.success).toBe(true);
-  });
-
-  it("accepts the anonymous actor type and still rejects unknown ones", () => {
-    const identity = {
-      version: "v1",
-      requestId: "req-1",
-      correlationId: "corr-1",
-      actorType: "anonymous",
-      roles: [],
-      siteIds: [],
-      issuedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      audience: "sales-service",
-    };
-    expect(internalIdentityContextSchema.safeParse(identity).success).toBe(true);
-    expect(internalIdentityContextSchema.safeParse({ ...identity, actorType: "guest" }).success).toBe(false);
   });
 });

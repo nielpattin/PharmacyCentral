@@ -2,6 +2,7 @@ import "./telemetry.ts"; // Must load first so the instrumentations can patch li
 import { createServer } from "node:http";
 
 import { metrics } from "@opentelemetry/api";
+import { createAccessTokenVerifier } from "@pharmacy/auth";
 import { z } from "zod";
 
 import { createApp } from "./app.ts";
@@ -44,8 +45,7 @@ const probes: Probes = {
 
 const logger = createLogger();
 const app = createApp({
-  identitySecret: requireEnv("INTERNAL_IDENTITY_SECRET"),
-  audience: "ops-console-service",
+  verifier: createAccessTokenVerifier({ jwks: requireEnv("IDENTITY_JWKS_URL") }),
   probes,
   links: [{ label: "Grafana", url: requireEnv("GRAFANA_PUBLIC_URL") }],
   logger,

@@ -1,9 +1,8 @@
 import type { Request } from "express";
 
 /**
- * Who may take and reverse money, restated here for the local stack (see `deploy/aws/lambda/policy.mjs`). The edge
- * admits the roles; this module decides what the edge cannot see, the kind of invoice. Platform Admin reads the money
- * records and moves none.
+ * Who may take and reverse money. The trusted-request middleware admits the roles; this module decides what the
+ * middleware cannot see, the kind of invoice. Platform Admin reads the money records and moves none.
  */
 
 export type AccessRefusal = {
@@ -20,24 +19,17 @@ export type SiteRefusal = {
   detail: string;
 };
 
-/** The roles the trusted layer copied from the verified identity context; empty when no verified employee calls. */
+/** The roles the trusted layer copied from the verified access token; empty when no verified employee calls. */
 export const actorRoles = (request: Request): string[] =>
   (request.header("x-actor-roles") ?? "")
     .split(",")
     .map((role) => role.trim())
     .filter((role) => role.length > 0);
 
-/**
- * The actor headers a service-to-service read forwards so sales-service judges the same caller. The identity context is
- * audience-bound to this service, so the verified values travel as plain headers beside the internal service secret.
- */
-export const forwardedActorHeaders = (request: Request): Record<string, string> => {
-  const forwarded: Record<string, string> = {};
-  for (const name of ["x-actor-type", "x-actor-roles", "x-actor-site-ids"]) {
-    const value = request.header(name);
-    if (value !== undefined) forwarded[name] = value;
-  }
-  return forwarded;
+/** The caller's own access token, which a read made on the caller's behalf forwards so the other service judges the same caller. */
+export const forwardedAuthorization = (request: Request): Record<string, string> => {
+  const authorization = request.header("authorization");
+  return authorization === undefined ? {} : { authorization };
 };
 
 const roleForbidden = (detail: string): AccessRefusal => ({

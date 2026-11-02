@@ -9,7 +9,7 @@ import type { CatalogImportService } from "./catalog-import-service.ts";
 export const createCatalogImportRouter = (
   importService: CatalogImportService | undefined,
   identity: IdentityOptions,
-  onProductsChanged?: () => void,
+  onProductsChanged?: () => void | Promise<void>,
 ): Router => {
   const router = Router();
   const managers = requireEmployee(identity, ROLE_RULES.pharmacyManager);
@@ -25,7 +25,7 @@ export const createCatalogImportRouter = (
       });
     try {
       const summary = await importService.import(parsed.data);
-      onProductsChanged?.();
+      await onProductsChanged?.();
       response.json({ status: "imported", summary });
     } catch (error) {
       response.status(409).json({

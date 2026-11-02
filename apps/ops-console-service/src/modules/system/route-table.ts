@@ -5,11 +5,11 @@ import type { RouteRow } from "../../contracts/system.ts";
  * the exact product list comes before its prefix, and a credential path comes after the prefix it sits under.
  *
  * The container cannot read deploy/ at runtime, so this is a constant. route-table.test.ts fails when it disagrees with
- * deploy/local/gateway/routes.conf, the ALB path rules in deploy/aws/main.tf, or platformAdminPaths in
- * deploy/aws/lambda/policy.mjs. Access summarises the edge policy; the policy file is the authority.
+ * deploy/local/gateway/routes.conf or the ALB path rules in deploy/aws/main.tf. Access summarises what each owning
+ * service enforces on the caller's access token; the service's trusted-request middleware is the authority.
  */
 
-// Every staff role that the edge lets through on a route with no role of its own. Platform Admin reads every staff
+// Every staff role that the owning service lets through on a route with no role of its own. Platform Admin reads every staff
 // route and writes only on the paths marked platform-admin, so it is not listed.
 const STAFF_ROLES = ["Pharmacy Manager", "Pharmacist", "Warehouse Staff"];
 

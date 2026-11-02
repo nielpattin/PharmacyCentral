@@ -1,5 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { fileURLToPath } from "node:url";
@@ -148,5 +148,84 @@ describe("PaymentRepository invoice list", () => {
     });
     expect(rest.rows.map((row) => row.id)).toStrictEqual([id(1), id(5)]);
     expect(rest.next).toBeUndefined();
+  });
+});
+
+/**
+ * A SePay delivery can be repeated, and two deliveries of one transfer can race. The transfer is recorded once, the
+ * invoice is paid once, and the repeat is answered as a duplicate with no second payment event.
+ */
+describe("PaymentRepository provider transactions", () => {
+  const client = new PGlite();
+  const db = drizzle({ client, schema });
+  const repository = new PaymentRepository({ db } as unknown as PaymentDatabase);
+  const invoice = id(101);
+  const code = "PC-CCCC000000000101";
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder });
+    await db
+      .insert(schema.paymentInvoices)
+      .values({ id: invoice, paymentCode: code, amount: "45000", status: "Pending" });
+    await db
+      .insert(schema.reconciliationRecords)
+      .values({ paymentInvoiceId: invoice, expectedAmount: "45000", receivedAmount: "0", state: "Open" });
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  const transfer = (providerTransactionId: string, amount = 45000) =>
+    repository.applyProviderTransaction({
+      paymentCodes: [code],
+      provider: "sepay",
+      providerTransactionId,
+      amount,
+    });
+
+  it("pays the invoice once and answers a repeated delivery as a duplicate", async () => {
+    await expect(transfer("sepay-1")).resolves.toEqual({
+      invoiceId: invoice,
+      duplicate: false,
+      status: "Paid",
+      reason: "accepted",
+    });
+    await expect(transfer("sepay-1")).resolves.toEqual({
+      invoiceId: invoice,
+      duplicate: true,
+      status: "Paid",
+      reason: "duplicate_transaction",
+    });
+
+    await expect(db.select().from(schema.paymentTransactions)).resolves.toHaveLength(1);
+    const events = await db
+      .select()
+      .from(schema.outboxMessages)
+      .where(eq(schema.outboxMessages.eventType, "payment.invoice.paid.v1"));
+    expect(events).toHaveLength(1);
+  });
+
+  it("settles two racing deliveries of one transfer as one payment and one duplicate", async () => {
+    const racing = "00000000-0000-4000-8000-0000000000e1";
+    await db
+      .insert(schema.paymentInvoices)
+      .values({ id: racing, paymentCode: "PC-DDDD000000000102", amount: "1000", status: "Pending" });
+    await db.insert(schema.reconciliationRecords).values({ paymentInvoiceId: racing, expectedAmount: "1000" });
+    const deliver = () =>
+      repository.applyProviderTransaction({
+        paymentCodes: ["PC-DDDD000000000102"],
+        provider: "sepay",
+        providerTransactionId: "sepay-race",
+        amount: 1000,
+      });
+
+    const results = await Promise.all([deliver(), deliver()]);
+
+    expect(results.filter((result) => result?.duplicate === false)).toHaveLength(1);
+    expect(results.filter((result) => result?.duplicate === true)).toHaveLength(1);
+    await expect(
+      db.select().from(schema.paymentTransactions).where(eq(schema.paymentTransactions.paymentInvoiceId, racing)),
+    ).resolves.toHaveLength(1);
   });
 });

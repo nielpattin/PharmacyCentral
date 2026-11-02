@@ -3,33 +3,18 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { InternalIdentityContext } from "../contracts/common.ts";
-import { createTrustedRequestMiddleware, signInternalIdentityContext } from "../middleware/trusted-request.ts";
+import { createTrustedRequestMiddleware } from "../middleware/trusted-request.ts";
+import { accessToken, testAccessTokenVerifier } from "../test-access-tokens.ts";
 import type { SalesRepository } from "./sales-repository.ts";
 import { createSalesRouter } from "./sales-routes.ts";
 
-const identitySecret = "test-identity-secret-1234567890123456";
 const serviceSecret = "test-service-secret-1234567890123456";
 const actor = "00000000-0000-4000-8000-0000000000a1";
 const site = "00000000-0000-4000-8000-0000000000b1";
 const otherSite = "00000000-0000-4000-8000-0000000000b2";
 
-const context = (roles: string[], siteIds: string[]): string =>
-  signInternalIdentityContext(
-    {
-      version: "v1",
-      requestId: "req-targets",
-      correlationId: "corr-targets",
-      actorId: actor,
-      actorType: "employee",
-      roles,
-      siteIds,
-      issuedAt: new Date(Date.now() - 1000).toISOString(),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      audience: "sales-service",
-    } satisfies InternalIdentityContext,
-    identitySecret,
-  );
+const context = (roles: string[], siteIds: string[]): Promise<string> =>
+  accessToken({ actorId: actor, actorType: "employee", roles, siteIds });
 
 describe("sales targets API", () => {
   let server: Server | undefined;
@@ -49,7 +34,7 @@ describe("sales targets API", () => {
     listSalesTargets.mockResolvedValue([{ siteId: site, month: "2026-10", amount: 1_000_000, currency: "VND" }]);
     const app = express();
     app.use(express.json());
-    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret, expectedAudience: "sales-service" }));
+    app.use(createTrustedRequestMiddleware({ verifier: testAccessTokenVerifier, serviceSecret }));
     app.use(
       createSalesRouter({ setSalesTarget, listSalesTargets } as unknown as SalesRepository, {
         catalogServiceUrl: "http://catalog.test",
@@ -75,10 +60,10 @@ describe("sales targets API", () => {
     server = undefined;
   });
 
-  const put = (identity: string, body: unknown, path = "/sales-targets") =>
+  const put = async (identity: Promise<string>, body: unknown, path = "/sales-targets") =>
     fetch(`${url}${path}`, {
       method: "PUT",
-      headers: { "x-internal-identity-context": identity, "content-type": "application/json" },
+      headers: { authorization: await identity, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
 

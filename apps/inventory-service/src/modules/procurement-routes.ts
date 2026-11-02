@@ -11,7 +11,7 @@ import { internalServiceHeaders } from "../internal-service-headers.ts";
 import { listSiteIds } from "../middleware/trusted-request.ts";
 
 import { allowRoles, refuseOutOfSiteScope, refuseSelfApproval } from "./access-control.ts";
-import { signCatalogIdentity } from "./catalog-identity.ts";
+import { callerAuthorization } from "./catalog-authorization.ts";
 import { ProcurementRepository } from "./procurement-repository.ts";
 import { DEFAULT_REPLENISHMENT_PARAMS, replenishmentSuggestions } from "./replenishment-suggestions.ts";
 import { invalidCursor, sendPage } from "./keyset-page.ts";
@@ -100,7 +100,7 @@ export const createProcurementRouter = (
     try {
       await assertCatalogReferences(
         options.catalogServiceUrl,
-        signCatalogIdentity(request),
+        callerAuthorization(request),
         [parsed.data.supplierId],
         parsed.data.siteId,
         parsed.data.lines.map((line) => line.productId),
@@ -149,7 +149,7 @@ export const createProcurementRouter = (
     try {
       await assertCatalogReferences(
         options.catalogServiceUrl,
-        signCatalogIdentity(request),
+        callerAuthorization(request),
         orders.map((order) => order.supplierId),
         siteId,
         orders.flatMap((order) => order.lines.map((line) => line.productId)),
@@ -243,7 +243,7 @@ export const createProcurementRouter = (
       }
       await assertCatalogReferences(
         options.catalogServiceUrl,
-        signCatalogIdentity(request),
+        callerAuthorization(request),
         [parsed.data.supplierId],
         parsed.data.siteId,
         parsed.data.lines.map((line) => line.productId),
@@ -267,11 +267,11 @@ const unavailable = (response: import("express").Response) =>
   response.status(503).json({ title: "Procurement database is not configured", status: 503 });
 const invalid = (response: import("express").Response) =>
   response.status(400).json({ title: "Invalid procurement request", status: 400, code: "invalid_request" });
-// The catalog answers suppliers, sites and locations to a signed employee only, so each lookup carries the identity of the
-// employee who is writing, next to the service secret.
+// The catalog answers suppliers, sites and locations to a signed-in employee only, so each lookup forwards the
+// Authorization of the employee who is writing, next to the service secret.
 const assertCatalogReferences = async (
   baseUrl: string,
-  identity: string,
+  authorization: string,
   supplierIds: string[],
   siteId: string,
   productIds: string[],
@@ -286,7 +286,7 @@ const assertCatalogReferences = async (
   const responses = await Promise.all(
     paths.map((path) =>
       fetch(`${baseUrl}${path}`, {
-        headers: { ...internalServiceHeaders(), "x-internal-identity-context": identity },
+        headers: { ...internalServiceHeaders(), Authorization: authorization },
         signal: AbortSignal.timeout(2_000),
       }),
     ),

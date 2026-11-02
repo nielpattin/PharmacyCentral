@@ -34,7 +34,7 @@ export type IntegrationEvent = {
   actorId?: string | undefined;
   payload: Record<string, unknown>;
 };
-/** Signs the asking employee for catalog-service; called for each catalog read. */
+/** The asking employee's `Authorization` value for catalog-service; called for each catalog read. */
 export type CatalogIdentity = () => string;
 
 export type OperationsServiceOptions = {
@@ -399,12 +399,7 @@ export class OperationsRepository {
       channel: query.channel,
     };
     const sites = () =>
-      this.readAnswer(
-        this.options.catalogUrl,
-        "/sites",
-        { "x-internal-identity-context": catalogIdentity() },
-        sitesAnswerSchema,
-      );
+      this.readAnswer(this.options.catalogUrl, "/sites", { authorization: catalogIdentity() }, sitesAnswerSchema);
     switch (query.section) {
       case "overview": {
         // The tiles compare with the previous period, so the sales and their costs start there; the tab needs nothing else.
@@ -565,12 +560,7 @@ export class OperationsRepository {
         { ...internalServiceHeaders(), ...siteHeaders },
         salesTargetsAnswerSchema,
       ),
-      this.readAnswer(
-        this.options.catalogUrl,
-        "/sites",
-        { "x-internal-identity-context": catalogIdentity() },
-        sitesAnswerSchema,
-      ),
+      this.readAnswer(this.options.catalogUrl, "/sites", { authorization: catalogIdentity() }, sitesAnswerSchema),
     ]);
     return buildSalesTargetsReport({
       month: query.month,
@@ -716,7 +706,7 @@ export class OperationsRepository {
     try {
       const response = await fetch(`${baseUrl}${path}`, {
         headers: identity
-          ? { "x-internal-identity-context": identity() }
+          ? { authorization: identity() }
           : {
               ...internalServiceHeaders(),
               ...(siteIds ? { [ACTOR_SITE_IDS_HEADER]: siteIds.join(",") } : {}),

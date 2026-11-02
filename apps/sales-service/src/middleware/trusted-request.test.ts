@@ -3,31 +3,19 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { InternalIdentityContext } from "../contracts/common.ts";
+import { accessToken, testAccessTokenVerifier } from "../test-access-tokens.ts";
 
-import { createTrustedRequestMiddleware, matchesPathPrefix, signInternalIdentityContext } from "./trusted-request.ts";
+import { createTrustedRequestMiddleware, matchesPathPrefix } from "./trusted-request.ts";
 
 const warn = vi.hoisted(() => vi.fn());
 vi.mock("../logger.ts", () => ({ createLogger: () => ({ warn }) }));
 
-const identitySecret = "test-identity-secret-1234567890123456";
 const serviceSecret = "test-service-secret-1234567890123456";
 const actorId = "00000000-0000-4000-8000-000000000001";
 const siteId = "00000000-0000-4000-8000-000000000010";
 
-const createTestContext = (overrides: Partial<InternalIdentityContext> = {}): InternalIdentityContext => ({
-  version: "v1",
-  requestId: "req-123",
-  correlationId: "corr-123",
-  actorId,
-  actorType: "employee",
-  roles: ["Pharmacist"],
-  siteIds: [siteId],
-  issuedAt: new Date(Date.now() - 1000).toISOString(),
-  expiresAt: new Date(Date.now() + 60_000).toISOString(),
-  audience: "sales-service",
-  ...overrides,
-});
+const employeeToken = (overrides: Parameters<typeof accessToken>[0] = {}) =>
+  accessToken({ actorId, roles: ["Pharmacist"], siteIds: [siteId], ...overrides });
 
 const startServer = async (app: express.Express): Promise<{ server: Server; url: string }> => {
   const server = createServer(app);
@@ -50,9 +38,8 @@ const createApp = (): express.Express => {
   const app = express();
   app.use(
     createTrustedRequestMiddleware({
-      identitySecret,
+      verifier: testAccessTokenVerifier,
       serviceSecret,
-      expectedAudience: "sales-service",
       isPublic: (request) => matchesPathPrefix(request.path, "/delivery/calculate"),
     }),
   );
@@ -87,7 +74,7 @@ describe("sales trusted request middleware", () => {
     }
   });
 
-  it("drops client-sent actor headers on a public request with no verified context or secret", async () => {
+  it("drops client-sent actor headers on a public request with no verified token or secret", async () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
@@ -112,7 +99,7 @@ describe("sales trusted request middleware", () => {
     expect(warn).toHaveBeenCalledWith({ requestId: "req-from-client" }, expect.any(String));
   });
 
-  it("drops client-sent actor headers on a health route with no verified context or secret", async () => {
+  it("drops client-sent actor headers on a health route with no verified token or secret", async () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
@@ -161,16 +148,17 @@ describe("sales trusted request middleware", () => {
     expect(await response.json()).toMatchObject({ actorId: null, actorType: "system" });
   });
 
-  it("overwrites spoofed actor headers with the values of a verified context", async () => {
+  it("overwrites spoofed actor headers with the values of a verified token", async () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const header = signInternalIdentityContext(createTestContext({ actorType: "employee" }), identitySecret);
+    const header = await employeeToken({ actorType: "employee" });
     const response = await fetch(`${url}/delivery/calculate`, {
       headers: {
-        "x-internal-identity-context": header,
+        authorization: header,
         "x-actor-id": "spoofed-actor-id",
         "x-actor-type": "system",
+        "x-request-id": "req-123",
       },
     });
 
@@ -178,38 +166,31 @@ describe("sales trusted request middleware", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("removes the actor id from a verified context that names no actor", async () => {
+  it("treats an invalid token on a public path as anonymous", async () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const header = signInternalIdentityContext(
-      createTestContext({ actorId: undefined, actorType: "system" }),
-      identitySecret,
-    );
     const response = await fetch(`${url}/delivery/calculate`, {
-      headers: { "x-internal-identity-context": header, "x-actor-id": "spoofed-actor-id" },
-    });
-
-    expect(await response.json()).toMatchObject({ actorId: null, actorType: "system" });
-  });
-
-  it("passes an anonymous verified context through as anonymous, with no actor id", async () => {
-    const { server, url } = await startServer(createApp());
-    activeServer = server;
-
-    const header = signInternalIdentityContext(
-      createTestContext({ actorId: undefined, actorType: "anonymous", roles: [], siteIds: [] }),
-      identitySecret,
-    );
-    const response = await fetch(`${url}/delivery/calculate`, {
-      headers: { "x-internal-identity-context": header, "x-actor-id": "spoofed-actor-id" },
+      headers: { authorization: "Bearer not-a-jwt", "x-actor-id": "spoofed-actor-id" },
     });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ actorId: null, actorType: "anonymous" });
+    expect(await response.json()).toMatchObject({ actorId: null, actorType: null });
   });
 
-  it("still refuses a non-public request with no verified context or secret", async () => {
+  it("refuses a token that requires a password change", async () => {
+    const { server, url } = await startServer(createApp());
+    activeServer = server;
+
+    const response = await fetch(`${url}/orders`, {
+      headers: { authorization: await employeeToken({ passwordChangeRequired: true }) },
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "password_change_required" });
+  });
+
+  it("still refuses a non-public request with no verified token or secret", async () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
@@ -225,18 +206,15 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const header = signInternalIdentityContext(
-      createTestContext({ roles: ["Platform Admin"], siteIds: [] }),
-      identitySecret,
-    );
+    const header = await employeeToken({ roles: ["Platform Admin"], siteIds: [] });
     const response = await fetch(`${url}/delivery/calculate`, {
-      headers: { "x-internal-identity-context": header, "x-actor-roles": "Pharmacist" },
+      headers: { authorization: header, "x-actor-roles": "Pharmacist" },
     });
 
     expect(await response.json()).toMatchObject({ roles: "Platform Admin" });
   });
 
-  it("drops client-sent roles on a request with no verified context", async () => {
+  it("drops client-sent roles on a request with no verified token", async () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
@@ -247,7 +225,7 @@ describe("sales trusted request middleware", () => {
     expect(await response.json()).toMatchObject({ roles: null });
   });
 
-  it("keeps the roles a service forwards with a valid service secret and no identity context", async () => {
+  it("keeps the roles a service forwards with a valid service secret and no token", async () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
@@ -262,8 +240,8 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const header = signInternalIdentityContext(createTestContext({ roles: ["Warehouse Staff"] }), identitySecret);
-    const response = await fetch(`${url}/orders`, { headers: { "x-internal-identity-context": header } });
+    const header = await employeeToken({ roles: ["Warehouse Staff"] });
+    const response = await fetch(`${url}/orders`, { headers: { authorization: header } });
 
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ code: "role_forbidden" });
@@ -273,18 +251,18 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const pharmacist = signInternalIdentityContext(createTestContext({ roles: ["Pharmacist"] }), identitySecret);
+    const pharmacist = await employeeToken({ roles: ["Pharmacist"] });
     const allowed = await fetch(`${url}/orders/00000000-0000-4000-8000-0000000000bb/transition`, {
       method: "POST",
-      headers: { "x-internal-identity-context": pharmacist, "content-type": "application/json" },
+      headers: { authorization: pharmacist, "content-type": "application/json" },
       body: "{}",
     });
     expect(allowed.status).toBe(200);
 
-    const warehouse = signInternalIdentityContext(createTestContext({ roles: ["Warehouse Staff"] }), identitySecret);
+    const warehouse = await employeeToken({ roles: ["Warehouse Staff"] });
     const refused = await fetch(`${url}/orders/00000000-0000-4000-8000-0000000000bb/transition`, {
       method: "POST",
-      headers: { "x-internal-identity-context": warehouse, "content-type": "application/json" },
+      headers: { authorization: warehouse, "content-type": "application/json" },
       body: "{}",
     });
     expect(refused.status).toBe(403);
@@ -295,11 +273,8 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const admin = signInternalIdentityContext(
-      createTestContext({ roles: ["Platform Admin"], siteIds: [] }),
-      identitySecret,
-    );
-    const headers = { "x-internal-identity-context": admin, "content-type": "application/json" };
+    const admin = await employeeToken({ roles: ["Platform Admin"], siteIds: [] });
+    const headers = { authorization: admin, "content-type": "application/json" };
     const transition = await fetch(`${url}/orders/33333333-3333-4333-8333-333333333333/transition`, {
       method: "POST",
       headers,
@@ -315,13 +290,10 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const admin = signInternalIdentityContext(
-      createTestContext({ roles: ["Platform Admin"], siteIds: [] }),
-      identitySecret,
-    );
+    const admin = await employeeToken({ roles: ["Platform Admin"], siteIds: [] });
     const response = await fetch(`${url}/prescriptions`, {
       method: "POST",
-      headers: { "x-internal-identity-context": admin, "content-type": "application/json" },
+      headers: { authorization: admin, "content-type": "application/json" },
       body: "{}",
     });
 
@@ -333,11 +305,11 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const write = (roles: string[]) =>
+    const write = async (roles: string[]) =>
       fetch(`${url}/sales-targets`, {
         method: "PUT",
         headers: {
-          "x-internal-identity-context": signInternalIdentityContext(createTestContext({ roles }), identitySecret),
+          authorization: await employeeToken({ roles }),
           "content-type": "application/json",
         },
         body: "{}",
@@ -352,13 +324,10 @@ describe("sales trusted request middleware", () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
-    const customer = signInternalIdentityContext(
-      createTestContext({ actorType: "customer", roles: [], siteIds: [] }),
-      identitySecret,
-    );
+    const customer = await employeeToken({ actorType: "customer", roles: [], siteIds: [] });
     const response = await fetch(`${url}/prescriptions/consultations`, {
       method: "POST",
-      headers: { "x-internal-identity-context": customer, "content-type": "application/json" },
+      headers: { authorization: customer, "content-type": "application/json" },
       body: "{}",
     });
 

@@ -95,19 +95,16 @@ describe("POST /payments/prescriptions/:id access", () => {
     expect(writes).toStrictEqual([]);
   });
 
-  it("forwards the verified actor headers to sales", async () => {
+  it("forwards the caller's access token to sales", async () => {
     salesSiteId = siteA;
     await create({
+      Authorization: "Bearer caller-token",
       "X-Actor-Type": "employee",
       "X-Actor-Roles": "Pharmacist",
       "X-Actor-Site-Ids": siteA,
     });
-    expect(salesCalls[0]).toMatchObject({
-      "x-actor-type": "employee",
-      "x-actor-roles": "Pharmacist",
-      "x-actor-site-ids": siteA,
-      "x-actor-id": actorId,
-    });
+    expect(salesCalls[0]).toMatchObject({ authorization: "Bearer caller-token" });
+    expect(salesCalls[0]).not.toHaveProperty("x-actor-roles");
   });
 
   it("does not limit a caller that carries no site scope", async () => {

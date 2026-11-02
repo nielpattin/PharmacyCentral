@@ -234,6 +234,28 @@ export const idempotencyRecords = pgTable(
   (table) => [uniqueIndex("sales_idempotency_scope_key_actor_unique").on(table.scope, table.key, table.actorId)],
 );
 
+/**
+ * The Idempotency-Key of a placed order. It is written in the same transaction as the order, so a key and its order
+ * exist together or not at all. The unique index on (customer, key) is what makes concurrent duplicates place one order.
+ */
+export const orderIdempotencyKeys = pgTable(
+  "order_idempotency_keys",
+  {
+    customerId: uuid("customer_id").notNull(),
+    key: varchar("key", { length: 128 }).notNull(),
+    /** SHA-256 hex of the canonical request body; a repeat with another body is refused. */
+    requestHash: varchar("request_hash", { length: 64 }).notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("order_idempotency_keys_customer_key_unique").on(table.customerId, table.key),
+    index("order_idempotency_keys_created_at_idx").on(table.createdAt),
+  ],
+);
+
 export const outboxMessages = pgTable(
   "outbox_messages",
   {

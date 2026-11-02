@@ -9,17 +9,13 @@ import { z } from "zod";
 
 import type { CatalogDatabase } from "../../../../shared/infrastructure/database.ts";
 import * as schema from "../../../../shared/infrastructure/schema.ts";
-import {
-  createTrustedRequestMiddleware,
-  matchesPathPrefix,
-  signInternalIdentityContext,
-} from "../../../../middleware/trusted-request.ts";
+import { createTrustedRequestMiddleware, matchesPathPrefix } from "../../../../middleware/trusted-request.ts";
 import type { SynonymSetItem } from "../product-search-index.ts";
+import { bearerHeaders, testVerifier } from "../../../../test-support/access-tokens.ts";
 import { DrizzleSearchSynonymStore } from "./infrastructure/drizzle-search-synonym-store.ts";
 import { createSearchSynonymRouter } from "./search-synonym-routes.ts";
 import { SearchSynonymService } from "./search-synonym-service.ts";
 
-const SECRET = "test-internal-identity-secret";
 const ADMIN = "55555555-5555-4555-8555-555555555555";
 const MANAGER = "66666666-6666-4666-8666-666666666666";
 const PHARMACIST = "99999999-9999-4999-8999-999999999999";
@@ -35,25 +31,6 @@ const PUBLIC_CATALOG_PATHS = [
   "/stores",
   "/availability",
 ];
-
-const signedHeader = (actorType: "customer" | "employee", actorId: string, roles: string[]): string => {
-  const now = Date.now();
-  return signInternalIdentityContext(
-    {
-      version: "v1",
-      requestId: "request-1",
-      correlationId: "correlation-1",
-      actorId,
-      actorType,
-      roles,
-      siteIds: [],
-      issuedAt: new Date(now - 1_000).toISOString(),
-      expiresAt: new Date(now + 300_000).toISOString(),
-      audience: "catalog-service",
-    },
-    SECRET,
-  );
-};
 
 const identity = {
   customer: { actorType: "customer" as const, actorId: CUSTOMER, roles: [] },
@@ -75,7 +52,6 @@ describe("catalog search synonym routes", () => {
   let server: Server | undefined;
 
   beforeAll(async () => {
-    process.env.INTERNAL_IDENTITY_SECRET = SECRET;
     const migration = new URL("../../../../../drizzle/migrations/0009_tense_leader.sql", import.meta.url);
     await client.exec(await readFile(migration, "utf8"));
   });
@@ -88,13 +64,13 @@ describe("catalog search synonym routes", () => {
     app.use(express.json({ limit: "1mb" }));
     app.use(
       createTrustedRequestMiddleware({
-        expectedAudience: "catalog-service",
+        verifier: testVerifier,
         isPublic: (request) =>
           ["GET", "HEAD"].includes(request.method) &&
           PUBLIC_CATALOG_PATHS.some((prefix) => matchesPathPrefix(request.path, prefix)),
       }),
     );
-    app.use(createSearchSynonymRouter({ service, identitySecret: SECRET, audience: "catalog-service" }));
+    app.use(createSearchSynonymRouter({ service, verifier: testVerifier }));
     app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
     server = app.listen(0, "127.0.0.1");
     await once(server, "listening");
@@ -126,7 +102,7 @@ describe("catalog search synonym routes", () => {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (actor !== "anonymous") {
       const who = identity[actor];
-      headers["x-internal-identity-context"] = signedHeader(who.actorType, who.actorId, who.roles);
+      Object.assign(headers, await bearerHeaders(who));
     }
     const init: RequestInit =
       body === undefined ? { method, headers } : { method, headers, body: JSON.stringify(body) };
@@ -146,7 +122,7 @@ describe("catalog search synonym routes", () => {
   const TERMS = ["tiêu chảy", "đi ngoài"];
 
   describe("authentication and roles", () => {
-    it("answers 401 without an identity context on every route", async () => {
+    it("answers 401 without an access token on every route", async () => {
       const id = crypto.randomUUID();
       const attempts = [
         ["GET", BASE],

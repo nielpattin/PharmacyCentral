@@ -1,35 +1,20 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { bearerToken, type AccessIdentity, type AccessTokenVerifier } from "@pharmacy/auth";
 import { trace } from "@opentelemetry/api";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 import { createLogger } from "../logger.ts";
-import {
-  internalIdentityContextSchema,
-  signedInternalIdentityContextSchema,
-  type InternalIdentityContext,
-  type SignedInternalIdentityContext,
-} from "../contracts/common.ts";
 
 const logger = createLogger();
 
 export interface TrustedRequestEnforcementOptions {
-  /**
-   * Secret used to verify HMAC signed internal identity context.
-   * Defaults to process.env.INTERNAL_IDENTITY_SECRET.
-   */
-  identitySecret?: string | undefined;
+  /** Verifies the Bearer access token against the identity-service JWKS. */
+  verifier: AccessTokenVerifier;
 
   /**
    * Secret used for direct inter-service authentication.
    * Defaults to process.env.INTERNAL_SERVICE_SECRET.
    */
   serviceSecret?: string | undefined;
-
-  /**
-   * Expected audience for the signed internal identity context.
-   * Defaults to process.env.INTERNAL_IDENTITY_AUDIENCE.
-   */
-  expectedAudience?: string | string[] | undefined;
 
   /**
    * Health check path prefixes exempt from trusted gateway checks.
@@ -75,8 +60,8 @@ export const DEFAULT_SITE_SCOPED_PREFIXES: readonly string[] = [
 ];
 
 /**
- * The counter's own prefixes. `deploy/aws/lambda/policy.mjs` refuses a shopper on the same paths at the edge, but the
- * local topology has no authorizer and hands every shopper a signed context, so the split has to hold here too.
+ * The counter's own prefixes. Every shopper holds a valid access token, so the split between the shopper's paths and
+ * the counter's paths is enforced here.
  */
 export const DEFAULT_EMPLOYEE_PREFIXES: readonly string[] = [
   "/procurement",
@@ -109,10 +94,8 @@ export type CustomerRequestException = {
 };
 
 /**
- * Requests a shopper may keep making on a path the employee prefixes would otherwise refuse. The prescription entries
- * mirror `customerPrescriptionRequests` and the invoice entries mirror payment's customer carve-outs in
- * `deploy/aws/lambda/policy.mjs`; the invoice read is a shopper's own receipt, served with an owner check by
- * payment-service, so this service-side list keeps it reachable where the edge policy is stricter.
+ * Requests a shopper may keep making on a path the employee prefixes would otherwise refuse. The invoice read is a shopper's own
+ * receipt, served with an owner check by payment-service.
  */
 export const DEFAULT_CUSTOMER_REQUEST_EXCEPTIONS: readonly CustomerRequestException[] = [
   { method: "GET", path: "/prescriptions", match: "exact" },
@@ -176,8 +159,7 @@ const matchesCustomerException = (exception: CustomerRequestException, path: str
 };
 
 /**
- * True when the path belongs behind the counter rather than to the shopper, the same split
- * `deploy/aws/lambda/policy.mjs` makes with `employeePrefixes`, `catalogWritePrefixes` and its payment carve-outs.
+ * True when the path belongs behind the counter rather than to the shopper.
  * The exemptions are checked first, so a shared path such as the prescription list stays the shopper's.
  */
 export const isEmployeePath = (path: string, method: string): boolean => {
@@ -232,52 +214,11 @@ export const findOutOfScopeSiteIds = (value: unknown, allowedSiteIds: readonly s
   return [...offenders];
 };
 
-export const verifyInternalIdentityContext = (
-  header: string | undefined,
-  secret: string | undefined,
-  now = new Date(),
-  expectedAudience?: string | string[],
-): InternalIdentityContext | undefined => {
-  if (!header || !secret) return undefined;
-  try {
-    const rawJson = Buffer.from(header, "base64url").toString("utf8");
-    const signed = signedInternalIdentityContextSchema.parse(JSON.parse(rawJson));
-    const serialized = JSON.stringify(signed.context);
-    const expected = createHmac("sha256", secret).update(serialized).digest("hex");
-    const expectedBytes = Buffer.from(expected, "utf8");
-    const providedBytes = Buffer.from(signed.signature, "utf8");
-    if (expectedBytes.length !== providedBytes.length || !timingSafeEqual(expectedBytes, providedBytes)) {
-      return undefined;
-    }
-    const context = internalIdentityContextSchema.parse(signed.context);
-    if (new Date(context.expiresAt).getTime() <= now.getTime()) {
-      return undefined;
-    }
-    if (new Date(context.issuedAt).getTime() > now.getTime()) {
-      return undefined;
-    }
-    if (expectedAudience !== undefined) {
-      const allowedAudiences = Array.isArray(expectedAudience) ? expectedAudience : [expectedAudience];
-      if (!allowedAudiences.includes(context.audience)) {
-        return undefined;
-      }
-    }
-    return context;
-  } catch {
-    return undefined;
-  }
-};
-
-export const signInternalIdentityContext = (context: InternalIdentityContext, secret: string): string => {
-  const serialized = JSON.stringify(context);
-  const signature = createHmac("sha256", secret).update(serialized).digest("hex");
-  const signed: SignedInternalIdentityContext = {
-    context,
-    algorithm: "hmac-sha256",
-    signature,
-  };
-  return Buffer.from(JSON.stringify(signed), "utf8").toString("base64url");
-};
+/** The identity in the request's Bearer access token, or undefined when it is missing or invalid. */
+export const verifyRequestIdentity = (
+  request: Request,
+  verifier: AccessTokenVerifier,
+): Promise<AccessIdentity | undefined> => verifier.verify(bearerToken(request.header("authorization")));
 
 const injectDefaultSiteQuery = (request: Request, siteId: string): void => {
   if (request.query.siteId !== undefined) return;
@@ -367,38 +308,39 @@ const interceptResponseForSiteSecurity = (response: Response, allowedSiteIds: st
   };
 };
 
-export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcementOptions = {}): RequestHandler => {
+export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcementOptions): RequestHandler => {
   const healthPrefixes = options.healthPaths ?? DEFAULT_HEALTH_PREFIXES;
   const publicPrefixes = options.publicPaths ?? [];
   const siteScopedPrefixes = [...DEFAULT_SITE_SCOPED_PREFIXES, ...(options.siteScopedPaths ?? [])];
 
-  return (request: Request, response: Response, next: NextFunction): void => {
+  return async (request: Request, response: Response, next: NextFunction): Promise<void> => {
     const isHealth = healthPrefixes.some((prefix) => matchesPathPrefix(request.path, prefix));
     const isPublic =
       publicPrefixes.some((prefix) => matchesPathPrefix(request.path, prefix)) ||
       (options.isPublic ? options.isPublic(request) : false);
 
-    const identitySecret = options.identitySecret ?? process.env.INTERNAL_IDENTITY_SECRET;
     const serviceSecret = options.serviceSecret ?? process.env.INTERNAL_SERVICE_SECRET;
-    const expectedAudience = options.expectedAudience ?? process.env.INTERNAL_IDENTITY_AUDIENCE;
 
-    const rawIdentityHeader = request.header("x-internal-identity-context");
-    const verifiedContext = verifyInternalIdentityContext(
-      rawIdentityHeader,
-      identitySecret,
-      new Date(),
-      expectedAudience,
-    );
+    const identity = await verifyRequestIdentity(request, options.verifier);
 
     const rawServiceSecret = request.header("x-internal-service-secret");
     const isServiceSecretValid =
       Boolean(serviceSecret) && Boolean(rawServiceSecret) && rawServiceSecret === serviceSecret;
 
-    if (!isHealth && !isPublic && !verifiedContext && !isServiceSecretValid) {
+    if (!isHealth && !isPublic && !identity && !isServiceSecretValid) {
       response.status(401).json({
         title: "Trusted gateway request required",
         status: 401,
         code: "trusted_request_required",
+      });
+      return;
+    }
+
+    if (!isHealth && identity?.passwordChangeRequired) {
+      response.status(403).json({
+        title: "Password change required",
+        status: 403,
+        code: "password_change_required",
       });
       return;
     }
@@ -414,37 +356,34 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
       return;
     }
 
-    if (verifiedContext) {
+    if (identity) {
       // Lets an operator find the trace of a request from the correlation id shown to a user (System page, Traces).
-      const span = trace.getActiveSpan();
-      span?.setAttribute("correlation_id", verifiedContext.correlationId);
-      span?.setAttribute("request_id", verifiedContext.requestId);
-      if (verifiedContext.actorId) {
-        request.headers["x-actor-id"] = verifiedContext.actorId;
-      } else {
-        delete request.headers["x-actor-id"];
+      const requestId = request.header("x-request-id");
+      if (requestId) {
+        const span = trace.getActiveSpan();
+        span?.setAttribute("correlation_id", requestId);
+        span?.setAttribute("request_id", requestId);
       }
-      request.headers["x-actor-type"] = verifiedContext.actorType;
-      request.headers["x-request-id"] = verifiedContext.requestId;
-      request.headers["x-correlation-id"] = verifiedContext.correlationId;
+      request.headers["x-actor-id"] = identity.actorId;
+      request.headers["x-actor-type"] = identity.actorType;
     } else if (isServiceSecretValid) {
       if (!request.headers["x-actor-type"]) {
         request.headers["x-actor-type"] = "system";
       }
     } else {
-      // Neither a verified context nor a service secret: the caller is a public client, so nothing it sent may name an actor.
+      // Neither a valid access token nor a service secret: the caller is a public client, so nothing it sent may name an actor.
       if (request.headers["x-actor-id"] !== undefined) {
         logger.warn(
           { requestId: request.header("x-request-id"), path: request.path },
-          "dropped client actor headers without verified identity context",
+          "dropped client actor headers without a valid access token",
         );
       }
       delete request.headers["x-actor-id"];
       delete request.headers["x-actor-type"];
     }
 
-    // A shopper's own paths stay open; anything behind the counter stops here even though the context verifies.
-    if (verifiedContext && verifiedContext.actorType === "customer" && isEmployeePath(request.path, request.method)) {
+    // A shopper's own paths stay open; anything behind the counter stops here even though the token verifies.
+    if (identity && identity.actorType === "customer" && isEmployeePath(request.path, request.method)) {
       response.status(403).json({
         title: "Employee access required",
         status: 403,
@@ -454,15 +393,15 @@ export const createTrustedRequestMiddleware = (options: TrustedRequestEnforcemen
     }
 
     // Only this middleware states an employee's sites, so a browser can never claim a scope. An internal service
-    // calling without an identity context may forward the scope of the employee it acts for.
-    if (verifiedContext || !isServiceSecretValid) delete request.headers[ACTOR_SITE_IDS_HEADER];
+    // calling without an access token may forward the scope of the employee it acts for.
+    if (identity || !isServiceSecretValid) delete request.headers[ACTOR_SITE_IDS_HEADER];
 
     if (
-      verifiedContext &&
-      verifiedContext.actorType === "employee" &&
-      !verifiedContext.roles.includes("Platform Admin")
+      identity &&
+      identity.actorType === "employee" &&
+      !identity.roles.includes("Platform Admin")
     ) {
-      const employeeSiteIds = verifiedContext.siteIds ?? [];
+      const employeeSiteIds = identity.siteIds ?? [];
       request.headers[ACTOR_SITE_IDS_HEADER] = employeeSiteIds.join(",");
 
       if (employeeSiteIds.length === 0) {

@@ -3,17 +3,12 @@ import { createServer, type Server } from "node:http";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  createTrustedRequestMiddleware,
-  matchesPathPrefix,
-  signInternalIdentityContext,
-} from "../middleware/trusted-request.ts";
+import { createTrustedRequestMiddleware, matchesPathPrefix } from "../middleware/trusted-request.ts";
+import { bearerHeaders, testVerifier } from "../test-support/access-tokens.ts";
 import { REFUSALS, RefusalError } from "../shared/refusal.ts";
 import { createCatalogRouter } from "./catalog-routes.ts";
 import type { DrizzleStoreRepository } from "./stores/infrastructure/drizzle-store-repository.ts";
 
-const SECRET = "test-internal-identity-secret";
-const CATALOG = "catalog-service";
 const PUBLIC_CATALOG_PATHS = ["/products", "/pricing/active", "/pricing/prices", "/stores", "/availability"];
 
 const SITE_A = "00000000-0000-4000-8000-00000000000a";
@@ -26,47 +21,11 @@ const MANAGER_ID = "66666666-6666-4666-8666-666666666666";
 
 type Role = "Pharmacist" | "Pharmacy Manager" | "Platform Admin" | "Warehouse Staff";
 
-const employee = (roles: Role[], siteIds: string[], actorId = MANAGER_ID): Record<string, string> => {
-  const now = Date.now();
-  return {
-    "x-internal-identity-context": signInternalIdentityContext(
-      {
-        version: "v1",
-        requestId: "request-1",
-        correlationId: "correlation-1",
-        actorId,
-        actorType: "employee",
-        roles,
-        siteIds,
-        issuedAt: new Date(now - 1_000).toISOString(),
-        expiresAt: new Date(now + 300_000).toISOString(),
-        audience: CATALOG,
-      },
-      SECRET,
-    ),
-  };
-};
+const employee = (roles: Role[], siteIds: string[], actorId = MANAGER_ID): Promise<Record<string, string>> =>
+  bearerHeaders({ actorType: "employee", actorId, roles, siteIds });
 
-const customer = (): Record<string, string> => {
-  const now = Date.now();
-  return {
-    "x-internal-identity-context": signInternalIdentityContext(
-      {
-        version: "v1",
-        requestId: "request-1",
-        correlationId: "correlation-1",
-        actorId: "11111111-1111-4111-8111-111111111111",
-        actorType: "customer",
-        roles: [],
-        siteIds: [],
-        issuedAt: new Date(now - 1_000).toISOString(),
-        expiresAt: new Date(now + 300_000).toISOString(),
-        audience: CATALOG,
-      },
-      SECRET,
-    ),
-  };
-};
+const customer = (): Promise<Record<string, string>> =>
+  bearerHeaders({ actorType: "customer", actorId: "11111111-1111-4111-8111-111111111111" });
 
 /** A repository whose records all sit at SITE_A, with every method the routes under test call. */
 const fakeRepository = () => {
@@ -117,8 +76,7 @@ describe("catalog authorization", () => {
     app.use(express.json({ limit: "1mb" }));
     app.use(
       createTrustedRequestMiddleware({
-        identitySecret: SECRET,
-        expectedAudience: CATALOG,
+        verifier: testVerifier,
         isPublic: (request) =>
           ["GET", "HEAD"].includes(request.method) &&
           PUBLIC_CATALOG_PATHS.some((prefix) => matchesPathPrefix(request.path, prefix)),
@@ -126,8 +84,7 @@ describe("catalog authorization", () => {
     );
     app.use(
       createCatalogRouter(repository as unknown as DrizzleStoreRepository, undefined, {
-        identitySecret: SECRET,
-        audience: CATALOG,
+        verifier: testVerifier,
       }),
     );
     server = createServer(app);
@@ -141,9 +98,10 @@ describe("catalog authorization", () => {
     base: string,
     method: string,
     path: string,
-    headers: Record<string, string>,
+    headersInit: Record<string, string> | Promise<Record<string, string>>,
     body?: unknown,
   ): Promise<{ status: number; json: Record<string, unknown> | undefined }> => {
+    const headers = await headersInit;
     const response = await fetch(`${base}${path}`, {
       method,
       headers: body === undefined ? headers : { ...headers, "content-type": "application/json" },

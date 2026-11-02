@@ -6,10 +6,11 @@ import pino from "pino";
 
 import { createApp } from "../../app.ts";
 import { chatModelProviders } from "../../contracts/credentials.ts";
-import { signInternalIdentityContext } from "../../middleware/trusted-request.ts";
+import { bearerHeaders, testVerifier } from "../../test-support/access-tokens.ts";
 import type { ChatCompletionInput, ChatModel, ProductLookup } from "../../domain/chat-model.ts";
 import type { IntentGate } from "../../domain/intent-gate.ts";
 import { IntentGateError } from "../../domain/intent-gate.ts";
+import { AiBudgetExceededError, AiCapacityError, AiPricingMissingError } from "../ai-budget/ai-budget-errors.ts";
 import type { ChatExchange, ChatSessionStore, StoredTurn } from "./chat-session-store.ts";
 import { randomBytes } from "node:crypto";
 import { SecretBox } from "../../infrastructure/secret-box.ts";
@@ -17,29 +18,12 @@ import { AiCredentialVault } from "../credentials/ai-credential-vault.ts";
 import { createMemoryCredentialStore } from "../credentials/memory-credential-store.ts";
 import { CHATBOT_CREDENTIAL_PATH } from "../credentials/credential-routes.ts";
 
-const SECRET = "test-internal-identity-secret";
 const CUSTOMER = "11111111-1111-4111-8111-111111111111";
 const OTHER_CUSTOMER = "22222222-2222-4222-8222-222222222222";
 const EMPLOYEE = "33333333-3333-4333-8333-333333333333";
 
-const signedHeader = (actorType: "customer" | "employee", actorId: string): string => {
-  const now = Date.now();
-  return signInternalIdentityContext(
-    {
-      version: "v1",
-      requestId: "request-1",
-      correlationId: "correlation-1",
-      actorId,
-      actorType,
-      roles: [],
-      siteIds: [],
-      issuedAt: new Date(now - 1_000).toISOString(),
-      expiresAt: new Date(now + 300_000).toISOString(),
-      audience: "chatbot-service",
-    },
-    SECRET,
-  );
-};
+const signedHeader = async (actorType: "customer" | "employee", actorId: string): Promise<string> =>
+  (await bearerHeaders({ actorType, actorId })).authorization as string;
 
 const memoryStore = (): ChatSessionStore => {
   const sessions = new Map<string, { customerId: string; turns: StoredTurn[] }>();
@@ -90,14 +74,13 @@ describe("chatbot routes", () => {
     cacheMs: 60_000,
   });
   const app = createApp({
+    verifier: testVerifier,
     deps: { model, products, store: memoryStore(), gate, reportUsage: vi.fn(), reportGate: vi.fn() },
     credentials: [
       {
         path: CHATBOT_CREDENTIAL_PATH,
         providers: chatModelProviders,
         vault,
-        identitySecret: SECRET,
-        audience: "chatbot-service",
       },
     ],
     logger: pino({ level: "silent" }),
@@ -106,7 +89,6 @@ describe("chatbot routes", () => {
   let server: Server;
 
   beforeAll(async () => {
-    vi.stubEnv("INTERNAL_IDENTITY_SECRET", SECRET);
     await new Promise<void>((resolve) => {
       server = app.listen(0, "127.0.0.1", () => resolve());
     });
@@ -115,19 +97,18 @@ describe("chatbot routes", () => {
   });
 
   afterAll(async () => {
-    vi.unstubAllEnvs();
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   });
 
-  it("refuses a request without a verified identity context", async () => {
+  it("refuses a request without an access token", async () => {
     const response = await fetch(`${baseUrl}/chatbot/sessions`, { method: "POST" });
     expect(response.status).toBe(401);
   });
 
-  it("refuses an employee even with a verified context", async () => {
+  it("refuses an employee even with a valid access token", async () => {
     const response = await fetch(`${baseUrl}/chatbot/sessions`, {
       method: "POST",
-      headers: { "x-internal-identity-context": signedHeader("employee", EMPLOYEE) },
+      headers: { authorization: await signedHeader("employee", EMPLOYEE) },
     });
     expect(response.status).toBe(401);
   });
@@ -135,7 +116,7 @@ describe("chatbot routes", () => {
   it("lets a signed-in customer open a session and ask in it, and hides that session from another customer", async () => {
     const created = await fetch(`${baseUrl}/chatbot/sessions`, {
       method: "POST",
-      headers: { "x-internal-identity-context": signedHeader("customer", CUSTOMER) },
+      headers: { authorization: await signedHeader("customer", CUSTOMER) },
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
@@ -144,7 +125,7 @@ describe("chatbot routes", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-internal-identity-context": signedHeader("customer", CUSTOMER),
+        authorization: await signedHeader("customer", CUSTOMER),
       },
       body: JSON.stringify({ content: "tiêu chảy" }),
     });
@@ -155,7 +136,7 @@ describe("chatbot routes", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-internal-identity-context": signedHeader("customer", OTHER_CUSTOMER),
+        authorization: await signedHeader("customer", OTHER_CUSTOMER),
       },
       body: JSON.stringify({ content: "tiêu chảy" }),
     });
@@ -165,7 +146,7 @@ describe("chatbot routes", () => {
   it("answers 503 assistant_unavailable when the intent gate fails", async () => {
     const created = await fetch(`${baseUrl}/chatbot/sessions`, {
       method: "POST",
-      headers: { "x-internal-identity-context": signedHeader("customer", CUSTOMER) },
+      headers: { authorization: await signedHeader("customer", CUSTOMER) },
     });
     const { id } = (await created.json()) as { id: string };
     gateFailure = new IntentGateError("Jev gave no answer after 3 attempts (Jev answered HTTP 529)");
@@ -174,7 +155,7 @@ describe("chatbot routes", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-internal-identity-context": signedHeader("customer", CUSTOMER),
+          authorization: await signedHeader("customer", CUSTOMER),
         },
         body: JSON.stringify({ content: "tiêu chảy" }),
       });
@@ -189,18 +170,63 @@ describe("chatbot routes", () => {
     }
   });
 
+  describe("AI budget failures", () => {
+    const askAfterSession = async (failure: Error) => {
+      const created = await fetch(`${baseUrl}/chatbot/sessions`, {
+        method: "POST",
+        headers: { authorization: await signedHeader("customer", CUSTOMER) },
+      });
+      const { id } = (await created.json()) as { id: string };
+      gateFailure = failure;
+      try {
+        return await fetch(`${baseUrl}/chatbot/sessions/${id}/messages`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: await signedHeader("customer", CUSTOMER),
+          },
+          body: JSON.stringify({ content: "tiêu chảy" }),
+        });
+      } finally {
+        gateFailure = undefined;
+      }
+    };
+
+    it("answers 429 ai_budget_exceeded before any model call when the spend limit is reached", async () => {
+      const response = await askAfterSession(new AiBudgetExceededError("day"));
+
+      expect(response.status).toBe(429);
+      expect(await response.json()).toMatchObject({ status: 429, code: "ai_budget_exceeded" });
+    });
+
+    it("answers 503 assistant_busy with Retry-After when no call slot frees up in time", async () => {
+      const response = await askAfterSession(new AiCapacityError());
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get("retry-after")).toBe("5");
+      expect(await response.json()).toMatchObject({ status: 503, code: "assistant_busy" });
+    });
+
+    it("answers 503 assistant_unavailable when a spend limit cannot be priced", async () => {
+      const response = await askAfterSession(new AiPricingMissingError("typesafe", "jev-latest"));
+
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ status: 503, code: "assistant_unavailable" });
+    });
+  });
+
   it("answers 409 session_full once a session holds 20 saved questions", async () => {
     const created = await fetch(`${baseUrl}/chatbot/sessions`, {
       method: "POST",
-      headers: { "x-internal-identity-context": signedHeader("customer", CUSTOMER) },
+      headers: { authorization: await signedHeader("customer", CUSTOMER) },
     });
     const { id } = (await created.json()) as { id: string };
-    const ask = () =>
+    const ask = async () =>
       fetch(`${baseUrl}/chatbot/sessions/${id}/messages`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-internal-identity-context": signedHeader("customer", CUSTOMER),
+          authorization: await signedHeader("customer", CUSTOMER),
         },
         body: JSON.stringify({ content: "chào" }),
       });

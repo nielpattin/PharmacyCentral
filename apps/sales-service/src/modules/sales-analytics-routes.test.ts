@@ -2,13 +2,12 @@ import express from "express";
 import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { InternalIdentityContext } from "../contracts/common.ts";
 import { customerFirstPaidResponseSchema, salesDocumentsResponseSchema } from "../contracts/sales.ts";
-import { createTrustedRequestMiddleware, signInternalIdentityContext } from "../middleware/trusted-request.ts";
+import { createTrustedRequestMiddleware } from "../middleware/trusted-request.ts";
+import { accessToken, testAccessTokenVerifier } from "../test-access-tokens.ts";
 import type { SalesRepository } from "./sales-repository.ts";
 import { createSalesRouter } from "./sales-routes.ts";
 
-const identitySecret = "test-identity-secret-1234567890123456";
 const serviceSecret = "test-service-secret-1234567890123456";
 const siteA = "00000000-0000-4000-8000-00000000000a";
 const siteB = "00000000-0000-4000-8000-00000000000b";
@@ -16,23 +15,8 @@ const documentId = "00000000-0000-4000-8000-0000000000d1";
 const customerId = "00000000-0000-4000-8000-0000000000c1";
 const period = "from=2026-10-01T00:00:00.000Z&to=2026-11-01T00:00:00.000Z";
 
-const identityHeader = (overrides: Partial<InternalIdentityContext>): string =>
-  signInternalIdentityContext(
-    {
-      version: "v1",
-      requestId: "req-analytics",
-      correlationId: "corr-analytics",
-      actorId: "00000000-0000-4000-8000-000000000001",
-      actorType: "employee",
-      roles: ["Pharmacy Manager"],
-      siteIds: [siteA],
-      issuedAt: new Date(Date.now() - 1000).toISOString(),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      audience: "sales-service",
-      ...overrides,
-    },
-    identitySecret,
-  );
+const identityHeader = (overrides: Parameters<typeof accessToken>[0]): Promise<string> =>
+  accessToken({ roles: ["Pharmacy Manager"], siteIds: [siteA], ...overrides });
 
 describe("internal analytics routes", () => {
   let server: Server | undefined;
@@ -48,7 +32,7 @@ describe("internal analytics routes", () => {
       { id: documentId, kind: "order", siteId: siteA, customerId, createdAt: "2026-10-15T12:00:00.000Z" },
     ]);
     const app = express();
-    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret, expectedAudience: "sales-service" }));
+    app.use(createTrustedRequestMiddleware({ verifier: testAccessTokenVerifier, serviceSecret }));
     app.use(
       createSalesRouter({ listSalesDocuments, listCustomerFirstPaid } as unknown as SalesRepository, {
         catalogServiceUrl: "http://catalog.test",
@@ -127,9 +111,9 @@ describe("internal analytics routes", () => {
     expect(listSalesDocuments).toHaveBeenCalledWith(expect.objectContaining({ siteIds: undefined }));
   });
 
-  it("refuses a Pharmacy Manager's identity context, which may not read the internal analytics", async () => {
+  it("refuses a Pharmacy Manager's access token, which may not read the internal analytics", async () => {
     const response = await fetch(`${url}/internal/analytics/sales-documents?${period}`, {
-      headers: { "x-internal-identity-context": identityHeader({ actorType: "employee" }) },
+      headers: { authorization: await identityHeader({ actorType: "employee" }) },
     });
 
     expect(response.status).toBe(403);
@@ -137,18 +121,18 @@ describe("internal analytics routes", () => {
     expect(listSalesDocuments).not.toHaveBeenCalled();
   });
 
-  it("refuses a Platform Admin's identity context too", async () => {
+  it("refuses a Platform Admin's access token too", async () => {
     const response = await fetch(`${url}/internal/analytics/sales-documents?${period}`, {
-      headers: { "x-internal-identity-context": identityHeader({ roles: ["Platform Admin"], siteIds: [] }) },
+      headers: { authorization: await identityHeader({ roles: ["Platform Admin"], siteIds: [] }) },
     });
 
     expect(response.status).toBe(403);
     expect(listSalesDocuments).not.toHaveBeenCalled();
   });
 
-  it("refuses a shopper's identity context", async () => {
+  it("refuses a shopper's access token", async () => {
     const response = await fetch(`${url}/internal/analytics/sales-documents?${period}`, {
-      headers: { "x-internal-identity-context": identityHeader({ actorType: "customer", roles: [], siteIds: [] }) },
+      headers: { authorization: await identityHeader({ actorType: "customer", roles: [], siteIds: [] }) },
     });
 
     expect(response.status).toBe(403);
@@ -164,7 +148,7 @@ describe("internal analytics routes", () => {
     expect(listSalesDocuments).not.toHaveBeenCalled();
   });
 
-  it("answers 401 to a caller with neither an identity context nor the service secret", async () => {
+  it("answers 401 to a caller with neither an access token nor the service secret", async () => {
     const response = await fetch(`${url}/internal/analytics/sales-documents?${period}`);
 
     expect(response.status).toBe(401);

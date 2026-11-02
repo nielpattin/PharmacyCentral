@@ -2,9 +2,9 @@ import express from "express";
 import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { InternalIdentityContext } from "../contracts/common.ts";
 import { paidInvoicesAnalyticsResponseSchema } from "../contracts/payment.ts";
-import { createTrustedRequestMiddleware, signInternalIdentityContext } from "../middleware/trusted-request.ts";
+import { createTrustedRequestMiddleware } from "../middleware/trusted-request.ts";
+import { accessToken, testAccessTokenVerifier } from "../test-access-tokens.ts";
 import {
   PAID_INVOICE_LINES_ANALYTICS_CAP,
   PAID_INVOICES_ANALYTICS_CAP,
@@ -12,7 +12,6 @@ import {
 } from "./payment-routes.ts";
 import type { PaymentRepository } from "./payment-repository.ts";
 
-const identitySecret = "test-identity-secret-1234567890123456";
 const serviceSecret = "test-service-secret-1234567890123456";
 const orderId = "00000000-0000-4000-8000-0000000000d1";
 const prescriptionId = "00000000-0000-4000-8000-0000000000e1";
@@ -26,23 +25,8 @@ type StoredInvoice = {
   lines: Array<{ productId: string | null; description: string; quantity: number; unitPrice: number }>;
 };
 
-const identityHeader = (overrides: Partial<InternalIdentityContext>): string =>
-  signInternalIdentityContext(
-    {
-      version: "v1",
-      requestId: "req-paid-analytics",
-      correlationId: "corr-paid-analytics",
-      actorId: "00000000-0000-4000-8000-000000000001",
-      actorType: "employee",
-      roles: ["Pharmacy Manager"],
-      siteIds: [],
-      issuedAt: new Date(Date.now() - 1000).toISOString(),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      audience: "payment-service",
-      ...overrides,
-    },
-    identitySecret,
-  );
+const identityHeader = (overrides: Parameters<typeof accessToken>[0]): Promise<string> =>
+  accessToken({ roles: ["Pharmacy Manager"], ...overrides });
 
 describe("GET /internal/analytics/paid-invoices", () => {
   let server: Server | undefined;
@@ -86,7 +70,7 @@ describe("GET /internal/analytics/paid-invoices", () => {
     // Honours the limit the way the SQL does: at most that many of the stored rows.
     listPaidInvoicesSince.mockImplementation((_since: Date, limit: number) => Promise.resolve(stored.slice(0, limit)));
     const app = express();
-    app.use(createTrustedRequestMiddleware({ identitySecret, serviceSecret, expectedAudience: "payment-service" }));
+    app.use(createTrustedRequestMiddleware({ verifier: testAccessTokenVerifier, serviceSecret }));
     app.use(
       createPaymentRouter({ listPaidInvoicesSince } as unknown as PaymentRepository, {
         salesServiceUrl: "http://sales.test",
@@ -210,9 +194,9 @@ describe("GET /internal/analytics/paid-invoices", () => {
     expect(listPaidInvoicesSince).not.toHaveBeenCalled();
   });
 
-  it("refuses an employee's identity context, whatever the role", async () => {
+  it("refuses an employee's access token, whatever the role", async () => {
     const response = await fetch(`${url}/internal/analytics/paid-invoices?since=${since}`, {
-      headers: { "x-internal-identity-context": identityHeader({ actorType: "employee", roles: ["Platform Admin"] }) },
+      headers: { authorization: await identityHeader({ actorType: "employee", roles: ["Platform Admin"] }) },
     });
 
     expect(response.status).toBe(403);
@@ -220,10 +204,10 @@ describe("GET /internal/analytics/paid-invoices", () => {
     expect(listPaidInvoicesSince).not.toHaveBeenCalled();
   });
 
-  it("refuses a shopper's identity context", async () => {
+  it("refuses a shopper's access token", async () => {
     const response = await fetch(`${url}/internal/analytics/paid-invoices?since=${since}`, {
       headers: {
-        "x-internal-identity-context": identityHeader({ actorType: "customer", roles: [], siteIds: [] }),
+        authorization: await identityHeader({ actorType: "customer", roles: [], siteIds: [] }),
       },
     });
 
@@ -240,7 +224,7 @@ describe("GET /internal/analytics/paid-invoices", () => {
     expect(listPaidInvoicesSince).not.toHaveBeenCalled();
   });
 
-  it("answers 401 to a caller with neither an identity context nor the service secret", async () => {
+  it("answers 401 to a caller with neither an access token nor the service secret", async () => {
     const response = await fetch(`${url}/internal/analytics/paid-invoices?since=${since}`);
 
     expect(response.status).toBe(401);

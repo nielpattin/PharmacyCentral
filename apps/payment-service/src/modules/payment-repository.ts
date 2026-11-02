@@ -309,12 +309,20 @@ export class PaymentRepository {
       )[0];
       if (existingTransaction)
         return { invoiceId: invoice.id, duplicate: true, status: invoice.status, reason: "duplicate_transaction" };
-      await transaction.insert(paymentTransactions).values({
-        paymentInvoiceId: invoice.id,
-        provider: input.provider,
-        providerTransactionId: input.providerTransactionId,
-        amount: String(input.amount),
-      });
+      // The unique index on (provider, provider transaction id) settles a redelivery that raced this one: the insert
+      // waits for the first delivery to commit, then writes nothing and is answered as a duplicate.
+      const recorded = await transaction
+        .insert(paymentTransactions)
+        .values({
+          paymentInvoiceId: invoice.id,
+          provider: input.provider,
+          providerTransactionId: input.providerTransactionId,
+          amount: String(input.amount),
+        })
+        .onConflictDoNothing({ target: [paymentTransactions.provider, paymentTransactions.providerTransactionId] })
+        .returning({ id: paymentTransactions.id });
+      if (recorded.length === 0)
+        return { invoiceId: invoice.id, duplicate: true, status: invoice.status, reason: "duplicate_transaction" };
       if (Number(invoice.amount) !== input.amount) {
         await transaction
           .update(paymentAttempts)
