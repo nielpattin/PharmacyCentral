@@ -12,11 +12,12 @@ Pharmacy Central is a Node.js 24 pharmacy platform split into an Express 5 micro
 - `apps/sales-service`: customer carts, orders, prescriptions, counter transactions, delivery calculation, and order events.
 - `apps/payment-service`: provider-neutral invoices, QR attempts, cash payments, SePay webhooks, refunds, and reconciliation.
 - `apps/operations-query-service`: RabbitMQ-fed dashboard, finance, reporting, and audit projections.
+- `apps/chatbot-service`: customer consultation assistant. It keeps chat sessions and answers grounded in the catalog through HTTP tool calls to `catalog-service`, using Gemini or an OpenAI-compatible chat API.
 - `apps/ops-console-service`: read-only backend of the staff-web System page (Platform Admin only). It reads service health, Prometheus, the RabbitMQ management API and Typesense. It owns no database.
 - `apps/customer-web` and `apps/staff-web`: independently deployable React/Vite applications.
-- `packages/`: only stable technical packages and versioned transport contracts.
+- `packages/`: only stable technical packages and versioned transport contracts: `auth` (ES256 access-token signing and verification), `cache`, and `ui`.
 
-PostgreSQL/PostGIS stores are service-owned databases. RabbitMQ carries integration events. Redis provides delivery caching. OpenRouteService supplies server-side delivery address resolution, Matrix, Directions, distance, duration, and GeoJSON route data.
+PostgreSQL/PostGIS stores are service-owned databases. RabbitMQ carries integration events. Redis provides delivery caching. Typesense with a local embedder (`deploy/embedder`) powers hybrid product search. OpenTelemetry traces, metrics and logs flow to Tempo, Prometheus, Loki and Grafana. OpenRouteService supplies server-side delivery address resolution, Matrix, Directions, distance, duration, and GeoJSON route data.
 
 ## Documentation
 
@@ -72,6 +73,7 @@ The default endpoints are:
 - Staff web: `http://staff.pharmacy.localhost` (or `http://localhost:5302`)
 - API gateway: `http://api.pharmacy.localhost` (or `http://localhost:8080`)
 - Architecture diagrams (`pnpm diagrams:serve`): `http://localhost:5303`
+- Grafana: `http://localhost:3030` (`GRAFANA_PORT`)
 - RabbitMQ management: `http://localhost:15672`
 - Mailpit: `http://localhost:8025`
 
@@ -88,6 +90,7 @@ pnpm --dir apps/inventory-service db:migrate
 pnpm --dir apps/sales-service db:migrate
 pnpm --dir apps/payment-service db:migrate
 pnpm --dir apps/operations-query-service db:migrate
+pnpm --dir apps/chatbot-service db:migrate
 ```
 
 Two seeds, kept separate. Demo credentials are documented in `docs/runbook.md` and are for local use only.
@@ -135,6 +138,6 @@ pnpm run stack:aws-like                                         # container stac
 
 Copy `.env.example` to a local environment file and replace development secrets. Do not reuse demo secrets in production. Container startup runs `node dist/migrate.js` before `node dist/main.js`, and production deploys immutable digest-addressed GHCR images to ECS Fargate.
 
-AWS deployment configuration is located under `deploy/aws`, defining AWS API Gateway HTTP API, VPC Link, internal Application Load Balancer, and ECS Fargate services. This AWS configuration is configuration-only and no AWS resources were deployed.
+AWS deployment configuration is located under `deploy/aws`, defining AWS API Gateway HTTP API, VPC Link, internal Application Load Balancer, ECS Fargate services with Application Auto Scaling, and Grafana on Fargate with a CloudWatch dashboard. This AWS configuration is configuration-only and no AWS resources were deployed.
 
 GitHub Actions validates affected projects on pull requests and on demand through the `Workspace validation` workflow. Releases run on demand through the `Release application images` workflow, which validates the workspace and publishes digest-addressed GHCR application images for the requested version.
