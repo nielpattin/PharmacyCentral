@@ -54,7 +54,7 @@ Connection strings and keys are written by Terraform as SSM SecureString paramet
 
 ### Images (`registry.tf`)
 
-One ECR repository per service plus `ops`, none for the embedder, with immutable tags. `tools/aws-push-images.mjs <tag>` builds the images from the existing Dockerfiles for `linux/amd64` and pushes them as `<tag>`; the `image_tag` variable selects them. Tags are `staging-<git short SHA>`, and a tag is never reused. GHCR credentials are not needed.
+One ECR repository per service plus `ops`, none for the embedder, with immutable tags. GitHub Actions builds the images from the existing Dockerfiles for `linux/amd64` when a version tag is pushed and pushes them as that tag (`.github/workflows/release.yml`); the `image_tag` variable selects them, and a tag is never reused. `tools/aws-push-images.mjs <tag>` (`cloud:deploy --build --tag <name>`) is the local fallback. GHCR credentials are not needed.
 
 ### Web (`web.tf`)
 

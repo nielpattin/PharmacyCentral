@@ -1,20 +1,48 @@
-# Pharmacy Central runbooks
+# Pharmacy Central runbook
+
+How to run, operate and troubleshoot Pharmacy Central. The first half is tasks you do by hand, in the order you need them. The second half is reference for one subsystem each.
+
+## Contents
+
+| I want to... | Go to |
+| --- | --- |
+| Run the project on my machine for the first time | [Local development quickstart](#local-development-quickstart) |
+| Choose between day-to-day and as-shipped mode | [Two local modes](#two-local-modes) |
+| Load sample data | [Seeds](#seeds-default-a-and-demo-b), [Local sample data](#local-sample-data-development-only) |
+| Reset the data before a presentation | [Reset the demo data](#reset-the-demo-data-pnpm-run-demoreset) |
+| Run it on AWS, pause it, destroy it | [Run it on AWS](#run-it-on-aws) |
+| Fix something that is not working | [Troubleshooting](#troubleshooting) |
+| Look at traces, logs and alerts | [Observability](#observability) |
+| Understand how events move between services | [Messaging operations](#messaging-operations) |
 
 ## Local development quickstart
 
-Infra always runs on Docker Compose; the apps run either on the host or in containers (see "Two local modes"). Start here once:
+Infrastructure always runs on Docker Compose. The apps run either on your host or in containers (see [Two local modes](#two-local-modes)). Do this once:
 
 ```bash
 pnpm install --frozen-lockfile
-cp .env.example .env   # then fill in secrets
+cp .env.example .env   # then fill in the secrets
 pnpm run auth:keygen   # prints ACCESS_TOKEN_PRIVATE_KEY, ACCESS_TOKEN_PUBLIC_JWK and ACCESS_TOKEN_KEY_ID; paste them into .env
 pnpm run dev:infra
-docker compose ps   # postgres, rabbitmq, redis, mailpit, otel-collector, floci, gateway-dev healthy (floci-init exits 0)
+docker compose ps      # postgres, rabbitmq, redis, mailpit, otel-collector, floci and gateway-dev healthy; floci-init exits 0
+pnpm run db:migrate    # creates the databases
 ```
 
-Floci is the local AWS emulator (image `floci/floci:2.4.0`, pinned by digest, port 4566). It serves S3 for product images and ECR for image push tests. `floci-init` creates the `product-media` bucket and a policy that allows anonymous `GetObject` on it. The S3 API is at `http://localhost:4566` with path-style addressing; set `FLOCI_PORT`, the standard `AWS_*` variables (dummy keys, `us-east-1`), `MEDIA_BUCKET`, and `PUBLIC_MEDIA_URL` in `.env` before starting Compose. Floci mounts the Docker socket so it can start the `registry:2` container behind ECR, and its state lives in the `pharmacy-central-floci-data` volume. ECR URIs use the path style (`localhost:4566/<account>/<region>/<repo>`) because Docker 29's containerd image store reaches only `localhost` over plain HTTP. `.env` holds the emulator's dummy `AWS_*` values, so never load it into a process that talks to real AWS (`tools/aws-upload-media.mjs` refuses to run with `AWS_ENDPOINT_URL_S3` set). Upload caps: the catalog and inventory API groups allow 25 MB per request through the local Nginx proxies, `/api/prescriptions/intake*` allows 10 MB, and the other groups keep Nginx's 1 MB default. `catalog-service` accepts product images up to 5 MB (JPEG, PNG, or WebP); the import endpoints accept up to 25 MB; `sales-service` accepts prescription photos up to 8 MB; other JSON routes keep the 1 MB service default.
+Then load data (see [Seeds](#seeds-default-a-and-demo-b)): `pnpm run seed:default` creates the admin, `pnpm run seed:demo` the sample dataset.
 
-To try the local ECR, use the host AWS CLI with the dummy keys and the explicit `--endpoint-url`, so nothing reaches a real account:
+`API_BASE_URL=http://localhost:8080` in `.env` points browsers and Vite at whichever local gateway is running. Do not change it per service.
+
+### The local AWS emulator (Floci)
+
+Floci stands in for AWS on your machine. It serves S3 for product images and ECR for image push tests.
+
+- **Image and port:** `floci/floci:2.4.0`, pinned by digest, on port 4566. State lives in the `pharmacy-central-floci-data` volume.
+- **Bucket:** `floci-init` creates the `product-media` bucket and a policy that allows anonymous `GetObject` on it.
+- **Settings in `.env`:** `FLOCI_PORT`, the standard `AWS_*` variables (dummy keys, `us-east-1`), `MEDIA_BUCKET` and `PUBLIC_MEDIA_URL`. S3 uses path-style addressing at `http://localhost:4566`.
+- **Never load this `.env` into a process that talks to real AWS.** It holds the emulator's dummy keys. `tools/aws-upload-media.mjs` refuses to run when `AWS_ENDPOINT_URL_S3` is set.
+- **Docker socket:** Floci mounts it so it can start the `registry:2` container behind ECR. ECR URIs use the path style (`localhost:4566/<account>/<region>/<repo>`) because Docker 29's containerd image store reaches only `localhost` over plain HTTP.
+
+Try the local ECR with the host AWS CLI, the dummy keys and an explicit `--endpoint-url`, so nothing reaches a real account:
 
 ```bash
 export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
@@ -25,19 +53,23 @@ docker push localhost:4566/000000000000/us-east-1/pharmacy-central/smoke:v1
 docker pull localhost:4566/000000000000/us-east-1/pharmacy-central/smoke:v1   # after docker rmi of the tag
 ```
 
-Floci starts a `floci-ecr-registry` container on first use. It lives outside Compose and keeps running after `docker compose down`; remove it with `docker rm -f floci-ecr-registry`.
+Floci starts a `floci-ecr-registry` container on first use. It lives outside Compose and keeps running after `docker compose down`. Remove it with `docker rm -f floci-ecr-registry`.
 
-Create the databases. The default admin comes with `pnpm run seed:default` and the demo dataset with `pnpm run seed:demo` (see Seeds):
+### Upload size limits
 
-```bash
-pnpm run db:migrate
-```
-
-`API_BASE_URL=http://localhost:8080` in `.env` points browsers and Vite `dev` at whichever local gateway is running. Never change it per service.
+| Where | Limit |
+| --- | --- |
+| Local Nginx proxies: catalog and inventory API groups | 25 MB per request |
+| Local Nginx proxy: `/api/prescriptions/intake*` | 10 MB |
+| Local Nginx proxy: other groups | 1 MB (Nginx default) |
+| `catalog-service`: product images (JPEG, PNG, WebP) | 5 MB |
+| `catalog-service`: import endpoints | 25 MB |
+| `sales-service`: prescription photos | 8 MB |
+| Other JSON routes | 1 MB (service default) |
 
 ### Two local modes
 
-Infra always runs in Docker. The two modes differ only in where the apps and the gateway run:
+Infrastructure runs in Docker either way. The modes differ only in where the apps and the gateway run:
 
 | | Dev mode (day-to-day work) | Container mode (check what ships) |
 | --- | --- | --- |
@@ -49,7 +81,7 @@ Infra always runs in Docker. The two modes differ only in where the apps and the
 | Back to dev mode | | `pnpm run local:down`, then `pnpm dev` |
 | Stop everything | `pnpm run dev:down` | `pnpm run dev:down` |
 
-Use dev mode for fast iteration and container mode to check what ships. An agent session asks which mode to use before it starts ([AGENTS.md](../AGENTS.md#change-workflow)). Run container mode before opening a pull request, and always after changing a Dockerfile, `docker-compose.yml`, environment variables, dependencies, or migrations; every container in `docker compose ps` must be healthy.
+Use dev mode for fast iteration. Run container mode before opening a pull request, and always after changing a Dockerfile, `docker-compose.yml`, environment variables, dependencies or migrations. Every container in `docker compose ps` must be healthy.
 
 #### Dev mode
 
@@ -57,17 +89,59 @@ Use dev mode for fast iteration and container mode to check what ships. An agent
 pnpm dev   # dev:infra (infra + gateway-dev + migrations), then nx run-many -t dev --all
 ```
 
-`pnpm dev` starts every service with `node --watch` and both webs with Vite HMR through Nx, which prints a TUI with one pane per app. Each service's `dev` script runs Node with `--experimental-transform-types`, because Node's strip-only TypeScript mode rejects the parameter properties the services use.
+`pnpm dev` starts every service with `node --watch` and both webs with Vite HMR through Nx, which shows one pane per app. Each service's `dev` script runs Node with `--experimental-transform-types`, because Node's strip-only TypeScript mode rejects the parameter properties the services use.
 
-Run a subset by project name (the real names live in `apps/*/package.json`). `gateway-dev` still routes every path to the host, so paths of apps you leave out have no process behind them:
+Run a subset by project name (the real names are in `apps/*/package.json`). `gateway-dev` still routes every path to the host, so paths of apps you leave out have no process behind them:
 
 ```bash
 pnpm nx run-many -t dev -p @pharmacy/sales-service @pharmacy/customer-web
 ```
 
+**Ports.** Each app's port comes from `<SVC>_PORT` in the root `.env`. The web ports are `CUSTOMER_WEB_PORT` (5301) and `STAFF_WEB_PORT` (5302); Vite sets `strictPort`, so a busy port makes the app fail instead of moving. Nx loads `apps/<svc>-service/.env.dev` for the `dev` target before the root `.env`, so each service binds its own port and gets its own `DATABASE_URL`. Always start apps through Nx. `pnpm --dir apps/<app> dev` skips `.env.dev`, and every service would collide on `PORT=3000`.
+
+**Docker Desktop (Windows and macOS): turn on host networking.** `gateway-dev` uses host networking, which runs inside the Docker VM on these systems.
+
+1. Open Settings, Resources, Network, and turn on **Enable host networking** (Docker Desktop 4.34 or later).
+2. Choose Apply & restart.
+3. Run `pnpm run dev:infra` again.
+4. Check with `curl http://localhost:8080/api/products?limit=1`.
+
+Without it, the container reports healthy but nothing listens on `localhost:8080`, and the Vite proxy logs `http proxy error: /api/... AggregateError [ECONNREFUSED]` for every call. Linux hosts need no setting.
+
+**Why `gateway-dev` uses host networking.** It is the one container that has to call into the host, and host firewalls such as ufw drop container-to-host traffic on the Docker bridge. So it forwards to `127.0.0.1:${<SVC>_PORT}` instead.
+
+#### How services find each other
+
+- **Infrastructure:** services reach Postgres, RabbitMQ and the rest through the published ports (`localhost:5432`, `localhost:5672`, ...), never through a gateway. The gateway only forwards browser `/api/...` calls to the services.
+- **Service to service:** services call each other directly with the `*_SERVICE_URL` values in `.env` (`CATALOG_SERVICE_URL`, `IDENTITY_SERVICE_URL`, `INVENTORY_SERVICE_URL`, `SALES_SERVICE_URL`, `PAYMENT_SERVICE_URL`).
+- **`/internal` routes** accept only the service secret. The gateway and the ALB do not route them.
+
+Which service needs which URL, and why:
+
+| Service | Needs | Because |
+| --- | --- | --- |
+| `sales-service` | `IDENTITY_SERVICE_URL` | It looks the account up before filing a prescription with a customer. A missing or wrong value fails the create with `503 identity_unavailable` instead of writing a record against nobody. |
+| `payment-service` | `SALES_SERVICE_URL` | It reads the order behind an invoice. |
+| `operations-query-service` | `SALES_SERVICE_URL` | It reads the dashboard's prescription figures. |
+| `operations-query-service` | `PAYMENT_SERVICE_URL` | Period analytics read paid invoices from `GET /internal/analytics/paid-invoices`. It also reads sales documents and stock health from `/internal/analytics/*` of `sales-service` and `inventory-service`. |
+| `inventory-service` | `IDENTITY_SERVICE_URL` | It checks the owner of an action plan against `GET /internal/employees/{id}`. |
+
+Gross profit on the Analytics page shows "—" for sales whose goods have no recorded unit cost. Opening balances carry none, so `seed:demo` receives the shop's stock again through goods receipts with a cost (the demo history step). Your own receipts need a **Giá nhập**. The read behind it is `GET /internal/analytics/dispense-costs` of `inventory-service`.
+
+#### Container mode
+
+```bash
+# Stop `pnpm dev` first: the app containers publish the same host ports.
+pnpm run local:up     # stops gateway-dev, rebuilds the images, starts everything, migrates, waits until healthy
+docker compose ps     # every container must be healthy
+pnpm run local:down   # back to dev mode: stops gateway and the app containers, starts gateway-dev again
+```
+
+`gateway` and `gateway-dev` share `GATEWAY_PORT` (8080), so only one runs at a time and the two scripts swap them. On a small machine, building all eight images at once can exhaust memory. Build them one at a time first with `docker compose build <name>`.
+
 ### Named local URLs
 
-`pnpm run urls:up` starts a [portless](https://github.com/vercel-labs/portless) proxy on `127.0.0.1:80` and registers three names that point at the fixed ports, for `pnpm dev` and for the container stack alike:
+`pnpm run urls:up` starts a [portless](https://github.com/vercel-labs/portless) proxy on `127.0.0.1:80` and registers three names for the fixed ports. It works for `pnpm dev` and for the container stack alike:
 
 | URL | Target |
 | --- | --- |
@@ -75,30 +149,12 @@ pnpm nx run-many -t dev -p @pharmacy/sales-service @pharmacy/customer-web
 | `http://staff.pharmacy.localhost` | staff-web (`STAFF_WEB_PORT`) |
 | `http://api.pharmacy.localhost` | gateway (`GATEWAY_PORT`) |
 
-Each name is a separate browser origin. Each app keeps its own access token in that origin's `localStorage`, so both stay signed in side by side. `*.localhost` is a secure context in browsers, so `crypto` APIs that need HTTPS work without a certificate. The proxy is plain HTTP; run `pnpm exec portless proxy stop`, then `pnpm exec portless proxy start` for HTTPS (it asks to trust a local CA).
-
-Chrome, Edge and Firefox resolve `*.localhost` themselves. `curl` does too; Node scripts and Safari may not, so `API_BASE_URL` stays `http://localhost:8080` and `pnpm run seed:demo` is unchanged. `pnpm run urls:down` removes the routes and stops the proxy; `pnpm exec portless doctor` checks it. Port 80 must be free; if another program holds it, `urls:up` fails with the portless error.
-
-The web ports are `CUSTOMER_WEB_PORT` (5301) and `STAFF_WEB_PORT` (5302) in the root `.env`. Vite sets `strictPort`, so a busy port makes the app fail instead of moving to another port.
-
-Ports come from `<SVC>_PORT` in the root `.env`. Nx loads `apps/<svc>-service/.env.dev` for the `dev` target before the root `.env`, so it wins over the root `.env`'s shared `PORT=3000`; each service binds its own port and gets its own `DATABASE_URL`. Run apps through Nx: `pnpm --dir apps/<app> dev` bypasses Nx and skips `.env.dev`, so every service would collide on `PORT=3000`.
-
-Services reach infra through the published ports (`localhost:5432`, `localhost:5672`, ...), never through a gateway. The gateway only forwards browser `/api/...` calls to the services. `gateway-dev` is the one container that has to call into the host, and host firewalls such as ufw drop container-to-host traffic on the Docker bridge, so it uses host networking and forwards to `127.0.0.1:${<SVC>_PORT}` instead.
-
-Services also call each other directly, with the `*_SERVICE_URL` values in `.env` (`CATALOG_SERVICE_URL`, `IDENTITY_SERVICE_URL`, `INVENTORY_SERVICE_URL`, `SALES_SERVICE_URL`), never through a gateway. `sales-service` requires `IDENTITY_SERVICE_URL`: it looks the account up there before filing a prescription with a customer, so a missing or wrong value fails the create with `503 identity_unavailable` instead of writing the record against nobody. `payment-service` and `operations-query-service` require `SALES_SERVICE_URL` for the order behind an invoice and for the dashboard's prescription figures. `operations-query-service` also requires `PAYMENT_SERVICE_URL`: the period analytics read the paid invoices from `GET /internal/analytics/paid-invoices`, and it reads sales documents and stock health from `/internal/analytics/*` of `sales-service` and `inventory-service`. Those `/internal` routes accept only the service secret and are not routed by the gateway or the ALB. `inventory-service` requires `IDENTITY_SERVICE_URL` to check the owner of an action plan against `GET /internal/employees/{id}`. Run `pnpm run db:migrate` after pulling: migration `0013_action_plans` adds the plan table and `0014_receipt_line_unit_cost` adds the nullable purchase cost to goods receipt lines. Gross profit on the Analytics page stays "—" for sales whose goods have no recorded unit cost: opening balances carry none, so `seed:demo` receives the shop's stock again through goods receipts with a cost (the demo history step), and your own receipts need a **Giá nhập**; `GET /internal/analytics/dispense-costs` of `inventory-service` is the read behind it.
-
-On Docker Desktop (Windows and macOS), host networking runs inside the Docker VM, so `gateway-dev` needs it turned on. Open Settings, then Resources, then Network, and turn on **Enable host networking** (Docker Desktop 4.34 or later). Choose Apply & restart, then run `pnpm run dev:infra` again. Without it, the container reports healthy but nothing listens on `localhost:8080`, and the Vite proxy logs `http proxy error: /api/... AggregateError [ECONNREFUSED]` for every call. Check with `curl http://localhost:8080/api/products?limit=1`. Linux hosts need no setting.
-
-#### Container mode
-
-```bash
-# Stop `pnpm dev` first: the app containers publish the same host ports.
-pnpm run local:up   # stops gateway-dev, rebuilds the images, starts everything, migrates, waits until healthy
-docker compose ps     # every container must be healthy
-pnpm run local:down   # back to dev mode: stops gateway and the app containers, starts gateway-dev again
-```
-
-`gateway` and `gateway-dev` share `GATEWAY_PORT` (8080), so only one runs at a time; the two scripts swap them. On a small machine, building all eight images at once can exhaust memory; build them one at a time first with `docker compose build <name>`.
+- Each name is a separate browser origin with its own `localStorage`, so the customer and staff apps stay signed in side by side.
+- `*.localhost` is a secure context in browsers, so `crypto` APIs that need HTTPS work without a certificate.
+- The proxy is plain HTTP. For HTTPS run `pnpm exec portless proxy stop`, then `pnpm exec portless proxy start` (it asks to trust a local CA).
+- Chrome, Edge, Firefox and `curl` resolve `*.localhost` themselves. Node scripts and Safari may not, so `API_BASE_URL` stays `http://localhost:8080` and `pnpm run seed:demo` is unchanged.
+- `pnpm run urls:down` removes the routes and stops the proxy. `pnpm exec portless doctor` checks it.
+- Port 80 must be free. If another program holds it, `urls:up` fails with the portless error.
 
 ### Open the app
 
@@ -107,7 +163,10 @@ curl http://localhost:8080/healthz
 curl -s http://localhost:8080/api/sites | head -c 200
 ```
 
-The second command returns the site list with status 200. Catalog reads are public. A 401 with `trusted_request_required` means the path needs a bearer access token (see the hand-call recipe below). A 401 with `unauthenticated` means the bearer token is missing or expired.
+The second command returns the site list with status 200. Catalog reads are public.
+
+- `401 trusted_request_required`: the path needs a bearer access token (see the next section).
+- `401 unauthenticated`: the bearer token is missing or expired.
 
 ### Call the API by hand
 
@@ -118,9 +177,9 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login   -H 'Content-Type:
 curl -s http://localhost:8080/api/orders -H "Authorization: Bearer $TOKEN"
 ```
 
-The login response sets no cookie. There is no refresh route: when the token expires, sign in again.
-
-There is no CSRF token and no sign-out route; a client signs out by discarding the token. The public key set is served by identity-service at `/.well-known/jwks.json`; the gateways do not route it, and services read it from `IDENTITY_JWKS_URL`.
+- The login response sets no cookie. There is no refresh route: when the token expires, sign in again.
+- There is no CSRF token and no sign-out route. A client signs out by discarding the token.
+- Identity-service serves the public key set at `/.well-known/jwks.json`. The gateways do not route it, and services read it from `IDENTITY_JWKS_URL`.
 
 ### Path routing map
 
@@ -139,47 +198,52 @@ Any other path, `/` included, returns a JSON 404. Either gateway strips `/api` b
 
 ## Daily commands
 
-Check status and logs:
+| Task | Command |
+| --- | --- |
+| Check status | `docker compose ps` |
+| Read logs | `docker compose logs <name>` (add `-f` to follow) |
+| Restart one service | `docker compose restart <name>` |
+| Rebuild one service image after a change you want to validate as shipped | `docker compose up -d --build <name>` |
+| Stop everything, `gateway-dev` included | `pnpm run dev:down` |
+
+Backing tools on your laptop (ports come from `.env`): RabbitMQ management UI at `http://localhost:15672`, Mailpit at `http://localhost:8025`.
+
+## Run it on AWS
+
+Everything is one command, and each command is safe to rerun. Infrastructure is Terraform in `deploy/aws`. The full guide, with what each step does and what it costs, is [deploy/aws/README.md](../deploy/aws/README.md).
+
+| I want to... | Command |
+| --- | --- |
+| Deploy, or resume after a pause (deploys the latest version tag, builds nothing locally) | `pnpm run cloud:deploy` |
+| Build everything from nothing (infrastructure, images, migrations, services, data) | `pnpm run cloud:deploy:fresh` |
+| Add the sample data (safe to repeat) | `pnpm run cloud:seed` |
+| Wipe the data and load it again | `pnpm run cloud:reset` (add `--yes` when there is no terminal) |
+| Stop what costs money by the hour, keep the data | `pnpm run cloud:pause` |
+| Delete everything | `pnpm run cloud:destroy` (asks you to type `destroy`) |
+
+**Releasing a version.** Push a version tag and GitHub Actions builds the 12 images and pushes them to ECR with that tag:
 
 ```bash
-docker compose ps
-docker compose logs <name>
-docker compose logs -f <name>
+git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
-Restart one service:
+Then deploy that tag (`terraform apply -var image_tag=vX.Y.Z` in `deploy/aws`, or `pnpm run cloud:deploy`).
 
-```bash
-docker compose restart <name>
-```
+**What pause keeps and removes.** Pause stops the RDS database, which AWS starts again by itself after 7 days, and deletes the NAT gateway, load balancers, ElastiCache, the ECS services and the Cloudflare DNS records. Data stays in RDS. `cloud:deploy` brings everything back.
 
-Rebuild one service image after a change you want to validate as shipped:
-
-```bash
-docker compose up -d --build <name>
-```
-
-Open backing tools on your laptop (ports come from `.env`):
-
-```bash
-# RabbitMQ management UI at http://localhost:15672, Mailpit UI at http://localhost:8025
-```
-
-Tear everything down (including `gateway-dev`):
-
-```bash
-pnpm run dev:down
-```
+**Presenting.** Run `pnpm run cloud:seed` or `cloud:reset` on the day: the sample data's dates are relative to the day it is loaded (see [Reset the demo data](#reset-the-demo-data-pnpm-run-demoreset)).
 
 ## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
 | `localhost:8080` refused or 502 from `/api/...` | Start the gateway for your mode: `pnpm run dev:infra` for dev mode, or `pnpm run local:up` for containers. Only one of the two can hold port 8080 |
-| Vite logs `http proxy error: /api/... ECONNREFUSED` while `gateway-dev` is healthy (Docker Desktop) | Host networking is off, so port 8080 never reaches the host. Enable it as described under Dev mode, then rerun `pnpm run dev:infra` |
-| Gateway 404 on `/api/...` | Check the path against the routing map above |
+| Vite logs `http proxy error: /api/... ECONNREFUSED` while `gateway-dev` is healthy (Docker Desktop) | Host networking is off, so port 8080 never reaches the host. Enable it as described under [Dev mode](#dev-mode), then rerun `pnpm run dev:infra` |
+| Gateway 404 on `/api/...` | Check the path against the [routing map](#path-routing-map) |
 | `/api/...` returns 401 `trusted_request_required` | The path needs an access token. Sign in and send the `accessToken` as `Authorization: Bearer <token>`; a token lives one day |
-| `typesense` exits with code 139 and no log line (Docker Desktop with WSL2) | Typesense 30.2 bundles brpc, which reads `/proc/self/io` before `main()`. The WSL2 kernel of Docker Desktop has no task I/O accounting, so the file is missing and the 30.2 server segfaults (upstream [typesense/typesense#2998](https://github.com/typesense/typesense/issues/2998)). Compose pins `typesense/typesense:31.0.rc23` by digest, which starts on that kernel (it only logs `Fail to open /proc/self/io`, harmless). Pull it with `docker compose up -d --no-deps --wait typesense`, then check `docker compose ps typesense` and `curl http://localhost:8108/health` (`{"ok":true}`). The AWS task definition (`deploy/aws/data.tf`) pins the same digest, so local and AWS run one version. |
+| `typesense` exits with code 139 and no log line (Docker Desktop with WSL2) | See below |
+
+**Typesense exits with code 139.** Typesense 30.2 bundles brpc, which reads `/proc/self/io` before `main()`. The WSL2 kernel of Docker Desktop has no task I/O accounting, so the file is missing and the 30.2 server segfaults (upstream [typesense/typesense#2998](https://github.com/typesense/typesense/issues/2998)). Compose pins `typesense/typesense:31.0.rc23` by digest, which starts on that kernel (it only logs `Fail to open /proc/self/io`, which is harmless). Pull it with `docker compose up -d --no-deps --wait typesense`, then check `docker compose ps typesense` and `curl http://localhost:8108/health` (`{"ok":true}`). The AWS task definition (`deploy/aws/data.tf`) pins the same digest, so local and AWS run one version.
 
 ## Runtime contract
 
@@ -191,13 +255,19 @@ pnpm install --frozen-lockfile
 
 ## Identity rate limits and client address
 
-identity-service requires `REDIS_URL`, `AUTH_RATE_LIMIT_MAX_ATTEMPTS`, `AUTH_RATE_LIMIT_WINDOW_SECONDS`, and `TRUST_PROXY_HOPS`, with no defaults. Startup fails when one is missing or is not a whole number of at least 1.
+identity-service requires `REDIS_URL`, `AUTH_RATE_LIMIT_MAX_ATTEMPTS`, `AUTH_RATE_LIMIT_WINDOW_SECONDS` and `TRUST_PROXY_HOPS`, with no defaults. Startup fails when one is missing or is not a whole number of at least 1.
 
-identity-service also requires `COOKIE_SECURE`, which must be exactly `true` or `false`, with no default. It adds `Secure` to the OAuth state cookie. Use `false` on the plain-HTTP local URLs and `true` on AWS (`deploy/pharmacycentral.env.example`). identity-service also requires `ACCESS_TOKEN_PRIVATE_KEY`, `ACCESS_TOKEN_PUBLIC_JWK` and `ACCESS_TOKEN_KEY_ID`, generated by `pnpm run auth:keygen`; every other service except search-service requires `IDENTITY_JWKS_URL`. The trusted layer of every service drops `x-actor-id` and `x-actor-type` from a request that carries no verified access token or service secret, and logs a `warn` with the request id when it does; both local gateways also strip those headers from clients. `node --env-file=.env tools/edge-identity-smoke.mjs` checks this against `API_BASE_URL`.
+Other required identity settings:
+
+- `COOKIE_SECURE` must be exactly `true` or `false`, with no default. It adds `Secure` to the OAuth state cookie. Use `false` on the plain-HTTP local URLs and `true` on AWS (`deploy/pharmacycentral.env.example`).
+- `ACCESS_TOKEN_PRIVATE_KEY`, `ACCESS_TOKEN_PUBLIC_JWK` and `ACCESS_TOKEN_KEY_ID`, generated by `pnpm run auth:keygen`.
+- Every other service except search-service requires `IDENTITY_JWKS_URL`.
+
+The trusted layer of every service drops `x-actor-id` and `x-actor-type` from a request that carries no verified access token or service secret, and logs a `warn` with the request id when it does. Both local gateways also strip those headers from clients. `node --env-file=.env tools/edge-identity-smoke.mjs` checks this against `API_BASE_URL`.
 
 - `TRUST_PROXY_HOPS` is the number of proxies in front of identity-service that append to `X-Forwarded-For`. Locally it is `1`: the nginx gateway overwrites the header with its own `$remote_addr`, so a client cannot supply its own address. Behind AWS the value is unverified. The path is API Gateway HTTP API, then the VPC link, then the internal ALB. Two is the expected value if API Gateway appends the client address and the ALB appends the VPC link address. Confirm that from the `X-Forwarded-For` header of a real request before setting it in `deploy/aws`. A value that is too low keys every client to a proxy address, and a value that is too high lets a client choose its own.
 - The Compose stack reaches identity-service through the nginx gateway. Docker usually presents host clients to nginx as the bridge gateway address, which is not verified here, so locally the limit may be one bucket per account rather than per client.
-- When Redis is unreachable, `POST /api/auth/login`, `register`, `request-password-reset`, and `reset-password`, and `GET /api/auth/verify-email` answer `503 rate_limit_unavailable`. `GET /api/auth/me` reads the profile from Postgres and keeps working for a caller with a valid token.
+- When Redis is unreachable, `POST /api/auth/login`, `register`, `request-password-reset` and `reset-password`, and `GET /api/auth/verify-email` answer `503 rate_limit_unavailable`. `GET /api/auth/me` reads the profile from Postgres and keeps working for a caller with a valid token.
 - To clear a lockout for a support request, find the account's keys with `redis-cli --scan --pattern 'identity:auth-limit:<action>:<digest>:*'`, where `<digest>` is the SHA-256 of the lowercased, trimmed email, then `DEL` them. Keys hold that digest and the client address, never the email itself.
 
 ## Database migrations and seeds
@@ -206,29 +276,36 @@ Each microservice owns its Drizzle migrations and database schema under `apps/<s
 
 ### Run migrations
 
-Migrate all services with one command (runs each service from its own directory so every database is targeted correctly):
+Migrate all services with one command (it runs each service from its own directory so every database is targeted correctly):
 
 ```bash
 pnpm run db:migrate
 ```
 
-In containers, each service executes its compiled `node dist/migrate.js` on startup.
+In containers, each service runs its compiled `node dist/migrate.js` on startup. Run `pnpm run db:migrate` after every pull.
 
-Identity `0003_must_change_password` adds `users.must_change_password` (default `false`). Inventory `0012_batch_creator_stocktake_counter` adds nullable `product_batches.created_by` and `stocktake_lines.counted_by`. A row without a creator is not refused by the separation-of-duties checks (BR-AUTH-009).
+Notes on specific migrations:
 
-Inventory `0015_disposal_records` adds `disposal_records` and `disposal_lines` for the Disposals tab (biên bản tiêu hủy). An approval subtracts stock and writes a `Disposal` ledger entry; a proposal writes neither. No backfill is needed: existing negative adjustments stay adjustments, and the new tables start empty.
-
-Sales `0014_early_robin_chapel` adds nullable `orders.paid_at` and `prescriptions.paid_at`: the first time a paid invoice settled the document, kept after a refund. The payment events fill it from then on. Rows paid before the migration keep no date and read as new customers on Analytics; dev data is disposable, so reseed instead of backfilling.
-
-Sales `0015` indexes the first-payment lookup (`customer_id`, `paid_at` where paid), and `0016` adds `sales_targets`: one row per site and month, unique on `(site_id, month)`. Neither needs a backfill; a month starts with no targets until a Pharmacy Manager sets one.
+| Migration | What it does | Backfill |
+| --- | --- | --- |
+| Identity `0003_must_change_password` | Adds `users.must_change_password` (default `false`). | None |
+| Inventory `0012_batch_creator_stocktake_counter` | Adds nullable `product_batches.created_by` and `stocktake_lines.counted_by`. A row without a creator is not refused by the separation-of-duties checks (BR-AUTH-009). | None |
+| Inventory `0013_action_plans` | Adds the action plan table. | None |
+| Inventory `0014_receipt_line_unit_cost` | Adds the nullable purchase cost to goods receipt lines. | None |
+| Inventory `0015_disposal_records` | Adds `disposal_records` and `disposal_lines` for the Disposals tab (biên bản tiêu hủy). An approval subtracts stock and writes a `Disposal` ledger entry; a proposal writes neither. | None. Existing negative adjustments stay adjustments, and the new tables start empty. |
+| Sales `0014_early_robin_chapel` | Adds nullable `orders.paid_at` and `prescriptions.paid_at`: the first time a paid invoice settled the document, kept after a refund. Payment events fill it from then on. | None. Rows paid before the migration keep no date and read as new customers on Analytics. Dev data is disposable, so reseed. |
+| Sales `0015` | Indexes the first-payment lookup (`customer_id`, `paid_at` where paid). | None |
+| Sales `0016` | Adds `sales_targets`: one row per site and month, unique on `(site_id, month)`. | None. A month starts with no targets until a Pharmacy Manager sets one. |
 
 ### Database roles
 
-Every service connects as its own Postgres role, named after its database (`sales_service`, `payment_service`, and so on). The role owns that database and has no `CONNECT` privilege on the others, so a leaked `DATABASE_URL` exposes one service's data, not all of them. `POSTGRES_USER` is the admin account; only role setup and the chaos tooling use it.
+Every service connects as its own Postgres role, named after its database (`sales_service`, `payment_service` and so on). The role owns that database and has no `CONNECT` privilege on the others, so a leaked `DATABASE_URL` exposes one service's data, not all of them. `POSTGRES_USER` is the admin account; only role setup and the chaos tooling use it.
 
-The `postgres-roles` Compose service runs `deploy/local/postgres/roles.sh` after Postgres is healthy and before any backend service starts (`pnpm run dev:infra` includes it). The script reads the passwords from `IDENTITY_DB_PASSWORD`, `CATALOG_DB_PASSWORD`, `INVENTORY_DB_PASSWORD`, `SALES_DB_PASSWORD`, `PAYMENT_DB_PASSWORD`, `OPERATIONS_QUERY_DB_PASSWORD` and `CHATBOT_DB_PASSWORD` in `.env`. It is safe to run again: it creates missing roles, resets passwords, and moves tables that an older run created as the admin user to the owning role. A stack that already holds data needs only `docker compose up -d postgres-roles`, then the services.
-
-Migrations run as the owning role (`pnpm run db:migrate` builds each URL from the same passwords), so the tables belong to the role that uses them. On RDS, create the same roles by hand with the equivalent SQL, one secret per service as in `deploy/aws`; Terraform does not create the database tier.
+- The `postgres-roles` Compose service runs `deploy/local/postgres/roles.sh` after Postgres is healthy and before any backend service starts (`pnpm run dev:infra` includes it).
+- The script reads the passwords from `IDENTITY_DB_PASSWORD`, `CATALOG_DB_PASSWORD`, `INVENTORY_DB_PASSWORD`, `SALES_DB_PASSWORD`, `PAYMENT_DB_PASSWORD`, `OPERATIONS_QUERY_DB_PASSWORD` and `CHATBOT_DB_PASSWORD` in `.env`.
+- It is safe to run again: it creates missing roles, resets passwords, and moves tables that an older run created as the admin user to the owning role. A stack that already holds data needs only `docker compose up -d postgres-roles`, then the services.
+- Migrations run as the owning role (`pnpm run db:migrate` builds each URL from the same passwords), so the tables belong to the role that uses them.
+- On AWS, `pnpm run cloud:deploy:fresh` creates the roles and databases (`tools/aws-migrate.mjs`), one secret per service as in `deploy/aws`.
 
 ### Seeds: default (A) and demo (B)
 
@@ -240,10 +317,10 @@ There are two seeds. They are separate commands with separate code, and neither 
 | Code | `apps/identity-service/seed.mjs` | `tools/seed-demo.mjs` and `apps/identity-service/seed-demo.mjs` |
 | Creates | Exactly one account: the Platform Admin `admin@pharmacycentral.vn`. Nothing else. | Product images, sites, demo accounts (two managers, pharmacist, warehouse staff, shoppers), storage locations (warehouses), suppliers, products with their units of measure, opening balances, search synonyms, demo activity and 60 days of backdated sales history. |
 | Password | `ADMIN_PASSWORD` in `.env` | `DEMO_ACCOUNT_PASSWORD` in `.env` |
-| When | Always: on every start and release. It updates the admin by id, so repeating it is safe. | Opt-in, local only, after A. Every step skips what exists, so repeating it is safe. |
+| When | Always: on every start and release. It updates the admin by id, so repeating it is safe. | Opt-in, after A. Every step skips what exists, so repeating it is safe. |
 | Needs | The migrated identity database | A, the running stack, and the sites created before the accounts (the script keeps that order). |
 
-Business master data in production is imported through the staff import center or the catalog/inventory import APIs, not by seed B.
+Business master data in production is imported through the staff import center or the catalog and inventory import APIs, not by seed B.
 
 ```bash
 # A: the one admin
@@ -257,107 +334,151 @@ pnpm --dir apps/identity-service seed -- --dry-run
 pnpm --dir apps/identity-service seed:demo -- --dry-run
 ```
 
-Seed A resets the admin's roles to Platform Admin on every run and touches no other account. Seed B creates one account per staff role (two Pharmacy Managers, Pharmacist, Warehouse Staff) and the shoppers, each staff account holding only its role, and resets their roles and site access on every run. Site access is looked up by code from the imported sites (all four sites for the managers, the three that hold stock for warehouse staff, `SITE-RTL` for the pharmacist), so `seed:demo` creates the sites from `data/import-samples/sites.csv` first and stops if a site is missing. The account list is in `docs/user-guide.md`.
+- Seed A resets the admin's roles to Platform Admin on every run and touches no other account.
+- Seed B creates one account per staff role (two Pharmacy Managers, Pharmacist, Warehouse Staff) and the shoppers. Each staff account holds only its role, and every run resets roles and site access.
+- Site access is looked up by code from the imported sites: all four sites for the managers, the three that hold stock for warehouse staff, `SITE-RTL` for the pharmacist. So `seed:demo` creates the sites from `data/import-samples/sites.csv` first and stops if a site is missing.
+- The account list is in `docs/user-guide.md`.
+
+On AWS the same seed runs with `pnpm run cloud:seed` (see [Run it on AWS](#run-it-on-aws)).
 
 ### Import staff-managed data
 
-Staff import CSV files from the Data import screen in `staff-web`. The matching API endpoints are:
+Staff import CSV files from the Data import screen in `staff-web` (`http://127.0.0.1:5302/imports` locally). The matching API endpoints are:
 
 | Dataset | Endpoint |
 | --- | --- |
 | Sites, storage locations, suppliers, products, units, prices | `POST /api/products/imports` |
 | Opening stock balances | `POST /api/inventory/imports/opening-balances` |
 
-The screen generates one CSV template per dataset in the browser from the same column list the parser uses.
-Templates contain headers only: no sample records ship with the web app, and nothing under an app `public/`
-directory is a data store. The browser converts the CSV into the JSON payload that the service validates; the
-HTTP contract stays JSON.
+How it works:
 
-Import order matters, because rows are resolved by natural key: sites first, then storage locations and
-suppliers, then products, then opening balances.
+- The screen generates one CSV template per dataset in the browser, from the same column list the parser uses. Templates hold headers only: no sample records ship with the web app, and nothing under an app `public/` directory is a data store.
+- The browser converts the CSV into the JSON payload that the service validates. The HTTP contract stays JSON.
+- Imports are idempotent on natural keys (`code`, `sku`, `batchNumber`).
+- An opening balance row is accepted only while the batch and storage location have no stock balance or ledger history. Reimporting the same quantity is a no-op. Changing an existing balance requires a stock adjustment so the ledger keeps an audit trail.
 
-Source files stay outside the application image. The committed fixture set lives in `data/`: the sample CSVs in
-`data/import-samples/` and the coursework images as the folder `data/product-images/images/`, so a fresh checkout can
-exercise both flows. Any other file comes from the operator machine (`~/Downloads/...`), and the API never reads a
-server-side path. Dependency order matters. Images come first (uploaded by `seed:demo`, since `products.csv` carries Floci S3 URLs whose
-object keys are content hashes), then sites, storage locations, suppliers, products, and finally opening balances. After
-an import the truth lives in the owning service database: catalog data in `catalog-service`, stock in
-`inventory-service`, images in Floci S3. Original downloads, source-verification records
-(`provenance/`), and research dumps (`research/`) stay local.
+**Import order matters**, because rows are resolved by natural key:
 
-Imports are idempotent on natural keys (`code`, `sku`, `batchNumber`). An opening balance row is accepted only while the batch and storage location have no stock balance or ledger history. Reimporting the same quantity is a no-op; changing an existing balance requires a stock adjustment so the ledger keeps an audit trail.
+1. Images (uploaded by `seed:demo`, since `products.csv` carries Floci S3 URLs whose object keys are content hashes)
+2. Sites
+3. Storage locations and suppliers
+4. Products
+5. Opening balances
 
-```bash
-pnpm run dev:infra
-```
+**Where the files live.** Source files stay outside the application image. The committed fixture set is in `data/`: the sample CSVs in `data/import-samples/` and the coursework images in `data/product-images/images/`, so a fresh checkout can exercise both flows. Any other file comes from the operator's machine (`~/Downloads/...`); the API never reads a server-side path. Original downloads, source-verification records (`provenance/`) and research dumps (`research/`) stay local.
 
-Then open `http://127.0.0.1:5302/imports` from the staff web app.
+**Where the data ends up.** Catalog data in `catalog-service`, stock in `inventory-service`, images in Floci S3.
 
 #### Local sample data (development only)
 
-A fresh local database has no accounts and no master data. Migrations create empty tables, and sites, storage locations, suppliers, products, prices, and opening stock exist only after an import. The steps below fill all of it:
+A fresh local database has no accounts and no master data. Migrations create empty tables, and everything else exists only after an import. These steps fill it all:
 
 ```bash
-pnpm run dev:infra   # infra + gateway-dev (host networking on Docker Desktop) + migrations
+pnpm run dev:infra      # infra + gateway-dev (host networking on Docker Desktop) + migrations
 pnpm run seed:default   # A: the one admin (needs only the identity database)
 pnpm dev                # the services must be running: seed B goes through the API
 pnpm run seed:demo      # B: the demo dataset, in another terminal
 ```
 
-`seed:demo` runs `tools/seed-demo.mjs` and performs the steps in order. It signs in as the default admin (`admin@pharmacycentral.vn`, password `ADMIN_PASSWORD`) and stops with a pointer to `pnpm run seed:default` if that fails. It uploads the product images to Floci S3 and posts the sample CSVs from `data/import-samples/` to the same endpoints as the Data import screen, each as the role that owns it: the admin creates the sites one at a time (`POST /api/sites`, because the site import is a Pharmacy Manager's), a Pharmacy Manager imports the storage locations, the suppliers and the products with their prices, and Warehouse Staff import the opening balances. Right after the sites it creates the demo accounts (`apps/identity-service/seed-demo.mjs`), so the managers, pharmacist, and warehouse accounts get their site access in one pass. It reuses the screen's CSV mapping from `apps/staff-web/src/import-datasets.ts`, so the two cannot drift. After the synonyms it adds demo activity through the same APIs, so the list screens have rows in every state: three transfers (waiting, in transit, received), three stock adjustments (pending, approved, rejected), three purchase orders (waiting, approved, cancelled) and fifteen orders at `SITE-RTL`. The demo shopper `khachhang@pharmacycentral.vn` owns nine of them, one in every state the customer site draws: waiting for payment, confirmed, preparing, ready, out for delivery, completed (pickup and delivery), cancelled, and refunded. Each of the six sample shoppers holds one state, so signing in as one of them shows the order page featuring only that state. Each order is placed the way checkout places it, with its payment invoice under the same id. A QR order is paid by a webhook signed with `SEPAY_WEBHOOK_SECRET`, a cash order by the counter, and the refunded one goes back through the refund endpoint. Each record has a fixed number and is skipped when it exists, and the opening balances are skipped once stock has moved, so running the script again is safe. The orders are skipped while any exist, so clear the sales and payment data before reseeding them. Each seed connection uses its own database role and `<SERVICE>_DB_PASSWORD`, as the services do. Stock rows wait for the product search index to catch up, which takes a few seconds after a product import.
+`seed:demo` runs `tools/seed-demo.mjs`, which does these steps in order:
 
-Last, it creates and approves the six local search synonym groups, such as `tiêu chảy, đi ngoài, đi lỏng`. The first Pharmacy Manager proposes them, the demo pharmacist approves them, so live search uses them from the start. Production starts with no synonym groups. Staff add them in staff-web under Search synonyms.
+1. **Sign in** as the default admin (`admin@pharmacycentral.vn`, password `ADMIN_PASSWORD`). It stops with a pointer to `pnpm run seed:default` if that fails.
+2. **Upload the product images** to Floci S3.
+3. **Create the sites** one at a time as the admin (`POST /api/sites`, because the site import is a Pharmacy Manager's).
+4. **Create the demo accounts** (`apps/identity-service/seed-demo.mjs`), so the managers, pharmacist and warehouse accounts get their site access in one pass.
+5. **Import the sample CSVs** from `data/import-samples/` through the same endpoints as the Data import screen, each as the role that owns it: a Pharmacy Manager imports the storage locations, the suppliers, and the products with their prices; Warehouse Staff import the opening balances. It reuses the screen's CSV mapping from `apps/staff-web/src/import-datasets.ts`, so the two cannot drift.
+6. **Create and approve the six search synonym groups**, such as `tiêu chảy, đi ngoài, đi lỏng`. The first Pharmacy Manager proposes them and the pharmacist approves them, so live search uses them from the start. One more group (`ho khan, ho không đờm, ho rát cổ`) is left waiting for approval. Production starts with no synonym groups; staff add them in staff-web under Search synonyms.
+7. **Add demo activity** through the same APIs, so every list screen has rows in every state: three transfers (waiting, in transit, received), three stock adjustments (pending, approved, rejected), three purchase orders (waiting, approved, cancelled) and fifteen orders at `SITE-RTL`.
+8. **Add the sales history** (`tools/seed-demo-history.mjs`, below).
 
-The final step, `tools/seed-demo-history.mjs`, makes the dataset look like a shop that has traded for two months. It receives the shop's stock through five approved purchase orders (`PO-HIST-001` to `005`) and their goods receipts (`GR-HIST-001` to `005`) with a unit cost on every line, so gross profit has real figures. It then places about 200 sales over the last 60 days, backdated one by one: counter prescriptions paid in cash, and online orders paid by SePay QR or cash on delivery, pickup or delivery, with a few cancelled and refunded. The trend charts, channel split, top products, finance entries and audit log all show those days. It also leaves, on purpose: batches of six products that expire in 6, 12, 20, 27 and 45 days and one already 8 days past expiry (`GR-HIST-EXP`), six dead-stock products with no movement for 130 days, seven prescription-only medicines and one supply that have stock but no price, five products that end the history thin against their recent sales (replenishment suggestions with a shortfall), two more replenishment requests, and carts for two shoppers. No API sets the creation time of an order or a payment, so the backdating is SQL through `docker compose exec postgres psql` (needs Docker Compose and `POSTGRES_USER` in `.env`). The step runs once: if goods receipt `GR-HIST-001` exists it adds nothing. A last step, also in that file, fills the warehouse site (`SITE-WH`, the screens of the warehouse account): three goods receipts with a cost, one purchase order waiting for approval, replenishment requests in each state, two returns, a posted and an open stocktake, and adjustments in each state. Warehouse Staff creates them and a Pharmacy Manager decides, because nobody approves their own record. It runs once, marked by goods receipt `GR-WH-001`. The search synonym step also leaves one group (`ho khan, ho không đờm, ho rát cổ`) waiting for approval. To run the history again, use `pnpm run demo:reset` (below).
+Notes on the steps:
 
-The automatic action plans are created by `inventory-service` when it starts and every 15 minutes, so restart it once after seeding (`docker compose restart inventory-service`) to get the plans for the expiring batches and the shortfalls without waiting.
+- **The orders.** The demo shopper `khachhang@pharmacycentral.vn` owns nine of them, one in every state the customer site draws: waiting for payment, confirmed, preparing, ready, out for delivery, completed (pickup and delivery), cancelled, and refunded. Each of the six sample shoppers holds one state, so signing in as one of them shows the order page featuring only that state. Each order is placed the way checkout places it, with its payment invoice under the same id. A QR order is paid by a webhook signed with `SEPAY_WEBHOOK_SECRET`, a cash order by the counter, and the refunded one goes back through the refund endpoint.
+- **Running it again is safe.** Each record has a fixed number and is skipped when it exists, and the opening balances are skipped once stock has moved. The orders are skipped while any exist, so clear the sales and payment data before reseeding them.
+- **Database access.** Each seed connection uses its own database role and `<SERVICE>_DB_PASSWORD`, as the services do.
+- **Search index.** Stock rows wait for the product search index to catch up, which takes a few seconds after a product import.
 
-This is a development tool, kept apart from production on purpose.
+**The sales history step.** `tools/seed-demo-history.mjs` makes the dataset look like a shop that has traded for two months.
+
+- It receives the shop's stock through five approved purchase orders (`PO-HIST-001` to `005`) and their goods receipts (`GR-HIST-001` to `005`), with a unit cost on every line, so gross profit has real figures.
+- It places about 200 sales over the last 60 days, backdated one by one: counter prescriptions paid in cash, and online orders paid by SePay QR or cash on delivery, pickup or delivery, with a few cancelled and refunded. The trend charts, channel split, top products, finance entries and audit log all show those days.
+- It leaves, on purpose: batches of six products that expire in 6, 12, 20, 27 and 45 days; one batch already 8 days past expiry (`GR-HIST-EXP`); six dead-stock products with no movement for 130 days; seven prescription-only medicines and one supply that have stock but no price; five products that end the history thin against their recent sales (replenishment suggestions with a shortfall); two more replenishment requests; and carts for two shoppers.
+- No API sets the creation time of an order or a payment, so the backdating is SQL through `docker compose exec postgres psql` (it needs Docker Compose and `POSTGRES_USER` in `.env`).
+- The step runs once: if goods receipt `GR-HIST-001` exists it adds nothing.
+- A last step in the same file fills the warehouse site (`SITE-WH`, the screens of the warehouse account): three goods receipts with a cost, one purchase order waiting for approval, replenishment requests in each state, two returns, a posted and an open stocktake, and adjustments in each state. Warehouse Staff creates them and a Pharmacy Manager decides, because nobody approves their own record. It runs once, marked by goods receipt `GR-WH-001`.
+- To run the history again, use `pnpm run demo:reset` (below).
+
+**Action plans.** `inventory-service` creates the automatic action plans when it starts and every 15 minutes. Restart it once after seeding (`docker compose restart inventory-service`) to get the plans for the expiring batches and the shortfalls without waiting.
+
+**This is a development tool, kept apart from production on purpose.**
 
 - It only runs from the `seed:demo` script and is not part of any image or deployment. It never creates or changes the admin: that is seed A.
-- It refuses to run with `NODE_ENV=production` and refuses any `API_BASE_URL` that is not `localhost`, `127.0.0.1`, or `[::1]`.
+- It refuses to run with `NODE_ENV=production`. It accepts only an `API_BASE_URL` of `localhost`, `127.0.0.1` or `[::1]`, or the cloud target set by `pnpm run cloud:seed`.
 - The sample files are fabricated coursework data. Production data is imported by an operator on the staff-web Data import screen with a real account, from the operator's own files.
 
-Without the script, run `pnpm run seed:default`, then upload the same files by hand at `http://127.0.0.1:5302/imports` as a Pharmacy Manager, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv` and `products.csv`. Right after `sites.csv`, run `pnpm --dir apps/identity-service seed:demo` to create the demo accounts with their site access, then sign in as Warehouse Staff and import `opening-balances.csv`.
+**Without the script**, run `pnpm run seed:default`, then upload the same files by hand at `http://127.0.0.1:5302/imports` as a Pharmacy Manager, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv`, `products.csv`. Right after `sites.csv`, run `pnpm --dir apps/identity-service seed:demo` to create the demo accounts with their site access. Then sign in as Warehouse Staff and import `opening-balances.csv`.
 
 ### Reset the demo data (`pnpm run demo:reset`)
 
-Every date in the demo dataset is relative to the day it is seeded: the opening-balance expiry dates in `data/import-samples/opening-balances.csv` are written against 2026-10-29 and `seed:demo` moves each one by the days since, and the history, receipts and expiry countdowns count back or forward from the seed time. The data then ages with the clock (an expiry countdown drops by a day each day, the newest sale gets older), so reseed on the day you present.
+Every date in the demo dataset is relative to the day it is seeded. The opening-balance expiry dates in `data/import-samples/opening-balances.csv` are written against 2026-10-29 and `seed:demo` moves each one by the days since. The history, receipts and expiry countdowns count back or forward from the seed time. The data then ages with the clock (an expiry countdown drops by a day each day, the newest sale gets older), so **reseed on the day you present**.
 
-`pnpm run demo:reset` (`tools/demo-reset.mjs`) does that in one command, in container mode: it stops the services, drops and recreates the seven service databases, removes the Typesense volume, runs `db:migrate`, starts the services (`--no-deps`, so an unhealthy Typesense does not block them), runs `seed:default` and `seed:demo`, then restarts `inventory-service` so the automatic action plans are raised against the fresh stock, and prints how many exist. It takes about three minutes. It is destructive: it refuses `NODE_ENV=production` and any `API_BASE_URL` that is not a loopback host, and needs the stack from `pnpm run local:up` (or at least `postgres`, `rabbitmq`, `redis`, `floci` and the gateway) to be up. `pnpm run seed:demo` alone is idempotent but never refreshes the dates of data it already created; it warns when the history is a day old. The presenter's script is [Demo walkthrough](demo-walkthrough.md).
+`pnpm run demo:reset` (`tools/demo-reset.mjs`) does it in one command, in container mode. It takes about three minutes. It:
+
+1. stops the services,
+2. drops and recreates the seven service databases,
+3. removes the Typesense volume,
+4. runs `db:migrate`,
+5. starts the services (`--no-deps`, so an unhealthy Typesense does not block them),
+6. runs `seed:default` and `seed:demo`,
+7. restarts `inventory-service` so the automatic action plans are raised against the fresh stock, and prints how many exist.
+
+It is destructive. It refuses `NODE_ENV=production` and any `API_BASE_URL` that is not a loopback host, and it needs the stack from `pnpm run local:up` (or at least `postgres`, `rabbitmq`, `redis`, `floci` and the gateway) to be up.
+
+`pnpm run seed:demo` alone is idempotent but never refreshes the dates of data it already created. It warns when the history is a day old. For AWS use `pnpm run cloud:reset`. The presenter's script is [Demo walkthrough](demo-walkthrough.md).
 
 ### Product images
 
-The committed images are one file per product in `data/product-images/images/`, named `<SKU>.<ext>` (PNG, JPEG, or WebP). `pnpm run seed:demo` uploads them to the local Floci S3 bucket under the content-hash key `product-images/<SKU>/<sha256>.<ext>`, so the URL is the same for everyone and matches the `imageUrl` column of `data/import-samples/products.csv`. The upload validates every file before sending any, and the script warns about a product whose `imageUrl` was not uploaded. To add or replace an image, drop `<SKU>.<ext>` into the folder, rerun the command, and copy the new URL into `products.csv`. Original downloads and source-verification records stay local in `data/product-images/originals/` and `provenance/`. `data/` is excluded from container builds via `.dockerignore`.
+The committed images are one file per product in `data/product-images/images/`, named `<SKU>.<ext>` (PNG, JPEG or WebP).
+
+- `pnpm run seed:demo` uploads them to the local Floci S3 bucket under the content-hash key `product-images/<SKU>/<sha256>.<ext>`. The URL is therefore the same for everyone and matches the `imageUrl` column of `data/import-samples/products.csv`.
+- The upload validates every file before sending any, and warns about a product whose `imageUrl` was not uploaded.
+- To add or replace an image, drop `<SKU>.<ext>` into the folder, rerun the command, and copy the new URL into `products.csv`.
+- Original downloads and source-verification records stay local in `data/product-images/originals/` and `provenance/`.
+- `data/` is excluded from container builds via `.dockerignore`.
 
 ### Try prescription intake
 
-Prescription intake needs the catalog migrations `0005_text_search_extensions` (`pg_trgm` and `unaccent`) and `0006_folded_trigram_indexes` (the `catalog_fold` function and its trigram indexes), so run `pnpm run db:migrate` after pulling. Consultation requests also need the `sales-service` migration `0005_salty_trish_tilby` (the `prescription_consultations` table), which the same command applies. Import `products.csv` first, because suggestions come from the catalog.
+Prescription intake needs these migrations, so run `pnpm run db:migrate` after pulling: catalog `0005_text_search_extensions` (`pg_trgm` and `unaccent`), catalog `0006_folded_trigram_indexes` (the `catalog_fold` function and its trigram indexes), and sales-service `0005_salty_trish_tilby` (the `prescription_consultations` table, for consultation requests). Import `products.csv` first, because suggestions come from the catalog.
 
 1. Sign in to staff-web as `admin@pharmacycentral.vn`, open **AI integrations**, and save the provider, model, base URL and API key under **Prescription photo reading**. Or set all four `AI_PRESCRIPTION_READER_*` variables in `.env` (see `.env.example`), which are all or none. Until settings are saved, or the four variables are set, the photo path answers `503` and only QR intake works.
 2. Sign in as the customer account and open `http://localhost:5301/gui-don-thuoc`.
-3. Upload a page from `data/prescription-samples/`. `<slug>.png` carries a QR (read in the browser, no provider call); `<slug>-no-qr.png` is the same page without it and exercises Gemini. `<slug>.json` is the ground truth to compare against.
+3. Upload a page from `data/prescription-samples/`. `<slug>.png` carries a QR (read in the browser, no provider call). `<slug>-no-qr.png` is the same page without it and exercises Gemini. `<slug>.json` is the ground truth to compare against.
 4. The sample has one prescription, `tang-huyet-ap-dai-thao-duong`, with six lines. Five match catalog products: Amlodipin 5mg, Savi Losartan 50mg, Diamicron MR 30mg, Atorvastatin 20mg and Plavix 75mg. These are prescription-only with no price, so the page shows "Liên hệ báo giá" and they cannot be added to the cart.
-5. Aspirin 81mg has no catalog match, so the page offers "Nhờ dược sĩ tìm giúp" for the whole prescription; the request is filed through `POST /prescriptions/consultations` with that line flagged.
+5. Aspirin 81mg has no catalog match, so the page offers "Nhờ dược sĩ tìm giúp" for the whole prescription. The request is filed through `POST /prescriptions/consultations` with that line flagged.
 
 `pnpm run prescriptions:samples` generates that page. Its medicines all come from `products.csv`, and like other generated output it stays local and is not committed.
 
 ### Chatbot token usage
 
-The chatbot service logs one line for each question the model answers. The message is `chat turn usage`. The line has five counts: input tokens, cached input tokens, output tokens, thought tokens, and `modelCalls`. `modelCalls` is the number of model calls made for that question, at most three. A question that needs no product lookup has one model call. A high thought count means the model spent many tokens reasoning at its thinking level. A cached count above zero means implicit caching hit. Caching cannot start until the stable prompt prefix reaches the model's minimum size, so a cached count of zero is expected while the prompt stays below that minimum. The line holds counts only, never the question, the reply, or any customer or product data.
+The chatbot service logs one line for each question the model answers, with the message `chat turn usage`. The line has five counts: input tokens, cached input tokens, output tokens, thought tokens, and `modelCalls`.
+
+- `modelCalls` is the number of model calls made for that question, at most three. A question that needs no product lookup has one.
+- A high thought count means the model spent many tokens reasoning at its thinking level.
+- A cached count above zero means implicit caching hit. Caching cannot start until the stable prompt prefix reaches the model's minimum size, so zero is expected while the prompt stays below that minimum.
+- The line holds counts only, never the question, the reply, or any customer or product data.
 
 ### Intent gate
 
 The intent gate runs one TypeSafe Jev request before each question reaches the chat model. Its settings use the purpose `INTENT_GATE`, the environment group `AI_INTENT_GATE_*`, and the staff-web card **Question screening**. With no settings the gate is off.
 
-- Each decision logs `intent gate decision` with the fields `decision`, `reason`, `intent`, `intentConfidence`, `emergency`, and `injection`.
+- Each decision logs `intent gate decision` with the fields `decision`, `reason`, `intent`, `intentConfidence`, `emergency` and `injection`.
 - A Jev failure after the retries answers `503 assistant_unavailable`. The service logs `chat dependency failed` with the error `IntentGateError`.
 - The timeout and retry constants are `ATTEMPT_TIMEOUT_MS = 4000`, `MAX_ATTEMPTS = 3`, `BACKOFF_BASE_MS = 200` and `BACKOFF_CAP_MS = 2000` in `apps/chatbot-service/src/infrastructure/jev-intent-classifier.ts`.
 - The thresholds are `EMERGENCY_THRESHOLD = 0.6`, `INJECTION_THRESHOLD = 0.7` and `INTENT_CONFIDENCE_THRESHOLD = 0.6` in `apps/chatbot-service/src/modules/chat/intent-policy.ts`. They are untuned starting values.
 
 ### Demo credentials
 
-Credentials for local development. The admin comes from the default seed (A), and its password is the `ADMIN_PASSWORD` value from `.env`. Every other account comes from the demo seed (B), and its password is the `DEMO_ACCOUNT_PASSWORD` value.
+Credentials for local development and the sample dataset. The admin comes from the default seed (A), and its password is the `ADMIN_PASSWORD` value from `.env`. Every other account comes from the demo seed (B), and its password is the `DEMO_ACCOUNT_PASSWORD` value.
 
 | Role | Email | Site access |
 | --- | --- | --- |
@@ -744,7 +865,7 @@ Caveats: single runs, run-to-run spread about 25%; k6, Prometheus and the other 
 
 ## Load and chaos testing
 
-Load tests run with k6, chaos tests with a Node runner against the deployed stack (`chaos:aws`). Both are workstation tools, never part of a container image. Run them against the **container stack** (`pnpm run stack:up`): under `pnpm dev`, `node --watch` restarts services and leaves stale keepalive connections in the gateway, which shows up as 60 s stalls that are not application problems.
+Load tests run with k6, chaos tests with a Node runner against the deployed stack (`chaos:aws`). Both are workstation tools, never part of a container image. Run them against the **container stack** (`pnpm run local:up`): under `pnpm dev`, `node --watch` restarts services and leaves stale keepalive connections in the gateway, which shows up as 60 s stalls that are not application problems.
 
 k6 runs as the Compose service `k6` (profile `loadtest`, image pinned by digest), so nothing is installed on the host. It pushes its results to Prometheus remote write; Grafana shows them in the dashboard `Pharmacy Central - Load Test` (uid `pc-load-test`), next to the server-side latency, outbox, queue and database panels. Set `LOAD_TARGET_URL` in `.env`: `http://gateway:8080` for the container stack, `http://host.docker.internal:8080` when the services run under `pnpm dev`.
 

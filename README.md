@@ -135,16 +135,24 @@ pnpm run chaos:aws typesense-outage                             # one fault unde
 
 ## Run it: local and cloud
 
-| Where | Command | What it does |
-| --- | --- | --- |
-| Local | `pnpm run local:up` | Full container stack sized like AWS, then migrates. |
-| Local | `pnpm run seed:demo` | Loads demo data into the local stack (loopback only). |
-| Local | `pnpm run local:down` | Stops the app containers and goes back to dev mode. |
-| Cloud (AWS) | `pnpm run cloud:deploy` | Resumes or updates the existing AWS stack: starts RDS if stopped, pushes images for a new tag, starts services. |
-| Cloud (AWS) | `pnpm run cloud:deploy:fresh` | First deploy of a new stack: infrastructure, images, databases and migrations, services, then the demo data. |
-| Cloud (AWS) | `pnpm run cloud:seed` | Loads the full demo dataset (accounts, catalog, 60 days of history) into the running AWS stack. |
-| Cloud (AWS) | `pnpm run cloud:pause` | Stops RDS and removes only what bills by the hour (NAT, ALBs, ElastiCache, services, DNS). Data stays. |
-| Cloud (AWS) | `pnpm run cloud:destroy` | Deletes everything including the database (asks you to type `destroy`). |
+Two commands each. Run the first once, the second whenever you want fresh sample data (its dates are relative to the day it runs, so do it on the day you present).
+
+| Where | Commands |
+| --- | --- |
+| Local | `pnpm run local:up`, then `pnpm run demo:reset` |
+| Cloud (AWS) | `pnpm run cloud:deploy`, then `pnpm run cloud:reset --yes` |
+
+Everything else, when you need it:
+
+| Command | What it does |
+| --- | --- |
+| `pnpm run local:down` | Stops the app containers and goes back to dev mode. |
+| `pnpm run cloud:deploy:fresh` | First deploy of a brand new stack: infrastructure, databases, services and data. |
+| `pnpm run cloud:seed` | Adds the sample data to the running AWS stack without wiping it. |
+| `pnpm run cloud:pause` | Stops RDS and removes what bills by the hour (NAT, load balancers, ElastiCache, services, DNS). Data stays; `cloud:deploy` brings it back. |
+| `pnpm run cloud:destroy` | Deletes everything, database included (asks you to type `destroy`). |
+
+`cloud:deploy` deploys the latest version tag (`git tag vX.Y.Z && git push origin vX.Y.Z` makes GitHub build its images). It builds nothing on your machine.
 
 Local URLs: customer http://localhost:5301, staff http://localhost:5302. Cloud URLs come from the Terraform `web` output (`shop.` and `staff.` on the configured domain).
 

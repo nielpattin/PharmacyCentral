@@ -1,19 +1,25 @@
 // One command to bring the AWS demo stack up. Usage:
-//   node tools/aws-deploy.mjs [--fresh] [--tag <imageTag>]
-// Default (stack already exists, or is paused): start RDS if stopped, push images when the tag is new, apply with
-// services on. --fresh (nothing deployed yet): apply infra without services, push images, run databases and migrations
-// on ECS, start the services, then load the demo data (tools/aws-seed.mjs). The tag defaults to staging-<git short SHA>.
+//   node tools/aws-deploy.mjs [--fresh] [--tag <imageTag>] [--build]
+// Images are built by GitHub Actions when a version tag is pushed (git tag vX.Y.Z), never on this machine. The tag
+// defaults to the latest version tag of this repository. --build is the escape hatch that builds and pushes the images
+// locally under the tag given with --tag.
+// Default (stack already exists, or is paused): start RDS if stopped, check the tag is in ECR, apply with services on.
+// --fresh (nothing deployed yet): apply infra without services, check the images, run databases and migrations on ECS,
+// start the services, then load the demo data (tools/aws-seed.mjs).
 import { execFileSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 const fresh = args.includes("--fresh");
 const tagIndex = args.indexOf("--tag");
-const git = () => execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
-// ECR tags are immutable and a tag already pushed is skipped, so uncommitted changes need a tag of their own, or the
-// old image would be deployed under the same commit name.
-const dirty = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim() !== "";
-const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 12);
-const tag = tagIndex >= 0 ? args[tagIndex + 1] : `staging-${git()}${dirty ? `-dirty-${stamp}` : ""}`;
+const build = args.includes("--build");
+const latestVersionTag = () => {
+  try {
+    return execFileSync("git", ["describe", "--tags", "--abbrev=0", "--match", "v*"], { encoding: "utf8" }).trim();
+  } catch {
+    throw new Error("No version tag found. Create one with: git tag vX.Y.Z && git push origin vX.Y.Z");
+  }
+};
+const tag = tagIndex >= 0 ? args[tagIndex + 1] : latestVersionTag();
 
 const aws = ["--profile", "pharmacy", "--region", "us-east-1"];
 const awsEnv = {
@@ -78,6 +84,15 @@ const tagPushed = () => {
   }
 };
 
+const ensureImages = () => {
+  if (tagPushed()) return console.log(`tag ${tag} is in ECR`);
+  if (build) return node("tools/aws-push-images.mjs", tag);
+  throw new Error(
+    `Tag ${tag} is not in ECR. GitHub builds it when the tag is pushed: check "gh run list --workflow release.yml", ` +
+      `or rerun the release run of ${tag} if ECR was recreated. --build --tag <name> builds on this machine instead.`,
+  );
+};
+
 console.log(`image tag: ${tag}${fresh ? " (fresh deploy)" : ""}`);
 
 step("1/5 Service settings");
@@ -86,8 +101,8 @@ node("tools/aws-env.mjs", tag);
 if (fresh) {
   step("2/5 Infrastructure (RDS takes ~15 minutes)");
   apply(false);
-  step("3/5 Push images");
-  node("tools/aws-push-images.mjs", tag);
+  step("3/5 Images");
+  ensureImages();
   step("4/5 Databases, migrations and seeds");
   node("tools/aws-migrate.mjs");
 } else {
@@ -105,9 +120,8 @@ if (fresh) {
   } else {
     console.log("RDS already running");
   }
-  step("3/5 Push images");
-  if (tagPushed()) console.log(`tag ${tag} is already in ECR, skipping`);
-  else node("tools/aws-push-images.mjs", tag);
+  step("3/5 Images");
+  ensureImages();
   step("4/5 Migrations");
   console.log("skipped (use --fresh for a new stack)");
 }

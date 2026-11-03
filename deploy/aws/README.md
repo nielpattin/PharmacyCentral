@@ -37,7 +37,7 @@ Security groups: the VPC Link reaches only the internal ALB; the internal ALB ac
 
 ## Images and secrets
 
-- `registry.tf` creates one ECR repository per service plus `ops`, with immutable tags. A tag can never be pushed twice, so every build needs a new tag; use `staging-<git short SHA>`.
+- `registry.tf` creates one ECR repository per service plus `ops`, with immutable tags. A tag can never be pushed twice. GitHub Actions builds and pushes the images when a version tag is pushed (`git tag vX.Y.Z && git push origin vX.Y.Z`), and `cloud:deploy` deploys the latest version tag without building anything on this machine.
 - `node tools/aws-push-images.mjs <tag>` builds the backend images for `linux/amd64` and the `ops` image, then pushes them. Set the same tag with `-var image_tag=<tag>`.
 - `node tools/aws-env.mjs [tag]` writes `demo.auto.tfvars.json` (git-ignored, holds secrets) from the root `.env`: service settings, map keys, delivery and SePay values.
 - Terraform generates the database, broker and internal secrets and stores them as SSM SecureString parameters. `ACCESS_TOKEN_PRIVATE_KEY`, `ACCESS_TOKEN_PUBLIC_JWK` and `ACCESS_TOKEN_KEY_ID` (the identity-service signing key) travel the same way through `demo.auto.tfvars.json`: run `pnpm run auth:keygen` once, put the three lines it prints in the root `.env`, then run `node tools/aws-env.mjs`. Every other service except search-service gets `IDENTITY_JWKS_URL` from Terraform and fetches the public key from identity-service. Task definitions read them as ECS secrets; the execution role is limited to those ARNs.
