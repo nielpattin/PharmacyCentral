@@ -79,6 +79,16 @@ describe("sidebar sections by role", () => {
       "importLocations",
       "importSuppliers",
       "importStock",
+      // The period analytics are business figures, and action plans are the pharmacy's daily work: neither is the
+      // administrator's.
+      "analytics",
+      "actionPlans",
+      // Money and reports are the Pharmacy Manager's too.
+      "finance",
+      "reporting",
+      // Orders and prescriptions hold customers' personal and health data.
+      "orders",
+      "prescriptions",
     ];
     for (const section of allSections) {
       expect(canAccessSection(section, ["Platform Admin"]), section).toBe(!closed.includes(section));

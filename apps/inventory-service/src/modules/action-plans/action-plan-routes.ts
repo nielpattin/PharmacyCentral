@@ -62,7 +62,7 @@ const sendInvalid = (response: Response, detail = INVALID_DETAIL) =>
   sendProblem(response, { title: "Invalid action plan request", status: 400, code: "invalid_request", detail });
 
 /**
- * The sites a list may name. A manager reads her sites (none when unassigned); Platform Admin and a service read
+ * The sites a list may name. A manager reads her sites (none when unassigned); a service reads
  * everything. A site named in the query narrows that scope, and one outside it lists nothing. An owner reads only the
  * site they asked for, so a plan with no site stays visible to the owner while the site list does not hide it.
  */
@@ -87,7 +87,7 @@ export const createActionPlanRouter = (
 ): Router => {
   const router = Router();
 
-  // Managers and Platform Admin see the plans of their sites; everyone else sees only the plans they own.
+  // Managers see the plans of their sites; everyone else sees only the plans they own.
   router.get("/inventory/action-plans", async (request, response, next) => {
     if (!repository) return sendProblem(response, DATABASE_UNAVAILABLE);
     const actor: PlanActor = {

@@ -10,8 +10,8 @@ Date: 2026-10-30
 
 ## Decision
 
-- Platform Admin manages and views only what no other staff role touches. It writes: users, roles and site access (`/api/admin`), audit, AI integrations, the System page, creating and deleting sites, and giving an action plan to another owner.
-- Platform Admin reads every staff route (GET, HEAD, OPTIONS) and has no site limit, so it can see the whole operation.
+- Platform Admin manages and views only what no other staff role touches. It writes: users, roles and site access (`/api/admin`), audit, AI integrations, the System page and creating and deleting sites.
+- Platform Admin reads every staff route (GET, HEAD, OPTIONS) and has no site limit, so it can see the whole operation. The exceptions are the period analytics and sales targets (`/dashboard/analytics`, `/dashboard/sales-targets`), which are business figures for the Pharmacy Manager, the action plans (`/inventory/action-plans`), which are the pharmacy's daily work, finance, reports and the payment register (`/finance`, `/reports`, `/payments`), which are money, and orders, prescriptions and counter transactions (`/orders`, `/prescriptions`, `/counter-transactions`), which hold customers' personal and health data: the administrator is refused them in both the screen and the API, and cannot own a plan.
 - Every other write is refused to Platform Admin with `role_forbidden`. The rule is an allow-list: a write passes when its role rule names Platform Admin, or when no staff route covers the path (sign-out, password change, the shopper surface). The exclusion list `platformAdminExcludedRoutes` is removed.
 - An account that holds Platform Admin and another role keeps the rights of the other role.
 - Editing an existing site, importing data, refunding an online order, and approving or editing search synonyms belong to the Pharmacy Manager, and the Pharmacist for synonyms. Changing the status of an action plan belongs to its owner.

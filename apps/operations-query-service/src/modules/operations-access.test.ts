@@ -3,14 +3,17 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { dashboardActionFamilies } from "./operations-access.ts";
 import { createOperationsRouter } from "./operations-routes.ts";
 import type { OperationsRepository } from "./operations-repository.ts";
 
 describe("dashboard and reports role gates", () => {
   const reads: string[] = [];
+  const dashboardOptions: unknown[] = [];
   const repository = {
-    dashboard: () => {
+    dashboard: (_identity: unknown, _siteIds: unknown, options: unknown) => {
       reads.push("dashboard");
+      dashboardOptions.push(options);
       return Promise.resolve({});
     },
     report: () => {
@@ -41,6 +44,7 @@ describe("dashboard and reports role gates", () => {
 
   beforeEach(() => {
     reads.length = 0;
+    dashboardOptions.length = 0;
   });
 
   const get = (path: string, roles: string | undefined, actorType = "employee") =>
@@ -56,6 +60,17 @@ describe("dashboard and reports role gates", () => {
       const response = await get(path, role);
       expect(response.status).toBe(200);
       expect(reads).toStrictEqual(["dashboard"]);
+    });
+
+    it("hands the repository the action families the caller's roles may read", async () => {
+      await get(path, "Warehouse Staff");
+      await get(path, "Pharmacy Manager");
+      await get(path, "Platform Admin,Warehouse Staff");
+      expect(dashboardOptions).toStrictEqual([
+        { actionFamilies: ["inventory", "procurement"] },
+        { actionFamilies: undefined },
+        { actionFamilies: undefined },
+      ]);
     });
 
     it("refuses a Pharmacist before reading anything", async () => {
@@ -79,17 +94,39 @@ describe("dashboard and reports role gates", () => {
   });
 
   describe("GET /reports", () => {
-    it.each(["Platform Admin", "Pharmacy Manager"])("answers %s", async (role) => {
-      const response = await get("/reports", role);
+    it("answers Pharmacy Manager", async () => {
+      const response = await get("/reports", "Pharmacy Manager");
       expect(response.status).toBe(200);
       expect(reads).toStrictEqual(["report"]);
     });
 
-    it.each(["Warehouse Staff", "Pharmacist"])("refuses %s before reading anything", async (role) => {
+    it.each(["Platform Admin", "Warehouse Staff", "Pharmacist"])("refuses %s before reading anything", async (role) => {
       const response = await get("/reports", role);
       expect(response.status).toBe(403);
       expect(await response.json()).toMatchObject({ code: "role_forbidden" });
       expect(reads).toStrictEqual([]);
     });
+  });
+});
+
+describe("dashboard recent-activity families", () => {
+  it("lets Platform Admin and Pharmacy Manager read every family", () => {
+    expect(dashboardActionFamilies(["Platform Admin"])).toBeUndefined();
+    expect(dashboardActionFamilies(["Pharmacy Manager"])).toBeUndefined();
+  });
+
+  it("limits Warehouse Staff to the stock and purchasing families", () => {
+    expect(dashboardActionFamilies(["Warehouse Staff"])).toStrictEqual(["inventory", "procurement"]);
+  });
+
+  it("gives an account with several roles what its widest role may read", () => {
+    expect(dashboardActionFamilies(["Warehouse Staff", "Pharmacy Manager"])).toBeUndefined();
+    expect(dashboardActionFamilies(["Warehouse Staff", "Platform Admin"])).toBeUndefined();
+    expect(dashboardActionFamilies(["Warehouse Staff", "Pharmacist"])).toStrictEqual(["inventory", "procurement"]);
+  });
+
+  it("gives a role set with no dashboard role nothing", () => {
+    expect(dashboardActionFamilies(["Pharmacist"])).toStrictEqual([]);
+    expect(dashboardActionFamilies([])).toStrictEqual([]);
   });
 });

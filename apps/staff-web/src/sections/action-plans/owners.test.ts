@@ -10,9 +10,9 @@ const employees: StaffEmployee[] = [
 ];
 
 describe("canReadStaffDirectory", () => {
-  it("opens the directory to a Pharmacy Manager and Platform Admin only", () => {
+  it("opens the directory to a Pharmacy Manager only", () => {
     expect(canReadStaffDirectory({ roles: ["Pharmacy Manager"] })).toBe(true);
-    expect(canReadStaffDirectory({ roles: ["Platform Admin"] })).toBe(true);
+    expect(canReadStaffDirectory({ roles: ["Platform Admin"] })).toBe(false);
     expect(canReadStaffDirectory({ roles: ["Pharmacist"] })).toBe(false);
     expect(canReadStaffDirectory({ roles: ["Warehouse Staff"] })).toBe(false);
     expect(canReadStaffDirectory({})).toBe(false);
@@ -20,11 +20,8 @@ describe("canReadStaffDirectory", () => {
 });
 
 describe("ownerOptionsFor", () => {
-  it("offers the employees at the plan's site, and a Platform Admin, sorted by name", () => {
-    expect(ownerOptionsFor(employees, "site-1")).toEqual([
-      { value: "admin", label: "Quản trị" },
-      { value: "user-b", label: "Trần Thị B" },
-    ]);
+  it("offers the employees at the plan's site sorted by name, and never a Platform Admin, who holds no site", () => {
+    expect(ownerOptionsFor(employees, "site-1")).toEqual([{ value: "user-b", label: "Trần Thị B" }]);
   });
 
   it("offers every employee for a plan with no site", () => {

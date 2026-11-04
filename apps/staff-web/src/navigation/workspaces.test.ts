@@ -31,12 +31,11 @@ describe("workspace navigation", () => {
     [
       "Platform Admin",
       [
-        "Overview",
-        "Action plans",
-        "Pharmacy counter",
+        // Analytics is the manager's, so the administrator's Overview holds the Dashboard alone and flattens to it. Action
+        // plans, the Pharmacy counter and Finance are the pharmacy's work and money, so the administrator has none.
+        "Dashboard",
         "Inventory",
         "Purchasing",
-        "Finance",
         "Catalog",
         "Administration",
       ],

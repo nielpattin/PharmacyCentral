@@ -269,7 +269,7 @@ describe("sales trusted request middleware", () => {
     expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
   });
 
-  it("lets Platform Admin read the order register and refuses it every order or counter write", async () => {
+  it("refuses Platform Admin the order register, the prescription register and every order or counter write", async () => {
     const { server, url } = await startServer(createApp());
     activeServer = server;
 
@@ -282,8 +282,12 @@ describe("sales trusted request middleware", () => {
     });
     expect(transition.status).toBe(403);
     expect(await transition.json()).toMatchObject({ code: "role_forbidden" });
-    const read = await fetch(`${url}/orders`, { headers });
-    expect(read.status).not.toBe(403);
+    // Orders and prescriptions hold customers' names, phones, addresses and medicines: not the administrator's to read.
+    for (const path of ["/orders", "/prescriptions", "/counter-transactions"]) {
+      const read = await fetch(`${url}${path}`, { headers });
+      expect(read.status, path).toBe(403);
+      expect(await read.json()).toMatchObject({ code: "role_forbidden" });
+    }
   });
 
   it("refuses Platform Admin a counter write, which only a Pharmacist may make", async () => {

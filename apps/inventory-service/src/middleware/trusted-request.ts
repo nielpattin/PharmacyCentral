@@ -187,7 +187,11 @@ export const ACTOR_ROLES_HEADER = "x-actor-roles";
 
 // Role rules for the routes of this service. Methods: "*", "READ", "WRITE" or a name.
 type Route = { methods: readonly string[]; path: string; exact?: boolean };
-type RoleRule = Route & { roles: readonly string[] };
+type RoleRule = Route & {
+  roles: readonly string[];
+  /** Platform Admin reads every route unless the rule says it does not: action plans are the working roles' alone. */
+  adminMayRead?: false;
+};
 
 const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/procurement/purchase-orders", roles: ["Pharmacy Manager", "Warehouse Staff"] },
@@ -205,15 +209,21 @@ const ROLE_RULES: readonly RoleRule[] = [
     roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
   },
   { methods: ["WRITE"], path: "/inventory/replenishment", roles: ["Warehouse Staff"] },
-  // Action plans (design 0007): the owner, a manager, or Warehouse Staff reads or moves a plan; Platform Admin and a
-  // manager may reassign it. Which plans a caller sees, and which fields a caller may change, is checked by the route.
-  { methods: ["READ"], path: "/inventory/action-plans", roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"] },
+  // Action plans (design 0007): the owner, a manager, or Warehouse Staff reads or moves a plan; a manager may reassign
+  // it. Platform Admin has no part in them: they are the pharmacy's daily work. Which plans a caller sees, and which
+  // fields a caller may change, is checked by the route.
+  {
+    methods: ["READ"],
+    path: "/inventory/action-plans",
+    roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
+    adminMayRead: false,
+  },
   { methods: ["POST"], path: "/inventory/action-plans", exact: true, roles: ["Pharmacy Manager"] },
   {
     methods: ["PATCH"],
     path: "/inventory/action-plans/*",
     exact: true,
-    roles: ["Platform Admin", "Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
+    roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"],
   },
   { methods: ["READ"], path: "/inventory/batches", roles: ["Pharmacist", "Pharmacy Manager", "Warehouse Staff"] },
   { methods: ["POST"], path: "/inventory/batches/*/quality", exact: true, roles: ["Pharmacist", "Pharmacy Manager"] },
@@ -281,7 +291,7 @@ const roleRefusal = (path: string, method: string, roles: readonly string[]): st
   if (rule.roles.some((role) => roles.includes(role))) return undefined;
   const upper = method.toUpperCase();
   const isRead = upper === "GET" || upper === "HEAD";
-  return roles.includes("Platform Admin") && isRead ? undefined : ROLE_FORBIDDEN_DETAIL;
+  return roles.includes("Platform Admin") && isRead && rule.adminMayRead !== false ? undefined : ROLE_FORBIDDEN_DETAIL;
 };
 
 /**

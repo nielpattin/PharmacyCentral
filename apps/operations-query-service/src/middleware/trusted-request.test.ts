@@ -110,17 +110,25 @@ describe("trusted request role restatement", () => {
     expect((await callAs(["Platform Admin"], "/audit/logs")).status).toBe(200);
   });
 
-  it("admits a Pharmacy Manager and Platform Admin to the analytics, and refuses Warehouse Staff", async () => {
+  it("admits only a Pharmacy Manager to the analytics: business figures are not the administrator's to read", async () => {
     expect((await callAs(["Pharmacy Manager"], "/dashboard/analytics")).status).toBe(200);
-    expect((await callAs(["Platform Admin"], "/dashboard/analytics")).status).toBe(200);
-    const refused = await callAs(["Warehouse Staff"], "/dashboard/analytics");
-    expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+    for (const role of ["Platform Admin", "Warehouse Staff"]) {
+      const refused = await callAs([role], "/dashboard/analytics");
+      expect(refused.status, role).toBe(403);
+      expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+    }
   });
 
-  it("keeps the targets report to a Pharmacy Manager and Platform Admin, out of Warehouse Staff's dashboard", async () => {
+  it("keeps finance and reports to a Pharmacy Manager: Platform Admin is refused them", async () => {
+    for (const path of ["/finance/summary", "/operations/finance", "/reports"]) {
+      expect((await callAs(["Pharmacy Manager"], path)).status, path).toBe(200);
+      expect((await callAs(["Platform Admin"], path)).status, path).toBe(403);
+    }
+  });
+
+  it("keeps the targets report to a Pharmacy Manager, out of Platform Admin and Warehouse Staff", async () => {
     expect((await callAs(["Pharmacy Manager"], "/dashboard/sales-targets")).status).toBe(200);
-    expect((await callAs(["Platform Admin"], "/dashboard/sales-targets")).status).toBe(200);
+    expect((await callAs(["Platform Admin"], "/dashboard/sales-targets")).status).toBe(403);
     expect((await callAs(["Warehouse Staff"], "/dashboard/sales-targets")).status).toBe(403);
   });
 });

@@ -5,7 +5,6 @@ import {
   type UpdateActionPlanRequest,
 } from "../../contracts/action-plans.ts";
 
-const PLATFORM_ADMIN = "Platform Admin";
 const PHARMACY_MANAGER = "Pharmacy Manager";
 
 /** Who is calling: the verified employee's id and roles, or a service acting for itself (no employee). */
@@ -82,26 +81,25 @@ export const planChanges = (
 export const changedPlanFields = (patch: UpdateActionPlanRequest): ActionPlanPatchField[] =>
   ACTION_PLAN_PATCH_FIELDS.filter((field) => patch[field] !== undefined);
 
-/** A Platform Admin or Pharmacy Manager, or a service acting for itself: may create plans and reassign them. */
-export const managesPlans = (actor: PlanActor): boolean =>
-  actor.system || actor.roles.includes(PLATFORM_ADMIN) || actor.roles.includes(PHARMACY_MANAGER);
+/** A Pharmacy Manager, or a service acting for itself: may create plans and reassign them. */
+export const managesPlans = (actor: PlanActor): boolean => actor.system || actor.roles.includes(PHARMACY_MANAGER);
 
 /**
- * Which plans a caller reads: every plan for Platform Admin and a service; the plans in the caller's sites for a
+ * Which plans a caller reads: every plan for a service; the plans in the caller's sites for a
  * Pharmacy Manager; the plans the caller owns for everyone else. Undefined when an employee without an id asks for
  * a personal list, which the route refuses.
  */
 export type PlanReadScope = { kind: "all" } | { kind: "sites" } | { kind: "owner"; ownerId: string };
 
 export const planReadScope = (actor: PlanActor): PlanReadScope | undefined => {
-  if (actor.system || actor.roles.includes(PLATFORM_ADMIN)) return { kind: "all" };
+  if (actor.system) return { kind: "all" };
   if (actor.roles.includes(PHARMACY_MANAGER)) return { kind: "sites" };
   return actor.id === undefined ? undefined : { kind: "owner", ownerId: actor.id };
 };
 
 /**
  * What the caller may change on one plan (BR-PLAN-001): `status` for the plan's owner moving their own plan, `reassign`
- * for a Pharmacy Manager or Platform Admin changing the owner, due date and title and no other field, `all` for a
+ * for a Pharmacy Manager changing the owner, due date and title and no other field, `all` for a
  * service acting for itself, `refuse` for everyone else and for any caller who names a field outside their right. The
  * status and detail belong to the owner and the system; a manager assigns, the owner works the plan.
  */
@@ -122,8 +120,6 @@ export const planPatchAccess = (
   return "refuse";
 };
 
-/**
- * An owner must hold the plan's site. A plan with no site needs no site, and a Platform Admin holds every site.
- */
+/** An owner must hold the plan's site. A plan with no site needs no site. */
 export const ownerCoversSite = (owner: PlanOwnerCandidate, siteId: string | null): boolean =>
-  siteId === null || owner.roles.includes(PLATFORM_ADMIN) || owner.siteIds.includes(siteId);
+  siteId === null || owner.siteIds.includes(siteId);

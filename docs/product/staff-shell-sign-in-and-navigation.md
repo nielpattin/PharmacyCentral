@@ -93,12 +93,12 @@ The workspace and page structure. The role table below is per section; a section
 
 | Workspace | Pages (sidebar) | Tabs inside the page | Roles |
 | --- | --- | --- | --- |
-| Overview | Dashboard, Analytics | — | Platform Admin, Pharmacy Manager, Warehouse Staff (Dashboard only) |
+| Overview | Dashboard, Analytics | — | Pharmacy Manager (both), Platform Admin and Warehouse Staff (Dashboard only) |
 | Action plans | Action plans | — | All four roles |
-| Pharmacy counter | Prescriptions, Online orders | Prescriptions / Counter transactions / Consultations | Platform Admin, Pharmacy Manager, Pharmacist |
+| Pharmacy counter | Prescriptions, Online orders | Prescriptions / Counter transactions / Consultations | Pharmacy Manager, Pharmacist |
 | Inventory | Inventory | Stock (Balances, Batches, Movements), Supply (Transfers, Replenishment, Returns), Control (Adjustments, Stocktake) | All four roles, tabs by role |
 | Purchasing | Purchasing | Purchase orders / Goods receipts / Reorder suggestions | Platform Admin, Pharmacy Manager, Warehouse Staff |
-| Finance | Finance | Summary / Invoices / Reports | Platform Admin, Pharmacy Manager |
+| Finance | Finance | Summary / Invoices / Reports | Pharmacy Manager |
 | Catalog | Products, Units, Pricing, Search synonyms, Sites, Storage locations, Suppliers | — | Platform Admin, Pharmacy Manager; Pharmacist only Search synonyms |
 | Administration (pinned) | Users & audit, AI integrations, System | Users / Audit | Platform Admin |
 
@@ -111,10 +111,10 @@ The target access for each role, per D1 to D4. Other staff specs link to this ta
 | Workspace | Section (`section`) | Platform Admin | Pharmacy Manager | Pharmacist | Warehouse Staff | Code differs |
 | --- | --- | --- | --- | --- | --- | --- |
 | Overview | Dashboard (`dashboard`) | Read | ✓ | — | ✓ | — |
-| Overview | Analytics (`analytics`) | Read | ✓ | — | — | — |
-| Action plans | Action plans (`actionPlans`) | ✓ | ✓ | ✓ | ✓ | — |
+| Overview | Analytics (`analytics`) | — | ✓ | — | — | — |
+| Action plans | Action plans (`actionPlans`) | — | ✓ | ✓ | ✓ | — |
 | Pharmacy counter | Pharmacist overview (`pharmacistOverview`) | — | — | ✓ | — | — |
-| Pharmacy counter | Prescriptions (`prescriptions`) | Read | Read | ✓ | — | — |
+| Pharmacy counter | Prescriptions (`prescriptions`) | — | Read | ✓ | — | — |
 | Pharmacy counter | Online orders (`orders`) | Read | ✓ (moves status) | ✓ (moves status) | — | G3, G4 |
 | Inventory | Transfers (`transfers`) | Read | — | — | ✓ (approver is not creator) | G5, G24 |
 | Inventory | Replenishment (`replenishment`) | Read | — | Request | ✓ (approve, fulfil) | G6, G24 |
@@ -144,7 +144,7 @@ The target access for each role, per D1 to D4. Other staff specs link to this ta
 | Administration | AI integrations (`aiIntegrations`) | ✓ | — | — | — | — |
 | Administration | System (`system`) | ✓ | — | — | — | — |
 
-- Platform Admin manages and views only what no other staff role touches (BR-AUTH-010). It opens every section except Pharmacist overview and the five imports, and reads them without a write control. It writes only users, roles and site access (Users), audit, AI integrations, System, creating and deleting a site, and giving an action plan to another owner. Every other write is refused with `role_forbidden`, and `canAccessSection` with `staffActions` shows the same to the page. An account that also holds another role keeps that role's rights.
+- Platform Admin manages and views only what no other staff role touches (BR-AUTH-010). It opens every section except Pharmacist overview, the five imports, Analytics, Action plans, Finance, Reports, Prescriptions and Online orders (business figures, money, daily pharmacy work and customers' personal and health data), and reads them without a write control. It writes only users, roles and site access (Users), audit, AI integrations, System and creating and deleting a site. Every other write is refused with `role_forbidden`, and `canAccessSection` with `staffActions` shows the same to the page. An account that also holds another role keeps that role's rights.
 - Users, Audit, AI integrations and System are Platform Admin only; Audit is read-only for everyone (D10).
 - The History tab on a record shows to whoever can see that record (D4); it is not a row here. Tabs inside Inventory and Finance follow these roles at tab level; see [inventory operations](staff-inventory-operations.md) and [finance](staff-finance.md).
 

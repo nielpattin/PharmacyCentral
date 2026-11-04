@@ -282,7 +282,7 @@ export const createSalesRouter = (repository: SalesRepository | undefined, optio
     const status = queryString(request.query.status);
     const { limit, q } = query.data;
     try {
-      // Staff see the orders of their assigned sites (Platform Admin: all), optionally narrowed to one site or payment
+      // Staff see the orders of their assigned sites, optionally narrowed to one site or payment
       // state. A shopper only reads their own orders.
       if (isStaffActor(request)) {
         const page = await repository.listOrders({

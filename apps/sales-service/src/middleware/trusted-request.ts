@@ -188,19 +188,23 @@ export const ACTOR_ROLES_HEADER = "x-actor-roles";
 // Role rules for the routes of this service.
 // Methods: "*", "READ" (GET, HEAD), "WRITE" (other methods) or a method name. A rule with no roles admits any employee.
 type Route = { methods: readonly string[]; path: string; exact?: boolean };
-type RoleRule = Route & { roles: readonly string[] };
+type RoleRule = Route & {
+  roles: readonly string[];
+  /** Platform Admin reads every route unless the rule says it does not: orders and prescriptions hold customers' data. */
+  adminMayRead?: false;
+};
 
 const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["POST"], path: "/prescriptions/consultations", exact: true, roles: [] },
   { methods: ["POST"], path: "/prescriptions/intake/qr", roles: [] },
   { methods: ["POST"], path: "/prescriptions/intake/image", roles: [] },
   { methods: ["*"], path: "/prescriptions/intake-credential", roles: ["Platform Admin"] },
-  { methods: ["READ"], path: "/orders", roles: ["Pharmacist", "Pharmacy Manager"] },
+  { methods: ["READ"], path: "/orders", roles: ["Pharmacist", "Pharmacy Manager"], adminMayRead: false },
   { methods: ["*"], path: "/orders/*/transition", exact: true, roles: ["Pharmacist", "Pharmacy Manager"] },
   { methods: ["WRITE"], path: "/sales-targets", roles: ["Pharmacy Manager"] },
-  { methods: ["READ"], path: "/prescriptions", roles: ["Pharmacist", "Pharmacy Manager"] },
+  { methods: ["READ"], path: "/prescriptions", roles: ["Pharmacist", "Pharmacy Manager"], adminMayRead: false },
   { methods: ["WRITE"], path: "/prescriptions", roles: ["Pharmacist"] },
-  { methods: ["READ"], path: "/counter-transactions", roles: ["Pharmacist", "Pharmacy Manager"] },
+  { methods: ["READ"], path: "/counter-transactions", roles: ["Pharmacist", "Pharmacy Manager"], adminMayRead: false },
   { methods: ["WRITE"], path: "/counter-transactions", roles: ["Pharmacist"] },
 ];
 
@@ -230,7 +234,7 @@ const roleRefusal = (path: string, method: string, roles: readonly string[]): st
   if (rule.roles.some((role) => roles.includes(role))) return undefined;
   const upper = method.toUpperCase();
   const isRead = upper === "GET" || upper === "HEAD";
-  return roles.includes("Platform Admin") && isRead ? undefined : ROLE_FORBIDDEN_DETAIL;
+  return roles.includes("Platform Admin") && isRead && rule.adminMayRead !== false ? undefined : ROLE_FORBIDDEN_DETAIL;
 };
 
 /**

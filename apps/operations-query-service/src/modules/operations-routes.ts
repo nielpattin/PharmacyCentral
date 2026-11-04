@@ -5,7 +5,14 @@ import { listSiteIds } from "../middleware/trusted-request.ts";
 import { callerAuthorization } from "./catalog-identity.ts";
 import { analyticsQuerySchema, salesTargetQuerySchema } from "./analytics.ts";
 import { AnalyticsCache } from "./analytics-cache.ts";
-import { ANALYTICS_ROLES, DASHBOARD_ROLES, REPORT_ROLES, roleRefusal } from "./operations-access.ts";
+import {
+  actorRoles,
+  ANALYTICS_ROLES,
+  DASHBOARD_ROLES,
+  dashboardActionFamilies,
+  REPORT_ROLES,
+  roleRefusal,
+} from "./operations-access.ts";
 import { decodePageCursor, encodePageCursor } from "./page-cursor.ts";
 import {
   AnalyticsReadError,
@@ -87,7 +94,11 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       return;
     }
     try {
-      response.json(await repository.dashboard(() => callerAuthorization(request), listSiteIds(request)));
+      response.json(
+        await repository.dashboard(() => callerAuthorization(request), listSiteIds(request), {
+          actionFamilies: dashboardActionFamilies(actorRoles(request)),
+        }),
+      );
     } catch (error) {
       next(error);
     }
@@ -169,7 +180,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
     const refusal = roleRefusal(
       request,
       ANALYTICS_ROLES,
-      "Phân tích kỳ chỉ dành cho Quản trị nền tảng và Quản lý dược.",
+      "Phân tích kỳ chỉ dành cho Quản lý dược.",
     );
     if (refusal) {
       response.status(refusal.status).json(refusal);
@@ -221,7 +232,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
     const refusal = roleRefusal(
       request,
       ANALYTICS_ROLES,
-      "Mục tiêu doanh số chỉ dành cho Quản trị nền tảng và Quản lý dược.",
+      "Mục tiêu doanh số chỉ dành cho Quản lý dược.",
     );
     if (refusal) {
       response.status(refusal.status).json(refusal);
@@ -262,7 +273,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       unavailable(response);
       return;
     }
-    const refusal = roleRefusal(request, REPORT_ROLES, "Báo cáo chỉ dành cho Quản trị nền tảng và Quản lý dược.");
+    const refusal = roleRefusal(request, REPORT_ROLES, "Báo cáo chỉ dành cho Quản lý dược.");
     if (refusal) {
       response.status(refusal.status).json(refusal);
       return;

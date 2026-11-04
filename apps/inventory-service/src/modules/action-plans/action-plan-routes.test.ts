@@ -176,7 +176,7 @@ describe("POST /inventory/action-plans", () => {
     expect(body).toMatchObject({ code: "owner_not_at_site" });
   });
 
-  it("lets the system create a plan with no site, refuses Platform Admin the creation, and lets an owner with the Platform Admin role hold any site", async () => {
+  it("lets the system create a plan with no site, and refuses Platform Admin the creation and the ownership of a plan", async () => {
     const withoutSite = await createPlan(
       { siteId: undefined, sourceType: "price_warning", sourceRef: "price_warning:p-admin" },
       actors.system,
@@ -186,8 +186,10 @@ describe("POST /inventory/action-plans", () => {
 
     expect((await createPlan({ sourceRef: "price_warning:p-admin-refused" }, actors.admin)).status).toBe(403);
 
+    // The administrator has no site and no part in the pharmacy's work, so it cannot own a plan either.
     const adminOwner = await createPlan({ ownerId: idOf(0x7) });
-    expect(adminOwner.status).toBe(201);
+    expect(adminOwner.status).toBeGreaterThanOrEqual(400);
+    expect(adminOwner.body).toMatchObject({ code: "owner_not_at_site" });
   });
 
   it("refuses a due date in the past or one the calendar does not have", async () => {
@@ -275,24 +277,18 @@ describe("PATCH /inventory/action-plans/:id", () => {
     });
   });
 
-  it("lets a manager and Platform Admin change the owner, due date and title together", async () => {
-    for (const actor of [actors.manager, actors.admin]) {
-      const { body: plan } = await createPlan({
-        sourceRef: `replenishment:${siteA}:${idOf(actor === actors.manager ? 0x10a : 0x10b)}`,
-      });
-      const response = await call("PATCH", `/inventory/action-plans/${plan.id}`, actor, {
-        title: "Đổi tên việc",
-        dueDate: LATER,
-        ownerId: actors.warehouse.id,
-      });
-      expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({
-        title: "Đổi tên việc",
-        dueDate: LATER,
-        ownerId: actors.warehouse.id,
-        status: "open",
-      });
-    }
+  it("lets a manager change the owner, due date and title together, and refuses Platform Admin", async () => {
+    const { body: plan } = await createPlan({ sourceRef: `replenishment:${siteA}:${idOf(0x10a)}` });
+    const reassign = { title: "Đổi tên việc", dueDate: LATER, ownerId: actors.warehouse.id };
+    expect((await call("PATCH", `/inventory/action-plans/${plan.id}`, actors.admin, reassign)).status).toBe(403);
+    const response = await call("PATCH", `/inventory/action-plans/${plan.id}`, actors.manager, reassign);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      title: "Đổi tên việc",
+      dueDate: LATER,
+      ownerId: actors.warehouse.id,
+      status: "open",
+    });
   });
 
   it("refuses a manager and Platform Admin the status and the detail, alone or with an allowed field", async () => {
@@ -307,7 +303,7 @@ describe("PATCH /inventory/action-plans/:id", () => {
         expect((await call("PATCH", `/inventory/action-plans/${plan.id}`, actor, body)).status).toBe(403);
       }
     }
-    const unchanged = await call("GET", `/inventory/action-plans`, actors.admin);
+    const unchanged = await call("GET", `/inventory/action-plans`, actors.system);
     const rows = (await unchanged.json()) as PlanBody[];
     expect(rows.find((row) => row.id === plan.id)).toMatchObject({ title: plan.title, status: "open" });
   });
@@ -402,9 +398,9 @@ describe("GET /inventory/action-plans", () => {
     expect(rows.map((row) => row.id)).not.toContain(sitelessPlan.body.id);
   });
 
-  it("shows a Platform Admin every plan, including the plans with no site", async () => {
+  it("shows the system every plan, including the plans with no site", async () => {
     const [, , , sitelessPlan] = seeded;
-    const { rows } = await list(actors.admin);
+    const { rows } = await list(actors.system);
     expect(rows.map((row) => row.id)).toContain(sitelessPlan.body.id);
     expect(rows.some((row) => row.siteId === siteB)).toBe(true);
   });
@@ -450,7 +446,7 @@ describe("GET /inventory/action-plans", () => {
     const byText = await list(actors.manager, "?q=hết%20hạn%20q");
     expect(byText.rows.map((row) => row.title)).toEqual(["Lô sắp hết hạn Q"]);
 
-    const bySite = await list(actors.admin, `?siteId=${siteB}`);
+    const bySite = await list(actors.system, `?siteId=${siteB}`);
     expect(bySite.rows.every((row) => row.siteId === siteB)).toBe(true);
   });
 
@@ -465,12 +461,12 @@ describe("GET /inventory/action-plans", () => {
   });
 
   it("pages newest first with X-Next-Cursor, and refuses a cursor it did not make", async () => {
-    const first = await list(actors.admin, "?limit=2");
+    const first = await list(actors.system, "?limit=2");
     expect(first.rows).toHaveLength(2);
     const next = first.headers.get("x-next-cursor");
     expect(next).toEqual(expect.any(String));
 
-    const second = await list(actors.admin, `?limit=2&cursor=${encodeURIComponent(next ?? "")}`);
+    const second = await list(actors.system, `?limit=2&cursor=${encodeURIComponent(next ?? "")}`);
     expect(second.rows).toHaveLength(2);
     expect(second.rows.map((row) => row.id)).not.toContain(first.rows[0]?.id);
     const lastOfFirst = first.rows[1];
@@ -479,10 +475,10 @@ describe("GET /inventory/action-plans", () => {
       lastOfFirst && firstOfSecond && Date.parse(lastOfFirst.createdAt) >= Date.parse(firstOfSecond.createdAt),
     ).toBe(true);
 
-    const allOnOnePage = await list(actors.admin, "?limit=500");
+    const allOnOnePage = await list(actors.system, "?limit=500");
     expect(allOnOnePage.headers.get("x-next-cursor")).toBeNull();
 
-    const bad = await call("GET", "/inventory/action-plans?cursor=not-a-cursor", actors.admin);
+    const bad = await call("GET", "/inventory/action-plans?cursor=not-a-cursor", actors.system);
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({ code: "invalid_cursor" });
   });

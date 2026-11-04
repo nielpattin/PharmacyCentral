@@ -182,17 +182,21 @@ export const ACTOR_ROLES_HEADER = "x-actor-roles";
 
 // Role rules for the routes of this service. Methods: "*", "READ", "WRITE" or a name.
 type Route = { methods: readonly string[]; path: string; exact?: boolean };
-type RoleRule = Route & { roles: readonly string[] };
+type RoleRule = Route & {
+  roles: readonly string[];
+  /** Platform Admin reads every route unless the rule says it does not: business figures are the manager's alone. */
+  adminMayRead?: false;
+};
 
 const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/operations/audit", roles: ["Platform Admin"] },
   { methods: ["*"], path: "/audit", roles: ["Platform Admin"] },
-  { methods: ["*"], path: "/operations/finance", roles: ["Pharmacy Manager"] },
-  { methods: ["*"], path: "/finance", roles: ["Pharmacy Manager"] },
-  { methods: ["*"], path: "/reports", roles: ["Pharmacy Manager"] },
+  { methods: ["*"], path: "/operations/finance", roles: ["Pharmacy Manager"], adminMayRead: false },
+  { methods: ["*"], path: "/finance", roles: ["Pharmacy Manager"], adminMayRead: false },
+  { methods: ["*"], path: "/reports", roles: ["Pharmacy Manager"], adminMayRead: false },
   { methods: ["*"], path: "/operations/dashboard", roles: ["Pharmacy Manager", "Warehouse Staff"] },
-  { methods: ["*"], path: "/dashboard/analytics", roles: ["Pharmacy Manager"] },
-  { methods: ["*"], path: "/dashboard/sales-targets", roles: ["Pharmacy Manager"] },
+  { methods: ["*"], path: "/dashboard/analytics", roles: ["Pharmacy Manager"], adminMayRead: false },
+  { methods: ["*"], path: "/dashboard/sales-targets", roles: ["Pharmacy Manager"], adminMayRead: false },
   { methods: ["*"], path: "/dashboard", roles: ["Pharmacy Manager", "Warehouse Staff"] },
 ];
 
@@ -222,7 +226,7 @@ const roleRefusal = (path: string, method: string, roles: readonly string[]): st
   if (rule.roles.some((role) => roles.includes(role))) return undefined;
   const upper = method.toUpperCase();
   const isRead = upper === "GET" || upper === "HEAD";
-  return roles.includes("Platform Admin") && isRead ? undefined : ROLE_FORBIDDEN_DETAIL;
+  return roles.includes("Platform Admin") && isRead && rule.adminMayRead !== false ? undefined : ROLE_FORBIDDEN_DETAIL;
 };
 
 /**

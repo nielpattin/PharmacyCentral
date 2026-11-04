@@ -27,7 +27,7 @@ const batchResponseSchema = z.object({
 
 /**
  * The name and phone of the shoppers behind a page of orders, read from identity-service. The caller decides who may
- * see them (Pharmacist, Pharmacy Manager, Platform Admin, at their sites); identity answers only the system actor.
+ * see them (Pharmacist, Pharmacy Manager, at their sites); identity answers only the system actor.
  * Ids that are not active customer accounts are absent from the result.
  */
 export const lookupCustomerContacts = async (

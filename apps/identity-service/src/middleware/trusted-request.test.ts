@@ -846,9 +846,11 @@ describe("trusted request role restatement", () => {
     expect((await callAs(["Pharmacy Manager"], "/customers/00000000-0000-4000-8000-000000000060")).status).toBe(403);
   });
 
-  it("lets a Pharmacy Manager and Platform Admin read the staff directory, and refuses other staff roles", async () => {
+  it("lets a Pharmacy Manager read the staff directory, and refuses Platform Admin and the other staff roles", async () => {
     expect((await callAs(["Pharmacy Manager"], "/auth/staff-directory")).status).toBe(200);
-    expect((await callAs(["Platform Admin"], "/auth/staff-directory")).status).toBe(200);
+    expect((await callAs(["Platform Admin"], "/auth/staff-directory")).status).toBe(403);
+    // Customer accounts are the counter's: the administrator manages staff accounts, not shoppers.
+    expect((await callAs(["Platform Admin"], "/customers/lookup")).status).toBe(403);
     const refused = await callAs(["Pharmacist"], "/auth/staff-directory");
     expect(refused.status).toBe(403);
     expect(await refused.json()).toMatchObject({ code: "role_forbidden" });

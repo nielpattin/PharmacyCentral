@@ -121,21 +121,21 @@ describe("changedPlanFields", () => {
 });
 
 describe("managesPlans", () => {
-  it("is true for a Pharmacy Manager, a Platform Admin and a service", () => {
+  it("is true for a Pharmacy Manager and a service", () => {
     expect(managesPlans(manager)).toBe(true);
-    expect(managesPlans(admin)).toBe(true);
     expect(managesPlans(service)).toBe(true);
   });
 
-  it("is false for every other employee", () => {
+  it("is false for every other employee, Platform Admin included", () => {
+    expect(managesPlans(admin)).toBe(false);
     expect(managesPlans(pharmacist)).toBe(false);
     expect(managesPlans(employee(ownerId, ["Warehouse Staff"]))).toBe(false);
   });
 });
 
 describe("planReadScope", () => {
-  it("reads every plan for a Platform Admin and a service", () => {
-    expect(planReadScope(admin)).toEqual({ kind: "all" });
+  it("reads every plan for a service, and only its own for Platform Admin", () => {
+    expect(planReadScope(admin)).toEqual({ kind: "owner", ownerId: otherId });
     expect(planReadScope(service)).toEqual({ kind: "all" });
   });
 
@@ -157,10 +157,10 @@ describe("planReadScope", () => {
 describe("planPatchAccess", () => {
   const plan = { ownerId };
 
-  it("lets a manager or Platform Admin change the owner, due date and title, and no other field", () => {
+  it("lets a manager change the owner, due date and title, and no other field, and refuses Platform Admin all of them", () => {
     for (const fields of [["ownerId"], ["title"], ["dueDate"], ["ownerId", "dueDate", "title"]] as const) {
       expect(planPatchAccess(manager, plan, fields)).toBe("reassign");
-      expect(planPatchAccess(admin, plan, fields)).toBe("reassign");
+      expect(planPatchAccess(admin, plan, fields)).toBe("refuse");
     }
     for (const fields of [["status"], ["detail"], ["ownerId", "status"], ["title", "detail"]] as const) {
       expect(planPatchAccess(manager, plan, fields)).toBe("refuse");
@@ -209,7 +209,7 @@ describe("ownerCoversSite", () => {
     expect(ownerCoversSite({ roles: ["Warehouse Staff"], siteIds: [] }, siteA)).toBe(false);
   });
 
-  it("accepts a Platform Admin at any site", () => {
-    expect(ownerCoversSite({ roles: ["Platform Admin"], siteIds: [] }, siteA)).toBe(true);
+  it("refuses a Platform Admin, who holds no site", () => {
+    expect(ownerCoversSite({ roles: ["Platform Admin"], siteIds: [] }, siteA)).toBe(false);
   });
 });

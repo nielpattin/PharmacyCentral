@@ -184,12 +184,16 @@ export const ACTOR_ROLES_HEADER = "x-actor-roles";
 
 // Methods: "*", "READ", "WRITE" or a name.
 type Route = { methods: readonly string[]; path: string; exact?: boolean };
-type RoleRule = Route & { roles: readonly string[] };
+type RoleRule = Route & {
+  roles: readonly string[];
+  /** Platform Admin reads every route unless the rule says it does not: customer accounts are the counter's alone. */
+  adminMayRead?: false;
+};
 
 const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/admin", roles: ["Platform Admin"] },
-  { methods: ["*"], path: "/customers", roles: ["Pharmacist"] },
-  { methods: ["GET"], path: "/auth/staff-directory", exact: true, roles: ["Pharmacy Manager", "Platform Admin"] },
+  { methods: ["*"], path: "/customers", roles: ["Pharmacist"], adminMayRead: false },
+  { methods: ["GET"], path: "/auth/staff-directory", exact: true, roles: ["Pharmacy Manager"], adminMayRead: false },
 ];
 
 const ROLE_FORBIDDEN_DETAIL = "Vai trò của tài khoản này không được thực hiện thao tác này.";
@@ -218,7 +222,7 @@ const roleRefusal = (path: string, method: string, roles: readonly string[]): st
   if (rule.roles.some((role) => roles.includes(role))) return undefined;
   const upper = method.toUpperCase();
   const isRead = upper === "GET" || upper === "HEAD";
-  return roles.includes("Platform Admin") && isRead ? undefined : ROLE_FORBIDDEN_DETAIL;
+  return roles.includes("Platform Admin") && isRead && rule.adminMayRead !== false ? undefined : ROLE_FORBIDDEN_DETAIL;
 };
 
 /**

@@ -150,13 +150,13 @@ describe("trusted request role restatement", () => {
     expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
   });
 
-  it("admits only a Pharmacy Manager to create an action plan, every staff role to read and move one, and Platform Admin to reassign", async () => {
+  it("admits only a Pharmacy Manager to create an action plan, every staff role to read and move one, and nobody else, Platform Admin included", async () => {
     const plans = "/inventory/action-plans";
     const planPath = `${plans}/00000000-0000-4000-8000-000000000060`;
     expect((await callAs(["Pharmacy Manager"], plans, "POST")).status).toBe(200);
     expect((await callAs(["Platform Admin"], plans, "POST")).status).toBe(403);
-    expect((await callAs(["Platform Admin"], plans, "GET")).status).toBe(200);
-    expect((await callAs(["Platform Admin"], planPath, "PATCH")).status).toBe(200);
+    expect((await callAs(["Platform Admin"], plans, "GET")).status).toBe(403);
+    expect((await callAs(["Platform Admin"], planPath, "PATCH")).status).toBe(403);
     const refused = await callAs(["Pharmacist"], plans, "POST");
     expect(refused.status).toBe(403);
     expect(await refused.json()).toMatchObject({ code: "role_forbidden" });

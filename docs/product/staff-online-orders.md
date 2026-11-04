@@ -14,7 +14,7 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[owner]` a recorded owner d
 
 ## Users and entry points
 
-- Pharmacist and Pharmacy Manager work the screen; Platform Admin reads it and moves nothing (BR-AUTH-010). Warehouse Staff do not see it and cannot open `/orders` (`sectionRoles` in `apps/staff-web/src/permissions/section-access.ts`, `[observed]`).
+- Pharmacist and Pharmacy Manager work the screen; Platform Admin has no part in it: customers' names, phones, addresses and medicines are not the administrator's to read, and `/orders` answers it `role_forbidden` (decision 2026-11-04). Warehouse Staff do not see it and cannot open `/orders` (`sectionRoles` in `apps/staff-web/src/permissions/section-access.ts`, `[observed]`).
 - Staff sign in with a password (D9). Each staff member sees only orders at their assigned sites (D3, `(gap G12)`).
 - Entry: the sidebar item **Online orders**, then the row action **View**. The open order is in the URL as `?order=<id>` (target, `(gap G14)`); today the drawer state is local and a reload closes it.
 
@@ -44,7 +44,7 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[owner]` a recorded owner d
   - The drawer shows the order's lines (product name, unit, quantity, unit price, line total, from the price taken when the order was placed) `(gap G10)`.
   - For a delivery: the delivery address, address note, distance, duration, fee and the route on a map. If the map cannot load (no WebGL), an unavailable message replaces it and the page does not fail `(gap G10)`.
   - For a pickup: the store to collect from, and no delivery block.
-  - The customer's name and phone number show to Pharmacist and Pharmacy Manager for orders at their assigned sites, and to Platform Admin for every order (Decision 14). Warehouse Staff see neither, and cannot open the screen anyway `(gap G11)`.
+  - The customer's name and phone number show to Pharmacist and Pharmacy Manager for orders at their assigned sites, and to nobody else (Decision 14). Warehouse Staff see neither, and cannot open the screen anyway `(gap G11)`.
   - Every time shows in Asia/Ho_Chi_Minh `(gap G16)`.
 
 ### US4. As a pharmacist, I move an order to its next state, so that the shopper gets it
@@ -74,7 +74,7 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[owner]` a recorded owner d
 - Accepted when:
   - Pharmacist and Pharmacy Manager see only orders whose store is one of their assigned sites; with no assigned site they see a message, not an empty list `(gap G12)`.
   - The store filter offers only the assigned sites `(gap G12)`.
-  - Platform Admin sees every store.
+  - Platform Admin sees none: the screen is closed to it.
   - Opening an order at another site returns 404.
 
 ### US7. As a staff member, I read an order's history, so that I know who changed it and when
@@ -112,7 +112,7 @@ Payment status (`paymentStatus`): `Pending` reads **Chờ thanh toán** (staff) 
 
 **Order drawer.** Title `#<code>`, subtitle **Đơn hàng online**, the status badge, and the actions above in its footer. Two tabs: **Details** (store, fulfillment, payment, total, placed, customer, lines, delivery) and **History** (US7). Details come from `GET /api/orders/{id}` when it opens `(gap G9)`; today it reuses the list row and shows five fields.
 
-**Customer.** Name and phone come from the customer account (identity-service), read on the server only for Pharmacist and Pharmacy Manager at their assigned sites, and for Platform Admin everywhere `(gap G11)`. The order stores no contact.
+**Customer.** Name and phone come from the customer account (identity-service), read on the server only for Pharmacist and Pharmacy Manager at their assigned sites, and for nobody else `(gap G11)`. The order stores no contact.
 
 **Real data.** Every row, figure, line and history entry comes from the server. A failed read shows the error, never zeros or sample rows `[observed]`.
 
@@ -158,10 +158,10 @@ Payment status (`paymentStatus`): `Pending` reads **Chờ thanh toán** (staff) 
 | 8 | When is COD cash recorded? | At handover. The Pharmacist records the cash with **Xác nhận đã thu tiền**, then completes the order. A COD order cannot complete while unpaid. `[standard]` | Cash reconciles at handover; the cash is taken in the handover step, which is a counter action (D2). Without it an unpaid COD order is swept after 24 hours (BR-ORD-009) (G8). |
 | 9 | Does a COD order need staff confirmation? | Yes: the Pharmacist presses **Xác nhận đơn** once the order can be filled. `[standard]` | The COD order is unpaid when placed, so staff are the only ones who accept it. |
 | 10 | What are the fulfillment paths? | Pickup: `Ready` → `Completed`. Delivery: `Ready` → `Delivering` → `Completed`. `[standard]` | `Delivering` means the goods left the store; a pickup cannot leave. Today the state machine allows both paths for either fulfillment (G3). |
-| 11 | Should staff see orders from every store? | No. Pharmacist and Pharmacy Manager see their assigned sites; Platform Admin sees all. `[standard]` | D3 and BR-AUTH-004. The screen still has no store filter (G12). |
+| 11 | Should staff see orders from every store? | No. Pharmacist and Pharmacy Manager see their assigned sites; Platform Admin sees none. `[standard]` | D3 and BR-AUTH-004. The screen still has no store filter (G12). |
 | 12 | Can staff read one order's detail? | Yes, for orders at their sites. The drawer reads it from the server. `[standard]` | Lines, address and fee come from the server (ADR 0004). Today the drawer does not read the detail route (G9). |
 | 13 | Who reads the History tab? | Every role that can open the order, from an entity-scoped history. The full audit log stays Platform Admin only. `[standard]` | D4. The tab calls the full audit log today, so Pharmacist and Pharmacy Manager get an error (G13). |
-| 14 | Who sees the customer's name and phone? | Pharmacist and Pharmacy Manager for orders at their assigned sites; Platform Admin for every order, since it has no site limit. Warehouse Staff do not see them. `[owner]` 2026-10-26 | Owner decision. Contact is needed to hand over and deliver orders at the sites where the staff member works. Staff outside the order's site see nothing (D3). The customer lookup in BR-USER-011 is a separate rule. |
+| 14 | Who sees the customer's name and phone? | Pharmacist and Pharmacy Manager for orders at their assigned sites; nobody else. Warehouse Staff do not see them. `[owner]` 2026-10-26 | Owner decision. Contact is needed to hand over and deliver orders at the sites where the staff member works. Staff outside the order's site see nothing (D3). The customer lookup in BR-USER-011 is a separate rule. |
 | 15 | Whose phone does the courier call? | The phone on the customer account. The order stores no separate recipient phone, and this page does not add one. If the account has none, the drawer shows **Chưa có số điện thoại**. `[standard]` | A recipient field at checkout would change the customer page, which this spec does not do. |
 | 16 | Can staff search by customer? | No, by order code only. `[standard]` | The contact lives in identity-service. Joining it into every row spreads personal data to all list users. |
 | 17 | Where does the open order live? | In the URL, `?order=<id>`, as the Prescriptions page does. `[standard]` | A reload or a shared link keeps the drawer open. Only the id is in the URL. Today it is local state (G14). |
@@ -182,7 +182,7 @@ Payment status (`paymentStatus`): `Pending` reads **Chờ thanh toán** (staff) 
 | G6 | Refund refused after `Delivering` or `Completed` | The drawer offers no refund after `Pending`..`Ready`, and `cancelRefunded` cancels `Ready` as well. The payment route still accepts any `Paid` invoice, because payment-service does not know the order status | `apps/sales-service/src/modules/orders/application/order-stock.ts`; `apps/payment-service/src/modules/payment-routes.ts` |
 | G9 | Staff read any order at their sites through `GET /api/orders/{id}`, and the drawer reads its details from the server | The route answers staff for an order at one of their sites and `404` otherwise. The drawer does not call it and shows the list row. The [API guide](../api-guide.md) names only the other-customer `404`: align it after the change | `apps/sales-service/src/modules/sales-routes.ts` (`GET /orders/:id`); `apps/staff-web/src/sections/orders-section.tsx`; `docs/api-guide.md` |
 | G10 | Lines, delivery address, note, distance, duration, fee, route map; unavailable message without WebGL | Drawer has five fields (Store, Fulfillment, Payment, Total, Placed). `getOrder` returns the delivery snapshot (`orderDeliverySnapshots`), but no screen reads it. staff-web has no map library | `apps/staff-web/src/sections/orders-section.tsx`; `apps/sales-service/src/modules/sales-repository.ts` (`getOrder`) |
-| G11 | Customer name and phone for Pharmacist and Pharmacy Manager at their sites, and for Platform Admin everywhere, read on the server | The server adds them for staff on `GET /api/orders` and `GET /api/orders/{id}` (`withCustomerContacts`), for the sites the caller may see. The screen shows neither name nor phone | `apps/sales-service/src/modules/sales-routes.ts` (`GET /orders`, `GET /orders/:id`); `apps/staff-web/src/sections/orders-section.tsx` |
+| G11 | Customer name and phone for Pharmacist and Pharmacy Manager at their sites, read on the server | The server adds them for staff on `GET /api/orders` and `GET /api/orders/{id}` (`withCustomerContacts`), for the sites the caller may see. The screen shows neither name nor phone | `apps/sales-service/src/modules/sales-routes.ts` (`GET /orders`, `GET /orders/:id`); `apps/staff-web/src/sections/orders-section.tsx` |
 | G12 | Staff see orders at their sites only; store filter limited to them; no site means no orders | The server scopes `/orders` to the caller's sites (`DEFAULT_SITE_SCOPED_PREFIXES`): a staff call with no site is refused, and `GET /orders/{id}` answers `404` for another site. The screen has no store filter and no message for an account with no site | `apps/sales-service/src/middleware/trusted-request.ts`; the `trusted-request.ts` of each service; `apps/staff-web/src/sections/orders-section.tsx` |
 | G13 | Entity-scoped history for everyone who can open the order; actor names | `SalesAuditHistory` calls `/api/audit/logs`, which is limited to Platform Admin, so other roles get an error. The actor column shows an id prefix | `apps/staff-web/src/sections/sales/shared.tsx` (`SalesAuditHistory`); the `trusted-request.ts` of each service |
 | G14 | Open order in the URL as `?order=<id>` | Local state (`openId`), lost on reload | `orders-section.tsx` |
