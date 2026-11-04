@@ -418,7 +418,7 @@ const StaffApp = (): React.JSX.Element => {
       case "system":
         return <SystemSection key={activeSection} />;
       case "dashboard":
-        return <DashboardSection key={activeSection} />;
+        return <DashboardSection key={activeSection} roles={roles} />;
       case "analytics":
         return <AnalyticsSection key={activeSection} />;
       case "actionPlans":

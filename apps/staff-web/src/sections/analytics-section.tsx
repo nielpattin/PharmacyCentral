@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { Alert, Input, Field, ToggleGroup, ToggleGroupItem } from "@pharmacy/ui";
+import { Alert, Card, Disclosure, Input, Field, ToggleGroup, ToggleGroupItem } from "@pharmacy/ui";
 
 import { RefreshButton, SubTabs } from "../components/forms.tsx";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
@@ -9,6 +9,7 @@ import { translateText } from "../i18n.ts";
 import { formatDateTime, readOne, text } from "../staff-api.ts";
 import type { AnalyticsChannel, AnalyticsResponse, SalesTargetsResponse } from "./analytics/contract.ts";
 import { CustomersTab } from "./analytics/customers-tab.tsx";
+import { headerSummary } from "./analytics/header-summary.ts";
 import { InventoryTab } from "./analytics/inventory-tab.tsx";
 import { OverviewTab } from "./analytics/overview-tab.tsx";
 import {
@@ -96,7 +97,14 @@ export const AnalyticsSection = (): React.JSX.Element => {
   const rangeError = periodRangeError(range);
   const bounds = rangeError === undefined ? periodBounds(range) : NO_BOUNDS;
 
-  const siteOptions = referenceOptions(references.sites, ["code", "name"]);
+  // Sales figures belong to the sites that sell, and stock to the sites that hold it. The headquarters does neither, so
+  // no tab offers it; the warehouse and the hub hold stock but take no sale, so only the inventory tab offers them.
+  const siteOptions = referenceOptions(
+    references.sites.filter((site) =>
+      tab === "inventory" ? site.siteType !== "Headquarters" : site.isCustomerFacing !== false,
+    ),
+    ["code", "name"],
+  );
   // A site the URL names that the staff member may not see is dropped. While the site list loads, the URL value is sent
   // and the server answers for it.
   const siteKnown = siteOptions.length === 0 || siteOptions.some((option) => option.value === list.values.site);
@@ -154,6 +162,12 @@ export const AnalyticsSection = (): React.JSX.Element => {
       ? ""
       : `${formatDayLabel(firstDayOf(data.previousPeriod.from), locale)} – ${formatDayLabel(lastDayBefore(data.previousPeriod.to), locale)}`;
 
+  const summary = headerSummary({
+    current: `${translateText("Current period")}: ${currentDays}`,
+    previous: previousDays ? `${translateText("Previous period")}: ${previousDays}` : "",
+    updated: data === undefined ? "" : `${translateText("Updated at")} ${formatDateTime(data.generatedAt)}`,
+  });
+
   const selectPeriod = (next: PeriodPreset): void => {
     if (next === "custom") {
       list.setValues({ period: next, from: range.fromDay, to: range.toDay }, { history: "push" });
@@ -183,89 +197,87 @@ export const AnalyticsSection = (): React.JSX.Element => {
 
       {section === undefined ? null : (
         <>
-          <p className="text-sm text-muted">
-            {translateText(
-              "Revenue, orders and stock health for the chosen period, site and channel. Revenue counts paid invoices.",
-            )}{" "}
-            {translateText("A dash (—) means the figure could not be answered, not zero.")}
-          </p>
-
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="grid gap-1.5">
-              <span className="text-sm font-medium text-ink">{translateText("Period")}</span>
-              <ToggleGroup<PeriodPreset>
-                aria-label={translateText("Period")}
-                value={period}
-                onValueChange={selectPeriod}
-              >
-                {(Object.keys(PERIOD_LABELS) as PeriodPreset[]).map((preset) => (
-                  <ToggleGroupItem key={preset} value={preset}>
-                    {translateText(PERIOD_LABELS[preset])}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
-            <SiteFilter
-              value={siteId}
-              options={siteOptions}
-              onChange={(next) => list.setValues({ site: next }, { history: "push" })}
-            />
-            <div className="grid gap-1.5">
-              <span className="text-sm font-medium text-ink">{translateText("Channel")}</span>
-              <ToggleGroup<AnalyticsChannel>
-                aria-label={translateText("Channel")}
-                value={channel}
-                onValueChange={(next) => list.setValues({ channel: next }, { history: "push" })}
-              >
-                {ANALYTICS_CHANNELS.map((item) => (
-                  <ToggleGroupItem key={item} value={item}>
-                    {translateText(CHANNEL_LABELS[item])}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
-            <RefreshButton onClick={refresh} />
-          </div>
-
-          {period === "custom" ? (
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="w-44">
-                <Field label={translateText("From")}>
-                  <Input
-                    type="date"
-                    value={list.values.from}
-                    onChange={(event) => list.setValues({ from: event.target.value }, { history: "replace" })}
-                  />
-                </Field>
+          <Card variant="soft" className="grid gap-4 p-4">
+            <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+              <div className="grid gap-1.5">
+                <span className="text-sm font-medium text-ink">{translateText("Period")}</span>
+                <ToggleGroup<PeriodPreset>
+                  aria-label={translateText("Period")}
+                  value={period}
+                  onValueChange={selectPeriod}
+                >
+                  {(Object.keys(PERIOD_LABELS) as PeriodPreset[]).map((preset) => (
+                    <ToggleGroupItem key={preset} value={preset}>
+                      {translateText(PERIOD_LABELS[preset])}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
               </div>
-              <div className="w-44">
-                <Field label={translateText("To")}>
-                  <Input
-                    type="date"
-                    value={list.values.to}
-                    onChange={(event) => list.setValues({ to: event.target.value }, { history: "replace" })}
-                  />
-                </Field>
+              <div className="flex flex-wrap items-end gap-3">
+                <SiteFilter
+                  value={siteId}
+                  options={siteOptions}
+                  onChange={(next) => list.setValues({ site: next }, { history: "push" })}
+                />
+                <div className="grid gap-1.5">
+                  <span className="text-sm font-medium text-ink">{translateText("Channel")}</span>
+                  <ToggleGroup<AnalyticsChannel>
+                    aria-label={translateText("Channel")}
+                    value={channel}
+                    onValueChange={(next) => list.setValues({ channel: next }, { history: "push" })}
+                  >
+                    {ANALYTICS_CHANNELS.map((item) => (
+                      <ToggleGroupItem key={item} value={item}>
+                        {translateText(CHANNEL_LABELS[item])}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </div>
+                <RefreshButton onClick={refresh} />
               </div>
             </div>
-          ) : null}
 
-          {rangeError ? <Alert variant="warning">{translateText(RANGE_MESSAGES[rangeError])}</Alert> : null}
+            {period === "custom" ? (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="w-44">
+                  <Field label={translateText("From")}>
+                    <Input
+                      type="date"
+                      value={list.values.from}
+                      onChange={(event) => list.setValues({ from: event.target.value }, { history: "replace" })}
+                    />
+                  </Field>
+                </div>
+                <div className="w-44">
+                  <Field label={translateText("To")}>
+                    <Input
+                      type="date"
+                      value={list.values.to}
+                      onChange={(event) => list.setValues({ to: event.target.value }, { history: "replace" })}
+                    />
+                  </Field>
+                </div>
+              </div>
+            ) : null}
 
-          {rangeError === undefined ? (
-            <p className="text-xs text-muted">
-              {translateText("Current period")}: {currentDays}
-              {previousDays ? ` · ${translateText("Previous period")}: ${previousDays}` : null}
-              {data === undefined ? null : (
-                <>
-                  {" · "}
-                  {translateText("Updated at")} {formatDateTime(data.generatedAt)}
-                </>
-              )}
-              {" · "}
+            {rangeError ? <Alert variant="warning">{translateText(RANGE_MESSAGES[rangeError])}</Alert> : null}
+
+            {rangeError === undefined ? <p className="text-sm text-muted tabular-nums">{summary}</p> : null}
+          </Card>
+
+          <Disclosure
+            className="-mt-3"
+            closedLabel={translateText("How to read these figures")}
+            openLabel={translateText("Hide the explanation")}
+          >
+            <p className="max-w-3xl px-2 text-sm text-muted">
+              {translateText(
+                "Revenue, orders and stock health for the chosen period, site and channel. Revenue counts paid invoices.",
+              )}{" "}
+              {translateText("A dash (—) means the figure could not be answered, not zero.")}{" "}
               {translateText("The figures may be up to 30 seconds old.")}
             </p>
-          ) : null}
+          </Disclosure>
         </>
       )}
 

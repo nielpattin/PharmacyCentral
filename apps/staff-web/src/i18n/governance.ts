@@ -449,4 +449,14 @@ export const governanceLiterals: Record<string, string> = {
   "Output (USD per 1M)": "Đầu ra (USD/1 triệu)",
   "Image (USD each)": "Ảnh (USD mỗi ảnh)",
   "Price updated": "Giá cập nhật lúc",
+  // Platform admin dashboard.
+  "Platform status": "Tình trạng nền tảng",
+  "Services healthy": "Dịch vụ hoạt động tốt",
+  "Active users": "Người dùng đang hoạt động",
+  deactivated: "đã vô hiệu hóa",
+  "Users without a role": "Người dùng chưa có vai trò",
+  "Failed sign-ins": "Đăng nhập thất bại",
+  "Failed sign-in": "Đăng nhập thất bại",
+  "Last 24 hours": "24 giờ qua",
+  "Recent audit activity": "Hoạt động kiểm toán gần đây",
 };

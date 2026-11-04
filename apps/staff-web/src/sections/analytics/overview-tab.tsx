@@ -1,56 +1,20 @@
-import { DataTable, Skeleton, StatTile } from "@pharmacy/ui";
+import { AreaTrend, Card, CardContent, CardHeader, CardTitle, DonutChart, Skeleton, StatTile } from "@pharmacy/ui";
 
-import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { translateText } from "../../i18n.ts";
+import { Change } from "../dashboard/shared.tsx";
 import { fillText } from "../procurement/bulk-summary.ts";
-import type { AnalyticsOverviewResponse, Figure, FigurePair, SalesChannel } from "./contract.ts";
-import { formatPercentChange, partialCoveragePercent, percentChange } from "./figures.ts";
-import { Heading, type FigureFormat } from "./shared.tsx";
+import type { AnalyticsOverviewResponse, Figure, SalesChannel } from "./contract.ts";
+import { partValue } from "./customers-split.ts";
+import { formatRate, isAnswered, partialCoveragePercent } from "./figures.ts";
+import { compactMoney, comparedSeries, formatDay, hasNoDays } from "./overview-series.ts";
+import { type FigureFormat } from "./shared.tsx";
 
 const SALES_CHANNELS: readonly SalesChannel[] = ["counter", "online"];
 const SALES_CHANNEL_LABELS: Record<SalesChannel, string> = { counter: "Counter", online: "Online" };
 
 type ChannelRow = { channel: SalesChannel; revenue: Figure; orderCount: Figure };
 
-const KpiTile = ({
-  label,
-  pair,
-  format,
-  locale,
-  note,
-  footnote,
-}: {
-  label: string;
-  pair: FigurePair | undefined;
-  format: (value: unknown) => string;
-  locale: string;
-  /** Replaces the comparison, for a figure that has none to show. */
-  note?: string | undefined;
-  /** Added under the comparison. */
-  footnote?: string | undefined;
-}): React.JSX.Element => (
-  <StatTile
-    label={translateText(label)}
-    value={format(pair?.current)}
-    hint={
-      note ? (
-        <span className="text-xs text-muted">{note}</span>
-      ) : (
-        <span className="grid gap-0.5">
-          <span>
-            {translateText("Previous period")}: {format(pair?.previous)}
-          </span>
-          <span>
-            {translateText("Change")}: {formatPercentChange(percentChange(pair?.current, pair?.previous), locale)}
-          </span>
-          {footnote ? <span className="text-muted">{footnote}</span> : null}
-        </span>
-      )
-    }
-  />
-);
-
-/** The period at a glance: the KPIs against the previous period, and the two channels side by side. */
+/** The period at a glance: the KPIs against the previous period, the days as lines, and the two channels as a ring. */
 export const OverviewTab = ({
   data,
   loading,
@@ -64,91 +28,144 @@ export const OverviewTab = ({
 }): React.JSX.Element => {
   const grossProfit = data?.kpis.grossProfit;
   const grossProfitCoverage = grossProfit?.available ? partialCoveragePercent(grossProfit.coverage?.current) : null;
+  const currency = data?.currency ?? "VND";
+  const days = data?.series ?? { current: [], previous: [] };
+  const periodLabels = { current: translateText("Current period"), previous: translateText("Previous period") };
+  const empty = translateText("No records found");
   // A missing channel or figure stays null ("—"); it is never filled with 0.
   const channelRows: ChannelRow[] = SALES_CHANNELS.map((channel) => {
     const row = data?.channels.find((item) => item.channel === channel);
     return { channel, revenue: row?.revenue ?? null, orderCount: row?.orderCount ?? null };
   });
+  const channelTotal = channelRows.reduce<number | null>(
+    (sum, row) => (sum === null || !isAnswered(row.revenue) ? null : sum + row.revenue),
+    0,
+  );
+
+  if (loading) {
+    return (
+      <div className="grid gap-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,1fr))]">
+          <Skeleton className="h-40 lg:row-span-2 lg:h-auto" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28 lg:col-span-2" />
+        </div>
+        <Skeleton className="h-72" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-64" />
+          <Skeleton className="h-64" />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="grid gap-6">
-      <section className="grid gap-2">
-        <Heading>Revenue and orders</Heading>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2.5">
-          {loading ? (
-            ["Revenue", "Orders", "Average order value", "Gross profit"].map((label) => (
-              <Skeleton key={label} className="h-[98px]" />
-            ))
-          ) : (
-            <>
-              <KpiTile label="Revenue" pair={data?.kpis.revenue} format={format.money} locale={locale} />
-              <KpiTile label="Orders" pair={data?.kpis.orderCount} format={format.count} locale={locale} />
-              <KpiTile
-                label="Average order value"
-                pair={data?.kpis.averageOrderValue}
-                format={format.money}
-                locale={locale}
-              />
-              <KpiTile
-                label="Gross profit"
-                pair={grossProfit}
-                format={format.money}
-                locale={locale}
-                {...(grossProfit && grossProfit.available === false
-                  ? {
-                      note: translateText(
-                        "No purchase cost is recorded for the sales of this period. Enter the unit cost on the goods receipt.",
-                      ),
-                    }
-                  : {})}
-                {...(grossProfitCoverage === null
-                  ? {}
-                  : {
-                      footnote: fillText(translateText("Based on {percent}% of revenue that has a recorded cost."), {
-                        percent: grossProfitCoverage,
-                      }),
-                    })}
-              />
-            </>
-          )}
-        </div>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Revenue by channel</Heading>
-        <DataTable<ChannelRow>
-          storageKey="staff:analytics:channels"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={channelRows}
-          getKey={(row) => row.channel}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "channel",
-              label: translateText("Channel"),
-              render: (row) => translateText(SALES_CHANNEL_LABELS[row.channel]),
-            },
-            {
-              key: "revenue",
-              label: translateText("Revenue"),
-              align: "right",
-              render: (row) => format.money(row.revenue),
-            },
-            {
-              key: "orderCount",
-              label: translateText("Orders"),
-              align: "right",
-              render: (row) => format.count(row.orderCount),
-            },
-          ]}
+    <div className="grid gap-4">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,1fr))]">
+        <StatTile
+          featured
+          className="lg:row-span-2"
+          label={translateText("Revenue")}
+          value={format.money(data?.kpis.revenue.current)}
+          hint={<Change pair={data?.kpis.revenue} format={format.money} locale={locale} />}
         />
-        <p className="text-xs text-muted">
-          {translateText(
-            "The channel filter does not apply to this table: both channels show for the chosen site and period.",
+        <StatTile
+          label={translateText("Orders")}
+          value={format.count(data?.kpis.orderCount.current)}
+          hint={<Change pair={data?.kpis.orderCount} format={format.count} locale={locale} />}
+        />
+        <StatTile
+          label={translateText("Average order value")}
+          value={format.money(data?.kpis.averageOrderValue.current)}
+          hint={<Change pair={data?.kpis.averageOrderValue} format={format.money} locale={locale} />}
+        />
+        <StatTile
+          className="lg:col-span-2"
+          label={translateText("Gross profit")}
+          value={format.money(grossProfit?.current)}
+          hint={
+            grossProfit && grossProfit.available === false ? (
+              translateText(
+                "No purchase cost is recorded for the sales of this period. Enter the unit cost on the goods receipt.",
+              )
+            ) : (
+              <span className="grid gap-0.5">
+                <Change pair={grossProfit} format={format.money} locale={locale} />
+                {grossProfitCoverage === null ? null : (
+                  <span>
+                    {fillText(translateText("Based on {percent}% of revenue that has a recorded cost."), {
+                      percent: grossProfitCoverage,
+                    })}
+                  </span>
+                )}
+              </span>
+            )
+          }
+        />
+      </div>
+
+      <Card variant="soft">
+        <CardHeader>
+          <CardTitle>{translateText("Revenue by day")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {hasNoDays(days) ? (
+            <p className="py-6 text-sm text-muted">{empty}</p>
+          ) : (
+            <AreaTrend
+              height={280}
+              series={comparedSeries(days, "revenue", periodLabels)}
+              formatValue={(value) => compactMoney(value, currency, locale)}
+              formatTime={(unixSeconds) => formatDay(unixSeconds, locale)}
+            />
           )}
-        </p>
-      </section>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card variant="soft">
+          <CardHeader>
+            <CardTitle>{translateText("Orders by day")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {hasNoDays(days) ? (
+              <p className="py-6 text-sm text-muted">{empty}</p>
+            ) : (
+              <AreaTrend
+                height={220}
+                series={comparedSeries(days, "orders", periodLabels)}
+                formatValue={(value) => format.count(value)}
+                formatTime={(unixSeconds) => formatDay(unixSeconds, locale)}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card variant="soft">
+          <CardHeader>
+            <CardTitle>{translateText("Revenue by channel")}</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <DonutChart
+              empty={empty}
+              formatShare={(fraction) => formatRate(fraction, locale)}
+              centre={{ label: translateText("Revenue"), value: format.money(channelTotal) }}
+              parts={channelRows.map((row) => ({
+                key: row.channel,
+                label: `${translateText(SALES_CHANNEL_LABELS[row.channel])} · ${translateText("Orders")}: ${format.count(row.orderCount)}`,
+                value: partValue(row.revenue),
+                display: format.money(row.revenue),
+              }))}
+            />
+            <p className="text-xs text-muted">
+              {translateText(
+                "The channel filter does not apply to this table: both channels show for the chosen site and period.",
+              )}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

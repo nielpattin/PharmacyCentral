@@ -1,19 +1,24 @@
-import { Badge, DataTable } from "@pharmacy/ui";
+import {
+  BarChartCompare,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  DataTable,
+  DonutChart,
+  Skeleton,
+  StatTile,
+} from "@pharmacy/ui";
 
 import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { translateText } from "../../i18n.ts";
 import { text } from "../../staff-api.ts";
-import type {
-  AbcRevenueRow,
-  AnalyticsRevenueResponse,
-  CategoryRevenueRow,
-  PrescriptionGroup,
-  PrescriptionRevenueRow,
-  ProductRevenueRow,
-  SalesSiteRow,
-} from "./contract.ts";
+import type { AnalyticsRevenueResponse, PrescriptionGroup, ProductRevenueRow } from "./contract.ts";
 import { formatRate } from "./figures.ts";
-import { Heading, type FigureFormat } from "./shared.tsx";
+import type { FigureFormat } from "./shared.tsx";
+import { compactMoney } from "./overview-series.ts";
+import { abcParts, categoryBars, chartData, prescriptionParts, productBars, siteBars } from "./revenue-bars.ts";
 
 const PRESCRIPTION_LABELS: Record<PrescriptionGroup, string> = {
   prescription: "Prescription medicine",
@@ -21,7 +26,40 @@ const PRESCRIPTION_LABELS: Record<PrescriptionGroup, string> = {
   unknown: "Unknown product type",
 };
 
-/** Where the period's revenue came from: sites, products, product groups and the prescription split. */
+/** One block of the report: a soft card with a title, the figure's note under it, and the content. */
+const ReportCard = ({
+  title,
+  note,
+  loading,
+  className,
+  children,
+}: {
+  title: string;
+  note?: string | undefined;
+  loading: boolean;
+  className?: string | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element => (
+  <Card variant="soft" className={className}>
+    <CardHeader>
+      <CardTitle>{translateText(title)}</CardTitle>
+      {note ? <CardDescription>{translateText(note)}</CardDescription> : null}
+    </CardHeader>
+    <CardContent className="px-5 pt-3 pb-5">
+      {loading ? (
+        <div className="grid gap-3" role="status" aria-busy="true">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-4/5" />
+          <Skeleton className="h-5 w-3/5" />
+        </div>
+      ) : (
+        children
+      )}
+    </CardContent>
+  </Card>
+);
+
+/** Where the period's revenue came from: goods revenue first, then the splits, then sites, groups and products. */
 export const RevenueTab = ({
   data,
   loading,
@@ -34,207 +72,132 @@ export const RevenueTab = ({
   format: FigureFormat;
 }): React.JSX.Element => {
   const breakdown = data?.breakdown;
-  const siteRows: SalesSiteRow[] = breakdown?.bySite ?? [];
-  const topProductRows: ProductRevenueRow[] = breakdown?.topProducts ?? [];
-  const categoryRows: CategoryRevenueRow[] = breakdown?.byCategory ?? [];
-  const prescriptionRows: PrescriptionRevenueRow[] = breakdown?.byPrescription ?? [];
-  const abcRows: AbcRevenueRow[] = breakdown?.abc ?? [];
+  const waiting = loading && !data;
+  const barFormat = { ...format, rate: (value: unknown) => formatRate(value, locale) };
+  const formatShare = (fraction: number): string => formatRate(fraction, locale);
+  const empty = translateText("No records found");
+  const revenueSeries = [{ label: translateText("Revenue"), tone: "chart-1" as const }];
+  const formatMoney = (value: number): string => compactMoney(value, data?.currency ?? "VND", locale);
+  const goodsCentre = { label: translateText("Revenue"), value: format.money(breakdown?.goodsRevenue) };
+
+  const sites = siteBars(breakdown?.bySite ?? [], barFormat, {
+    unknownSite: translateText("Unknown site"),
+    orders: translateText("Orders"),
+  });
+  const categories = categoryBars(breakdown?.byCategory ?? [], barFormat, {
+    uncategorized: translateText("Uncategorized"),
+    translate: translateText,
+  });
+  const topProducts = productBars(breakdown?.topProducts ?? [], barFormat);
+  const abc = abcParts(breakdown?.abc ?? [], format, {
+    classLabel: translateText("Class"),
+    products: translateText("Products"),
+  });
+  const prescription = prescriptionParts(breakdown?.byPrescription ?? [], format, {
+    prescription: translateText(PRESCRIPTION_LABELS.prescription),
+    otc: translateText(PRESCRIPTION_LABELS.otc),
+    unknown: translateText(PRESCRIPTION_LABELS.unknown),
+  });
 
   return (
-    <div className="grid gap-6">
-      <section className="grid gap-2">
-        <Heading>Revenue by site</Heading>
-        <DataTable<SalesSiteRow>
-          storageKey="staff:analytics:revenue-by-site"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={siteRows}
-          getKey={(row) => row.siteId ?? "unknown"}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "siteName",
-              label: translateText("Site"),
-              render: (row) => (row.siteName === null ? translateText("Unknown site") : text(row.siteName)),
-            },
-            {
-              key: "revenue",
-              label: translateText("Revenue"),
-              align: "right",
-              render: (row) => format.money(row.revenue),
-            },
-            {
-              key: "orderCount",
-              label: translateText("Orders"),
-              align: "right",
-              render: (row) => format.count(row.orderCount),
-            },
-            {
-              key: "averageOrderValue",
-              label: translateText("Average order value"),
-              align: "right",
-              render: (row) => format.money(row.averageOrderValue),
-            },
-          ]}
-        />
-        <p className="text-xs text-muted">
-          {translateText("Site revenue includes the delivery fee, so the rows add up to the revenue tile.")}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Top products</Heading>
-        <DataTable<ProductRevenueRow>
-          storageKey="staff:analytics:top-products"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={topProductRows}
-          getKey={(row) => row.productId}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "productName",
-              label: translateText("Product"),
-              truncate: 32,
-              render: (row) => text(row.productName),
-            },
-            {
-              key: "revenue",
-              label: translateText("Revenue"),
-              align: "right",
-              render: (row) => format.money(row.revenue),
-            },
-            {
-              key: "share",
-              label: translateText("Share"),
-              align: "right",
-              render: (row) => formatRate(row.share, locale),
-            },
-          ]}
-        />
-        <p className="text-xs text-muted">
-          {translateText("Goods revenue")}: {format.money(breakdown?.goodsRevenue)} ·{" "}
-          {translateText(
+    <div className="grid gap-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StatTile
+          featured
+          className="lg:col-span-2"
+          label={translateText("Goods revenue")}
+          value={format.money(breakdown?.goodsRevenue)}
+          hint={translateText(
             "Goods only: the delivery fee is not attributed to a product, so each share is of goods revenue.",
           )}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Revenue by product group</Heading>
-        <DataTable<CategoryRevenueRow>
-          storageKey="staff:analytics:product-groups"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={categoryRows}
-          getKey={(row) => row.category ?? "uncategorized"}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "category",
-              label: translateText("Category"),
-              render: (row) => (row.category === null ? translateText("Uncategorized") : text(row.category)),
-            },
-            {
-              key: "revenue",
-              label: translateText("Revenue"),
-              align: "right",
-              render: (row) => format.money(row.revenue),
-            },
-            {
-              key: "share",
-              label: translateText("Share"),
-              align: "right",
-              render: (row) => formatRate(row.share, locale),
-            },
-          ]}
         />
-        <p className="text-xs text-muted">
-          {translateText(
-            "Grouped by the category the catalog holds today, so a changed category also moves past sales.",
+        <ReportCard
+          title="Prescription and over the counter"
+          note="Counts goods revenue by the prescription flag the catalog holds today."
+          loading={waiting}
+        >
+          <DonutChart parts={prescription} empty={empty} formatShare={formatShare} centre={goodsCentre} height={180} />
+        </ReportCard>
+        <ReportCard
+          title="ABC classification"
+          note="A until 80% of goods revenue, B until 95%, C the rest. The product that crosses a cut-off stays in the class it completes."
+          loading={waiting}
+        >
+          <DonutChart parts={abc} empty={empty} formatShare={formatShare} centre={goodsCentre} height={180} />
+        </ReportCard>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReportCard
+          title="Revenue by site"
+          note="Site revenue includes the delivery fee, so the rows add up to the revenue tile."
+          loading={waiting}
+        >
+          {sites.length === 0 ? (
+            <p className="py-4 text-sm text-muted">{empty}</p>
+          ) : (
+            <BarChartCompare data={chartData(sites)} series={revenueSeries} formatValue={formatMoney} />
           )}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>Prescription and over the counter</Heading>
-        <DataTable<PrescriptionRevenueRow>
-          storageKey="staff:analytics:prescription-split"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={prescriptionRows}
-          getKey={(row) => row.group}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "group",
-              label: translateText("Product type"),
-              render: (row) => translateText(PRESCRIPTION_LABELS[row.group]),
-            },
-            {
-              key: "revenue",
-              label: translateText("Revenue"),
-              align: "right",
-              render: (row) => format.money(row.revenue),
-            },
-            {
-              key: "share",
-              label: translateText("Share"),
-              align: "right",
-              render: (row) => formatRate(row.share, locale),
-            },
-          ]}
-        />
-        <p className="text-xs text-muted">
-          {translateText("Counts goods revenue by the prescription flag the catalog holds today.")}
-        </p>
-      </section>
-
-      <section className="grid gap-2">
-        <Heading>ABC classification</Heading>
-        <DataTable<AbcRevenueRow>
-          storageKey="staff:analytics:abc"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={abcRows}
-          getKey={(row) => row.abcClass}
-          empty={translateText("No records found")}
-          columns={[
-            {
-              key: "abcClass",
-              label: translateText("Class"),
-              render: (row) => (
-                <Badge variant={row.abcClass === "A" ? "success" : row.abcClass === "B" ? "warning" : "secondary"}>
-                  {row.abcClass}
-                </Badge>
-              ),
-            },
-            {
-              key: "productCount",
-              label: translateText("Products"),
-              align: "right",
-              render: (row) => format.count(row.productCount),
-            },
-            {
-              key: "revenue",
-              label: translateText("Revenue"),
-              align: "right",
-              render: (row) => format.money(row.revenue),
-            },
-            {
-              key: "share",
-              label: translateText("Share"),
-              align: "right",
-              render: (row) => formatRate(row.share, locale),
-            },
-          ]}
-        />
-        <p className="text-xs text-muted">
-          {translateText(
-            "A until 80% of goods revenue, B until 95%, C the rest. The product that crosses a cut-off stays in the class it completes.",
+        </ReportCard>
+        <ReportCard
+          title="Revenue by product group"
+          note="Grouped by the category the catalog holds today, so a changed category also moves past sales."
+          loading={waiting}
+        >
+          {categories.length === 0 ? (
+            <p className="py-4 text-sm text-muted">{empty}</p>
+          ) : (
+            <BarChartCompare
+              data={chartData(categories)}
+              series={revenueSeries}
+              formatValue={formatMoney}
+              layout="horizontal"
+            />
           )}
-        </p>
-      </section>
+        </ReportCard>
+      </div>
+
+      <ReportCard title="Top products" loading={waiting}>
+        <div className="grid gap-6">
+          {topProducts.length === 0 ? null : (
+            <BarChartCompare
+              data={chartData(topProducts)}
+              series={revenueSeries}
+              formatValue={formatMoney}
+              layout="horizontal"
+              height={320}
+            />
+          )}
+          <DataTable<ProductRevenueRow>
+            storageKey="staff:analytics:top-products"
+            labels={dataTableLabels()}
+            loading={loading}
+            rows={breakdown?.topProducts ?? []}
+            getKey={(row) => row.productId}
+            empty={empty}
+            columns={[
+              {
+                key: "productName",
+                label: translateText("Product"),
+                truncate: 32,
+                render: (row) => text(row.productName),
+              },
+              {
+                key: "revenue",
+                label: translateText("Revenue"),
+                align: "right",
+                render: (row) => format.money(row.revenue),
+              },
+              {
+                key: "share",
+                label: translateText("Share"),
+                align: "right",
+                render: (row) => formatRate(row.share, locale),
+              },
+            ]}
+          />
+        </div>
+      </ReportCard>
     </div>
   );
 };

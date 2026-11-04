@@ -5,8 +5,20 @@ export {
   type AccessGrant,
   type AccessTokenStore,
 } from "./access-token.ts";
+export {
+  ActivityFeed,
+  type ActivityFeedGroup,
+  type ActivityFeedItem,
+  type ActivityFeedProps,
+} from "./components/activity-feed.tsx";
 export { Alert } from "./components/alert.tsx";
 export { AreaTrend } from "./components/area-trend.tsx";
+export type { AreaTrendProps } from "./components/area-trend.tsx";
+export type { TrendSeries } from "./charts/trend-rows.ts";
+export { BarChartCompare, type BarChartCompareProps, type BarChartCompareSeries } from "./components/bar-chart.tsx";
+export type { CompareDatum } from "./charts/compare-rows.ts";
+export { BarList, type BarListItem, type BarListProps } from "./components/bar-list.tsx";
+export { DonutChart, type DonutChartProps, type DonutPart } from "./components/donut-chart.tsx";
 export { Badge, type BadgeProps } from "./components/badge.tsx";
 export { Button } from "./components/button.tsx";
 export {
@@ -15,7 +27,7 @@ export {
   type BreadcrumbLinkProps,
   type BreadcrumbProps,
 } from "./components/breadcrumb.tsx";
-export { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/card.tsx";
+export { Card, CardContent, CardDescription, CardHeader, CardTitle, type CardProps } from "./components/card.tsx";
 export {
   DataTable,
   type DataColumn,
@@ -43,6 +55,7 @@ export { Input } from "./components/input.tsx";
 export { PageHeader, type PageHeaderProps } from "./components/page-header.tsx";
 export { RowActions, type RowActionsProps } from "./components/row-actions.tsx";
 export { Select } from "./components/select.tsx";
+export { ShareBar, type ShareBarProps, type SharePart } from "./components/share-bar.tsx";
 export { Sheet } from "./components/sheet.tsx";
 export { Skeleton } from "./components/skeleton.tsx";
 export { StatTile, type StatTileProps } from "./components/stat-tile.tsx";

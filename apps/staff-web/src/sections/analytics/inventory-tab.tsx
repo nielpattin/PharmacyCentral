@@ -1,6 +1,17 @@
 import { useState } from "react";
 
-import { Button, DataTable, type DataColumn, Skeleton, StatTile } from "@pharmacy/ui";
+import {
+  BarChartCompare,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  DataTable,
+  type DataColumn,
+  Skeleton,
+  StatTile,
+} from "@pharmacy/ui";
 
 import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { useRetainedTarget } from "../../hooks/useRetainedTarget.ts";
@@ -10,7 +21,9 @@ import { useCan } from "../../permissions/use-can.ts";
 import { CreatePlanDrawer } from "../action-plans/create-plan-drawer.tsx";
 import { deadStockDraft, type ActionPlanDraft } from "../action-plans/drafts.ts";
 import type { AnalyticsInventoryResponse, DeadStockItem, ExpiryBucket, InventoryHealth } from "./contract.ts";
-import { formatRate } from "./figures.ts";
+import { formatRate, isAnswered } from "./figures.ts";
+import { compactNumber, expiryChartRows, siteStockChartRows } from "./inventory-chart.ts";
+import { rankByValue } from "./inventory-rows.ts";
 import { Heading, type FigureFormat } from "./shared.tsx";
 
 type ExpiryKey = keyof InventoryHealth["expiry"];
@@ -51,7 +64,7 @@ export const InventoryTab = ({
     label: group.label,
     bucket: inventory?.expiry[group.key],
   }));
-  const siteStockRows: SiteStockRow[] = inventory?.stockValue.bySite ?? [];
+  const siteStockRows: SiteStockRow[] = rankByValue(inventory?.stockValue.bySite ?? []);
   const deadStockRows: DeadStockRow[] = (inventory?.deadStock.items ?? []).map((item) => ({
     ...item,
     site: siteLabel(item.siteId),
@@ -59,29 +72,43 @@ export const InventoryTab = ({
 
   return (
     <div className="grid gap-6">
-      <section className="grid gap-2">
+      <section className="grid gap-3">
         <Heading>Inventory health</Heading>
         <p className="text-xs text-muted">
           {translateText(
             "The channel does not change inventory figures. Turnover and days of inventory cover the chosen period; stockout rate, dead stock and expiry are the current state.",
           )}
         </p>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2.5">
-          {loading ? (
-            Array.from({ length: 7 }, (_, index) => <Skeleton key={index} className="h-[98px]" />)
-          ) : (
-            <>
+        {loading ? (
+          <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {Array.from({ length: 3 }, (_, index) => (
+                <Skeleton key={index} className="h-40 rounded-2xl" />
+              ))}
+            </div>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
+              {Array.from({ length: 4 }, (_, index) => (
+                <Skeleton key={index} className="h-28 rounded-2xl" />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <StatTile
-                label={translateText("Inventory turnover")}
-                value={format.count(inventory?.turnover)}
-                hint={translateText("In the period")}
+                featured
+                label={translateText("Total stock value")}
+                value={format.money(inventory?.stockValue.total)}
+                hint={
+                  <span>
+                    {translateText("Products without a published price")}:{" "}
+                    {format.count(inventory?.stockValue.missingPriceCount)}
+                  </span>
+                }
               />
               <StatTile
-                label={translateText("Days of inventory")}
-                value={format.count(inventory?.daysOfInventory)}
-                hint={translateText("Period days divided by turnover")}
-              />
-              <StatTile
+                featured
+                tone={isAnswered(inventory?.stockoutRate) && inventory.stockoutRate > 0 ? "warning" : undefined}
                 label={translateText("Stockout rate")}
                 value={formatRate(inventory?.stockoutRate, locale)}
                 hint={
@@ -93,6 +120,24 @@ export const InventoryTab = ({
                     </span>
                   </span>
                 }
+              />
+              <StatTile
+                featured
+                label={translateText("Dead stock value")}
+                value={format.money(inventory?.deadStock.value)}
+                hint={translateText("Now")}
+              />
+            </div>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
+              <StatTile
+                label={translateText("Inventory turnover")}
+                value={format.count(inventory?.turnover)}
+                hint={translateText("In the period")}
+              />
+              <StatTile
+                label={translateText("Days of inventory")}
+                value={format.count(inventory?.daysOfInventory)}
+                hint={translateText("Period days divided by turnover")}
               />
               <StatTile
                 label={translateText("Dead stock")}
@@ -109,55 +154,59 @@ export const InventoryTab = ({
                 value={format.count(inventory?.deadStock.quantity)}
                 hint={translateText("Now")}
               />
-              <StatTile
-                label={translateText("Dead stock value")}
-                value={format.money(inventory?.deadStock.value)}
-                hint={translateText("Now")}
-              />
-              <StatTile
-                label={translateText("Total stock value")}
-                value={format.money(inventory?.stockValue.total)}
-                hint={
-                  <span>
-                    {translateText("Products without a published price")}:{" "}
-                    {format.count(inventory?.stockValue.missingPriceCount)}
-                  </span>
-                }
-              />
-            </>
-          )}
-        </div>
+            </div>
+          </div>
+        )}
       </section>
 
-      <section className="grid gap-2">
-        <Heading>Stock value by site</Heading>
-        <DataTable<SiteStockRow>
-          storageKey="staff:analytics:stock-by-site"
-          labels={dataTableLabels()}
-          loading={loading}
-          rows={siteStockRows}
-          getKey={(row) => row.siteId}
-          empty={translateText("No records found")}
-          columns={[
-            { key: "siteName", label: translateText("Site"), render: (row) => row.siteName },
-            {
-              key: "quantity",
-              label: translateText("Quantity"),
-              align: "right",
-              render: (row) => format.count(row.quantity),
-            },
-            {
-              key: "value",
-              label: translateText("Value"),
-              align: "right",
-              render: (row) => format.money(row.value),
-            },
-          ]}
-        />
-      </section>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Card variant="soft">
+          <CardHeader>
+            <CardTitle>{translateText("Stock value by site")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-32" />
+            ) : (
+              <>
+                <BarChartCompare
+                  layout="horizontal"
+                  height={Math.max(160, siteStockRows.length * 56 + 40)}
+                  data={siteStockChartRows(siteStockRows)}
+                  series={[{ label: translateText("Stock value by site"), tone: "chart-1" }]}
+                  formatValue={(value) => compactNumber(value, locale)}
+                />
+                <ul className="mt-3 grid gap-0.5 text-xs text-muted">
+                  {siteStockRows.map((row) => (
+                    <li key={row.siteId}>
+                      {row.siteName}: {translateText("Quantity")} {format.count(row.quantity)}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </CardContent>
+        </Card>
+        <Card variant="soft">
+          <CardHeader>
+            <CardTitle>{translateText("Expiring in 30 / 60 / 90 days")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-32" />
+            ) : (
+              <BarChartCompare
+                height={220}
+                data={expiryChartRows(expiryRows.map((row) => ({ ...row, label: translateText(row.label) })))}
+                series={[{ label: translateText("Value"), tone: "chart-3" }]}
+                formatValue={(value) => compactNumber(value, locale)}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-      <section className="grid gap-2">
-        <Heading>Expiring in 30 / 60 / 90 days</Heading>
+      <section aria-label={translateText("Expiring in 30 / 60 / 90 days")} className="grid gap-2">
         <DataTable<ExpiryRow>
           storageKey="staff:analytics:expiry"
           labels={dataTableLabels()}

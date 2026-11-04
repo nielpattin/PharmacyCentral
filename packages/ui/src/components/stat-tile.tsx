@@ -3,41 +3,66 @@ import type { StatusTone } from "./status-badge.tsx";
 
 export type StatTileTone = StatusTone;
 
-const TONE_EDGE: Record<StatTileTone, string> = {
+// A small dot before the label. The fill shade for warning, because `warning` itself is the dark text shade.
+const TONE_DOT: Record<StatTileTone, string> = {
   success: "bg-success",
-  // The fill shade; `warning` itself is the dark text shade and reads brown as a bar.
   warning: "bg-warning-edge",
   danger: "bg-danger",
   info: "bg-primary",
-  neutral: "bg-line",
+  neutral: "bg-muted-soft",
 };
 
 export type StatTileProps = {
   label: string;
   value: React.ReactNode;
+  /** A line under the figure, such as the change against the previous period. */
   hint?: React.ReactNode | undefined;
   /**
-   * Marks the tile as needing a look. Pass a tone only while the figure calls for it (for example a warning when the
-   * count is above zero); a coloured edge on a zero tells people to ignore the colour. Colours the top edge only; the
-   * value stays ink so numbers remain readable.
+   * Marks the tile as needing a look: a dot before the label. Pass a tone only while the figure calls for it (for
+   * example a warning when the count is above zero); a dot on a zero tells people to ignore it. The tile itself stays
+   * neutral and the value stays ink, so numbers remain readable.
    */
   tone?: StatTileTone | undefined;
+  /** The one figure a row is about: taller, with a larger value. */
+  featured?: boolean | undefined;
+  /** Adds the hover surface, for a tile wrapped in a link or button. The wrapper owns the focus ring. */
+  interactive?: boolean | undefined;
   className?: string | undefined;
 };
 
-/** Dashboard KPI tile. Lay several out in a grid such as `grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2.5`. */
-export const StatTile = ({ label, value, hint, tone, className }: StatTileProps): React.JSX.Element => (
+/**
+ * Dashboard KPI tile: a soft, borderless surface with the label on top and the figure at the bottom, so the figures of
+ * tiles in one row line up even when a label wraps. Lay several out in a grid such as
+ * `grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3`.
+ */
+export const StatTile = ({
+  label,
+  value,
+  hint,
+  tone,
+  featured,
+  interactive,
+  className,
+}: StatTileProps): React.JSX.Element => (
   <div
     data-tone={tone}
+    data-featured={featured ? "" : undefined}
     className={cn(
-      "relative grid min-w-0 gap-1 overflow-hidden rounded-lg border border-line bg-surface px-4 py-3",
+      "grid min-w-0 content-between gap-4 rounded-2xl bg-surface-soft p-5",
+      featured ? "min-h-40" : "min-h-28",
+      interactive ? "h-full transition-colors duration-150 hover:bg-line/60" : null,
       className,
     )}
   >
-    {/* A bar clipped by the rounded corners, because a thick top border bends into a crescent at the corners. */}
-    {tone ? <span aria-hidden="true" className={cn("absolute inset-x-0 top-0 h-0.5", TONE_EDGE[tone])} /> : null}
-    <p className="text-xs font-semibold tracking-wide text-muted uppercase">{label}</p>
-    <p className="text-2xl font-semibold tracking-tight text-ink tabular-nums">{value}</p>
-    {hint ? <p className="text-xs text-muted">{hint}</p> : null}
+    <p className="flex items-center gap-2 text-sm text-muted">
+      {tone ? <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", TONE_DOT[tone])} /> : null}
+      {label}
+    </p>
+    <div className="grid gap-1">
+      <p className={cn("font-semibold tracking-tight text-ink tabular-nums", featured ? "text-5xl" : "text-3xl")}>
+        {value}
+      </p>
+      {hint ? <div className="text-xs text-muted">{hint}</div> : null}
+    </div>
   </div>
 );

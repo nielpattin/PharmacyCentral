@@ -5,6 +5,8 @@ export const analyticsLiterals: Record<string, string> = {
     "Doanh thu, số đơn và tình trạng tồn kho theo kỳ, cơ sở và kênh đã chọn. Doanh thu là tổng hóa đơn đã thanh toán.",
   "A dash (—) means the figure could not be answered, not zero.":
     "Dấu gạch (—) nghĩa là số liệu chưa được tính, không phải số 0.",
+  "How to read these figures": "Cách đọc các số liệu này",
+  "Hide the explanation": "Ẩn phần giải thích",
   Period: "Khoảng thời gian",
   "7 days": "7 ngày",
   "30 days": "30 ngày",
@@ -40,6 +42,8 @@ export const analyticsLiterals: Record<string, string> = {
     "Chưa có giá nhập cho các đơn trong kỳ. Hãy nhập giá nhập ở phiếu nhập kho.",
   "Based on {percent}% of revenue that has a recorded cost.": "Tính trên {percent}% doanh thu có giá nhập.",
   "Revenue by channel": "Doanh thu theo kênh",
+  "Revenue by day": "Doanh thu theo ngày",
+  "Orders by day": "Số đơn theo ngày",
   "The channel filter does not apply to this table: both channels show for the chosen site and period.":
     "Bảng này không theo bộ lọc kênh: luôn hiển thị cả hai kênh theo cơ sở và kỳ đã chọn.",
   "Revenue by site": "Doanh thu theo cơ sở",
@@ -68,6 +72,9 @@ export const analyticsLiterals: Record<string, string> = {
   "Two or more paid purchases in the period": "Từ hai lần mua đã trả tiền trong kỳ",
   "Revenue from identified customers": "Doanh thu từ khách đã nhận diện",
   "Share of revenue": "Tỷ trọng doanh thu",
+  "New and returning customers": "Khách mới và khách quay lại",
+  "One-time and repeat buyers": "Khách mua 1 lần và mua lặp lại",
+  "Walk-in sales": "Bán cho khách vãng lai",
   "Only a customer account on the sale counts; a walk-in counter sale has none. New customers count by their first paid purchase across the whole system.":
     "Chỉ tính khách có tài khoản trên chứng từ bán; khách vãng lai tại quầy không được tính. Khách mới tính theo lần mua đã trả tiền đầu tiên trên toàn hệ thống.",
   "Sales targets": "Mục tiêu doanh số",

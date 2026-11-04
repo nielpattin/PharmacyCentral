@@ -147,10 +147,15 @@ export type AnalyticsEnvelope = {
   channel: AnalyticsChannel;
 };
 
+/** One day of a period: the paid sales created that day. A day without sales is a real 0 (revenue and orders are plain numbers). */
+export type DailyPoint = { date: string; revenue: number; orders: number };
+
 export type AnalyticsOverviewResponse = AnalyticsEnvelope & {
   section: "overview";
   kpis: AnalyticsKpis;
   channels: ChannelTotal[];
+  /** One point per day of each period, zero-filled; `previous` lines up with `current` day for day. */
+  series: { current: DailyPoint[]; previous: DailyPoint[] };
 };
 
 export type AnalyticsRevenueResponse = AnalyticsEnvelope & {

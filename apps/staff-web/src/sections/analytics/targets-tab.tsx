@@ -1,6 +1,19 @@
 import { useState } from "react";
 
-import { Button, DataTable, type DataColumn, Field, Input } from "@pharmacy/ui";
+import {
+  BarChartCompare,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  DataTable,
+  type DataColumn,
+  Field,
+  Input,
+  Skeleton,
+  StatTile,
+} from "@pharmacy/ui";
 
 import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { RefreshButton } from "../../components/forms.tsx";
@@ -11,6 +24,8 @@ import { useCan } from "../../permissions/use-can.ts";
 import type { SalesTargetSiteRow, SalesTargetsResponse } from "./contract.ts";
 import { formatRate } from "./figures.ts";
 import { Heading, SiteFilter, type FigureFormat } from "./shared.tsx";
+import { compactNumber } from "./inventory-chart.ts";
+import { targetsChartRows } from "./targets-chart.ts";
 import { SalesTargetDialog, type SalesTargetDraft } from "./target-dialog.tsx";
 
 /**
@@ -47,9 +62,10 @@ export const TargetsTab = ({
   const targetDrawer = useRetainedTarget(targetDraft);
   const rows: SalesTargetSiteRow[] = data?.sites ?? [];
   const totals = data?.totals;
+  const hasTargets = rows.some((row) => row.target !== null);
 
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="grid gap-1">
           <Heading>Sales targets</Heading>
@@ -69,6 +85,60 @@ export const TargetsTab = ({
           <RefreshButton onClick={onRefresh} />
         </div>
       </div>
+      {loading ? (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} className="h-40 rounded-2xl" />
+          ))}
+        </div>
+      ) : (
+        <div className={hasTargets ? "grid gap-3 sm:grid-cols-3" : "grid gap-3"}>
+          {hasTargets ? (
+            <StatTile
+              featured
+              label={`${translateText("Total")}: ${translateText("Progress")}`}
+              value={formatRate(totals?.progress, locale)}
+            />
+          ) : null}
+          <StatTile
+            featured
+            label={`${translateText("Total")}: ${translateText("Revenue")}`}
+            value={format.money(totals?.revenue)}
+          />
+          {hasTargets ? (
+            <StatTile
+              featured
+              label={`${translateText("Total")}: ${translateText("Target")}`}
+              value={format.money(totals?.target)}
+            />
+          ) : null}
+        </div>
+      )}
+      <Card variant="soft">
+        <CardHeader>
+          <CardTitle>
+            {hasTargets ? `${translateText("Revenue")} / ${translateText("Target")}` : translateText("Revenue")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <Skeleton className="h-32" />
+          ) : (
+            <BarChartCompare
+              data={targetsChartRows(rows, hasTargets)}
+              series={
+                hasTargets
+                  ? [
+                      { label: translateText("Revenue"), tone: "chart-1" },
+                      { label: translateText("Target"), tone: "chart-2" },
+                    ]
+                  : [{ label: translateText("Revenue"), tone: "chart-1" }]
+              }
+              formatValue={(value) => compactNumber(value, locale)}
+            />
+          )}
+        </CardContent>
+      </Card>
       <DataTable<SalesTargetSiteRow>
         storageKey="staff:analytics:sales-targets"
         labels={dataTableLabels()}
@@ -97,7 +167,7 @@ export const TargetsTab = ({
               key: "progress",
               label: translateText("Progress"),
               align: "right",
-              render: (row) => formatRate(row.progress, locale),
+              render: (row) => (row.target === null ? translateText("Not set") : formatRate(row.progress, locale)),
             },
             {
               key: "actions",
@@ -125,10 +195,6 @@ export const TargetsTab = ({
           targetGate.allowed && rows.length > 0,
         )}
       />
-      <p className="text-xs text-muted">
-        {translateText("Total")}: {translateText("Target")} {format.money(totals?.target)} · {translateText("Revenue")}{" "}
-        {format.money(totals?.revenue)} · {translateText("Progress")} {formatRate(totals?.progress, locale)}
-      </p>
       {targetDrawer ? (
         <SalesTargetDialog
           key={targetDrawer.key}
