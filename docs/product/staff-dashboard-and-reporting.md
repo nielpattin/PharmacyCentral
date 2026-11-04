@@ -3,7 +3,7 @@
 - **Status:** Current
 - **App and route:** staff-web, `/` (Dashboard), `/pharmacist-overview` (Counter overview, "Tổng quan quầy"), `/reporting` (Reporting)
 - **Owner:** @nielpattin
-- **Last reviewed:** 2026-10-26
+- **Last reviewed:** 2026-11-03
 
 Tags: `[observed]` read from the code on 2026-10-26; `[owner]` a recorded owner decision (none on this page yet); `[standard]` a decision from industry practice. Gaps against the code are in the table at the end. See [README](README.md).
 
@@ -55,9 +55,9 @@ Signed-in staff only. Sign-in and the sidebar are in the [shell spec](staff-shel
 
 - Source: `[observed]`; the role split is `[standard]`.
 - Accepted when:
-  - "Hoạt động gần đây" lists at most 10 audit rows, newest first, each with its action label and time (`operations-repository.ts`, `.limit(10)`).
+  - "Hoạt động gần đây" lists at most 30 audit rows, newest first, each with its action, entity, actor and time (`operations-repository.ts`, `DASHBOARD_ACTIVITY_LIMIT`). The page folds runs of the same action and shows the latest few.
   - A site-scoped employee sees only rows whose audit entry names one of their sites; rows with no site are left out (`operations-repository.test.ts`).
-  - Warehouse Staff see only inventory and procurement actions (G10).
+  - The server filters by role (`dashboardActionFamilies` in `operations-access.ts`): Warehouse Staff get only actions that start with `inventory.` or `procurement.`; Platform Admin and Pharmacy Manager get every action; a person with several roles gets the widest set; a role with no dashboard access gets none (`operations-access.test.ts`, `operations-repository.test.ts`).
   - The card shows "Dữ liệu tới HH:mm" from the projection lag (G11). With no rows it shows "Chưa có hoạt động gần đây".
 - Rules: BR-AUDIT-001, BR-AUDIT-002, BR-AUTH-004.
 
@@ -181,7 +181,7 @@ Rows 1 to 11 answer the questions of the earlier draft. Rows 12 to 21 settle beh
 | G7 | A site selector on the dashboard and on Reporting (decision 3). | No selector. The dashboard and reports requests send no `siteId`, though the API honours an employee's `siteId`. | `dashboard-section.tsx`; `finance/reports-tab.tsx`; BR-REPORT-001 already names a selected site |
 | G8 | Each attention tile links to its worklist, keeping the site (decision 16). | Tiles are display only. | `dashboard-section.tsx` |
 | G9 | "Đơn thuốc đang mở" is not shown to Warehouse Staff (decision 6). | The attention list is unconditional. | `dashboard-section.tsx`; [user guide](../user-guide.md#dashboard-and-reporting) must match |
-| G10 | Warehouse Staff see inventory and procurement actions only in recent activity (decision 14). | `dashboard()` returns the latest audit rows at the site with no action filter. | `operations-repository.ts` (`dashboard()`, `recentRows`) |
+| G10 | (resolved 2026-11-03) Warehouse Staff see inventory and procurement actions only in recent activity (decision 14). | Resolved: `dashboard()` takes the action families from the route and filters with `action ILIKE '<family>.%'`. | `operations-repository.ts` (`dashboard()`, `actionFamilyFilter`); `operations-access.ts` (`dashboardActionFamilies`) |
 | G11 | "Dữ liệu tới HH:mm" from the projection lag (decision 14). | `projectionLag` is returned and not rendered. | `operations-repository.ts`; `dashboard-section.tsx` |
 | G12 | Refresh every 60 seconds while visible, and a "Làm mới" button (decision 15). | `refetchOnWindowFocus: false` globally; no refetch interval on this query; no button. | `apps/staff-web/src/query-client.ts`; `dashboard-section.tsx` |
 | G14 | The attention block of the Counter overview (US5). | Not rendered. The `pharmacistOverview.*` keys in `i18n.ts` are used by no component. | `apps/staff-web/src/App.tsx` (`case "pharmacistOverview"`); `apps/staff-web/src/i18n.ts` |

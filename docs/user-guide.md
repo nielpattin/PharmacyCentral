@@ -85,7 +85,7 @@ Staff Web has four business roles. Access is decided by role, and non-admin user
 
 | Role | Sidebar workspaces |
 | --- | --- |
-| Platform Admin | Overview (Dashboard, Analytics), Action plans, Pharmacy counter (Prescriptions, Online orders), Inventory, Purchasing, Finance, Catalog (Products, Units, Pricing, Search synonyms, Sites, Storage locations, Suppliers), Administration (Users & audit, AI integrations, System). Its work screens carry no action buttons; it only creates and deletes sites in Sites, and only reassigns in Action plans |
+| Platform Admin | Overview (Dashboard), Inventory, Purchasing, Catalog (Products, Units, Pricing, Search synonyms, Sites, Storage locations, Suppliers), Administration (Users & audit, AI integrations, System). Its work screens carry no action buttons; it only creates and deletes sites in Sites, and only reassigns in Action plans |
 | Pharmacy Manager | Overview (Dashboard, Analytics), Action plans, Pharmacy counter (Prescriptions, Online orders), Inventory, Purchasing, Finance, Catalog (Products, Units, Pricing, Search synonyms, Sites, Storage locations, Suppliers) |
 | Pharmacist | Action plans, Pharmacy counter (Prescriptions, Online orders), Inventory, Search synonyms |
 | Warehouse Staff | Dashboard, Action plans, Inventory, Purchasing |
@@ -106,7 +106,7 @@ A Platform Admin sees the same records, and every other staff route, read-only: 
 
 **Dashboard** (Platform Admin, Pharmacy Manager, Warehouse Staff) shows summary cards: active sites and storage locations, product and supplier counts, quantity on hand and reserved, low-stock batches, expiring batches, pending transfers, open prescriptions, open stocktakes, pending adjustments, and a list of recent activity.
 
-**Reporting** (Platform Admin, Pharmacy Manager) opens the Reports tab of the finance service:
+**Reporting** (Pharmacy Manager) opens the Reports tab of the finance service:
 
 1. Enter a **Report type** (the default is `sales`).
 2. Choose **Run report**.
@@ -114,7 +114,7 @@ A Platform Admin sees the same records, and every other staff route, read-only: 
 
 Reporting does not show stock-risk summaries; low-stock and expiring batch counts are on the Dashboard.
 
-**Analytics** ("Phân tích", read by Pharmacy Manager and Platform Admin) is a workspace of five tabs — **Tổng quan**, **Doanh thu**, **Khách hàng**, **Tồn kho** and **Mục tiêu** — so a visit loads only the tab it opens, never the whole report.
+**Analytics** ("Phân tích", read by Pharmacy Manager only) is a workspace of five tabs — **Tổng quan**, **Doanh thu**, **Khách hàng**, **Tồn kho** and **Mục tiêu** — so a visit loads only the tab it opens, never the whole report.
 
 The period (7, 30 or 90 days, this month, or two dates), the site and the channel (all, counter or online) stay above the tabs. They apply to every tab and keep their values as you switch tabs; changing one loads the open tab again.
 
@@ -288,7 +288,7 @@ Counter flow for a pharmacist:
 
 ## Finance
 
-**Finance** (Platform Admin, Pharmacy Manager) has three tabs.
+**Finance** (Pharmacy Manager) has three tabs.
 
 - **Summary**: paid, refunded and net amounts; inventory value and reserved value; the count of products missing a published price (**Missing prices**); receipt, dispensed and return quantities; an inventory activity table; and an inventory valuation table with each batch's price status. Stock is valued at the current published price per base unit, so a stocked product without a published price adds nothing to the value.
 - **Invoices**: payment invoices with payment code, prescription or order, status, amount and created time. A Pharmacy Manager can **Refund** a paid invoice with a reason; refunding an online order is theirs alone. Cash is confirmed, and a counter invoice refunded, by a Pharmacist in Counter transactions.
