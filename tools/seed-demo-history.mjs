@@ -107,8 +107,8 @@ const shoppers = [
   ["dang.hoang.nam@example.com", 1],
 ];
 const deliveryPoints = [
-  { latitude: 10.7769, longitude: 106.7009 },
-  { latitude: 10.7295, longitude: 106.7218 },
+  { latitude: 21.0305, longitude: 105.816 },
+  { latitude: 21.0227, longitude: 105.803 },
 ];
 
 // A small deterministic generator, so the same seed gives the same shop every time.
@@ -751,6 +751,21 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
     },
   );
   await runSql(writes);
+
+  // The only site that sells is the pharmacy, so it is the only site with a revenue goal: this month's and last month's.
+  const monthOf = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const today = new Date();
+  for (const [date, amount] of [
+    [today, 45_000_000],
+    [new Date(today.getFullYear(), today.getMonth() - 1, 1), 40_000_000],
+  ]) {
+    await call(manager, "/api/sales-targets", {
+      method: "PUT",
+      body: { siteId: retail.id, month: monthOf(date), amount },
+    });
+  }
+  console.log(`demo history: revenue goals set for ${retail.code} (this month and last)`);
+
   console.log(
     `demo history: ${placed.length} sales documents backdated over ${HISTORY_DAYS} days (${skipped} skipped, ${unfilled} not sold for lack of stock), ` +
       `${purchaseOrders.length} purchase orders and ${receipts.length} goods receipts with unit costs, ` +

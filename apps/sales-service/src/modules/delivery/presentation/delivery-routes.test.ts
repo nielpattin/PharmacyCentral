@@ -45,19 +45,19 @@ describe("delivery address endpoints", () => {
 
   describe("POST /delivery/reverse-geocode", () => {
     it("names the point the shopper dragged the pin to, without needing a store", async () => {
-      const resolveAddress = vi.fn().mockResolvedValue("Hẻm 150 Nguyễn Trãi, Quận 1");
+      const resolveAddress = vi.fn().mockResolvedValue("Ngõ 150 Xuân Thủy, Cầu Giấy");
       const url = await start(createAddresses({ resolveAddress }));
 
       const response = await post(`${url}/delivery/reverse-geocode`, {
-        destination: { latitude: 10.7806, longitude: 106.6991 },
+        destination: { latitude: 21.0448, longitude: 105.7776 },
       });
 
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({
-        destination: { latitude: 10.7806, longitude: 106.6991 },
-        providerResolvedAddress: "Hẻm 150 Nguyễn Trãi, Quận 1",
+        destination: { latitude: 21.0448, longitude: 105.7776 },
+        providerResolvedAddress: "Ngõ 150 Xuân Thủy, Cầu Giấy",
       });
-      expect(resolveAddress).toHaveBeenCalledWith({ latitude: 10.7806, longitude: 106.6991 });
+      expect(resolveAddress).toHaveBeenCalledWith({ latitude: 21.0448, longitude: 105.7776 });
     });
 
     it("rejects a point outside the coordinate range instead of asking the provider", async () => {
@@ -65,7 +65,7 @@ describe("delivery address endpoints", () => {
       const url = await start(createAddresses({ resolveAddress }));
 
       const response = await post(`${url}/delivery/reverse-geocode`, {
-        destination: { latitude: 10.7806, longitude: 999 },
+        destination: { latitude: 21.0448, longitude: 999 },
       });
 
       expect(response.status).toBe(400);
@@ -82,7 +82,7 @@ describe("delivery address endpoints", () => {
       );
 
       const response = await post(`${url}/delivery/reverse-geocode`, {
-        destination: { latitude: 10.7806, longitude: 106.6991 },
+        destination: { latitude: 21.0448, longitude: 105.7776 },
       });
 
       expect(response.status).toBe(502);
@@ -92,16 +92,16 @@ describe("delivery address endpoints", () => {
 
   describe("GET /delivery/addresses/search", () => {
     it("returns the suggestions for what the shopper typed", async () => {
-      const search = vi.fn().mockResolvedValue([{ refId: "ref-1", displayName: "268 Tôn Đản, Quận 4" }]);
+      const search = vi.fn().mockResolvedValue([{ refId: "ref-1", displayName: "268 Xuân Thủy, Cầu Giấy" }]);
       const url = await start(createAddresses({ search }));
 
-      const response = await fetch(`${url}/delivery/addresses/search?q=${encodeURIComponent("268 Tôn Đản")}`);
+      const response = await fetch(`${url}/delivery/addresses/search?q=${encodeURIComponent("268 Xuân Thủy")}`);
 
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({
-        results: [{ refId: "ref-1", displayName: "268 Tôn Đản, Quận 4" }],
+        results: [{ refId: "ref-1", displayName: "268 Xuân Thủy, Cầu Giấy" }],
       });
-      expect(search).toHaveBeenCalledWith("268 Tôn Đản");
+      expect(search).toHaveBeenCalledWith("268 Xuân Thủy");
     });
 
     it("does not spend a paid lookup on a prefix too short to mean anything", async () => {
@@ -134,7 +134,7 @@ describe("delivery address endpoints", () => {
     it("turns the chosen suggestion into the point the rider has to reach", async () => {
       const resolvePrediction = vi
         .fn()
-        .mockResolvedValue({ displayName: "268 Tôn Đản, Quận 4", latitude: 10.7589, longitude: 106.7093 });
+        .mockResolvedValue({ displayName: "268 Xuân Thủy, Cầu Giấy", latitude: 21.0231, longitude: 105.7878 });
       const url = await start(createAddresses({ resolvePrediction }));
 
       const response = await post(`${url}/delivery/addresses/resolve`, { refId: "ref-1" });
@@ -142,8 +142,8 @@ describe("delivery address endpoints", () => {
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({
         refId: "ref-1",
-        displayName: "268 Tôn Đản, Quận 4",
-        destination: { latitude: 10.7589, longitude: 106.7093 },
+        displayName: "268 Xuân Thủy, Cầu Giấy",
+        destination: { latitude: 21.0231, longitude: 105.7878 },
       });
       expect(resolvePrediction).toHaveBeenCalledWith("ref-1");
     });

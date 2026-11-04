@@ -42,7 +42,7 @@ Sign in at `/tai-khoan` as `khachhang@pharmacycentral.vn`.
 
 1. **Home and catalog**: the menu groups products (Thuốc, Thực phẩm chức năng, Thiết bị y tế). Every product has a photo. A prescription-only product shows a disabled "Cần đơn thuốc" button; an unpriced one shows "Liên hệ báo giá".
 2. **Cart (`/don-hang`, tab "Đặt hàng")**: the cart already has three lines, only the first ticked. Tick another, reload the page, and the ticks stay. Only ticked lines go into the order.
-3. **Place an order**: pick pickup at the shop, or delivery to an address in Quận 3 or Quận 7 (the fee comes from the server). Pay by SePay QR or cash. If the browser has no WebGL the map shows an unavailable notice and the rest still works.
+3. **Place an order**: pick pickup at the shop, or delivery to an address in Kim Mã or Chùa Láng (the fee comes from the server). Pay by SePay QR or cash. If the browser has no WebGL the map shows an unavailable notice and the rest still works.
 4. **Track it (tab "Đơn của tôi")**: the featured card is the order that is out for delivery, with the stepper. Below it are the other states, filterable by "Đang xử lý", "Hoàn tất", "Đã huỷ".
 5. **Shopping assistant and "Gửi đơn thuốc"**: they need an AI provider set up (see Platform Admin, step 4). Without one they answer that the assistant is unavailable.
 
@@ -78,7 +78,7 @@ Sign in at `/tai-khoan` as `khachhang@pharmacycentral.vn`.
 2. **Kiểm toán**: the activity log with 60 days of events; filter by action or entity.
 3. **Hệ thống**: service health, metrics, queues and the search index. Admin only.
 4. **Tích hợp AI**: the four AI feature cards. Set a provider here to turn the assistant and prescription reader on.
-5. The admin reads every page above and changes nothing there: no write buttons show. The only operational thing it does is give an action plan to another owner. Everything else is the job of the manager, the pharmacist and the warehouse account.
+5. The admin has no Phân tích page and no revenue anywhere: sales figures are the manager's. It reads every other page and changes nothing there: no write buttons show. It has no Kế hoạch hành động, Tài chính, Đơn thuốc or Đơn hàng online page either: plans and money are the pharmacy's work, and orders and prescriptions hold customers' personal and health data. Everything else is the job of the manager, the pharmacist and the warehouse account.
 
 ## Known limits
 

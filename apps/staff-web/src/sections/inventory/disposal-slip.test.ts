@@ -6,7 +6,7 @@ describe("disposal slip", () => {
   it("lists every batch with its quantity and totals them", () => {
     const html = renderDisposalSlipHtml({
       id: "12345678-0000-4000-8000-000000000000",
-      site: "Nhà thuốc Quận 4",
+      site: "Nhà thuốc Cầu Giấy",
       reason: "Hết hạn",
       note: "Tiêu hủy theo biên bản",
       createdAt: "2026-10-30T03:00:00.000Z",

@@ -431,7 +431,7 @@ async function seedActivity() {
   await purchaseOrder("PO-DEMO-003", "THU-0034", 100, "cancel");
 
   // Online orders: pickup at the store, one in each of a few states.
-  const orders = await admin.call("/api/orders?limit=50");
+  const orders = await manager.call("/api/orders?limit=50");
   if (orders.length === 0) {
     const unitFor = async (sku) => {
       const units = await admin.call(`/api/products/${products.get(sku).id}/units`);
@@ -550,9 +550,9 @@ async function seedActivity() {
     const viet = await signIn({ email: "pham.quoc.viet@example.com" });
     const mai = await signIn({ email: "vo.ngoc.mai@example.com" });
     const nam = await signIn({ email: "dang.hoang.nam@example.com" });
-    // Two addresses in HCMC, inside the delivery range of SITE-RTL.
-    const quan3 = { latitude: 10.7769, longitude: 106.7009 };
-    const quan7 = { latitude: 10.7295, longitude: 106.7218 };
+    // Two addresses in Hanoi (Kim Mã and Chùa Láng), inside the delivery range of SITE-RTL.
+    const kimMa = { latitude: 21.0305, longitude: 105.816 };
+    const chuaLang = { latitude: 21.0227, longitude: 105.803 };
 
     // The demo shopper owns one order in every state the customer site draws, oldest first. The newest order that is
     // ready or out for delivery is the one the page features, so the delivery order goes last.
@@ -566,7 +566,7 @@ async function seedActivity() {
       ],
       steps: ["Preparing", "Ready", "Delivering", "Completed"],
       paid: "qr",
-      deliverTo: quan3,
+      deliverTo: kimMa,
       note: "Tầng 3, nhấn chuông căn 302",
     });
     await place({ shopper: customer, payment: cash, lines: [["THU-0025", 1]], steps: ["Cancelled"] });
@@ -598,7 +598,7 @@ async function seedActivity() {
         ["THU-0001", 2],
       ],
       steps: ["Confirmed", "Preparing", "Ready", "Delivering"],
-      deliverTo: quan7,
+      deliverTo: chuaLang,
       note: "Gọi trước khi đến, cổng sau",
     });
 
@@ -770,7 +770,7 @@ async function seedActivity() {
   await stocktake("Kiểm kê đột xuất - kệ vitamin", ["THU-0006"], false);
 
   // Prescriptions: a queue with one waiting, one dispensed and one cancelled.
-  const prescriptions = await admin.call("/api/prescriptions?limit=100");
+  const prescriptions = await manager.call("/api/prescriptions?limit=100");
   const prescribe = async (patientName, sku, quantity, action) => {
     if (prescriptions.some((row) => row.patientName === patientName)) return;
     const row = stock(sku, "SITE-RTL", "RTL-FRONT");

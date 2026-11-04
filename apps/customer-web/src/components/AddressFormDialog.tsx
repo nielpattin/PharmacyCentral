@@ -37,15 +37,15 @@ type AddressFormDialogProps = {
   onSubmit: (draft: AddressDraft) => void;
 };
 
-/** Where the pin opens for a brand-new address: central Ho Chi Minh City, where every store delivers. */
-const FALLBACK_POINT: Point = { latitude: 10.7905, longitude: 106.682 };
+/** Where the pin opens for a brand-new address: central Hanoi, where every store delivers. */
+const FALLBACK_POINT: Point = { latitude: 21.03, longitude: 105.81 };
 
 /**
  * The one form for adding and editing a delivery address.
  *
  * Order is deliberate: the name comes first because it is what the shopper recognises later on the checkout
  * chips, and the address is a single free-text field rather than separate street/district fields. Vietnamese
- * addresses are written as one line ("hẻm 150 Nguyễn Trãi, phường 7, quận 1") and forcing a structure on them
+ * addresses are written as one line ("ngõ 150 Xuân Thủy, phường Cầu Giấy") and forcing a structure on them
  * loses the alley and the tower, which is the part the rider actually needs.
  *
  * The pin is what gets saved, not the text: the delivery fee is computed from that coordinate, so the map is

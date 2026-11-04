@@ -72,17 +72,17 @@ const scenarios: Scenario[] = [
     slug: "tang-huyet-ap-dai-thao-duong",
     facility: {
       ten: "Phòng khám Nội tiết - Tim mạch Phúc Lộc (mẫu)",
-      dia_chi: "5 Đường Nguyễn Thị Thập, Phường Tân Hưng, Quận 7, TP. Hồ Chí Minh",
-      dien_thoai: "028 7300 0303",
+      dia_chi: "5 Chùa Bộc, Phường Đống Đa, Hà Nội",
+      dien_thoai: "024 7300 0303",
     },
     patient: {
       ho_ten: "Lê Văn Thịnh",
-      cccd: "079051007788",
+      cccd: "001051007788",
       ngay_sinh: "21/11/1951",
       can_nang_kg: 68,
       gioi_tinh: "Nam",
-      ma_bhyt: "HT3790077889",
-      noi_thuong_tru: "301 Đường Huỳnh Tấn Phát, Phường Tân Thuận Tây, Quận 7, TP. Hồ Chí Minh",
+      ma_bhyt: "HT3010077889",
+      noi_thuong_tru: "301 Đường Láng, Phường Láng, Hà Nội",
     },
     diagnoses: [
       { ma_icd: "I10", ten: "Tăng huyết áp vô căn (nguyên phát)" },

@@ -497,9 +497,9 @@ describe("catalog API", () => {
     const store = {
       id: ids.site,
       code: "SITE-001",
-      name: "Nhà thuốc Quận 4",
-      address: "268 Tôn Đản",
-      coordinates: { latitude: 10.773, longitude: 106.704 },
+      name: "Nhà thuốc Cầu Giấy",
+      address: "268 Xuân Thủy",
+      coordinates: { latitude: 21.0372, longitude: 105.7825 },
     };
     const findActiveStore = vi
       .fn<(id: string) => Promise<unknown>>()

@@ -18,10 +18,10 @@ describe("VietmapGeocoder", () => {
   });
 
   it("puts the space back after the bare commas Vietmap joins a reverse-geocoded label with", async () => {
-    answerWith([{ display: "166/60 Đoàn Văn Bơ Phường 15,Quận 4,Thành Phố Hồ Chí Minh" }]);
+    answerWith([{ display: "15 Duy Tân Phường Dịch Vọng Hậu,Cầu Giấy,Thành Phố Hà Nội" }]);
 
-    await expect(geocoder.resolveAddress({ latitude: 10.7589, longitude: 106.7093 })).resolves.toBe(
-      "166/60 Đoàn Văn Bơ Phường 15, Quận 4, Thành Phố Hồ Chí Minh",
+    await expect(geocoder.resolveAddress({ latitude: 21.0231, longitude: 105.7878 })).resolves.toBe(
+      "15 Duy Tân Phường Dịch Vọng Hậu, Cầu Giấy, Thành Phố Hà Nội",
     );
   });
 
@@ -33,34 +33,34 @@ describe("VietmapGeocoder", () => {
     );
   });
 
-  it("scopes a search to Ho Chi Minh City and drops predictions that would render as blank rows", async () => {
+  it("scopes a search to Hanoi and drops predictions that would render as blank rows", async () => {
     const fetchMock = answerWith([
-      { ref_id: "auto:1", display: "268 Tôn Đản, Phường Khánh Hội, Thành phố Hồ Chí Minh" },
+      { ref_id: "auto:1", display: "268 Xuân Thủy, Phường Cầu Giấy, Thành phố Hà Nội" },
       { ref_id: "auto:2", display: "  " },
-      { ref_id: "", display: "No handle, Quận 4" },
+      { ref_id: "", display: "No handle, Cầu Giấy" },
     ]);
 
-    await expect(geocoder.search("268 Tôn Đản")).resolves.toEqual([
-      { refId: "auto:1", displayName: "268 Tôn Đản, Phường Khánh Hội, Thành phố Hồ Chí Minh" },
+    await expect(geocoder.search("268 Xuân Thủy")).resolves.toEqual([
+      { refId: "auto:1", displayName: "268 Xuân Thủy, Phường Cầu Giấy, Thành phố Hà Nội" },
     ]);
     const url = requestedUrl(fetchMock);
-    expect(url.searchParams.get("cityId")).toBe("12");
+    expect(url.searchParams.get("cityId")).toBe("11");
     expect(url.searchParams.get("layers")).toBe("ADDRESS");
-    expect(url.searchParams.get("text")).toBe("268 Tôn Đản");
+    expect(url.searchParams.get("text")).toBe("268 Xuân Thủy");
   });
 
   it("resolves a chosen prediction to the point the rider has to reach", async () => {
-    answerWith({ display: "268 Tôn Đản,Phường Khánh Hội", lat: 10.7589, lng: 106.7093 });
+    answerWith({ display: "268 Xuân Thủy,Phường Cầu Giấy", lat: 21.0231, lng: 105.7878 });
 
     await expect(geocoder.resolvePrediction("auto:1")).resolves.toEqual({
-      displayName: "268 Tôn Đản, Phường Khánh Hội",
-      latitude: 10.7589,
-      longitude: 106.7093,
+      displayName: "268 Xuân Thủy, Phường Cầu Giấy",
+      latitude: 21.0231,
+      longitude: 105.7878,
     });
   });
 
   it("has no point for a prediction whose coordinates are missing", async () => {
-    answerWith({ display: "268 Tôn Đản" });
+    answerWith({ display: "268 Xuân Thủy" });
 
     await expect(geocoder.resolvePrediction("auto:1")).resolves.toBeUndefined();
   });

@@ -50,8 +50,8 @@ describe("catalog-service contracts", () => {
       code: "STORE-1",
       name: "Central Pharmacy",
       address: "123 Main St",
-      latitude: 10.762622,
-      longitude: 106.660172,
+      latitude: 21.026822,
+      longitude: 105.738672,
     });
     expect(validStore.success).toBe(true);
   });

@@ -1,20 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCatalogStoreLookup } from "./catalog-store-lookup.ts";
 
-const store = { id: "store-1", code: "SITE-RTL", name: "Quận 4", address: null };
+const store = { id: "store-1", code: "SITE-RTL", name: "Cầu Giấy", address: null };
 
 describe("catalog store lookup", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("asks the public store route and returns the store's coordinates", async () => {
     const fetchMock = vi.fn(async (_url: string) =>
-      Response.json({ ...store, coordinates: { latitude: 10.77, longitude: 106.7 } }),
+      Response.json({ ...store, coordinates: { latitude: 21.04, longitude: 105.78 } }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
     const found = await createCatalogStoreLookup("http://catalog.test")("store-1");
 
-    expect(found).toEqual({ id: "store-1", latitude: 10.77, longitude: 106.7 });
+    expect(found).toEqual({ id: "store-1", latitude: 21.04, longitude: 105.78 });
     expect(fetchMock.mock.calls[0]?.[0]).toBe("http://catalog.test/stores/store-1");
   });
 

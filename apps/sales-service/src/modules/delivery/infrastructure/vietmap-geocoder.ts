@@ -10,7 +10,7 @@ import type {
  * Names and finds Vietnamese addresses with Vietmap, which is built for this country rather than for the world.
  *
  * OpenStreetMap is missing something delivery cannot do without: house numbers. `addr:housenumber` is an optional
- * OSM tag, so in Vietnam almost nobody enters one, and "268 Tôn Đản, Quận 4" returns nothing at all. Vietmap
+ * OSM tag, so in Vietnam almost nobody enters one, and "268 Xuân Thủy, Phường Cầu Giấy" returns nothing at all. Vietmap
  * carries 18 million Vietnamese addresses with the number as a first-class field, so a shopper's own front door
  * survives the round trip instead of degrading to a street name.
  *
@@ -23,9 +23,10 @@ type VietmapOptions = { baseUrl: string; apiKey: string };
 
 /**
  * Vietmap does not ship a usable default scope: without a city a search for "Quang Trung" returns Thanh Hoa and
- * Khanh Hoa before Ho Chi Minh City, and the shopper has to scroll past other provinces to reach their street.
+ * Khanh Hoa before Hanoi, and the shopper has to scroll past other provinces to reach their street.
  */
-const VIETMAP_CITY_HCMC = 12;
+/** Vietmap's id for Hà Nội (Hồ Chí Minh is 12). */
+const VIETMAP_CITY_HANOI = 11;
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -33,7 +34,7 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const hasText = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
 
 /**
- * Vietmap joins the parts of an address with a bare comma ("Phường Võ Thị Sáu,Quận 3"), so wherever the label is
+ * Vietmap joins the parts of an address with a bare comma ("Phường Cầu Giấy,Hà Nội"), so wherever the label is
  * shown a reader sees two parts run together. Putting the space back is the only change: the wording and the
  * house number stay exactly as Vietmap wrote them.
  */
@@ -58,7 +59,7 @@ export class VietmapGeocoder implements AddressGeocoder, AddressSearch {
     // 1 is the two-level administrative model Vietnam has used since the 1 July 2025 merger.
     url.searchParams.set("display_type", "1");
     url.searchParams.set("layers", "ADDRESS");
-    url.searchParams.set("cityId", String(VIETMAP_CITY_HCMC));
+    url.searchParams.set("cityId", String(VIETMAP_CITY_HANOI));
 
     const rows = await this.getJson(url);
     if (!Array.isArray(rows)) return [];

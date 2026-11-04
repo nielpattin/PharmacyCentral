@@ -82,7 +82,7 @@ const deliveryCache = redisClient ? new RedisDeliveryCache(redisClient) : new In
  * Two providers with two jobs. OpenRouteService prices the route and can only answer in the language its own
  * data happens to hold; Vietmap names the point, and is the one Vietnamese address source that keeps house
  * numbers. OpenStreetMap cannot do this job: `addr:housenumber` is optional there, nobody in Vietnam enters it,
- * and "268 Tôn Đản, Quận 4" returns nothing at all. A rider needs "268 Tôn Đản" to find the door, not just the
+ * and "268 Xuân Thủy, Phường Cầu Giấy" returns nothing at all. A rider needs "268 Xuân Thủy" to find the door, not just the
  * street it stands on.
  */
 const addressGeocoder = new VietmapGeocoder({

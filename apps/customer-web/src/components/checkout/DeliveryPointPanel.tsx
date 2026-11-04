@@ -137,7 +137,7 @@ export const DeliveryPointPanel = ({
                       className="h-10 rounded-lg pl-9 pr-9"
                       value={query}
                       onChange={(event) => onQueryChange(event.target.value)}
-                      placeholder="Ví dụ: 123 Nguyễn Trãi, Quận 1"
+                      placeholder="Ví dụ: 123 Xuân Thủy, Cầu Giấy"
                     />
                     {query || results.length > 0 ? (
                       <button
