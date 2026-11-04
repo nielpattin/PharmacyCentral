@@ -8,7 +8,7 @@
     "auth:keygen": "node tools/auth-keygen.mjs",
     "build": "nx run-many -t build --all",
     "chaos:aws": "node --env-file=.env tools/chaos/aws/runner.mjs",
-    "dev:infra": "docker compose up -d --wait postgres postgres-roles rabbitmq redis typesense embedder mailpit otel-collector tempo prometheus loki grafana floci floci-init gateway-dev && node --env-file=.env tools/migrate-all.mjs",
+    "dev:infra": "docker compose up -d --wait postgres rabbitmq redis typesense embedder mailpit otel-collector tempo prometheus loki grafana floci gateway-dev && docker compose run --rm postgres-roles && docker compose run --rm floci-init && node --env-file=.env tools/migrate-all.mjs",
     "dev": "pnpm run dev:infra && nx run-many -t dev --all",
     "dev:down": "docker compose --profile dev down",
     "local:up": "docker compose -f docker-compose.yml -f docker-compose.aws-like.yml stop gateway-dev && docker compose -f docker-compose.yml -f docker-compose.aws-like.yml up -d --build --wait && node --env-file=.env tools/migrate-all.mjs",

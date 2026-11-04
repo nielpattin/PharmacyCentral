@@ -84,7 +84,7 @@ const accountCheck = async (email) => {
       line(
         "OK",
         "identity db + account",
-        `${email} actor=${account.actor_type} active=${account.is_active} activeSessions=${account.active_sessions}`,
+        `${email} actor=${account.actor_type} active=${account.is_active}`,
       );
     } else {
       line(
