@@ -118,21 +118,18 @@ describe("GET /dashboard/analytics", () => {
     },
   );
 
-  it.each(["Platform Admin", "Pharmacy Manager"])(
-    "answers %s with the period and the default channel",
-    async (role) => {
-      const period = freshPeriod();
-      const response = await get(
-        `/dashboard/analytics?${new URLSearchParams({ ...period, section: "overview" }).toString()}`,
-        role,
-      );
-      expect(response.status).toBe(200);
-      expect(calls[0]?.query.from).toStrictEqual(new Date(period.from));
-      expect(calls[0]?.query.to).toStrictEqual(new Date(period.to));
-      expect(calls[0]?.query.channel).toBe("all");
-      expect(calls[0]?.query.siteId).toBeUndefined();
-    },
-  );
+  it("answers a Pharmacy Manager with the period and the default channel", async () => {
+    const period = freshPeriod();
+    const response = await get(
+      `/dashboard/analytics?${new URLSearchParams({ ...period, section: "overview" }).toString()}`,
+      "Pharmacy Manager",
+    );
+    expect(response.status).toBe(200);
+    expect(calls[0]?.query.from).toStrictEqual(new Date(period.from));
+    expect(calls[0]?.query.to).toStrictEqual(new Date(period.to));
+    expect(calls[0]?.query.channel).toBe("all");
+    expect(calls[0]?.query.siteId).toBeUndefined();
+  });
 
   it("passes the requested channel and site, inside the caller's scope", async () => {
     const response = await get(
@@ -151,7 +148,7 @@ describe("GET /dashboard/analytics", () => {
     expect(calls[0]?.siteIds).toStrictEqual([SITE, OTHER_SITE]);
   });
 
-  it.each(["Warehouse Staff", "Pharmacist"])("refuses %s before reading anything", async (role) => {
+  it.each(["Platform Admin", "Warehouse Staff", "Pharmacist"])("refuses %s before reading anything", async (role) => {
     const response = await get(analyticsPath({ section: "overview" }), role);
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ code: "role_forbidden" });

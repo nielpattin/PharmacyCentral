@@ -120,8 +120,13 @@ export const basePricesAnswerSchema = z.array(
   z.object({ productId: uuid, productName: z.string(), unitPrice: z.number().nullable() }),
 );
 
-/** `GET /sites` of catalog-service. */
-export const sitesAnswerSchema = z.array(z.object({ id: uuid, name: z.string() }));
+/**
+ * `GET /sites` of catalog-service. `isCustomerFacing` marks a site that sells (a pharmacy); the warehouse, the regional hub
+ * and the headquarters hold stock or administer, but take no sale, so they have no revenue and no sales target.
+ */
+export const sitesAnswerSchema = z.array(
+  z.object({ id: uuid, name: z.string(), isCustomerFacing: z.boolean().optional() }),
+);
 
 /**
  * `GET /internal/analytics/products` of catalog-service: every product, active or not, with the grouping the catalog
@@ -241,6 +246,9 @@ export const joinSales = (documents: SalesDocument[], invoices: PaidInvoice[]): 
  * caller asked for. A site-scoped reader never sees a row whose site is unknown.
  */
 export type SiteFilter = { siteId: string | null; scope: readonly string[] | undefined };
+
+/** Whether a site sells to customers. An answer that does not say is read as selling, the way the catalog used to answer. */
+export const isSellingSite = (site: SiteName): boolean => site.isCustomerFacing ?? true;
 
 export const siteVisible = (siteId: string | null, filter: SiteFilter): boolean => {
   if (filter.scope !== undefined && (siteId === null || !filter.scope.includes(siteId))) return false;
@@ -551,7 +559,8 @@ export type SalesTargetsReport = {
 
 /**
  * The month's revenue against each site's target (BR-REPORT-018). Every site the caller may see is a row, whether or
- * not it has a target or a sale, so a manager can set the goal of a quiet site. Revenue counts the paid invoices of
+ * not it has a target or a sale, so a manager can set the goal of a quiet pharmacy. A site that does not sell (the
+ * warehouse, the regional hub, the headquarters) is no row: it has no revenue to measure and no goal to set. Revenue counts the paid invoices of
  * the sales created in the month, whatever the channel; a sale with no site belongs to no site row. A target of a
  * site the catalog no longer lists is dropped. The totals add the rows; a revenue of 0 is answered, never "missing".
  */
@@ -568,7 +577,7 @@ export const buildSalesTargetsReport = (input: {
   const revenue = new Map(siteRevenueOf(input.sales, input.period, filter).map((row) => [row.siteId, row.revenue]));
   const targets = new Map(input.targets.map((target) => [target.siteId, target.amount]));
   const sites = input.sites
-    .filter((site) => siteVisible(site.id, filter))
+    .filter((site) => isSellingSite(site) && siteVisible(site.id, filter))
     .map((site) => {
       const target = targets.get(site.id) ?? null;
       const siteRevenue = revenue.get(site.id) ?? 0;
@@ -897,17 +906,61 @@ export type AnalyticsKpis = {
   };
 };
 
+/** One day of a period: the paid sales created that day. A day without sales is a real 0, not unanswered. */
+export type DailyPoint = { date: string; revenue: number; orders: number };
+
+/** The overview's day-by-day sales of the period and of the previous one, for the trend chart. */
+export type DailySeries = { current: DailyPoint[]; previous: DailyPoint[] };
+
+/**
+ * The pharmacy trades in Vietnam (UTC+7, no daylight saving). The API takes instants, not a zone, so a day's label is
+ * the calendar date of its start in this zone; the client sends local midnights, which are day starts in the same zone.
+ */
+const PERIOD_UTC_OFFSET_MS = 7 * 3_600_000;
+
+/**
+ * One point per 24 hours from `period.from`, zero-filled, under the same period, site and channel rules as
+ * `totalSales`, so the points add up to the overview tile. The last day is shorter when the period is not whole days.
+ */
+export const dailySalesOf = (
+  sales: Sale[],
+  period: Period,
+  filter: SiteFilter,
+  channel: AnalyticsChannel,
+): DailyPoint[] => {
+  const from = period.from.getTime();
+  const to = period.to.getTime();
+  const count = Math.max(0, Math.ceil((to - from) / DAY_MS));
+  const points: DailyPoint[] = Array.from({ length: count }, (_, index) => ({
+    date: new Date(from + index * DAY_MS + PERIOD_UTC_OFFSET_MS).toISOString().slice(0, 10),
+    revenue: 0,
+    orders: 0,
+  }));
+  for (const sale of sales) {
+    const createdAt = sale.createdAt.getTime();
+    if (createdAt < from || createdAt >= to) continue;
+    if (!siteVisible(sale.siteId, filter)) continue;
+    if (channel !== "all" && channel !== sale.channel) continue;
+    const point = points[Math.floor((createdAt - from) / DAY_MS)];
+    if (!point) continue;
+    point.revenue += sale.revenue;
+    point.orders += 1;
+  }
+  return points;
+};
+
 /** One channel of the period under the site filter; the requested channel does not narrow this row. */
 export type ChannelTotal = { channel: SaleChannel; revenue: number; orderCount: number };
 
 /**
- * The overview tab: the sales tiles, the gross profit beside them, and both channels of the period. The channel filter
- * applies to the tiles only, as it always has.
+ * The overview tab: the sales tiles, the gross profit beside them, both channels of the period, and the day-by-day sales
+ * of this period and the previous one. The channel filter applies to the tiles and the series, not to `channels`.
  */
 export type OverviewAnalytics = AnalyticsEnvelope & {
   section: "overview";
   kpis: AnalyticsKpis;
   channels: ChannelTotal[];
+  series: DailySeries;
 };
 
 /** The revenue tab: the site, product, category and prescription breakdown of the period's sales. */
@@ -1030,6 +1083,10 @@ export function buildAnalyticsSection(input: AnalyticsSectionInput): DashboardAn
           const totals = totalSales(sales, input.period, filter, channel);
           return { channel, revenue: totals.revenue, orderCount: totals.orderCount };
         }),
+        series: {
+          current: dailySalesOf(sales, input.period, filter, input.channel),
+          previous: dailySalesOf(sales, previousPeriodOf(input.period), filter, input.channel),
+        },
       };
     }
     case "revenue":

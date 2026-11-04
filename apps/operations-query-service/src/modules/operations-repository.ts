@@ -27,6 +27,26 @@ import {
 } from "./analytics.ts";
 import type { PageCursor } from "./page-cursor.ts";
 
+/** How many audit rows the dashboard's recent activity returns; the page folds repeats and groups them by day. */
+export const DASHBOARD_ACTIVITY_LIMIT = 30;
+
+export type DashboardOptions = {
+  /**
+   * Restricts the recent activity to these audit action families (the part of `action` before the first dot). Undefined
+   * lists every family; an empty list lists none.
+   */
+  actionFamilies?: readonly string[] | undefined;
+};
+
+/**
+ * `action ILIKE 'family.%'` for each family, or no rows at all for an empty list. The families are the fixed names of
+ * `operations-access.ts`, which hold no LIKE wildcard.
+ */
+const actionFamilyFilter = (families: readonly string[]): SQL =>
+  families.length === 0
+    ? sql`false`
+    : (or(...families.map((family) => ilike(auditEvents.action, `${family}.%`))) as SQL);
+
 export type IntegrationEvent = {
   eventId: string;
   eventType: string;
@@ -232,7 +252,7 @@ export class OperationsRepository {
     };
   }
 
-  public async dashboard(catalogIdentity: CatalogIdentity, siteIds?: string[]) {
+  public async dashboard(catalogIdentity: CatalogIdentity, siteIds?: string[], options: DashboardOptions = {}) {
     const rows = await this.database.db.select().from(projectionCounters);
     const live = await this.loadLiveOperations(catalogIdentity, siteIds);
     const counts = await this.loadCounts(siteIds);
@@ -250,9 +270,14 @@ export class OperationsRepository {
         occurredAt: auditEvents.occurredAt,
       })
       .from(auditEvents)
-      .where(siteIds ? inArray(auditEvents.siteId, siteIds) : undefined)
+      .where(
+        and(
+          siteIds ? inArray(auditEvents.siteId, siteIds) : undefined,
+          options.actionFamilies ? actionFamilyFilter(options.actionFamilies) : undefined,
+        ),
+      )
       .orderBy(desc(auditEvents.occurredAt))
-      .limit(10);
+      .limit(DASHBOARD_ACTIVITY_LIMIT);
     const recentActivity = recentRows.map(({ actorId, ...row }) => ({
       ...row,
       id: row.eventId,

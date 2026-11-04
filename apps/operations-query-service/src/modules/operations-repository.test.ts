@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import type { OperationsDatabase } from "../shared/infrastructure/database.ts";
 import * as schema from "../shared/infrastructure/schema.ts";
-import { OperationsRepository } from "./operations-repository.ts";
+import { DASHBOARD_ACTIVITY_LIMIT, OperationsRepository } from "./operations-repository.ts";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle/migrations", import.meta.url));
 const scopeHeader = "x-actor-site-ids";
@@ -236,5 +236,111 @@ describe("OperationsRepository dashboard site scope", () => {
       }),
       expect.objectContaining({ productName: "Vitamin C", valueOnHand: null, priceStatus: "Missing price" }),
     ]);
+  });
+});
+
+/** The dashboard's recent activity: the caller's sites, the action families its roles may read, and a fixed size. */
+describe("OperationsRepository dashboard recent activity", () => {
+  const client = new PGlite();
+  const db = drizzle({ client, schema });
+  const repository = new OperationsRepository({ db, pool: undefined } as unknown as OperationsDatabase, {
+    catalogUrl: "http://catalog.test",
+    inventoryUrl: "http://inventory.test",
+    salesUrl: "http://sales.test",
+  });
+  const eventId = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const warehouse = ["inventory", "procurement"] as const;
+
+  const record = async (n: number, action: string, siteId: string | null, minutesAgo = n): Promise<void> => {
+    await db.insert(schema.auditEvents).values({
+      eventId: eventId(n),
+      action,
+      entityType: action.split(".")[1] ?? "unknown",
+      siteId,
+      payload: "{}",
+      occurredAt: new Date(Date.now() - minutesAgo * 60_000),
+    });
+  };
+  const actionsOf = (answer: { recentActivity: Array<{ action: string }> }): string[] =>
+    answer.recentActivity.map((row) => row.action);
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder });
+    await record(1, "inventory.transfer.approved", siteA);
+    await record(2, "sales.order.status-changed.v1", siteA);
+    await record(3, "procurement.purchase-order.created", siteA);
+    await record(4, "identity.auth.login", siteA);
+    await record(5, "inventory.adjustment.created", siteB);
+    await record(6, "catalog.product.updated", null);
+  });
+
+  beforeEach(() => {
+    vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-internal-secret");
+    vi.stubGlobal("fetch", async (input: string | URL) => {
+      const body = new URL(input).pathname.endsWith("/count") ? { count: 0 } : [];
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it("lists every action family when no family restriction is given", async () => {
+    expect(actionsOf(await repository.dashboard(identity))).toStrictEqual([
+      "inventory.transfer.approved",
+      "sales.order.status-changed.v1",
+      "procurement.purchase-order.created",
+      "identity.auth.login",
+      "inventory.adjustment.created",
+      "catalog.product.updated",
+    ]);
+  });
+
+  it("lists only inventory and procurement actions for the warehouse families", async () => {
+    expect(actionsOf(await repository.dashboard(identity, undefined, { actionFamilies: warehouse }))).toStrictEqual([
+      "inventory.transfer.approved",
+      "procurement.purchase-order.created",
+      "inventory.adjustment.created",
+    ]);
+  });
+
+  it("keeps the site scope when it narrows by family too", async () => {
+    expect(actionsOf(await repository.dashboard(identity, [siteA], { actionFamilies: warehouse }))).toStrictEqual([
+      "inventory.transfer.approved",
+      "procurement.purchase-order.created",
+    ]);
+    expect(actionsOf(await repository.dashboard(identity, [siteA]))).toStrictEqual([
+      "inventory.transfer.approved",
+      "sales.order.status-changed.v1",
+      "procurement.purchase-order.created",
+      "identity.auth.login",
+    ]);
+  });
+
+  it("lists nothing for an empty family list", async () => {
+    expect((await repository.dashboard(identity, undefined, { actionFamilies: [] })).recentActivity).toStrictEqual([]);
+  });
+
+  it("does not take a family for a prefix of another word", async () => {
+    await record(7, "inventoryx.thing.created", siteA, 0);
+    expect(actionsOf(await repository.dashboard(identity, undefined, { actionFamilies: warehouse }))).not.toContain(
+      "inventoryx.thing.created",
+    );
+  });
+
+  it("returns the newest rows up to the limit, with the actor, entity and site fields", async () => {
+    for (let n = 100; n < 100 + DASHBOARD_ACTIVITY_LIMIT + 5; n += 1) {
+      await record(n, "inventory.movement.recorded", siteA, 0);
+    }
+    const answer = await repository.dashboard(identity, [siteA], { actionFamilies: warehouse });
+    expect(DASHBOARD_ACTIVITY_LIMIT).toBe(30);
+    expect(answer.recentActivity).toHaveLength(30);
+    expect(answer.recentActivity[0]).toMatchObject({ siteId: siteA, userId: null, entityId: null });
   });
 });

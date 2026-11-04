@@ -10,6 +10,7 @@ import {
   buildAnalyticsSection,
   buildSalesTargetsReport,
   customerInsightsOf,
+  dailySalesOf,
   daysOfInventoryOf,
   DEAD_STOCK_ITEM_LIMIT,
   grossProfitOf,
@@ -328,13 +329,71 @@ describe("sales KPIs", () => {
   });
 });
 
+describe("overview daily series", () => {
+  const sum = (points: { revenue: number; orders: number }[]) => ({
+    revenue: points.reduce((total, point) => total + point.revenue, 0),
+    orders: points.reduce((total, point) => total + point.orders, 0),
+  });
+
+  it("has one zero-filled point per day of each period, the previous one aligned day for day", () => {
+    const { series } = overviewAnswer(salesInput());
+    expect(series.current.map((point) => point.date)).toStrictEqual([
+      "2026-10-08",
+      "2026-10-09",
+      "2026-10-10",
+      "2026-10-11",
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14",
+    ]);
+    expect(series.previous.map((point) => point.date)).toStrictEqual([
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04",
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+    ]);
+    expect(series.current.some((point) => point.orders === 0 && point.revenue === 0)).toBe(true);
+  });
+
+  it("adds up to the overview revenue and order figures, under every site and channel filter", () => {
+    for (const overrides of [
+      {},
+      { channel: "counter" as const },
+      { channel: "online" as const },
+      { siteId: SITE_A },
+      { scope: [SITE_A] },
+      { siteId: SITE_B, channel: "counter" as const },
+    ]) {
+      const answer = overviewAnswer(salesInput(overrides));
+      expect(sum(answer.series.current)).toStrictEqual({
+        revenue: answer.kpis.revenue.current,
+        orders: answer.kpis.orderCount.current,
+      });
+      expect(sum(answer.series.previous)).toStrictEqual({
+        revenue: answer.kpis.revenue.previous,
+        orders: answer.kpis.orderCount.previous,
+      });
+    }
+  });
+
+  it("puts a sale on the day it was created, with `to` exclusive and `from` inclusive", () => {
+    const sales = joinSales(salesInput().documents, salesInput().invoices);
+    const points = dailySalesOf(sales, PERIOD, { siteId: null, scope: undefined }, "all");
+    expect(points[0]?.orders).toBeGreaterThanOrEqual(1);
+    expect(sum(points).orders).toBe(5);
+  });
+});
+
 /** The keys every tab answers, so a test can assert that no other tab's figures came along. */
 const ENVELOPE_KEYS = ["channel", "currency", "generatedAt", "period", "previousPeriod", "section", "siteId"];
 
 describe("analytics sections", () => {
   it("answers the overview with the envelope, the tiles and both channels, and nothing of the other tabs", () => {
     const answer = overviewAnswer(salesInput());
-    expect(Object.keys(answer).sort()).toStrictEqual([...ENVELOPE_KEYS, "channels", "kpis"].sort());
+    expect(Object.keys(answer).sort()).toStrictEqual([...ENVELOPE_KEYS, "channels", "kpis", "series"].sort());
     expect(answer.section).toBe("overview");
     expect(answer.currency).toBe("VND");
     expect(answer.channel).toBe("all");
@@ -786,6 +845,29 @@ describe("sales targets", () => {
       { siteId: SITE_B, siteName: "Nhà thuốc B", target: null, revenue: 300, progress: null },
     ]);
     expect(report.totals).toStrictEqual({ target: 0, revenue: 300, progress: null });
+  });
+
+  it("lists only the sites that sell: the warehouse, the hub and the headquarters are no row and add nothing", () => {
+    const report = buildSalesTargetsReport({
+      month: "2026-10",
+      period: PERIOD,
+      siteId: null,
+      scope: undefined,
+      sites: [
+        { ...siteA, isCustomerFacing: true },
+        { id: SITE_B, name: "Kho vệ tinh", isCustomerFacing: false },
+      ],
+      targets: [
+        { siteId: SITE_A, month: "2026-10", amount: 1000, currency: "VND" },
+        { siteId: SITE_B, month: "2026-10", amount: 5000, currency: "VND" },
+      ],
+      sales: [sale(SITE_A, "online", 500)],
+    });
+
+    expect(report.sites).toStrictEqual([
+      { siteId: SITE_A, siteName: "Nhà thuốc A", target: 1000, revenue: 500, progress: 0.5 },
+    ]);
+    expect(report.totals).toStrictEqual({ target: 1000, revenue: 500, progress: 0.5 });
   });
 
   it("answers zero revenue and no target for a month with no sale, never a missing figure", () => {
