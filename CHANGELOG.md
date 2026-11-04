@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**deploy, docs**
+
+- CI audits production dependencies (`pnpm audit --prod --audit-level=high`), scans the history for committed secrets with gitleaks, and runs CodeQL on JavaScript and TypeScript for each pull request into `main` and weekly (`.github/workflows/codeql.yml`). Dependabot proposes weekly npm, GitHub Actions, Docker and Compose updates (`.github/dependabot.yml`). The `seroval` override in `pnpm-workspace.yaml` (`>=1.6.11`) closes three high and two moderate advisories that came in through `@tanstack/react-router`.
+
 **customer-web, staff-web, deploy, docs**
 
 - The web containers send `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and, over https, `Strict-Transport-Security`, and limit `/api/` to `API_RATE_LIMIT_RPS` requests per second per client (default 30, burst `API_RATE_LIMIT_BURST`, default 60), answering `429 rate_limited` beyond it. Documented in `docs/runbook.md` under "Web edge hardening".

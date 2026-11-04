@@ -928,6 +928,14 @@ hash, so they are served `public, max-age=31536000, immutable`. Every other path
 fallback included, is served `no-cache`: the browser keeps a copy but revalidates it on each load, so a deploy is
 picked up at once instead of leaving a browser on the old bundle. `curl -sI http://localhost:5302/` shows the header.
 
+## Security checks in CI
+
+`.github/workflows/ci.yml` fails a pull request when `pnpm audit --prod` finds a high or critical advisory, or when
+gitleaks finds a secret anywhere in the history. A failed audit is fixed by updating the package, or by adding a
+version floor under `overrides` in `pnpm-workspace.yaml` when the package is only a transitive dependency.
+`.github/workflows/codeql.yml` reports code findings under the repository's Security tab and does not block merges.
+`.github/dependabot.yml` opens the weekly update pull requests.
+
 ## Web edge hardening
 
 The same script, `apps/nginx-entrypoint.sh`, adds the browser security headers and a per-client rate limit.
