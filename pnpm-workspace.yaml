@@ -54,7 +54,7 @@ catalog:
   "@tanstack/react-table": 8.21.3
   "@tanstack/react-virtual": 3.14.12
   "@types/express": 5.0.6
-  "@types/node": 24.13.3
+  "@types/node": 26.6.6
   "@types/nodemailer": 8.0.2
   "@types/pg": 8.23.1
   "@types/qrcode": 1.5.6
