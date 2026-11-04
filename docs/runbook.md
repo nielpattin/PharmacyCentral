@@ -928,6 +928,21 @@ hash, so they are served `public, max-age=31536000, immutable`. Every other path
 fallback included, is served `no-cache`: the browser keeps a copy but revalidates it on each load, so a deploy is
 picked up at once instead of leaving a browser on the old bundle. `curl -sI http://localhost:5302/` shows the header.
 
+## Web edge hardening
+
+The same script, `apps/nginx-entrypoint.sh`, adds the browser security headers and a per-client rate limit.
+
+- **Headers.** Every response carries `Content-Security-Policy` (scripts from the same origin only; images from any
+  https origin; `https://*.vietmap.vn` and `blob:` workers for the map; `frame-ancestors 'none'`),
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy` and `Permissions-Policy` (camera and
+  geolocation for the same origin only). `Strict-Transport-Security` is sent only when `X-Forwarded-Proto` is `https`,
+  so the ALB's https requests get it and plain http does not. If a new page loads a script, font or API from another
+  host, the browser console reports a CSP violation: add the host to the policy in the script.
+- **Rate limit.** `/api/` allows `API_RATE_LIMIT_RPS` requests per second per client (default 30) with a burst of
+  `API_RATE_LIMIT_BURST` (default 60); the rest get `429` with `Retry-After: 1`. Static files are not limited. The client
+  address is the last untrusted entry of `X-Forwarded-For` behind the ALB (the VPC range `10.20.0.0/16` is trusted). A
+  store whose staff share one public address share one bucket, so raise the two values before lowering them.
+
 Redis stores rate-limit counters and delivery route calculations.
 
 - PostgreSQL remains the authoritative source of truth.
