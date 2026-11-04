@@ -637,7 +637,7 @@ a {
     height: 100vh;
     min-height: 100vh;
     transform: translateX(-105%);
-    transition: transform 180ms var(--ease);
+    transition: transform calc(180ms * var(--sidebar-motion)) var(--ease);
     z-index: 30;
   }
 
@@ -713,9 +713,30 @@ a {
    The raw shell controls (sidebar links, topbar buttons, profile menu) get the same press timing as the shared
    components. Tokens and the reasoning live in packages/ui/src/weight.css. */
 
+/* The sidebar moves at 70% of the shared weight: durations, travel and squash are all scaled by --sidebar-motion, so
+   the navigation stays lighter than the dialogs and buttons it sits beside. One number tunes it. */
+.sidebar {
+  --sidebar-motion: 0.7;
+  --sidebar-hover: calc(var(--weight-hover) * var(--sidebar-motion));
+  --sidebar-press: calc(var(--weight-press) * var(--sidebar-motion));
+  --sidebar-release: calc(var(--weight-release) * var(--sidebar-motion));
+  --sidebar-settle: calc(var(--weight-toast) * var(--sidebar-motion));
+  --sidebar-squash: calc(0.03 * var(--sidebar-motion));
+  --sidebar-squash-large: calc(0.06 * var(--sidebar-motion));
+  --sidebar-sink: calc(var(--weight-sink) * var(--sidebar-motion));
+  --sidebar-lean: calc(3px * var(--sidebar-motion));
+  --sidebar-arrive: calc(12px * var(--sidebar-motion));
+}
+
 .sidebar-nav-link,
 .sidebar-child-link,
-.sidebar-collapse-toggle,
+.sidebar-collapse-toggle {
+  transition:
+    background-color var(--sidebar-hover) var(--weight-ease-out),
+    color var(--sidebar-hover) var(--weight-ease-out),
+    border-color var(--sidebar-hover) var(--weight-ease-out);
+}
+
 .topbar-icon-button,
 .profile-menu-item {
   transition:
@@ -744,7 +765,10 @@ a {
 
 .sidebar-nav-link:active,
 .sidebar-child-link:active,
-.sidebar-collapse-toggle:active,
+.sidebar-collapse-toggle:active {
+  transition-duration: var(--sidebar-press);
+}
+
 .topbar-icon-button:active,
 .profile-trigger:active,
 .profile-menu-item:active:not(:disabled) {
@@ -754,7 +778,15 @@ a {
 @media (prefers-reduced-motion: no-preference) {
   .sidebar-nav-link,
   .sidebar-child-link,
-  .sidebar-collapse-toggle,
+  .sidebar-collapse-toggle {
+    transition-property: background-color, color, border-color, box-shadow, transform;
+    transition-duration:
+      var(--sidebar-hover), var(--sidebar-hover), var(--sidebar-hover), var(--sidebar-release), var(--sidebar-release);
+    transition-timing-function:
+      var(--weight-ease-out), var(--weight-ease-out), var(--weight-ease-out), var(--weight-ease-out),
+      var(--weight-spring);
+  }
+
   .topbar-icon-button,
   .profile-trigger {
     transition-property: background-color, color, border-color, box-shadow, transform;
@@ -766,8 +798,12 @@ a {
   }
 
   .sidebar-nav-link:active,
-  .sidebar-child-link:active,
-  .sidebar-collapse-toggle:active,
+  .sidebar-child-link:active {
+    transform: translateY(var(--sidebar-sink)) scale(calc(1 - var(--sidebar-squash)));
+    transition-duration: var(--sidebar-press);
+    transition-timing-function: var(--weight-ease-out);
+  }
+
   .topbar-icon-button:active,
   .profile-trigger:active {
     transform: translateY(1px) scale(0.97);
@@ -775,22 +811,27 @@ a {
     transition-timing-function: var(--weight-ease-out);
   }
 
-  .sidebar-collapse-toggle:active,
+  .sidebar-collapse-toggle:active {
+    transform: translateY(var(--sidebar-sink)) scale(calc(1 - var(--sidebar-squash-large)));
+    transition-duration: var(--sidebar-press);
+    transition-timing-function: var(--weight-ease-out);
+  }
+
   .topbar-icon-button:active {
-    transform: translateY(var(--weight-sink)) scale(0.88);
+    transform: translateY(var(--weight-sink)) scale(0.94);
   }
 
   /* The icon leans toward where the link goes, and the active pill lands with a settle. */
   .sidebar-nav-icon {
-    transition: transform var(--weight-release) var(--weight-spring);
+    transition: transform var(--sidebar-release) var(--weight-spring);
   }
 
   .sidebar-nav-link:hover .sidebar-nav-icon {
-    transform: translateX(3px);
+    transform: translateX(var(--sidebar-lean));
   }
 
   .sidebar-nav-active-indicator {
-    animation: weight-indicator-in var(--weight-toast) var(--weight-spring) both;
+    animation: sidebar-indicator-in var(--sidebar-settle) var(--weight-spring) both;
   }
 
   .profile-dropdown {
@@ -803,10 +844,10 @@ a {
   }
 }
 
-@keyframes weight-indicator-in {
+@keyframes sidebar-indicator-in {
   from {
     opacity: 0;
-    transform: translateX(-12px) scaleX(0.85);
+    transform: translateX(calc(var(--sidebar-arrive) * -1)) scaleX(calc(1 - 0.15 * var(--sidebar-motion)));
   }
   to {
     opacity: 1;

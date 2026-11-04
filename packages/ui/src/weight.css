@@ -5,12 +5,12 @@
 
    The rules:
    1. Asymmetric timing. A press goes down fast (the finger is the force); the release is a spring that overshoots and
-      settles over half a second (the mass). A transition takes the timing of the state it moves TO, so the `:active`
+      settles in a quarter of a second (the mass). A transition takes the timing of the state it moves TO, so the `:active`
       rule carries the press timing and the resting rule carries the release timing.
-   2. Pressed means lower. The control sinks 2px, shrinks to 0.94, and a filled button loses its lift shadow and gains
+   2. Pressed means lower. The control sinks 1px, shrinks to 0.97, and a filled button loses its lift shadow and gains
       an inset one, as if pushed into the page. Hovering lifts it 1px.
    3. Things arrive and leave on the same path. Panels fade and travel a few pixels in, then back out when closed; the
-      bigger the panel, the longer it takes (menu 200ms, dialog 420ms spring, sheet 380ms).
+      bigger the panel, the longer it takes (menu 100ms, dialog 210ms spring, sheet 190ms).
    4. Selection moves. The raised pill under a chosen tab slides to the next one on a spring.
    5. Movement honours `prefers-reduced-motion`. Colour changes stay, because they carry state without moving anything. */
 
@@ -18,17 +18,17 @@
   --weight-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --weight-ease-in: cubic-bezier(0.5, 0, 0.75, 0);
   /* Spring with about 15% overshoot. Browsers without linear() get a gentler cubic-bezier overshoot. */
-  --weight-spring: cubic-bezier(0.34, 1.7, 0.64, 1);
-  --weight-press: 100ms;
-  --weight-hover: 220ms;
-  --weight-release: 520ms;
-  --weight-menu: 200ms;
-  --weight-dialog: 420ms;
-  --weight-sheet: 380ms;
-  --weight-toast: 420ms;
-  --weight-exit: 200ms;
-  --weight-scale-down: 0.94;
-  --weight-sink: 2px;
+  --weight-spring: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --weight-press: 50ms;
+  --weight-hover: 110ms;
+  --weight-release: 260ms;
+  --weight-menu: 100ms;
+  --weight-dialog: 210ms;
+  --weight-sheet: 190ms;
+  --weight-toast: 210ms;
+  --weight-exit: 100ms;
+  --weight-scale-down: 0.97;
+  --weight-sink: 1px;
 }
 
 @supports (transition-timing-function: linear(0, 1)) {
@@ -173,13 +173,13 @@ tbody > [data-weight="row"]:hover {
   /* Icon-only buttons are small; a deeper scale reads at their size. */
   [data-weight="press"][data-size="icon"]:active:not(:disabled),
   [data-weight="press"][data-size="icon-sm"]:active:not(:disabled) {
-    transform: translateY(var(--weight-sink)) scale(0.88);
+    transform: translateY(var(--weight-sink)) scale(0.94);
   }
 
   /* Segments sink with the pill; the pill itself stays put, so the press reads as pushing the label. */
   [role="tab"][data-weight="press"]:active:not(:disabled),
   [role="radio"][data-weight="press"]:active:not(:disabled) {
-    transform: translateY(1px) scale(0.95);
+    transform: translateY(0.5px) scale(0.975);
   }
 
   /* Floating panels (popover, action menu) grow out of the button that opened them and shrink back into it. */
@@ -229,7 +229,7 @@ tbody > [data-weight="row"]:hover {
 @keyframes weight-panel-in {
   from {
     opacity: 0;
-    transform: translateY(-6px) scale(0.96);
+    transform: translateY(-3px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -244,7 +244,7 @@ tbody > [data-weight="row"]:hover {
   }
   to {
     opacity: 0;
-    transform: translateY(-4px) scale(0.97);
+    transform: translateY(-2px) scale(0.985);
   }
 }
 
@@ -269,7 +269,7 @@ tbody > [data-weight="row"]:hover {
 @keyframes weight-dialog-in {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.92);
+    transform: translateY(8px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -284,7 +284,7 @@ tbody > [data-weight="row"]:hover {
   }
   to {
     opacity: 0;
-    transform: translateY(8px) scale(0.97);
+    transform: translateY(4px) scale(0.985);
   }
 }
 
@@ -309,7 +309,7 @@ tbody > [data-weight="row"]:hover {
 @keyframes weight-toast-in {
   from {
     opacity: 0;
-    transform: translateY(18px) scale(0.94);
+    transform: translateY(9px) scale(0.97);
   }
   to {
     opacity: 1;
@@ -324,6 +324,6 @@ tbody > [data-weight="row"]:hover {
   }
   to {
     opacity: 0;
-    transform: translateX(28px);
+    transform: translateX(14px);
   }
 }
