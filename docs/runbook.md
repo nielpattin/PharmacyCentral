@@ -936,6 +936,26 @@ version floor under `overrides` in `pnpm-workspace.yaml` when the package is onl
 `.github/workflows/codeql.yml` reports code findings under the repository's Security tab and does not block merges.
 `.github/dependabot.yml` opens the weekly update pull requests.
 
+## Dependabot pull requests
+
+`.github/dependabot.yml` opens weekly pull requests for npm (minor and patch in one group), GitHub Actions (one
+group), Docker and Compose. To run CI on one branch without a new commit, use
+`gh workflow run "Workspace validation" --ref <branch>`; the workflow has `workflow_dispatch`.
+
+- **Green CI is not enough for an image bump.** CI lints, type-checks, tests and builds; it never builds a service
+  image or starts the stack. For nginx, Alpine, Redis, Tempo or the OTel collector, run the new image in container mode
+  (`docker compose up -d --build --no-deps <service>`) and check the part you changed. A RabbitMQ minor upgrade
+  also needs its upgrade notes read first, because the local volume keeps data.
+- **A group can leave related packages apart.** One npm group bumped `react` and left `react-dom`, and React failed
+  with "Incompatible React versions". Fix the catalog in `pnpm-workspace.yaml` on the Dependabot branch and merge soon:
+  a Dependabot rebase can drop your commit. Merge group pull requests with squash.
+- **Close, do not merge:** a Node major (the runtime is pinned to 24.19.0, and `@types/node` must match it), and a major
+  bump that fails type-check. Closing a pull request makes Dependabot skip that version.
+- **Action bumps in `release.yml` are not exercised by CI.** `configure-aws-credentials` and `build-push-action` run
+  only when a release tag is pushed, so a major bump there fails at release time. Review those by hand.
+- **gitleaks reads test fixtures.** `.gitleaks.toml` allows `*.test.ts`, whose API keys are made-up strings. A finding
+  anywhere else is a real secret: rotate it before anything else.
+
 ## Web edge hardening
 
 The same script, `apps/nginx-entrypoint.sh`, adds the browser security headers and a per-client rate limit.
