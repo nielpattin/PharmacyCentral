@@ -1,0 +1,8 @@
+# Extends the default gitleaks rules. The only allowance is test files, whose API keys are made-up strings
+# ("example-key-1234", "AIzaSySecondKey999") used to check how a key is stored, masked and rotated.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake credentials in tests"
+paths = ['''.*\.test\.ts$''']
