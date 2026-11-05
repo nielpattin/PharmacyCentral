@@ -87,5 +87,5 @@ catalog:
   zod: 4.6.7
   zod-openapi: 6.0.2
   vite: 8.3.5
-  vitest: 4.1.12
+  vitest: 5.0.5
   portless: 0.15.13
