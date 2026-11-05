@@ -117,8 +117,8 @@ catalogs:
       specifier: 1.9.1
       version: 1.9.1
     '@opentelemetry/context-async-hooks':
-      specifier: 2.12.0
-      version: 2.12.0
+      specifier: 3.0.0
+      version: 3.0.0
     '@opentelemetry/exporter-logs-otlp-http':
       specifier: 0.223.0
       version: 0.223.0
@@ -408,7 +408,7 @@ importers:
         version: 0.5.8
       '@opentelemetry/context-async-hooks':
         specifier: 'catalog:'
-        version: 2.12.0(@opentelemetry/api@1.9.1)
+        version: 3.0.0(@opentelemetry/api@1.9.1)
       '@types/express':
         specifier: 'catalog:'
         version: 5.0.6
@@ -721,7 +721,7 @@ importers:
         version: 0.5.8
       '@opentelemetry/context-async-hooks':
         specifier: 'catalog:'
-        version: 2.12.0(@opentelemetry/api@1.9.1)
+        version: 3.0.0(@opentelemetry/api@1.9.1)
       '@types/express':
         specifier: 'catalog:'
         version: 5.0.6
@@ -946,7 +946,7 @@ importers:
         version: 0.5.8
       '@opentelemetry/context-async-hooks':
         specifier: 'catalog:'
-        version: 2.12.0(@opentelemetry/api@1.9.1)
+        version: 3.0.0(@opentelemetry/api@1.9.1)
       '@types/express':
         specifier: 'catalog:'
         version: 5.0.6
@@ -1037,7 +1037,7 @@ importers:
         version: 0.5.8
       '@opentelemetry/context-async-hooks':
         specifier: 'catalog:'
-        version: 2.12.0(@opentelemetry/api@1.9.1)
+        version: 3.0.0(@opentelemetry/api@1.9.1)
       '@resvg/resvg-js':
         specifier: 'catalog:'
         version: 2.6.2
@@ -2274,6 +2274,12 @@ packages:
     engines: {node: ^18.19.0 || >=20.6.0}
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
+
+  '@opentelemetry/context-async-hooks@3.0.0':
+    resolution: {integrity: sha512-qDZeKSgTT+qTaL99eRbpvWO5+oZ0MKvMH4pqvzi6xYKyhiMTDBxBeTLI6BpdeMt58T5TpxHJvFl9P52i6CDWGA==}
+    engines: {node: '>=22.15.0'}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.0.0 <1.11.0'
 
   '@opentelemetry/core@2.12.0':
     resolution: {integrity: sha512-1HsSAuvT4/my0QrXWsyXFdWjKaPeCHsismKZgEEIb8NK13LP6DrMRlsUbvD/0F9mDWK3xDom9AMv3IscxgOnOQ==}
@@ -6598,6 +6604,10 @@ snapshots:
       yaml: 2.9.0
 
   '@opentelemetry/context-async-hooks@2.12.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+
+  '@opentelemetry/context-async-hooks@3.0.0(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
 
