@@ -209,10 +209,9 @@ export const identityDb = async (fn) => {
 
 export const accountState = (email) =>
   identityDb(async (client) => {
-    const { rows } = await client.query(
-      `select u.id, u.actor_type, u.is_active from users u where u.email = $1`,
-      [email],
-    );
+    const { rows } = await client.query(`select u.id, u.actor_type, u.is_active from users u where u.email = $1`, [
+      email,
+    ]);
     return rows[0] ?? null;
   });
 

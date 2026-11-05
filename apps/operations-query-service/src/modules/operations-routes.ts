@@ -177,11 +177,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       unavailable(response);
       return;
     }
-    const refusal = roleRefusal(
-      request,
-      ANALYTICS_ROLES,
-      "Phân tích kỳ chỉ dành cho Quản lý dược.",
-    );
+    const refusal = roleRefusal(request, ANALYTICS_ROLES, "Phân tích kỳ chỉ dành cho Quản lý dược.");
     if (refusal) {
       response.status(refusal.status).json(refusal);
       return;
@@ -229,11 +225,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       unavailable(response);
       return;
     }
-    const refusal = roleRefusal(
-      request,
-      ANALYTICS_ROLES,
-      "Mục tiêu doanh số chỉ dành cho Quản lý dược.",
-    );
+    const refusal = roleRefusal(request, ANALYTICS_ROLES, "Mục tiêu doanh số chỉ dành cho Quản lý dược.");
     if (refusal) {
       response.status(refusal.status).json(refusal);
       return;

@@ -17,12 +17,7 @@ export const ownerOptionsFor = (
   currentOwnerId?: string,
 ): OwnerOption[] => {
   const options: OwnerOption[] = employees
-    .filter(
-      (employee) =>
-        siteId === undefined ||
-        siteId === null ||
-        employee.siteIds.includes(siteId),
-    )
+    .filter((employee) => siteId === undefined || siteId === null || employee.siteIds.includes(siteId))
     .map((employee) => ({ value: employee.id, label: employee.displayName }));
   if (currentOwnerId !== undefined && !options.some((option) => option.value === currentOwnerId)) {
     options.push({ value: currentOwnerId, label: currentOwnerId.slice(0, 8).toUpperCase() });

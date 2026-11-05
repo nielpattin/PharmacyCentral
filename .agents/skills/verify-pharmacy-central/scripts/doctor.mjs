@@ -81,11 +81,7 @@ const accountCheck = async (email) => {
   try {
     const account = await accountState(email);
     if (account) {
-      line(
-        "OK",
-        "identity db + account",
-        `${email} actor=${account.actor_type} active=${account.is_active}`,
-      );
+      line("OK", "identity db + account", `${email} actor=${account.actor_type} active=${account.is_active}`);
     } else {
       line(
         "FAIL",
