@@ -42,9 +42,9 @@
     "@nx/js": "23.2.1",
     "@typescript/native": "npm:typescript@7.0.2",
     "nx": "23.2.1",
-    "oxfmt": "0.64.0",
+    "oxfmt": "0.75.0",
     "oxlint": "1.79.0",
-    "oxlint-tsgolint": "7.0.2001",
+    "oxlint-tsgolint": "7.0.2005",
     "pg": "catalog:",
     "portless": "catalog:",
     "typescript": "npm:@typescript/typescript6@6.0.2"

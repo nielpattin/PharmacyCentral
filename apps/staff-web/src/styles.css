@@ -14,12 +14,7 @@ body {
   font-size: 16px;
   background: var(--bg);
   color: var(--text);
-  font-family:
-    "Be Vietnam Pro",
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: "Be Vietnam Pro", ui-sans-serif, system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
