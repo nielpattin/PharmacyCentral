@@ -970,6 +970,14 @@ The same script, `apps/nginx-entrypoint.sh`, adds the browser security headers a
   `API_RATE_LIMIT_BURST` (default 60); the rest get `429` with `Retry-After: 1`. Static files are not limited. The client
   address is the last untrusted entry of `X-Forwarded-For` behind the ALB (the VPC range `10.20.0.0/16` is trusted). A
   store whose staff share one public address share one bucket, so raise the two values before lowering them.
+- **Known gap: the API Gateway can be called directly.** The per-client limit lives in the web containers' nginx. The
+  API Gateway endpoint is public (the web containers proxy to it, and the SePay webhook posts to it), and its only
+  limit is the stage throttle (`throttling_rate_limit`, default 1000 requests per second, shared by every caller).
+  Someone who calls it directly skips the per-client limit, though a staff route still needs a valid token. The services
+  have no rate-limit middleware of their own besides sign-in, prescription intake and the shopping assistant, so CodeQL
+  reports `js/missing-rate-limiting` on the other routes; those alerts are dismissed with this note. Closing the gap
+  needs the edge, not the services: a custom domain in front of the API Gateway with the default endpoint disabled, plus
+  a limit keyed by client address there. Neither exists yet.
 
 Redis stores rate-limit counters and delivery route calculations.
 

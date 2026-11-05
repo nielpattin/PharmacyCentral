@@ -1,3 +1,5 @@
+import { randomInt } from "node:crypto";
+
 import {
   and,
   asc,
@@ -748,9 +750,7 @@ export class SalesRepository {
           prescriptionNumber: `RX-${new Date()
             .toISOString()
             .replace(/[-:.TZ]/g, "")
-            .slice(0, 14)}-${Math.floor(Math.random() * 1000)
-            .toString()
-            .padStart(3, "0")}`,
+            .slice(0, 14)}-${randomInt(1000).toString().padStart(3, "0")}`,
           siteId: input.siteId,
           storageLocationId: input.storageLocationId,
           patientName: input.patientName,
