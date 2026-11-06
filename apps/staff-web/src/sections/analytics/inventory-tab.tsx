@@ -286,7 +286,7 @@ export const InventoryTab = ({
           empty={translateText("No records found")}
           columns={withActionColumn<DataColumn<DeadStockRow>>(
             [
-              { key: "productName", label: translateText("Product"), truncate: 32 },
+              { key: "productName", label: translateText("Product") },
               { key: "site", label: translateText("Site") },
               {
                 key: "quantity",

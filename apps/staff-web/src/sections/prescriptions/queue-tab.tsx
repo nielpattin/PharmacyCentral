@@ -133,6 +133,7 @@ export const PrescriptionQueueTab = ({
       label: "Site",
       truncate: true,
       render: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
+      text: (row) => referenceLabel(references.sites, row.siteId, ["code", "name"]),
     },
     {
       key: "lines",

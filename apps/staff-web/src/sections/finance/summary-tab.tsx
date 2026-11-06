@@ -104,7 +104,7 @@ export const SummaryTab = (): React.JSX.Element => {
           exportCsv={{ filename: "inventory-valuation.csv" }}
           columns={withActionColumn<DataColumn<JsonRecord>>(
             [
-              { key: "productName", label: translateText("Product"), truncate: 32 },
+              { key: "productName", label: translateText("Product") },
               { key: "batchNumber", label: translateText("Batch") },
               { key: "siteName", label: translateText("Site") },
               {

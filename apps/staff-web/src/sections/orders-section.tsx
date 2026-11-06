@@ -62,6 +62,7 @@ export const OrdersSection = (): React.JSX.Element => {
       label: "Store",
       truncate: true,
       render: (row) => referenceLabel(references.sites, row.selectedStoreId, ["code", "name"]),
+      text: (row) => referenceLabel(references.sites, row.selectedStoreId, ["code", "name"]),
     },
     {
       key: "fulfillmentType",

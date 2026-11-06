@@ -89,6 +89,7 @@ export const SavedViewsMenu = ({
                   <button
                     type="button"
                     data-weight="item"
+                    title={view.name}
                     onClick={() => apply(view, close)}
                     className="flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm text-ink hover:bg-surface-soft"
                   >

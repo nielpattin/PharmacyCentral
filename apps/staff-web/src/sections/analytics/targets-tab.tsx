@@ -155,7 +155,7 @@ export const TargetsTab = ({
         empty={translateText("No records found")}
         columns={withActionColumn<DataColumn<SalesTargetSiteRow>>(
           [
-            { key: "siteName", label: translateText("Site"), truncate: 32 },
+            { key: "siteName", label: translateText("Site") },
             {
               key: "target",
               label: translateText("Target"),
