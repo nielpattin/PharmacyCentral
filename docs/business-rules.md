@@ -894,7 +894,7 @@ Các trường hợp biên:
 - Một giao dịch chỉ vào $K$ khi $\left| \text{số lượng xuất} - \text{số lượng xuất có giá} \right| \le 10^{-6}$; giao dịch có giá nhập một phần, hoặc không có, không được cộng doanh thu hay giá vốn đoán vào lợi nhuận gộp (BR-FIN-002, BR-FIN-003).
 - Kỳ không có giao dịch bán nào: lợi nhuận gộp là 0 thật và coverage để trống. Kỳ có giao dịch bán nhưng không giao dịch nào đủ giá nhập: lợi nhuận gộp hiển thị "—" (lý do `no_cost_data`), không phải 0.
 - Coverage là tỷ lệ doanh thu thuộc $K$ trên doanh thu của $P$, từ 0 đến 1, để trống khi doanh thu kỳ bằng 0.
-- Giá vốn của một giao dịch được làm tròn 2 chữ số thập phân, lợi nhuận gộp làm tròn đến đồng.
+- Màn hình Phân tích hiển thị cả hai vế: ô **Giá vốn hàng bán** là $\sum_{d \in K} \text{Giá vốn}(d)$, và ô **Lợi nhuận gộp** ghi rõ "doanh thu có giá nhập − giá vốn". Doanh thu có giá nhập và giá vốn được làm tròn đến đồng rồi mới trừ nhau, nên số hiển thị trừ nhau đúng từng đồng. Khi không giao dịch nào đủ giá nhập, cả hai ô hiển thị "—".
 - Lô nhập từ số dư đầu kỳ không có dòng phiếu nhập nên chưa có giá nhập, và mọi giao dịch xuất từ lô đó nằm ngoài $K$.
 - Lô được ghép với dòng phiếu nhập theo cặp (`productId`, `batchNumber`) chứ không theo id lô, và không lọc theo site; nhập cùng số lô ở site khác vẫn góp vào giá nhập đơn vị.
 

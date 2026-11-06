@@ -43,15 +43,18 @@ export const Change = ({
   pair,
   format,
   locale,
+  neutral = false,
 }: {
   pair: FigurePair | undefined;
   format: (value: unknown) => string;
   locale: string;
+  /** For a figure that is neither good nor bad when it rises, such as a cost that follows sales: no colour. */
+  neutral?: boolean;
 }): React.JSX.Element => {
   const change = percentChange(pair?.current, pair?.previous);
   return (
     <span className="flex flex-wrap gap-x-2 tabular-nums">
-      <span className={change === null ? undefined : change < 0 ? "text-danger-ink" : "text-success"}>
+      <span className={change === null || neutral ? undefined : change < 0 ? "text-danger-ink" : "text-success"}>
         {formatPercentChange(change, locale)}
       </span>
       <span>

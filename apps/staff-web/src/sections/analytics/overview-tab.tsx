@@ -28,6 +28,10 @@ export const OverviewTab = ({
 }): React.JSX.Element => {
   const grossProfit = data?.kpis.grossProfit;
   const grossProfitCoverage = grossProfit?.available ? partialCoveragePercent(grossProfit.coverage?.current) : null;
+  const noCostRecorded = grossProfit !== undefined && grossProfit.available === false;
+  const noCostHint = translateText(
+    "No purchase cost is recorded for the sales of this period. Enter the unit cost on the goods receipt.",
+  );
   const currency = data?.currency ?? "VND";
   const days = data?.series ?? { current: [], previous: [] };
   const periodLabels = { current: translateText("Current period"), previous: translateText("Previous period") };
@@ -45,8 +49,9 @@ export const OverviewTab = ({
   if (loading) {
     return (
       <div className="grid gap-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,1fr))]">
-          <Skeleton className="h-40 lg:row-span-2 lg:h-auto" />
+        <div className="grid gap-3 lg:grid-cols-3">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
           <Skeleton className="h-28" />
           <Skeleton className="h-28" />
           <Skeleton className="h-28 lg:col-span-2" />
@@ -62,10 +67,8 @@ export const OverviewTab = ({
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,1fr))]">
+      <div className="grid gap-3 lg:grid-cols-3">
         <StatTile
-          featured
-          className="lg:row-span-2"
           label={translateText("Revenue")}
           value={format.money(data?.kpis.revenue.current)}
           hint={<Change pair={data?.kpis.revenue} format={format.money} locale={locale} />}
@@ -81,17 +84,38 @@ export const OverviewTab = ({
           hint={<Change pair={data?.kpis.averageOrderValue} format={format.money} locale={locale} />}
         />
         <StatTile
+          label={translateText("Cost of goods sold")}
+          value={format.money(grossProfit?.cost?.current)}
+          hint={
+            noCostRecorded ? (
+              noCostHint
+            ) : (
+              <span className="grid gap-0.5">
+                <Change pair={grossProfit?.cost} format={format.money} locale={locale} neutral />
+                <span>{translateText("Purchase cost of the goods sold, from the goods receipts.")}</span>
+              </span>
+            )
+          }
+        />
+        <StatTile
           className="lg:col-span-2"
           label={translateText("Gross profit")}
           value={format.money(grossProfit?.current)}
           hint={
-            grossProfit && grossProfit.available === false ? (
-              translateText(
-                "No purchase cost is recorded for the sales of this period. Enter the unit cost on the goods receipt.",
-              )
+            noCostRecorded ? (
+              noCostHint
             ) : (
               <span className="grid gap-0.5">
                 <Change pair={grossProfit} format={format.money} locale={locale} />
+                <span>
+                  {fillText(
+                    translateText("{costedRevenue} revenue with a recorded cost, less {cost} cost of goods sold."),
+                    {
+                      costedRevenue: format.money(grossProfit?.costedRevenue?.current),
+                      cost: format.money(grossProfit?.cost?.current),
+                    },
+                  )}
+                </span>
                 {grossProfitCoverage === null ? null : (
                   <span>
                     {fillText(translateText("Based on {percent}% of revenue that has a recorded cost."), {

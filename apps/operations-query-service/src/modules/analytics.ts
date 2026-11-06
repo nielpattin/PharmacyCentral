@@ -280,9 +280,17 @@ export const totalSales = (
 /** Quantities from different batches are summed as decimals, so equality is judged to a millionth of a unit. */
 const QUANTITY_TOLERANCE = 1e-6;
 
+/**
+ * Gross profit with both of its terms, so the page can show `current = costedRevenue - cost` with no hidden step.
+ * `costedRevenue` and `cost` are whole dong and null, like `current`, when sales exist but none is costed.
+ */
 export type GrossProfit = {
-  /** Revenue less the cost of goods of the sales whose cost is fully known; null when no sale in the period is. */
+  /** `costedRevenue` less `cost`; null when no sale in the period is costed. */
   current: number | null;
+  /** Revenue of the sales whose goods all have a recorded cost: the only revenue gross profit is taken from. */
+  costedRevenue: number | null;
+  /** Cost of goods sold of those same sales, from the purchase cost on goods receipts. */
+  cost: number | null;
   /** Share of the period's revenue that belongs to those sales, 0 to 1; null when the period has no revenue. */
   coverage: number | null;
 };
@@ -330,9 +338,13 @@ export const grossProfitOf = (
     costedRevenue += sale.revenue;
     costedCost += cost;
   }
-  if (saleCount === 0) return { current: 0, coverage: null };
+  if (saleCount === 0) return { current: 0, costedRevenue: 0, cost: 0, coverage: null };
   const coverage = revenue > 0 ? costedRevenue / revenue : null;
-  return { current: costedCount === 0 ? null : Math.round(costedRevenue - costedCost), coverage };
+  if (costedCount === 0) return { current: null, costedRevenue: null, cost: null, coverage };
+  // Each term is rounded to whole dong first, so the figures on the page subtract exactly.
+  const roundedRevenue = Math.round(costedRevenue);
+  const roundedCost = Math.round(costedCost);
+  return { current: roundedRevenue - roundedCost, costedRevenue: roundedRevenue, cost: roundedCost, coverage };
 };
 
 /** Revenue per sale, whole dong; null when there is no sale to average. */
@@ -903,6 +915,9 @@ export type AnalyticsKpis = {
     available: boolean;
     reason: "no_cost_data" | null;
     coverage: { current: number | null; previous: number | null };
+    /** The two terms of `current`: revenue of the costed sales and their cost of goods sold. */
+    costedRevenue: { current: number | null; previous: number | null };
+    cost: { current: number | null; previous: number | null };
   };
 };
 
@@ -1055,6 +1070,8 @@ const kpisOf = (input: OverviewInput, sales: Sale[], filter: SiteFilter): Analyt
       available: profit.current !== null,
       reason: profit.current === null ? ("no_cost_data" as const) : null,
       coverage: { current: profit.coverage, previous: priorProfit.coverage },
+      costedRevenue: { current: profit.costedRevenue, previous: priorProfit.costedRevenue },
+      cost: { current: profit.cost, previous: priorProfit.cost },
     },
   };
 };

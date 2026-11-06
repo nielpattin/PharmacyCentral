@@ -38,6 +38,10 @@ export const analyticsLiterals: Record<string, string> = {
   Orders: "Số đơn",
   "Average order value": "Giá trị đơn trung bình",
   "Gross profit": "Lợi nhuận gộp",
+  "Cost of goods sold": "Giá vốn hàng bán",
+  "Purchase cost of the goods sold, from the goods receipts.": "Tiền nhập hàng của những mặt hàng đã bán trong kỳ.",
+  "{costedRevenue} revenue with a recorded cost, less {cost} cost of goods sold.":
+    "Tiền bán {costedRevenue} − tiền nhập hàng {cost} (chỉ tính hàng đã có giá nhập).",
   "No purchase cost is recorded for the sales of this period. Enter the unit cost on the goods receipt.":
     "Chưa có giá nhập cho các đơn trong kỳ. Hãy nhập giá nhập ở phiếu nhập kho.",
   "Based on {percent}% of revenue that has a recorded cost.": "Tính trên {percent}% doanh thu có giá nhập.",

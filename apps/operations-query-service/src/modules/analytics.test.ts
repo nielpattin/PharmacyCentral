@@ -310,6 +310,8 @@ describe("sales KPIs", () => {
       available: false,
       reason: "no_cost_data",
       coverage: { current: 0, previous: 0 },
+      costedRevenue: { current: null, previous: null },
+      cost: { current: null, previous: null },
     });
   });
 
@@ -1109,7 +1111,15 @@ describe("gross profit", () => {
       available: true,
       reason: null,
       coverage: { current: 150_000 / 390_000, previous: 80_000 / 120_000 },
+      costedRevenue: { current: 150_000, previous: 80_000 },
+      cost: { current: 60_000, previous: 30_000 },
     });
+  });
+
+  it("is exactly the costed revenue less the cost, so the page can show both terms", () => {
+    const { grossProfit } = overviewAnswer(salesInput({ dispenseCosts: COSTS })).kpis;
+    expect(grossProfit.current).toBe(grossProfit.costedRevenue.current! - grossProfit.cost.current!);
+    expect(grossProfit.previous).toBe(grossProfit.costedRevenue.previous! - grossProfit.cost.previous!);
   });
 
   it("leaves out the revenue of a sale that is only partly costed instead of guessing the rest", () => {
@@ -1151,6 +1161,8 @@ describe("gross profit", () => {
     expect(answer.kpis.grossProfit.current).toBe(0);
     expect(answer.kpis.grossProfit.available).toBe(true);
     expect(answer.kpis.grossProfit.coverage.current).toBeNull();
+    expect(answer.kpis.grossProfit.cost.current).toBe(0);
+    expect(answer.kpis.grossProfit.costedRevenue.current).toBe(0);
   });
 
   it("tolerates the rounding of decimal quantities summed across batches", () => {

@@ -91,6 +91,9 @@ export type GrossProfit = {
   reason?: string | null;
   /** The share (0 to 1) of the period's revenue that belongs to sales whose goods all have a recorded cost. */
   coverage?: { current: Figure; previous: Figure };
+  /** The two terms of `current`: the revenue of the costed sales and their cost of goods sold. */
+  costedRevenue?: FigurePair;
+  cost?: FigurePair;
 };
 
 export type AnalyticsKpis = {
