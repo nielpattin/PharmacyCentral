@@ -5,3 +5,11 @@ SITE-WH,WH-B,Kho B,Warehouse
 SITE-HUB,HUB-MAIN,Kho vệ tinh,Warehouse
 SITE-RTL,RTL-FRONT,Quầy bán,Retail
 SITE-RTL,RTL-BACK,Kho sau quầy,Backroom
+SITE-RTL2,RTL2-FRONT,Quầy bán,Retail
+SITE-RTL2,RTL2-BACK,Kho sau quầy,Backroom
+SITE-RTL3,RTL3-FRONT,Quầy bán,Retail
+SITE-RTL3,RTL3-BACK,Kho sau quầy,Backroom
+SITE-RTL4,RTL4-FRONT,Quầy bán,Retail
+SITE-RTL4,RTL4-BACK,Kho sau quầy,Backroom
+SITE-RTL5,RTL5-FRONT,Quầy bán,Retail
+SITE-RTL5,RTL5-BACK,Kho sau quầy,Backroom

@@ -66,10 +66,12 @@ Two seeds create these accounts. The default seed (A, `pnpm run seed:default`) c
 | Role | Email | Phone | Site access |
 | --- | --- | --- | --- |
 | Platform Admin (seed A) | `admin@pharmacycentral.vn` | 0902000001 | All sites (no site list needed) |
-| Pharmacy Manager | `manager@pharmacycentral.vn` | 0902000002 | `SITE-HQ`, `SITE-WH`, `SITE-HUB`, `SITE-RTL` |
-| Pharmacy Manager (second, for approvals) | `manager2@pharmacycentral.vn` | 0902000005 | `SITE-HQ`, `SITE-WH`, `SITE-HUB`, `SITE-RTL` |
+| Pharmacy Manager | `manager@pharmacycentral.vn` | 0902000002 | `SITE-HQ`, `SITE-WH`, `SITE-HUB`, `SITE-RTL` to `SITE-RTL5` |
+| Pharmacy Manager (second, for approvals) | `manager2@pharmacycentral.vn` | 0902000005 | `SITE-HQ`, `SITE-WH`, `SITE-HUB`, `SITE-RTL` to `SITE-RTL5` |
 | Pharmacist | `pharmacist@pharmacycentral.vn` | 0902000003 | `SITE-RTL` |
-| Warehouse Staff | `warehouse@pharmacycentral.vn` | 0902000004 | `SITE-WH`, `SITE-HUB`, `SITE-RTL` |
+| Pharmacy Manager (one store each) | `manager.rtl2@pharmacycentral.vn`, `manager.rtl3@pharmacycentral.vn`, `manager.rtl4@pharmacycentral.vn`, `manager.rtl5@pharmacycentral.vn` | 0902000006, 0902000008, 0902000010, 0902000012 | `SITE-RTL2`, `SITE-RTL3`, `SITE-RTL4`, `SITE-RTL5` (one each) |
+| Pharmacist (one store each) | `pharmacist.rtl2@pharmacycentral.vn`, `pharmacist.rtl3@pharmacycentral.vn`, `pharmacist.rtl4@pharmacycentral.vn`, `pharmacist.rtl5@pharmacycentral.vn` | 0902000007, 0902000009, 0902000011, 0902000013 | `SITE-RTL2`, `SITE-RTL3`, `SITE-RTL4`, `SITE-RTL5` (one each) |
+| Warehouse Staff | `warehouse@pharmacycentral.vn` | 0902000004 | `SITE-WH`, `SITE-HUB`, `SITE-RTL` to `SITE-RTL5` |
 | Customer (Customer Web only) | `khachhang@pharmacycentral.vn` | - | None; customer account |
 | Customer (sample shoppers, Customer Web only) | `nguyen.lan@example.com`, `tran.minh.khoa@example.com`, `le.thanh.huong@example.com`, `pham.quoc.viet@example.com`, `vo.ngoc.mai@example.com`, `dang.hoang.nam@example.com` | - | None; customer accounts with their own orders |
 

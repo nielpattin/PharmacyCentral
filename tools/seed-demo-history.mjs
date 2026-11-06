@@ -106,9 +106,63 @@ const shoppers = [
   ["vo.ngoc.mai@example.com", 1],
   ["dang.hoang.nam@example.com", 1],
 ];
-const deliveryPoints = [
-  { latitude: 21.0305, longitude: 105.816 },
-  { latitude: 21.0227, longitude: 105.803 },
+// The five pharmacies the history sells at, in the order their documents are numbered: the first one keeps the
+// numbers (`GR-HIST-001`) the "already seeded" check below looks for. Each store is read from the sites and storage
+// locations the sample CSVs import, and has its own pharmacist (the Pharmacist role reaches one site only).
+// The history keeps one stream of sales (about the same count as for a single pharmacy) and splits it between the
+// stores, so each one is given:
+// - `share`: the weight of its part of the sales; a sale goes to a store with a chance of its share over the sum.
+// - `counterRate`: the part of its sales taken at the counter, the rest being online orders, so the stores differ in mix.
+// - `goal`: its revenue goal for this month and for last month, in VND. The five add up to the goals of the single
+//   pharmacy before (45 and 40 million).
+const stores = [
+  {
+    code: "SITE-RTL",
+    frontCode: "RTL-FRONT",
+    pharmacistEmail: "pharmacist@pharmacycentral.vn",
+    share: 1,
+    counterRate: 0.45,
+    goal: { thisMonth: 15_000_000, lastMonth: 13_000_000 },
+  },
+  {
+    code: "SITE-RTL2",
+    frontCode: "RTL2-FRONT",
+    pharmacistEmail: "pharmacist.rtl2@pharmacycentral.vn",
+    share: 0.7,
+    counterRate: 0.6,
+    goal: { thisMonth: 10_500_000, lastMonth: 9_500_000 },
+  },
+  {
+    code: "SITE-RTL3",
+    frontCode: "RTL3-FRONT",
+    pharmacistEmail: "pharmacist.rtl3@pharmacycentral.vn",
+    share: 0.55,
+    counterRate: 0.35,
+    goal: { thisMonth: 8_000_000, lastMonth: 7_000_000 },
+  },
+  {
+    code: "SITE-RTL4",
+    frontCode: "RTL4-FRONT",
+    pharmacistEmail: "pharmacist.rtl4@pharmacycentral.vn",
+    share: 0.45,
+    counterRate: 0.7,
+    goal: { thisMonth: 6_500_000, lastMonth: 6_000_000 },
+  },
+  {
+    code: "SITE-RTL5",
+    frontCode: "RTL5-FRONT",
+    pharmacistEmail: "pharmacist.rtl5@pharmacycentral.vn",
+    share: 0.35,
+    counterRate: 0.25,
+    goal: { thisMonth: 5_000_000, lastMonth: 4_500_000 },
+  },
+];
+
+// A delivery order's address is a street or two from the store it is ordered at, well inside the delivery range:
+// each offset is in degrees of latitude and longitude (0.01 degree is about a kilometre).
+const deliveryOffsets = [
+  { latitude: 0.008, longitude: 0.006 },
+  { latitude: -0.006, longitude: -0.009 },
 ];
 
 // A small deterministic generator, so the same seed gives the same shop every time.
@@ -139,7 +193,8 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
   // A second manager raises the purchase orders, because nobody approves an order they made.
   const buyer = await signIn({ email: "manager2@pharmacycentral.vn" });
   const warehouse = await signIn({ email: "warehouse@pharmacycentral.vn" });
-  const pharmacist = await signIn({ email: "pharmacist@pharmacycentral.vn" });
+  const pharmacists = new Map();
+  for (const store of stores) pharmacists.set(store.code, await signIn({ email: store.pharmacistEmail }));
   const sessions = new Map();
   for (const [email] of shoppers) sessions.set(email, await signIn({ email }));
 
@@ -169,8 +224,21 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
     if (!value) throw new Error(`The demo history needs ${what}; import the sample data first.`);
     return value;
   };
-  const retail = need(sites.get("SITE-RTL"), "site SITE-RTL");
-  const front = need(locations.get("RTL-FRONT"), "storage location RTL-FRONT");
+  // Where each store stands comes from the same file the sites were imported from.
+  const coordinates = new Map(
+    datasets.sites
+      .fromCsv(csvRows(await readFile(new URL("../data/import-samples/sites.csv", import.meta.url), "utf8")))
+      .sites.map((row) => [row.code, { latitude: row.latitude, longitude: row.longitude }]),
+  );
+  // Each store with its site, its selling shelf and its pharmacist. The first one also carries the steps that happen
+  // at one store only (the near-expiry batches, the replenishment requests).
+  for (const store of stores) {
+    store.coordinates = need(coordinates.get(store.code), `the coordinates of ${store.code} in sites.csv`);
+    store.site = need(sites.get(store.code), `site ${store.code}`);
+    store.front = need(locations.get(store.frontCode), `storage location ${store.frontCode}`);
+    store.pharmacist = pharmacists.get(store.code);
+  }
+  const [primary] = stores;
 
   const existingReceipt = await call(admin, "/api/procurement/goods-receipts?q=GR-HIST-001&limit=50");
   if (existingReceipt.some((row) => row.receiptNumber === "GR-HIST-001")) {
@@ -219,7 +287,8 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
       Math.round(2.2 + growth + (weekday === 0 || weekday === 6 ? 1 : 0) + (random() - 0.5) * 2),
     );
     for (let index = 0; index < count; index += 1) {
-      const counter = random() < 0.45;
+      const store = pick(stores, (entry) => entry.share);
+      const counter = random() < store.counterRate;
       const choices = counter ? sellable : sellable.filter((item) => !priced.get(item.sku).prescription);
       const lineCount = between(1, counter ? 3 : 4);
       const lines = new Map();
@@ -231,6 +300,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
       const at = dayStart + between(8 * 60, 21 * 60) * 60_000;
       const outcome = random();
       documents.push({
+        store,
         kind: counter ? "counter" : "online",
         at,
         lines: [...lines],
@@ -243,12 +313,16 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
       });
     }
   }
-  const soldUnits = new Map();
+  // What each store sold, per product, to size its purchases.
+  const soldUnits = new Map(stores.map((store) => [store.code, new Map()]));
   for (const document of documents) {
     if (document.fate !== "completed") continue;
-    for (const [sku, quantity] of document.lines) soldUnits.set(sku, (soldUnits.get(sku) ?? 0) + quantity);
+    const sold = soldUnits.get(document.store.code);
+    for (const [sku, quantity] of document.lines) sold.set(sku, (sold.get(sku) ?? 0) + quantity);
   }
-  console.log(`demo history: ${documents.length} sales documents planned over ${HISTORY_DAYS} days`);
+  console.log(
+    `demo history: ${documents.length} sales documents planned over ${HISTORY_DAYS} days at ${stores.length} stores`,
+  );
 
   // 2. Purchases: one approved purchase order per supplier, received in full with a unit cost on every line.
   const supplierOf = (sku) => {
@@ -260,70 +334,79 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
       : ["SUP-001", "SUP-002", "SUP-005"][number % 3];
   };
   const costRatio = (sku) => 0.58 + (Number(sku.slice(-2)) % 7) * 0.02;
-  const bySupplier = new Map();
-  for (const item of sellable) {
-    const sold = soldUnits.get(item.sku) ?? 0;
-    const velocity = sold / HISTORY_DAYS;
-    // Thin stock at the end for the shortfall products, a comfortable shelf for the rest.
-    const quantity = shortfallSkus.has(item.sku)
-      ? Math.max(item.min * 2, Math.round(sold - shortfallSkus.get(item.sku) + velocity * 1.5 + 5))
-      : Math.max(item.min * 3, Math.round(sold * 1.15 + 20));
-    const code = supplierOf(item.sku);
-    bySupplier.set(code, [...(bySupplier.get(code) ?? []), { ...item, quantity }]);
-  }
+  // Each store buys what it sold: one approved purchase order per supplier, received in full at its own shelf.
   const purchaseOrders = [];
   const receipts = [];
   let sequence = 0;
-  for (const [code, items] of [...bySupplier].sort(([a], [b]) => a.localeCompare(b))) {
-    sequence += 1;
-    const number = String(sequence).padStart(3, "0");
-    const orderedAt = now - (74 - sequence * 2) * DAY;
-    const receivedAt = orderedAt + between(3, 6) * DAY;
-    const order = await call(buyer, "/api/procurement/purchase-orders", {
-      method: "POST",
-      body: {
-        purchaseOrderNumber: `PO-HIST-${number}`,
-        supplierId: need(suppliers.get(code), `supplier ${code}`).id,
-        siteId: retail.id,
-        expectedDate: new Date(now + 7 * DAY).toISOString().slice(0, 10),
-        lines: items.map((item) => ({ productId: products.get(item.sku).id, orderedQuantity: item.quantity })),
-      },
-    });
-    await call(manager, `/api/procurement/purchase-orders/${order.id}/action`, {
-      method: "POST",
-      body: { action: "approve" },
-    });
-    const receipt = await call(warehouse, "/api/procurement/goods-receipts", {
-      method: "POST",
-      body: {
-        receiptNumber: `GR-HIST-${number}`,
-        supplierId: suppliers.get(code).id,
-        siteId: retail.id,
-        storageLocationId: front.id,
-        purchaseOrderId: order.id,
-        receivedAt: new Date(receivedAt).toISOString(),
-        lines: items.map((item) => ({
-          productId: products.get(item.sku).id,
-          batchNumber: `LOT-H-${item.sku.slice(-4)}`,
-          manufacturedDate: inDays(-120),
-          // Between 8 and 20 months out, spread by product, never near expiry.
-          expiryDate: inDays(240 + (Number(item.sku.slice(-2)) % 13) * 30),
-          quantity: item.quantity,
-          unitCost: Math.round(priced.get(item.sku).price * costRatio(item.sku) * 100) / 100,
-        })),
-      },
-    });
-    purchaseOrders.push({ id: order.id, at: orderedAt, receivedAt });
-    receipts.push({ id: receipt.id, at: receivedAt });
+  for (const [storeIndex, store] of stores.entries()) {
+    const bySupplier = new Map();
+    for (const item of sellable) {
+      const sold = soldUnits.get(store.code).get(item.sku) ?? 0;
+      const velocity = sold / HISTORY_DAYS;
+      // Thin stock at the end for the shortfall products, a comfortable shelf for the rest.
+      const quantity = shortfallSkus.has(item.sku)
+        ? Math.max(item.min * 2, Math.round(sold - shortfallSkus.get(item.sku) + velocity * 1.5 + 5))
+        : Math.max(item.min * 3, Math.round(sold * 1.15 + 20));
+      const code = supplierOf(item.sku);
+      bySupplier.set(code, [...(bySupplier.get(code) ?? []), { ...item, quantity }]);
+    }
+    // A batch is one lot of one product, so each store's lot has its own number: the first store keeps `LOT-H-0001`,
+    // the others are `LOT-H-0001-2`, `-3` and so on.
+    const lotSuffix = storeIndex === 0 ? "" : `-${storeIndex + 1}`;
+    // The store's purchases are dated from its own count, so every store's orders sit about two months back.
+    let storeOrders = 0;
+    for (const [code, items] of [...bySupplier].sort(([a], [b]) => a.localeCompare(b))) {
+      sequence += 1;
+      storeOrders += 1;
+      const number = String(sequence).padStart(3, "0");
+      const orderedAt = now - (74 - storeOrders * 2) * DAY;
+      const receivedAt = orderedAt + between(3, 6) * DAY;
+      const order = await call(buyer, "/api/procurement/purchase-orders", {
+        method: "POST",
+        body: {
+          purchaseOrderNumber: `PO-HIST-${number}`,
+          supplierId: need(suppliers.get(code), `supplier ${code}`).id,
+          siteId: store.site.id,
+          expectedDate: new Date(now + 7 * DAY).toISOString().slice(0, 10),
+          lines: items.map((item) => ({ productId: products.get(item.sku).id, orderedQuantity: item.quantity })),
+        },
+      });
+      await call(manager, `/api/procurement/purchase-orders/${order.id}/action`, {
+        method: "POST",
+        body: { action: "approve" },
+      });
+      const receipt = await call(warehouse, "/api/procurement/goods-receipts", {
+        method: "POST",
+        body: {
+          receiptNumber: `GR-HIST-${number}`,
+          supplierId: suppliers.get(code).id,
+          siteId: store.site.id,
+          storageLocationId: store.front.id,
+          purchaseOrderId: order.id,
+          receivedAt: new Date(receivedAt).toISOString(),
+          lines: items.map((item) => ({
+            productId: products.get(item.sku).id,
+            batchNumber: `LOT-H-${item.sku.slice(-4)}${lotSuffix}`,
+            manufacturedDate: inDays(-120),
+            // Between 8 and 20 months out, spread by product, never near expiry.
+            expiryDate: inDays(240 + (Number(item.sku.slice(-2)) % 13) * 30),
+            quantity: item.quantity,
+            unitCost: Math.round(priced.get(item.sku).price * costRatio(item.sku) * 100) / 100,
+          })),
+        },
+      });
+      purchaseOrders.push({ id: order.id, at: orderedAt, receivedAt });
+      receipts.push({ id: receipt.id, at: receivedAt });
+    }
   }
-  // Batches that expire soon, or already have, received with a cost like the rest.
+  // Batches that expire soon, or already have, received with a cost like the rest. They are the first store's alone.
   const expiringReceipt = await call(warehouse, "/api/procurement/goods-receipts", {
     method: "POST",
     body: {
       receiptNumber: "GR-HIST-EXP",
       supplierId: suppliers.get("SUP-001").id,
-      siteId: retail.id,
-      storageLocationId: front.id,
+      siteId: primary.site.id,
+      storageLocationId: primary.front.id,
       receivedAt: new Date(now - 40 * DAY).toISOString(),
       lines: expiringBatches.map(([sku, batchNumber, , quantity]) => ({
         productId: need(products.get(sku), `product ${sku}`).id,
@@ -339,8 +422,9 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
 
   // New batches wait for quality review, and Pharmacy Manager releases them.
   let balances = [];
+  // No `limit`: the list answers every row then. Five stores hold more rows than the largest page (500).
   const reload = async () => {
-    balances = await call(admin, "/api/inventory/balances?limit=500");
+    balances = await call(admin, "/api/inventory/balances");
   };
   await reload();
   for (const { batch } of balances) {
@@ -389,14 +473,21 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
   const transition = (id, status) =>
     call(manager, `/api/orders/${id}/transition`, { method: "POST", body: { status } });
 
+  // An address near the store: the store's own coordinates moved by an offset.
+  const deliveryPointOf = ({ coordinates }, offset) => ({
+    latitude: coordinates.latitude + offset.latitude,
+    longitude: coordinates.longitude + offset.longitude,
+  });
+
   const placed = [];
   let skipped = 0;
   const sellOnline = async (document) => {
     const shopper = sessions.get(document.shopper);
+    const { store } = document;
     const created = await call(shopper, "/api/orders", {
       method: "POST",
       body: {
-        selectedStoreId: retail.id,
+        selectedStoreId: store.site.id,
         fulfillmentType: document.delivery ? "delivery" : "pickup",
         paymentMethod: document.payment === "qr" ? "sepay_qr" : "cash_on_delivery",
         lines: await Promise.all(
@@ -407,7 +498,12 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
           })),
         ),
         ...(document.delivery
-          ? { delivery: { destination: deliveryPoints[between(0, 1)], addressNote: "Gọi trước khi giao" } }
+          ? {
+              delivery: {
+                destination: deliveryPointOf(store, deliveryOffsets[between(0, deliveryOffsets.length - 1)]),
+                addressNote: "Gọi trước khi giao",
+              },
+            }
           : {}),
       },
     });
@@ -444,7 +540,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
       if (document.fate === "refunded" && status !== "Confirmed" && status !== "Preparing") break;
       // An order cannot be completed before its cash is recorded, so the cash is taken just before Completed.
       if (status === "Completed" && document.payment === "cash" && document.fate === "completed") {
-        await call(pharmacist, `/api/payments/${invoice.id}/confirm-counter`, {
+        await call(store.pharmacist, `/api/payments/${invoice.id}/confirm-counter`, {
           method: "POST",
           body: {},
         });
@@ -454,7 +550,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
     }
     if (document.fate === "refunded") {
       if (document.payment === "cash")
-        await call(pharmacist, `/api/payments/${invoice.id}/confirm-counter`, {
+        await call(store.pharmacist, `/api/payments/${invoice.id}/confirm-counter`, {
           method: "POST",
           body: {},
         });
@@ -467,21 +563,21 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
   };
   // What can still be sold from a batch: on hand minus what open orders and prescriptions have reserved.
   const availableOf = ({ balance }) => Number(balance.quantityOnHand) - Number(balance.quantityReserved ?? 0);
-  const eligibleRows = (sku) =>
+  const eligibleRows = (sku, store) =>
     balances
       .filter(
         ({ balance, batch }) =>
           batch.productId === products.get(sku).id &&
           batch.qualityStatus === "Released" &&
-          balance.siteId === retail.id &&
-          balance.storageLocationId === front.id &&
+          balance.siteId === store.site.id &&
+          balance.storageLocationId === store.front.id &&
           new Date(batch.expiryDate).getTime() > now,
       )
       .sort((a, b) => a.batch.expiryDate.localeCompare(b.batch.expiryDate));
-  const stockOf = (sku, quantity = 1) => eligibleRows(sku).find((row) => availableOf(row) >= quantity);
+  const stockOf = (sku, store, quantity = 1) => eligibleRows(sku, store).find((row) => availableOf(row) >= quantity);
   // A counter sale dispenses from one batch; an online order can draw on all of them.
-  const capacityOf = (sku, counter) => {
-    const available = eligibleRows(sku).map(availableOf);
+  const capacityOf = (sku, store, counter) => {
+    const available = eligibleRows(sku, store).map(availableOf);
     return counter
       ? Math.max(0, ...available)
       : Math.max(
@@ -490,7 +586,9 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
         );
   };
   const sellAtCounter = async (document) => {
-    const rows = document.lines.map(([sku, quantity]) => ({ sku, quantity, row: stockOf(sku, quantity) }));
+    const { store } = document;
+    const { pharmacist } = store;
+    const rows = document.lines.map(([sku, quantity]) => ({ sku, quantity, row: stockOf(sku, store, quantity) }));
     if (rows.some(({ row }) => !row)) {
       skipped += 1;
       return;
@@ -498,8 +596,8 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
     const created = await call(pharmacist, "/api/prescriptions", {
       method: "POST",
       body: {
-        siteId: retail.id,
-        storageLocationId: front.id,
+        siteId: store.site.id,
+        storageLocationId: store.front.id,
         patientName: document.patient,
         patientPhone: "0901234567",
         doctorName: document.doctor,
@@ -547,7 +645,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
     // dropped when nothing is, so a sale never asks for stock the shelf does not have.
     await reload();
     document.lines = document.lines
-      .map(([sku, quantity]) => [sku, Math.min(quantity, capacityOf(sku, document.kind === "counter"))])
+      .map(([sku, quantity]) => [sku, Math.min(quantity, capacityOf(sku, document.store, document.kind === "counter"))])
       .filter(([, quantity]) => quantity > 0);
     if (document.lines.length === 0) {
       unfilled += 1;
@@ -572,15 +670,15 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
   }
   await reload();
 
-  // 4. A few more requests from the shop floor for what ran short, then the shopper carts.
+  // 4. A few more requests from the first store's shop floor for what ran short, then the shopper carts.
   for (const sku of ["THU-0019", "VTYT-001"]) {
-    const row = stockOf(sku);
+    const row = stockOf(sku, primary);
     if (!row) continue;
-    await call(pharmacist, "/api/inventory/replenishment", {
+    await call(primary.pharmacist, "/api/inventory/replenishment", {
       method: "POST",
       body: {
-        siteId: retail.id,
-        storageLocationId: front.id,
+        siteId: primary.site.id,
+        storageLocationId: primary.front.id,
         notes: `Bổ sung ${sku} theo gợi ý đặt hàng`,
         lines: [
           {
@@ -752,19 +850,25 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
   );
   await runSql(writes);
 
-  // The only site that sells is the pharmacy, so it is the only site with a revenue goal: this month's and last month's.
+  // The pharmacies are the only sites that sell, so they are the only sites with a revenue goal: this month's and last
+  // month's, as each store's `goal` says.
   const monthOf = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
   const today = new Date();
-  for (const [date, amount] of [
-    [today, 45_000_000],
-    [new Date(today.getFullYear(), today.getMonth() - 1, 1), 40_000_000],
-  ]) {
-    await call(manager, "/api/sales-targets", {
-      method: "PUT",
-      body: { siteId: retail.id, month: monthOf(date), amount },
-    });
+  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  for (const store of stores) {
+    for (const [date, amount] of [
+      [today, store.goal.thisMonth],
+      [lastMonth, store.goal.lastMonth],
+    ]) {
+      await call(manager, "/api/sales-targets", {
+        method: "PUT",
+        body: { siteId: store.site.id, month: monthOf(date), amount },
+      });
+    }
   }
-  console.log(`demo history: revenue goals set for ${retail.code} (this month and last)`);
+  console.log(
+    `demo history: revenue goals set for ${stores.map((store) => store.code).join(", ")} (this month and last)`,
+  );
 
   console.log(
     `demo history: ${placed.length} sales documents backdated over ${HISTORY_DAYS} days (${skipped} skipped, ${unfilled} not sold for lack of stock), ` +
@@ -797,7 +901,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
   const products = new Map();
   for (const row of await admin.call("/api/products?limit=100")) products.set(row.sku, row);
   const warehouseSite = need(sites.get("SITE-WH"), "site SITE-WH");
-  const balances = await call(admin, "/api/inventory/balances?limit=500");
+  const balances = await call(admin, "/api/inventory/balances");
   const stock = (sku) =>
     need(
       balances.find(
@@ -963,7 +1067,7 @@ export async function seedWarehouseActivity({ admin, signIn }) {
   ]);
 
   // The received batches wait for quality review. The manager releases all but the last, which stays pending.
-  const fresh = await call(admin, "/api/inventory/balances?limit=500");
+  const fresh = await call(admin, "/api/inventory/balances");
   for (const { batch } of fresh) {
     if (!batch.batchNumber.startsWith("LOT-WH-") || batch.qualityStatus !== "PendingQc") continue;
     if (batch.batchNumber === "LOT-WH-0019") continue;

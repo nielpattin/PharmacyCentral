@@ -9,10 +9,55 @@ if (process.argv.includes("--dry-run")) {
   process.exit(0);
 }
 
+// The five pharmacies. SITE-RTL is served by the shared manager and pharmacist below; each of the other four has its own
+// manager and pharmacist, who reach that store alone.
+const retailSites = ["SITE-RTL", "SITE-RTL2", "SITE-RTL3", "SITE-RTL4", "SITE-RTL5"];
+
 // The managers and the warehouse account do the work Platform Admin used to do, so they reach every site that holds
-// stock or master data: the managers all four, the warehouse account the three that hold stock.
-const allSites = ["SITE-HQ", "SITE-WH", "SITE-HUB", "SITE-RTL"];
-const stockSites = ["SITE-WH", "SITE-HUB", "SITE-RTL"];
+// stock or master data: the managers every site, the warehouse account the ones that hold stock.
+const stockSites = ["SITE-WH", "SITE-HUB", ...retailSites];
+const allSites = ["SITE-HQ", ...stockSites];
+
+/** The staff of one pharmacy: the ids are fixed so a reseed updates the same account. */
+const storeStaff = [
+  {
+    siteCode: "SITE-RTL2",
+    manager: { id: 13, email: "manager.rtl2@pharmacycentral.vn", displayName: "Đỗ Thanh Tùng" },
+    pharmacist: { id: 14, email: "pharmacist.rtl2@pharmacycentral.vn", displayName: "Ngô Thị Thu" },
+  },
+  {
+    siteCode: "SITE-RTL3",
+    manager: { id: 15, email: "manager.rtl3@pharmacycentral.vn", displayName: "Bùi Quang Huy" },
+    pharmacist: { id: 16, email: "pharmacist.rtl3@pharmacycentral.vn", displayName: "Đinh Thị Hạnh" },
+  },
+  {
+    siteCode: "SITE-RTL4",
+    manager: { id: 17, email: "manager.rtl4@pharmacycentral.vn", displayName: "Vũ Hoàng Long" },
+    pharmacist: { id: 18, email: "pharmacist.rtl4@pharmacycentral.vn", displayName: "Lương Thị Mỹ" },
+  },
+  {
+    siteCode: "SITE-RTL5",
+    manager: { id: 19, email: "manager.rtl5@pharmacycentral.vn", displayName: "Trịnh Đức Anh" },
+    pharmacist: { id: 20, email: "pharmacist.rtl5@pharmacycentral.vn", displayName: "Phan Thị Yến" },
+  },
+];
+const accountId = (number) => `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`;
+// The phone numbers of the accounts above end at 0902000005, so the store staff continue from the next one.
+const FIRST_STORE_STAFF_PHONE = 902_000_006;
+const storeStaffAccounts = storeStaff.flatMap(({ siteCode, manager, pharmacist }, storeIndex) =>
+  [
+    { person: manager, role: "Pharmacy Manager" },
+    { person: pharmacist, role: "Pharmacist" },
+  ].map(({ person, role }, personIndex) => ({
+    id: accountId(person.id),
+    actorType: "employee",
+    email: person.email,
+    displayName: person.displayName,
+    phoneNumber: `0${FIRST_STORE_STAFF_PHONE + storeIndex * 2 + personIndex}`,
+    roles: [role],
+    siteCodes: [siteCode],
+  })),
+);
 
 /**
  * One account per staff role, each holding only that role, so signing in as one shows exactly what the role may do.
@@ -114,6 +159,7 @@ const demoAccounts = [
     roles: [],
     siteCodes: [],
   },
+  ...storeStaffAccounts,
 ];
 // Sites are imported master data with generated ids, so the seed looks their codes up rather than inventing ids.
 const siteCodes = [...new Set(demoAccounts.flatMap((account) => account.siteCodes))];

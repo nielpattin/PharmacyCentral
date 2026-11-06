@@ -15,7 +15,7 @@ A script for presenting Pharmacy Central from a fresh demo dataset: who signs in
 | Pharmacy Manager | `manager@pharmacycentral.vn` | every site | staff |
 | Pharmacy Manager (second) | `manager2@pharmacycentral.vn` | every site | staff |
 | Pharmacist | `pharmacist@pharmacycentral.vn` | `SITE-RTL` | staff |
-| Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH` (the warehouse), `SITE-HUB`, `SITE-RTL` | staff |
+| Warehouse Staff | `warehouse@pharmacycentral.vn` | `SITE-WH` (the warehouse), `SITE-HUB`, `SITE-RTL` to `SITE-RTL5` | staff |
 | Customer | `khachhang@pharmacycentral.vn` | none | customer |
 
 ### Why it must be reseeded on the day

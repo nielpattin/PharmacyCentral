@@ -335,8 +335,8 @@ pnpm --dir apps/identity-service seed:demo -- --dry-run
 ```
 
 - Seed A resets the admin's roles to Platform Admin on every run and touches no other account.
-- Seed B creates one account per staff role (two Pharmacy Managers, Pharmacist, Warehouse Staff) and the shoppers. Each staff account holds only its role, and every run resets roles and site access.
-- Site access is looked up by code from the imported sites: all four sites for the managers, the three that hold stock for warehouse staff, `SITE-RTL` for the pharmacist. So `seed:demo` creates the sites from `data/import-samples/sites.csv` first and stops if a site is missing.
+- Seed B creates one account per staff role (two Pharmacy Managers, Pharmacist, Warehouse Staff), a Pharmacy Manager and a Pharmacist for each of the four other pharmacies (`SITE-RTL2` to `SITE-RTL5`), and the shoppers. Each staff account holds only its role, and every run resets roles and site access.
+- Site access is looked up by code from the imported sites: all eight sites for the two main managers, the seven that hold stock for warehouse staff, `SITE-RTL` for the pharmacist, and one store alone for each store manager and store pharmacist. So `seed:demo` creates the sites from `data/import-samples/sites.csv` first and stops if a site is missing.
 - The account list is in `docs/user-guide.md`.
 
 On AWS the same seed runs with `pnpm run cloud:seed` (see [Run it on AWS](#run-it-on-aws)).
@@ -400,8 +400,8 @@ Notes on the steps:
 
 **The sales history step.** `tools/seed-demo-history.mjs` makes the dataset look like a shop that has traded for two months.
 
-- It receives the shop's stock through five approved purchase orders (`PO-HIST-001` to `005`) and their goods receipts (`GR-HIST-001` to `005`), with a unit cost on every line, so gross profit has real figures.
-- It places about 200 sales over the last 60 days, backdated one by one: counter prescriptions paid in cash, and online orders paid by SePay QR or cash on delivery, pickup or delivery, with a few cancelled and refunded. The trend charts, channel split, top products, finance entries and audit log all show those days.
+- It receives each pharmacy's stock through approved purchase orders (five per store, `PO-HIST-001` to `025`) and their goods receipts (`GR-HIST-001` to `025`), with a unit cost on every line, so gross profit has real figures. `SITE-RTL` comes first and keeps `001` to `005`.
+- It places about 200 sales over the last 60 days, split between the five pharmacies (`SITE-RTL` to `SITE-RTL5`) by a weight each store has (`share` in `stores` of the file), with a different counter and online mix per store (`counterRate`), backdated one by one: counter prescriptions paid in cash, and online orders paid by SePay QR or cash on delivery, pickup or delivery, with a few cancelled and refunded. The trend charts, channel split, top products, finance entries and audit log all show those days.
 - It leaves, on purpose: batches of six products that expire in 6, 12, 20, 27 and 45 days; one batch already 8 days past expiry (`GR-HIST-EXP`); six dead-stock products with no movement for 130 days; seven prescription-only medicines and one supply that have stock but no price; five products that end the history thin against their recent sales (replenishment suggestions with a shortfall); two more replenishment requests; and carts for two shoppers.
 - No API sets the creation time of an order or a payment, so the backdating is SQL through `docker compose exec postgres psql` (it needs Docker Compose and `POSTGRES_USER` in `.env`).
 - The step runs once: if goods receipt `GR-HIST-001` exists it adds nothing.

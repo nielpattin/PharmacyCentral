@@ -3,3 +3,7 @@ SITE-HQ,Trụ sở Pharmacy Central,Headquarters,"98 Nguyễn Chí Thanh, Phư�
 SITE-WH,Kho trung tâm Long Biên,Warehouse,"Số 1 Cổ Linh, Phường Long Biên, Hà Nội",21.0185,105.8935,false,true,Active
 SITE-HUB,Kho vệ tinh Thanh Xuân,RegionalHub,"15 Nguyễn Trãi, Phường Thanh Xuân, Hà Nội",20.9945,105.8057,false,true,Active
 SITE-RTL,Nhà thuốc Pharmacy Central Cầu Giấy,RetailStore,"268 Xuân Thủy, Phường Cầu Giấy, Hà Nội",21.0372,105.7825,true,true,Active
+SITE-RTL2,Nhà thuốc Pharmacy Central Đống Đa,RetailStore,"52 Chùa Bộc, Phường Đống Đa, Hà Nội",21.0073,105.8267,true,true,Active
+SITE-RTL3,Nhà thuốc Pharmacy Central Hai Bà Trưng,RetailStore,"118 Bạch Mai, Phường Bạch Mai, Hà Nội",21.0013,105.8493,true,true,Active
+SITE-RTL4,Nhà thuốc Pharmacy Central Hà Đông,RetailStore,"62 Quang Trung, Phường Hà Đông, Hà Nội",20.9633,105.7685,true,true,Active
+SITE-RTL5,Nhà thuốc Pharmacy Central Tây Hồ,RetailStore,"166 Lạc Long Quân, Phường Tây Hồ, Hà Nội",21.0617,105.8097,true,true,Active

@@ -21,7 +21,7 @@ flow with no external download. Import order matters, because rows are resolved 
 4. `opening-balances.csv`
 
 The files are internally consistent: the opening balances reference SKUs, site codes, storage location code, and a supplier
-code that the other files create. `products.csv` has 54 products, one per image (36 medicines and 18 medical supplies and
+code that the other files create. `sites.csv` has the headquarters, the warehouse, the regional hub and five pharmacies (`SITE-RTL` to `SITE-RTL5`); each pharmacy has a selling shelf and a backroom in `storage-locations.csv` and the same opening stock in `opening-balances.csv`. `products.csv` has 54 products, one per image (36 medicines and 18 medical supplies and
 devices). Names, manufacturers, dosage forms, package descriptions, registration numbers, units, prices and indications come
 from the public Long Châu listings (nhathuoclongchau.com.vn), fetched on 2026-10-29; the photos are our own and match each
 listing. `product-source-metadata.json` keeps, per SKU, the listing URL, the listing image URL, the specifications and the
