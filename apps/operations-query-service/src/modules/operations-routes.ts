@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { listSiteIds } from "../middleware/trusted-request.ts";
 import { callerAuthorization } from "./catalog-identity.ts";
-import { analyticsQuerySchema, salesTargetQuerySchema } from "./analytics.ts";
+import { analyticsQuerySchema, pageRevenueAnswer, salesTargetQuerySchema } from "./analytics.ts";
 import { AnalyticsCache } from "./analytics-cache.ts";
 import {
   actorRoles,
@@ -215,7 +215,12 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
           ),
       );
       response.set("X-Analytics-Cache", cached.outcome);
-      response.json(cached.value);
+      // The cache holds the whole ranked product list; the page is cut after it, so turning pages never rereads the services.
+      response.json(
+        cached.value.section === "revenue"
+          ? pageRevenueAnswer(cached.value, { abcClass: parsed.data.productClass, page: parsed.data.productPage })
+          : cached.value,
+      );
     } catch (error) {
       refuseRange(response, error, next);
     }

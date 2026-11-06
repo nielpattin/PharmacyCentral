@@ -71,6 +71,11 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 **operations-query-service, docs**
 
+- The Analytics revenue breakdown's `topProducts` (the 10 best sellers) is now `products`: every product with goods revenue in the period, highest first, each with its `abcClass` (`A`, `B` or `C`, BR-REPORT-015), so the page can show which product is in which class. The `abc` class totals are unchanged. One helper classifies the ranked products and the class totals are summed from it. Documented in `docs/api-guide.md` and `docs/business-rules.md`.
+- The Analytics product table is paged: a `revenue` request takes `productPage` and `productClass` (`A`, `B` or `C`) and answers `breakdown.products` as `{ rows, total, page, pageSize, leadShare }`, 20 rows a page, instead of every product at once. The page is cut after the cache, so turning pages does not read the services again. The revenue tab gets Tất cả/A/B/C buttons and a Trước/Sau pager.
+
+**operations-query-service, docs**
+
 - The dashboard summary's `recentActivity` now lists the latest 30 audit events (was 10) and is filtered by role on the server: Warehouse Staff see only `inventory.*` and `procurement.*` actions, Platform Admin and Pharmacy Manager see all, and a person with several roles gets the widest set. Site scoping is unchanged. Spec: `docs/product/staff-dashboard-and-reporting.md` (US4, G10).
 
 **staff-web, ui, docs**

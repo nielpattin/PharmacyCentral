@@ -52,17 +52,20 @@ export const analyticsLiterals: Record<string, string> = {
     "Bảng này không theo bộ lọc kênh: luôn hiển thị cả hai kênh theo cơ sở và kỳ đã chọn.",
   "Revenue by site": "Doanh thu theo cơ sở",
   "Unknown site": "Không rõ cơ sở",
+  "All product groups": "Tất cả nhóm hàng",
   "Site revenue includes the delivery fee, so the rows add up to the revenue tile.":
     "Doanh thu theo cơ sở gồm cả phí giao hàng, nên tổng các dòng bằng ô doanh thu.",
-  "Top products": "Sản phẩm bán chạy",
+  "Revenue by product": "Doanh thu theo sản phẩm",
+  "Every product sold in the period, ranked by goods revenue, with its ABC class.":
+    "Mọi sản phẩm đã bán trong kỳ, xếp theo doanh thu hàng hóa, kèm nhóm ABC.",
   Share: "Tỷ trọng",
   "Goods revenue": "Doanh thu hàng hóa",
   "Goods only: the delivery fee is not attributed to a product, so each share is of goods revenue.":
     "Chỉ tính hàng hóa: phí giao hàng không gán cho sản phẩm nào, nên tỷ trọng tính trên doanh thu hàng hóa.",
   "ABC classification": "Phân nhóm ABC",
   Class: "Nhóm",
-  "A until 80% of goods revenue, B until 95%, C the rest. The product that crosses a cut-off stays in the class it completes.":
-    "A đến 80% doanh thu hàng hóa, B đến 95%, C phần còn lại. Sản phẩm vượt mốc vẫn ở nhóm mà nó hoàn tất.",
+  "A until 80% of goods revenue, B until 95%, C the rest. The product that crosses a cut-off stays in the class it completes. The class of each product is in the product table below.":
+    "A đến 80% doanh thu hàng hóa, B đến 95%, C phần còn lại. Sản phẩm vượt mốc vẫn ở nhóm mà nó hoàn tất. Nhóm của từng sản phẩm nằm trong bảng sản phẩm bên dưới.",
   Customers: "Khách hàng",
   "Identified customers": "Khách đã nhận diện",
   "New customers": "Khách mới",
@@ -131,4 +134,5 @@ export const analyticsLiterals: Record<string, string> = {
   "31 to 60 days": "31–60 ngày tới",
   "61 to 90 days": "61–90 ngày tới",
   "Dead stock items": "Hàng tồn lâu theo sản phẩm",
+  "Showing {shown} of {total} dead stock products.": "Hiển thị {shown} trên {total} sản phẩm tồn lâu.",
 };

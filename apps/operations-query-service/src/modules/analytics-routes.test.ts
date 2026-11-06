@@ -13,6 +13,14 @@ const BASE_DAY = Date.UTC(2025, 0, 1);
 
 type TargetQuery = { month: string; from: Date; to: Date; siteId?: string | undefined };
 
+const RANKED_PRODUCTS = Array.from({ length: 45 }, (_, index) => ({
+  productId: `p${index}`,
+  productName: `Product ${index}`,
+  revenue: 1000 - index,
+  share: null,
+  abcClass: index < 10 ? "A" : index < 25 ? "B" : "C",
+}));
+
 describe("GET /dashboard/analytics", () => {
   const calls: Array<{ query: AnalyticsQuery; siteIds: string[] | undefined }> = [];
   const targetCalls: Array<{ query: TargetQuery; siteIds: string[] | undefined }> = [];
@@ -24,7 +32,11 @@ describe("GET /dashboard/analytics", () => {
       calls.push({ query, siteIds });
       await loadGate;
       if (failure !== undefined) throw failure;
-      return { section: query.section, currency: "VND", siteId: query.siteId ?? null };
+      const answer = { section: query.section, currency: "VND", siteId: query.siteId ?? null };
+      // The revenue answer carries every ranked product; the router cuts the requested page from it.
+      return query.section === "revenue"
+        ? { ...answer, breakdown: { goodsRevenue: 0, products: RANKED_PRODUCTS } }
+        : answer;
     },
     salesTargetsReport: async (query: TargetQuery, _identity: () => string, siteIds: string[] | undefined) => {
       targetCalls.push({ query, siteIds });
@@ -117,6 +129,25 @@ describe("GET /dashboard/analytics", () => {
       expect(response.headers.get("x-analytics-cache")).toBe("miss");
     },
   );
+
+  it("answers one page of the ranked products, narrowed to an ABC class when asked", async () => {
+    const period = freshPeriod();
+    const ask = async (extra: Record<string, string>) =>
+      (await get(
+        `/dashboard/analytics?${new URLSearchParams({ ...period, section: "revenue", ...extra }).toString()}`,
+        "Pharmacy Manager",
+      ).then((response) => response.json())) as {
+        breakdown: { products: { rows: { abcClass: string }[]; total: number; page: number } };
+      };
+    const first = await ask({});
+    expect(first.breakdown.products).toMatchObject({ total: 45, page: 1 });
+    expect(first.breakdown.products.rows).toHaveLength(20);
+    const classC = await ask({ productClass: "C", productPage: "2" });
+    expect(classC.breakdown.products.total).toBe(20);
+    expect(classC.breakdown.products.rows.every((row) => row.abcClass === "C")).toBe(true);
+    // Turning the page or the class reads the cache, not the services again.
+    expect(calls).toHaveLength(1);
+  });
 
   it("answers a Pharmacy Manager with the period and the default channel", async () => {
     const period = freshPeriod();

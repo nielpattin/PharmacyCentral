@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { Alert, Card, Disclosure, Input, Field, ToggleGroup, ToggleGroupItem } from "@pharmacy/ui";
 
@@ -7,7 +7,13 @@ import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { referenceLabel, referenceOptions, useStaffReferences } from "../hooks/useStaffReferences.ts";
 import { translateText } from "../i18n.ts";
 import { formatDateTime, readOne, text } from "../staff-api.ts";
-import type { AnalyticsChannel, AnalyticsResponse, SalesTargetsResponse } from "./analytics/contract.ts";
+import {
+  isAbcClass,
+  type AbcClass,
+  type AnalyticsChannel,
+  type AnalyticsResponse,
+  type SalesTargetsResponse,
+} from "./analytics/contract.ts";
 import { CustomersTab } from "./analytics/customers-tab.tsx";
 import { headerSummary } from "./analytics/header-summary.ts";
 import { InventoryTab } from "./analytics/inventory-tab.tsx";
@@ -55,6 +61,9 @@ const LIST_DEFAULTS = {
   site: "all",
   channel: "all",
   month: "",
+  // The revenue tab's product table: an ABC class ("all" or A, B, C) and its page.
+  abc: "all",
+  page: "1",
 } as const;
 const NO_BOUNDS = { from: "", to: "" };
 
@@ -111,15 +120,33 @@ export const AnalyticsSection = (): React.JSX.Element => {
   const siteId = siteKnown ? list.values.site : "all";
   const siteFilter = siteId === "all" ? undefined : siteId;
   const channel: AnalyticsChannel = isAnalyticsChannel(list.values.channel) ? list.values.channel : "all";
+  const productClass: AbcClass | undefined = isAbcClass(list.values.abc) ? list.values.abc : undefined;
+  const productPage = Math.max(1, Number.parseInt(list.values.page, 10) || 1);
   const siteLabel = (value: string): string =>
     labelOrShortId(referenceLabel(references.sites, value, ["code", "name"]), value);
 
   // One request answers the active tab only. The fallback section never runs: the query is enabled on the four
   // analytics tabs alone, and the targets tab reads its own report below.
   const analyticsQuery = useQuery({
-    queryKey: [...ANALYTICS_QUERY_KEY, section ?? "targets", bounds.from, bounds.to, siteFilter ?? "all", channel],
-    queryFn: () => readOne<AnalyticsResponse>(analyticsPath(bounds, siteFilter, channel, section ?? "overview")),
+    queryKey: [
+      ...ANALYTICS_QUERY_KEY,
+      section ?? "targets",
+      bounds.from,
+      bounds.to,
+      siteFilter ?? "all",
+      channel,
+      ...(section === "revenue" ? [productClass ?? "all", productPage] : []),
+    ],
+    queryFn: () =>
+      readOne<AnalyticsResponse>(
+        analyticsPath(bounds, siteFilter, channel, section ?? "overview", {
+          abcClass: productClass,
+          page: productPage,
+        }),
+      ),
     enabled: section !== undefined && rangeError === undefined,
+    // Turning the product page keeps the table on screen until the next page arrives.
+    placeholderData: keepPreviousData,
   });
 
   // The target report has its own month: its revenue is the whole calendar month, all channels, under the page's site
@@ -170,10 +197,10 @@ export const AnalyticsSection = (): React.JSX.Element => {
 
   const selectPeriod = (next: PeriodPreset): void => {
     if (next === "custom") {
-      list.setValues({ period: next, from: range.fromDay, to: range.toDay }, { history: "push" });
+      list.setValues({ period: next, from: range.fromDay, to: range.toDay, page: "1" }, { history: "push" });
       return;
     }
-    list.setValues({ period: next, from: "", to: "" }, { history: "push" });
+    list.setValues({ period: next, from: "", to: "", page: "1" }, { history: "push" });
   };
 
   // Refresh reads the open tab again, and nothing the other tabs hold.
@@ -217,14 +244,14 @@ export const AnalyticsSection = (): React.JSX.Element => {
                 <SiteFilter
                   value={siteId}
                   options={siteOptions}
-                  onChange={(next) => list.setValues({ site: next }, { history: "push" })}
+                  onChange={(next) => list.setValues({ site: next, page: "1" }, { history: "push" })}
                 />
                 <div className="grid gap-1.5">
                   <span className="text-sm font-medium text-ink">{translateText("Channel")}</span>
                   <ToggleGroup<AnalyticsChannel>
                     aria-label={translateText("Channel")}
                     value={channel}
-                    onValueChange={(next) => list.setValues({ channel: next }, { history: "push" })}
+                    onValueChange={(next) => list.setValues({ channel: next, page: "1" }, { history: "push" })}
                   >
                     {ANALYTICS_CHANNELS.map((item) => (
                       <ToggleGroupItem key={item} value={item}>
@@ -287,7 +314,15 @@ export const AnalyticsSection = (): React.JSX.Element => {
         <OverviewTab data={overview} loading={analyticsLoading} locale={locale} format={figures} />
       ) : null}
       {tab === "revenue" ? (
-        <RevenueTab data={revenue} loading={analyticsLoading} locale={locale} format={figures} />
+        <RevenueTab
+          data={revenue}
+          loading={analyticsLoading}
+          locale={locale}
+          format={figures}
+          productClass={productClass}
+          onProductClass={(next) => list.setValues({ abc: next ?? "all", page: "1" }, { history: "push" })}
+          onProductPage={(next) => list.setValues({ page: String(next) }, { history: "push" })}
+        />
       ) : null}
       {tab === "customers" ? (
         <CustomersTab data={customers} loading={analyticsLoading} locale={locale} format={figures} />

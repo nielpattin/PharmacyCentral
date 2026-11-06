@@ -42,9 +42,25 @@ export type ProductRevenueRow = {
   revenue: Figure;
   /** The share (0 to 1) of goods revenue; null when the period sold no goods. */
   share: Figure;
+  /** The ABC class of the product: the one its goods revenue puts it in. */
+  abcClass: AbcClass;
 };
 
 export type AbcClass = "A" | "B" | "C";
+
+export const ABC_CLASSES: readonly AbcClass[] = ["A", "B", "C"];
+
+export const isAbcClass = (value: string): value is AbcClass => (ABC_CLASSES as readonly string[]).includes(value);
+
+/** One page of the ranked products. `total` counts every product the class filter keeps, not only this page. */
+export type ProductPage = {
+  rows: ProductRevenueRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** The share of the top product of the whole list, so the share bars keep one scale on every page. */
+  leadShare: Figure;
+};
 
 export type AbcRevenueRow = {
   abcClass: AbcClass;
@@ -108,7 +124,8 @@ export type ChannelTotal = { channel: SalesChannel; revenue: Figure; orderCount:
 export type RevenueBreakdown = {
   goodsRevenue: Figure;
   bySite: SalesSiteRow[];
-  topProducts: ProductRevenueRow[];
+  /** One page of the products with goods revenue in the period, highest revenue first. */
+  products: ProductPage;
   abc: AbcRevenueRow[];
   byCategory: CategoryRevenueRow[];
   byPrescription: PrescriptionRevenueRow[];

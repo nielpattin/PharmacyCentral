@@ -9,6 +9,7 @@ import {
   averageOrderValue,
   buildAnalyticsSection,
   buildSalesTargetsReport,
+  classifyAbc,
   customerInsightsOf,
   dailySalesOf,
   daysOfInventoryOf,
@@ -20,6 +21,8 @@ import {
   isDeadStock,
   joinSales,
   lineValue,
+  PRODUCT_PAGE_SIZE,
+  productPageOf,
   previousPeriodOf,
   salesBreakdownOf,
   salesTargetQuerySchema,
@@ -498,13 +501,27 @@ describe("sales breakdown", () => {
   it("counts goods alone for the product tables, so the delivery fee is not attributed to a product", () => {
     const breakdown = revenueAnswer(breakdownInput()).breakdown;
     expect(breakdown.goodsRevenue).toBe(220);
-    expect(breakdown.topProducts.map((row) => [row.productName, row.revenue])).toStrictEqual([
+    expect(breakdown.products.map((row) => [row.productName, row.revenue])).toStrictEqual([
       ["Paracetamol", 120],
       ["Amoxicillin", 50],
       ["Vitamin C", 40],
       ["Hàng mới", 10],
     ]);
-    expect(breakdown.topProducts[0]?.share).toBeCloseTo(120 / 220);
+    expect(breakdown.products[0]?.share).toBeCloseTo(120 / 220);
+  });
+
+  it("gives every product its ABC class, and the classes of the product list add up to the abc table", () => {
+    const breakdown = revenueAnswer(breakdownInput()).breakdown;
+    // Running shares before each product: 0, 120/220, 170/220 (A), 210/220 = 95.5% (C).
+    expect(breakdown.products.map((row) => [row.productName, row.abcClass])).toStrictEqual([
+      ["Paracetamol", "A"],
+      ["Amoxicillin", "A"],
+      ["Vitamin C", "A"],
+      ["Hàng mới", "C"],
+    ]);
+    for (const row of breakdown.abc) {
+      expect(breakdown.products.filter((product) => product.abcClass === row.abcClass)).toHaveLength(row.productCount);
+    }
   });
 
   it("groups by the catalog category, merging an uncategorized product with one the catalog no longer lists", () => {
@@ -558,14 +575,14 @@ describe("sales breakdown", () => {
     const counter = revenueAnswer(breakdownInput({ channel: "counter" })).breakdown;
     expect(counter.goodsRevenue).toBe(50);
     expect(counter.bySite.map((row) => row.revenue)).toStrictEqual([50]);
-    expect(counter.topProducts.map((row) => row.productName)).toStrictEqual(["Amoxicillin"]);
+    expect(counter.products.map((row) => row.productName)).toStrictEqual(["Amoxicillin"]);
   });
 
   it("leaves out a site outside the caller's scope, and a sale with no site", () => {
     const scoped = revenueAnswer(breakdownInput({ scope: [SITE_A] })).breakdown;
     expect(scoped.bySite.map((row) => row.siteName)).toStrictEqual(["Chi nhánh A"]);
     expect(scoped.goodsRevenue).toBe(110);
-    expect(scoped.topProducts.map((row) => [row.productName, row.revenue])).toStrictEqual([
+    expect(scoped.products.map((row) => [row.productName, row.revenue])).toStrictEqual([
       ["Paracetamol", 60],
       ["Amoxicillin", 50],
     ]);
@@ -580,7 +597,7 @@ describe("sales breakdown", () => {
     expect(empty).toStrictEqual({
       goodsRevenue: 0,
       bySite: [],
-      topProducts: [],
+      products: [],
       abc: [
         { abcClass: "A", productCount: 0, revenue: 0, share: null },
         { abcClass: "B", productCount: 0, revenue: 0, share: null },
@@ -672,6 +689,70 @@ describe("ABC classification", () => {
       ["B", 1, 50],
       ["C", 0, 0],
     ]);
+  });
+
+  it("classifies each product of an 80/15/5 split into its own class", () => {
+    const classes = classifyAbc([
+      { productId: P3, revenue: 50_000 },
+      { productId: P1, revenue: 800_000 },
+      { productId: P2, revenue: 150_000 },
+    ]);
+
+    // Ranked by revenue, not by input order. Before-shares are 0, 0.8 and 0.95, so each product opens its own class.
+    expect(classes).toStrictEqual([
+      { productId: P1, revenue: 800_000, abcClass: "A" },
+      { productId: P2, revenue: 150_000, abcClass: "B" },
+      { productId: P3, revenue: 50_000, abcClass: "C" },
+    ]);
+  });
+
+  it("keeps each product that crosses a cut-off in the class it completes", () => {
+    // Ranked: 700k, 150k, 100k, 50k. Cumulative shares after each: 0.7, 0.85, 0.95, 1.
+    // P2 starts at 0.7 (A) and completes A at 0.85; P3 starts at 0.85 (B) and completes B at 0.95; P4 starts at 0.95 (C).
+    const classes = classifyAbc([
+      { productId: P1, revenue: 700_000 },
+      { productId: P2, revenue: 150_000 },
+      { productId: P3, revenue: 100_000 },
+      { productId: P4, revenue: 50_000 },
+    ]);
+
+    expect(classes.map((row) => [row.productId, row.abcClass])).toStrictEqual([
+      [P1, "A"],
+      [P2, "A"],
+      [P3, "B"],
+      [P4, "C"],
+    ]);
+  });
+
+  it("breaks ties by product id, so the tied product that crosses a cut-off is the same whatever the input order", () => {
+    // P1 is 60%; P2 and P3 tie at 20% each. The running share before P3 is 0.8, so P3 starts B and P2 stays A.
+    const expected = [
+      [P1, "A"],
+      [P2, "A"],
+      [P3, "B"],
+    ];
+    const ordered = classifyAbc([
+      { productId: P1, revenue: 60_000 },
+      { productId: P2, revenue: 20_000 },
+      { productId: P3, revenue: 20_000 },
+    ]);
+    const shuffled = classifyAbc([
+      { productId: P3, revenue: 20_000 },
+      { productId: P1, revenue: 60_000 },
+      { productId: P2, revenue: 20_000 },
+    ]);
+    expect(ordered.map((row) => [row.productId, row.abcClass])).toStrictEqual(expected);
+    expect(shuffled.map((row) => [row.productId, row.abcClass])).toStrictEqual(expected);
+  });
+
+  it("gives no class to a product without goods revenue", () => {
+    const classes = classifyAbc([
+      { productId: P1, revenue: 0 },
+      { productId: P2, revenue: 10_000 },
+    ]);
+
+    expect(classes.map((row) => row.productId)).toStrictEqual([P2]);
+    expect(classes[0]?.abcClass).toBe("A");
   });
 });
 
@@ -1185,5 +1266,67 @@ describe("gross profit", () => {
       salesInput({ dispenseCosts: [cost("Order", 1, 3, 3, 33_333.33)], channel: "online", siteId: SITE_A }),
     );
     expect(answer.kpis.grossProfit.current).toBe(66_667);
+    expect(answer.kpis.grossProfit.cost.current).toBe(33_333);
+  });
+});
+
+describe("productPageOf", () => {
+  const products = Array.from({ length: 45 }, (_, index) => ({
+    productId: `p${index}`,
+    productName: `Product ${index}`,
+    revenue: 1000 - index,
+    share: null,
+    abcClass: index < 10 ? ("A" as const) : index < 25 ? ("B" as const) : ("C" as const),
+  }));
+
+  it("cuts a page of the ranked list and counts every product", () => {
+    const page = productPageOf(products, { page: 2 });
+    expect(page.rows).toHaveLength(PRODUCT_PAGE_SIZE);
+    expect(page.rows[0]?.productId).toBe("p20");
+    expect(page).toMatchObject({ total: 45, page: 2, pageSize: PRODUCT_PAGE_SIZE });
+  });
+
+  it("keeps one lead share whatever the page or class, so bars share a scale", () => {
+    const ranked = products.map((row, index) => ({ ...row, share: index === 0 ? 0.3 : 0.01 }));
+    expect(productPageOf(ranked, { page: 3 }).leadShare).toBe(0.3);
+    expect(productPageOf(ranked, { abcClass: "C" }).leadShare).toBe(0.3);
+  });
+
+  it("keeps only the asked ABC class and counts that class", () => {
+    const page = productPageOf(products, { abcClass: "B" });
+    expect(page.rows.map((row) => row.abcClass)).toEqual(Array(15).fill("B"));
+    expect(page.total).toBe(15);
+  });
+
+  it("answers the last page when the page is past the end, and page 1 for a page below 1", () => {
+    expect(productPageOf(products, { page: 99 })).toMatchObject({ page: 3 });
+    expect(productPageOf(products, { page: 99 }).rows).toHaveLength(5);
+    expect(productPageOf(products, { page: 0 }).page).toBe(1);
+  });
+
+  it("answers an empty first page for no products", () => {
+    expect(productPageOf([], {})).toStrictEqual({
+      rows: [],
+      total: 0,
+      page: 1,
+      pageSize: PRODUCT_PAGE_SIZE,
+      leadShare: null,
+    });
+  });
+});
+
+describe("analytics query product paging", () => {
+  const base = { section: "revenue", from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" };
+
+  it("takes an ABC class and a page from the query string", () => {
+    expect(analyticsQuerySchema.parse({ ...base, productClass: "C", productPage: "2" })).toMatchObject({
+      productClass: "C",
+      productPage: 2,
+    });
+  });
+
+  it("refuses an unknown class and a page below 1", () => {
+    expect(analyticsQuerySchema.safeParse({ ...base, productClass: "D" }).success).toBe(false);
+    expect(analyticsQuerySchema.safeParse({ ...base, productPage: "0" }).success).toBe(false);
   });
 });

@@ -11,13 +11,10 @@ import type {
   Figure,
   PrescriptionGroup,
   PrescriptionRevenueRow,
-  ProductRevenueRow,
   SalesSiteRow,
 } from "./contract.ts";
 import { isAnswered } from "./figures.ts";
-
-/** How many products the ranked list shows; the table under it carries the rest. */
-export const TOP_PRODUCT_BARS = 8;
+import { isCapped } from "./chart-cap.ts";
 
 export type RevenueBar = {
   key: string;
@@ -78,21 +75,31 @@ export const categoryBars = (
     hint: format.rate(row.share),
   }));
 
-export const productBars = (
-  rows: readonly ProductRevenueRow[],
-  format: Formatters,
-  limit = TOP_PRODUCT_BARS,
-): RevenueBar[] =>
-  byRevenueDesc(rows)
-    .slice(0, limit)
-    .map((row) => ({
-      key: row.productId,
-      label: row.productName,
-      value: barValue(row.revenue),
-      answered: isAnswered(row.revenue),
-      display: format.money(row.revenue),
-      hint: format.rate(row.share),
-    }));
+/**
+ * The first `limit` ranked bars, then one bar that adds up every bar after them, named `other (n)`. The bars must already
+ * be ranked. The merged bar is unanswered only when every bar it merges is, so a dash is never turned into 0.
+ */
+export const capBars = (
+  bars: readonly RevenueBar[],
+  limit: number,
+  words: { other: string; money: (value: unknown) => string },
+): RevenueBar[] => {
+  // Merging a single bar would only rename it, so one bar over the limit still shows whole.
+  if (!isCapped(bars.length, limit)) return [...bars];
+  const rest = bars.slice(limit);
+  const total = rest.reduce((sum, bar) => sum + bar.value, 0);
+  const answered = rest.some((bar) => bar.answered);
+  return [
+    ...bars.slice(0, limit),
+    {
+      key: "other",
+      label: `${words.other} (${rest.length})`,
+      value: total,
+      answered,
+      display: answered ? words.money(total) : words.money(null),
+    },
+  ];
+};
 
 /**
  * The ranked rows as chart categories, one revenue value each. An unanswered row keeps its place with no bar and a

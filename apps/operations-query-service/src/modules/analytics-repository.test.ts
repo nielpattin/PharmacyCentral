@@ -152,8 +152,8 @@ describe("OperationsRepository.dashboardAnalytics", () => {
     expect(answer.breakdown.bySite).toStrictEqual([
       { siteId: SITE, siteName: "Chi nhánh A", revenue: 100_000, orderCount: 1, averageOrderValue: 100_000 },
     ]);
-    expect(answer.breakdown.topProducts).toStrictEqual([
-      { productId: PRODUCT, productName: "Paracetamol", revenue: 90_000, share: 1 },
+    expect(answer.breakdown.products).toStrictEqual([
+      { productId: PRODUCT, productName: "Paracetamol", revenue: 90_000, share: 1, abcClass: "A" },
     ]);
     expect(answer.breakdown.byPrescription).toStrictEqual([
       { group: "prescription", revenue: 0, share: 0 },

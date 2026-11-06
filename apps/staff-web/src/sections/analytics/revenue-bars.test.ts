@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { abcParts, categoryBars, chartData, prescriptionParts, productBars, siteBars } from "./revenue-bars.ts";
+import {
+  abcParts,
+  capBars,
+  categoryBars,
+  chartData,
+  prescriptionParts,
+  siteBars,
+  type RevenueBar,
+} from "./revenue-bars.ts";
 
 const format = {
   money: (value: unknown) => (typeof value === "number" ? `${value}đ` : "—"),
@@ -54,26 +62,6 @@ describe("categoryBars", () => {
       ["Uncategorized", "75%"],
       ["Vitamins", "25%"],
     ]);
-  });
-});
-
-describe("productBars", () => {
-  const rows = Array.from({ length: 12 }, (_, index) => ({
-    productId: `p${index}`,
-    productName: `Product ${index}`,
-    revenue: index * 10,
-    share: null,
-  }));
-
-  it("keeps the top rows by revenue and leaves the rest to the table", () => {
-    const bars = productBars(rows, format);
-    expect(bars).toHaveLength(8);
-    expect(bars[0]?.key).toBe("p11");
-    expect(bars[7]?.key).toBe("p4");
-  });
-
-  it("shows a dash for an unanswered share", () => {
-    expect(productBars(rows, format, 1)[0]?.hint).toBe("—");
   });
 });
 
@@ -154,5 +142,37 @@ describe("chartData", () => {
       categoryBars([{ category: "Vitamins", revenue: 0, share: 0 }], format, { uncategorized: "Uncategorized" }),
     );
     expect(row?.values).toEqual([0]);
+  });
+});
+
+describe("capBars", () => {
+  const bar = (key: string, value: number, answered = true): RevenueBar => ({
+    key,
+    label: key,
+    value,
+    answered,
+    display: format.money(answered ? value : null),
+  });
+  const words = { other: "Other", money: format.money };
+
+  it("leaves a list within the limit alone", () => {
+    const bars = [bar("a", 3), bar("b", 2)];
+    expect(capBars(bars, 2, words)).toEqual(bars);
+  });
+
+  it("does not merge a single bar over the limit, which would only rename it", () => {
+    const bars = [bar("a", 3), bar("b", 2), bar("c", 1)];
+    expect(capBars(bars, 2, words)).toEqual(bars);
+  });
+
+  it("keeps the first bars and merges the rest into one counted bar", () => {
+    const merged = capBars([bar("a", 5), bar("b", 4), bar("c", 3), bar("d", 2)], 2, words);
+    expect(merged.map((item) => item.key)).toEqual(["a", "b", "other"]);
+    expect(merged[2]).toMatchObject({ label: "Other (2)", value: 5, answered: true, display: "5đ" });
+  });
+
+  it("keeps a dash when every merged bar is unanswered", () => {
+    const merged = capBars([bar("a", 5), bar("b", 0, false), bar("c", 0, false)], 1, words);
+    expect(merged[1]).toMatchObject({ label: "Other (2)", answered: false, display: "—" });
   });
 });

@@ -173,7 +173,13 @@ const periodRefusal = (query: { from: string; to: string }): string | undefined 
 
 /** The query of `GET /dashboard/analytics`: the period and the tab whose figures are asked for. */
 export const analyticsQuerySchema = z
-  .object({ ...periodQueryShape, section: z.enum(ANALYTICS_SECTIONS) })
+  .object({
+    ...periodQueryShape,
+    section: z.enum(ANALYTICS_SECTIONS),
+    // Only the revenue tab reads these: which page of its product table, and whether to keep one ABC class.
+    productClass: z.enum(["A", "B", "C"]).optional(),
+    productPage: z.coerce.number().int().min(1).optional(),
+  })
   .superRefine((query, context) => {
     const refusal = periodRefusal(query);
     if (refusal !== undefined) context.addIssue({ code: "custom", path: ["to"], message: refusal });
@@ -351,9 +357,6 @@ export const grossProfitOf = (
 export const averageOrderValue = ({ revenue, orderCount }: SalesTotals): number | null =>
   orderCount === 0 ? null : Math.round(revenue / orderCount);
 
-/** How many products the top list carries. */
-export const TOP_PRODUCT_LIMIT = 10;
-
 /** One site's sales of the period. `siteName` is null only for a sale whose site is unknown. */
 export type SalesSiteRow = {
   siteId: string | null;
@@ -363,19 +366,20 @@ export type SalesSiteRow = {
   averageOrderValue: number | null;
 };
 
-/** One product's goods revenue, and its share of the goods revenue of the period. */
-export type ProductRevenueRow = {
-  productId: string;
-  productName: string;
-  revenue: number;
-  share: number | null;
-};
-
 /** The ABC cut-offs on cumulative goods revenue: A until 80%, B until 95%, C the rest. */
 export const ABC_A_CUMULATIVE_SHARE = 0.8;
 export const ABC_B_CUMULATIVE_SHARE = 0.95;
 export const ABC_CLASSES = ["A", "B", "C"] as const;
 export type AbcClass = (typeof ABC_CLASSES)[number];
+
+/** One product's goods revenue, its share of the goods revenue of the period, and its ABC class. */
+export type ProductRevenueRow = {
+  productId: string;
+  productName: string;
+  revenue: number;
+  share: number | null;
+  abcClass: AbcClass;
+};
 
 export type AbcRevenueRow = {
   abcClass: AbcClass;
@@ -385,36 +389,34 @@ export type AbcRevenueRow = {
 };
 
 /**
- * The ABC classification of the period's products by goods revenue. Products are ranked highest revenue first; the
- * product that pushes the running share past a cut-off stays in the class it completes, so A covers at least 80% of
+ * The ABC class of each product of the period, the one place the rule lives. Products are ranked highest revenue first;
+ * the product that pushes the running share past a cut-off stays in the class it completes, so A covers at least 80% of
  * goods revenue. Products with no goods revenue are left out, and ties sort by product id so a class is stable.
  */
-export const abcOf = (rows: readonly { productId: string; revenue: number }[]): AbcRevenueRow[] => {
+export const classifyAbc = <T extends { productId: string; revenue: number }>(
+  rows: readonly T[],
+): (T & { abcClass: AbcClass })[] => {
   const ranked = rows
     .filter((row) => row.revenue > 0)
     .sort((left, right) => right.revenue - left.revenue || left.productId.localeCompare(right.productId));
   const total = ranked.reduce((running, row) => running + row.revenue, 0);
-  const classes = new Map<AbcClass, { productCount: number; revenue: number }>(
-    ABC_CLASSES.map((abcClass) => [abcClass, { productCount: 0, revenue: 0 }]),
-  );
   let running = 0;
-  for (const row of ranked) {
+  return ranked.map((row) => {
     const before = total === 0 ? 1 : running / total;
-    const abcClass: AbcClass = before < ABC_A_CUMULATIVE_SHARE ? "A" : before < ABC_B_CUMULATIVE_SHARE ? "B" : "C";
-    const totals = classes.get(abcClass);
-    if (totals === undefined) continue;
-    totals.productCount += 1;
-    totals.revenue += row.revenue;
     running += row.revenue;
-  }
+    const abcClass: AbcClass = before < ABC_A_CUMULATIVE_SHARE ? "A" : before < ABC_B_CUMULATIVE_SHARE ? "B" : "C";
+    return { ...row, abcClass };
+  });
+};
+
+/** The ABC classification of the period's products: each class's product count, goods revenue and share. */
+export const abcOf = (rows: readonly { productId: string; revenue: number }[]): AbcRevenueRow[] => {
+  const classified = classifyAbc(rows);
+  const total = classified.reduce((running, row) => running + row.revenue, 0);
   return ABC_CLASSES.map((abcClass) => {
-    const totals = classes.get(abcClass) ?? { productCount: 0, revenue: 0 };
-    return {
-      abcClass,
-      productCount: totals.productCount,
-      revenue: totals.revenue,
-      share: total > 0 ? totals.revenue / total : null,
-    };
+    const members = classified.filter((row) => row.abcClass === abcClass);
+    const revenue = members.reduce((running, row) => running + row.revenue, 0);
+    return { abcClass, productCount: members.length, revenue, share: total > 0 ? revenue / total : null };
   });
 };
 
@@ -442,7 +444,8 @@ export type PrescriptionRevenueRow = {
 export type SalesBreakdown = {
   goodsRevenue: number;
   bySite: SalesSiteRow[];
-  topProducts: ProductRevenueRow[];
+  /** Every product with goods revenue, highest first, each with its ABC class. */
+  products: ProductRevenueRow[];
   abc: AbcRevenueRow[];
   byCategory: CategoryRevenueRow[];
   byPrescription: PrescriptionRevenueRow[];
@@ -698,10 +701,13 @@ export const salesBreakdownOf = (input: {
     productName: products.get(productId)?.productName ?? row.description ?? productId.slice(0, 8),
     revenue: row.revenue,
   }));
-  const topProducts: ProductRevenueRow[] = productRows
-    .map((row) => ({ ...row, share: share(row.revenue) }))
-    .sort(byRevenueThenLabel((row) => row.productName))
-    .slice(0, TOP_PRODUCT_LIMIT);
+  const abcClassOf = new Map(classifyAbc(productRows).map((row) => [row.productId, row.abcClass]));
+  const productList: ProductRevenueRow[] = productRows
+    .flatMap((row) => {
+      const abcClass = abcClassOf.get(row.productId);
+      return abcClass === undefined ? [] : [{ ...row, share: share(row.revenue), abcClass }];
+    })
+    .sort(byRevenueThenLabel((row) => row.productName));
 
   const categoryRows: CategoryRevenueRow[] = [...byCategory.values()]
     .map((row) => ({ category: row.category, revenue: row.revenue, share: share(row.revenue) }))
@@ -719,7 +725,7 @@ export const salesBreakdownOf = (input: {
   return {
     goodsRevenue,
     bySite: siteRows,
-    topProducts,
+    products: productList,
     abc: abcOf(productRows),
     byCategory: categoryRows,
     byPrescription: prescriptionRows,
@@ -980,6 +986,50 @@ export type OverviewAnalytics = AnalyticsEnvelope & {
 
 /** The revenue tab: the site, product, category and prescription breakdown of the period's sales. */
 export type RevenueAnalytics = AnalyticsEnvelope & { section: "revenue"; breakdown: SalesBreakdown };
+
+/** How many products one page of the product table carries. */
+export const PRODUCT_PAGE_SIZE = 20;
+
+/** One page of the ranked products. `total` counts every product the filter keeps, not only this page. */
+export type ProductPage = {
+  rows: ProductRevenueRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** The share of the top product of the whole list, whatever the page or class, so bars drawn from it keep one scale. */
+  leadShare: number | null;
+};
+
+/** Which products of the ranked list the caller wants: one ABC class or all, and which page (from 1). */
+export type ProductPageRequest = { abcClass?: AbcClass | undefined; page?: number | undefined };
+
+/**
+ * One page of the ranked products, optionally of one ABC class. A page past the end answers the last page, so a filter
+ * that shrinks the list never leaves the caller on an empty page.
+ */
+export const productPageOf = (products: readonly ProductRevenueRow[], request: ProductPageRequest): ProductPage => {
+  const kept = request.abcClass === undefined ? products : products.filter((row) => row.abcClass === request.abcClass);
+  const pageCount = Math.max(1, Math.ceil(kept.length / PRODUCT_PAGE_SIZE));
+  const page = Math.min(Math.max(1, request.page ?? 1), pageCount);
+  const start = (page - 1) * PRODUCT_PAGE_SIZE;
+  return {
+    rows: kept.slice(start, start + PRODUCT_PAGE_SIZE),
+    total: kept.length,
+    page,
+    pageSize: PRODUCT_PAGE_SIZE,
+    leadShare: products[0]?.share ?? null,
+  };
+};
+
+/** The revenue answer as sent: the cached answer holds every product, the response only the requested page. */
+export type PagedRevenueAnalytics = Omit<RevenueAnalytics, "breakdown"> & {
+  breakdown: Omit<SalesBreakdown, "products"> & { products: ProductPage };
+};
+
+export const pageRevenueAnswer = (answer: RevenueAnalytics, request: ProductPageRequest): PagedRevenueAnalytics => ({
+  ...answer,
+  breakdown: { ...answer.breakdown, products: productPageOf(answer.breakdown.products, request) },
+});
 
 /** The customers tab: who bought in the period, and how many of them are new. */
 export type CustomersAnalytics = AnalyticsEnvelope & { section: "customers"; customers: CustomerInsights };

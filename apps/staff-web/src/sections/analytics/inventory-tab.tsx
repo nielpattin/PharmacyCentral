@@ -21,7 +21,9 @@ import { useCan } from "../../permissions/use-can.ts";
 import { CreatePlanDrawer } from "../action-plans/create-plan-drawer.tsx";
 import { deadStockDraft, type ActionPlanDraft } from "../action-plans/drafts.ts";
 import type { AnalyticsInventoryResponse, DeadStockItem, ExpiryBucket, InventoryHealth } from "./contract.ts";
+import { fillText } from "../procurement/bulk-summary.ts";
 import { formatRate, isAnswered } from "./figures.ts";
+import { capChartRows, isCapped, MAX_CHART_BARS } from "./chart-cap.ts";
 import { compactNumber, expiryChartRows, siteStockChartRows } from "./inventory-chart.ts";
 import { rankByValue } from "./inventory-rows.ts";
 import { Heading, type FigureFormat } from "./shared.tsx";
@@ -65,6 +67,9 @@ export const InventoryTab = ({
     bucket: inventory?.expiry[group.key],
   }));
   const siteStockRows: SiteStockRow[] = rankByValue(inventory?.stockValue.bySite ?? []);
+  // The chart keeps a fixed height: the first sites, then one merged bar. The full list is a table when the chart cuts it.
+  const siteStockBars = capChartRows(siteStockChartRows(siteStockRows), MAX_CHART_BARS, translateText("Other"));
+  const siteStockCapped = isCapped(siteStockRows.length, MAX_CHART_BARS);
   const deadStockRows: DeadStockRow[] = (inventory?.deadStock.items ?? []).map((item) => ({
     ...item,
     site: siteLabel(item.siteId),
@@ -159,7 +164,7 @@ export const InventoryTab = ({
         )}
       </section>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid items-start gap-3 lg:grid-cols-2">
         <Card variant="soft">
           <CardHeader>
             <CardTitle>{translateText("Stock value by site")}</CardTitle>
@@ -171,18 +176,48 @@ export const InventoryTab = ({
               <>
                 <BarChartCompare
                   layout="horizontal"
-                  height={Math.max(160, siteStockRows.length * 56 + 40)}
-                  data={siteStockChartRows(siteStockRows)}
+                  height={Math.max(160, siteStockBars.length * 56 + 40)}
+                  data={siteStockBars}
                   series={[{ label: translateText("Stock value by site"), tone: "chart-1" }]}
                   formatValue={(value) => compactNumber(value, locale)}
                 />
-                <ul className="mt-3 grid gap-0.5 text-xs text-muted">
-                  {siteStockRows.map((row) => (
-                    <li key={row.siteId}>
-                      {row.siteName}: {translateText("Quantity")} {format.count(row.quantity)}
-                    </li>
-                  ))}
-                </ul>
+                {siteStockCapped ? (
+                  <div className="mt-4">
+                    <DataTable<SiteStockRow>
+                      interactive
+                      stickyHeader={false}
+                      storageKey="staff:analytics:stock-by-site"
+                      labels={dataTableLabels()}
+                      loading={loading}
+                      rows={siteStockRows}
+                      getKey={(row) => row.siteId}
+                      empty={translateText("No records found")}
+                      columns={[
+                        { key: "siteName", label: translateText("Site") },
+                        {
+                          key: "quantity",
+                          label: translateText("Quantity"),
+                          align: "right",
+                          render: (row) => format.count(row.quantity),
+                        },
+                        {
+                          key: "value",
+                          label: translateText("Value"),
+                          align: "right",
+                          render: (row) => format.money(row.value),
+                        },
+                      ]}
+                    />
+                  </div>
+                ) : (
+                  <ul className="mt-3 grid gap-0.5 text-xs text-muted">
+                    {siteStockRows.map((row) => (
+                      <li key={row.siteId}>
+                        {row.siteName}: {translateText("Quantity")} {format.count(row.quantity)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </>
             )}
           </CardContent>
@@ -196,7 +231,7 @@ export const InventoryTab = ({
               <Skeleton className="h-32" />
             ) : (
               <BarChartCompare
-                height={220}
+                height={Math.max(220, siteStockBars.length * 56 + 40)}
                 data={expiryChartRows(expiryRows.map((row) => ({ ...row, label: translateText(row.label) })))}
                 series={[{ label: translateText("Value"), tone: "chart-3" }]}
                 formatValue={(value) => compactNumber(value, locale)}
@@ -295,6 +330,14 @@ export const InventoryTab = ({
             planGate.allowed && deadStockDays !== undefined && deadStockRows.length > 0,
           )}
         />
+        {isAnswered(inventory?.deadStock.productCount) && inventory.deadStock.productCount > deadStockRows.length ? (
+          <p className="text-xs text-muted">
+            {fillText(translateText("Showing {shown} of {total} dead stock products."), {
+              shown: format.count(deadStockRows.length),
+              total: format.count(inventory.deadStock.productCount),
+            })}
+          </p>
+        ) : null}
       </section>
 
       {planDrawer ? (

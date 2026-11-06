@@ -25,6 +25,7 @@ import type { SalesTargetSiteRow, SalesTargetsResponse } from "./contract.ts";
 import { formatRate } from "./figures.ts";
 import { Heading, SiteFilter, type FigureFormat } from "./shared.tsx";
 import { compactNumber } from "./inventory-chart.ts";
+import { capChartRows, MAX_CHART_BARS } from "./chart-cap.ts";
 import { targetsChartRows } from "./targets-chart.ts";
 import { SalesTargetDialog, type SalesTargetDraft } from "./target-dialog.tsx";
 
@@ -63,6 +64,8 @@ export const TargetsTab = ({
   const rows: SalesTargetSiteRow[] = data?.sites ?? [];
   const totals = data?.totals;
   const hasTargets = rows.some((row) => row.target !== null);
+  // The chart keeps a fixed height: the first sites, then one merged bar. The table under it lists every site.
+  const targetBars = capChartRows(targetsChartRows(rows, hasTargets), MAX_CHART_BARS, translateText("Other"));
 
   return (
     <div className="grid gap-4">
@@ -125,7 +128,9 @@ export const TargetsTab = ({
             <Skeleton className="h-32" />
           ) : (
             <BarChartCompare
-              data={targetsChartRows(rows, hasTargets)}
+              layout="horizontal"
+              height={Math.max(160, targetBars.length * (hasTargets ? 64 : 44) + 40)}
+              data={targetBars}
               series={
                 hasTargets
                   ? [

@@ -961,6 +961,7 @@ Các trường hợp biên:
 - Sản phẩm làm tổng vượt mốc vẫn ở nhóm mà nó hoàn tất, nên A luôn chiếm ít nhất 80% và A+B ít nhất 95% doanh thu hàng hóa.
 - Sản phẩm có doanh thu hàng hóa bằng 0 không vào nhóm nào; kỳ không bán hàng hóa ($G = 0$) trả ba nhóm rỗng với tỷ trọng null.
 - Tỷ trọng của một nhóm là doanh thu nhóm chia $G$, null khi $G = 0$.
+- Mục Doanh thu của Phân tích liệt kê mọi sản phẩm có $R_i > 0$, xếp theo doanh thu giảm dần, mỗi sản phẩm kèm nhóm của nó. API trả từng trang 20 dòng và có thể lọc theo một nhóm (`productClass`), nên danh mục lớn không bị tải về một lần; số sản phẩm mỗi nhóm trong danh sách bằng `productCount` của bảng ABC.
 - Phân nhóm dùng đúng doanh thu hàng hóa của BR-REPORT-013 và cùng bộ lọc kỳ, cơ sở, kênh; dòng không có `productId` (phí giao hàng) không vào bảng này.
 
 ### BR-REPORT-016. Khách hàng đã nhận diện trong kỳ

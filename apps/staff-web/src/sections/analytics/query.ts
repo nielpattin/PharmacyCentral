@@ -1,4 +1,4 @@
-import type { AnalyticsChannel, AnalyticsSection } from "./contract.ts";
+import type { AbcClass, AnalyticsChannel, AnalyticsSection } from "./contract.ts";
 
 export const ANALYTICS_QUERY_KEY = ["staff-analytics"] as const;
 export const SALES_TARGETS_QUERY_KEY = ["sales-targets"] as const;
@@ -17,9 +17,15 @@ export const analyticsPath = (
   siteId: string | undefined,
   channel: AnalyticsChannel,
   section: AnalyticsSection,
+  products?: { abcClass: AbcClass | undefined; page: number },
 ): string => {
   const params = new URLSearchParams({ section, from: bounds.from, to: bounds.to, channel });
   if (siteId) params.set("siteId", siteId);
+  // Only the revenue tab has a product table to page.
+  if (section === "revenue" && products) {
+    params.set("productPage", String(products.page));
+    if (products.abcClass) params.set("productClass", products.abcClass);
+  }
   return `/api/dashboard/analytics?${params.toString()}`;
 };
 

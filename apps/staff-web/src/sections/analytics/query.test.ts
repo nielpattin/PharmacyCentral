@@ -48,3 +48,28 @@ describe("isAnalyticsChannel", () => {
     expect(isAnalyticsChannel("pos")).toBe(false);
   });
 });
+
+describe("analyticsPath product paging", () => {
+  it("asks the revenue tab for a page of products, and for one ABC class when chosen", () => {
+    const url = new URL(
+      analyticsPath(BOUNDS, undefined, "all", "revenue", { abcClass: "C", page: 3 }),
+      "http://staff.local",
+    );
+    expect(url.searchParams.get("productPage")).toBe("3");
+    expect(url.searchParams.get("productClass")).toBe("C");
+  });
+
+  it("leaves the class out for all classes, and sends no product paging to another tab", () => {
+    const all = new URL(
+      analyticsPath(BOUNDS, undefined, "all", "revenue", { abcClass: undefined, page: 1 }),
+      "http://staff.local",
+    );
+    expect(all.searchParams.has("productClass")).toBe(false);
+    const overview = new URL(
+      analyticsPath(BOUNDS, undefined, "all", "overview", { abcClass: "A", page: 2 }),
+      "http://staff.local",
+    );
+    expect(overview.searchParams.has("productPage")).toBe(false);
+    expect(overview.searchParams.has("productClass")).toBe(false);
+  });
+});
