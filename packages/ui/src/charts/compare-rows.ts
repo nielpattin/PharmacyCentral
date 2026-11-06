@@ -27,6 +27,33 @@ export const compareRows = (data: readonly CompareDatum[], seriesCount: number):
 export const truncateLabel = (label: string, max: number): string =>
   max > 1 && label.length > max ? `${label.slice(0, max - 1).trimEnd()}…` : label;
 
+/**
+ * Breaks an axis label into at most `maxLines` lines of at most `maxChars` characters, at spaces. A word longer than a
+ * line, or text left over after the last line, ends in an ellipsis. Whole labels stay in the tooltip.
+ */
+export const wrapLabel = (label: string, maxChars: number, maxLines: number): string[] => {
+  const lines: string[] = [];
+  let current = "";
+  const words = label.split(/\s+/).filter(Boolean);
+  for (const [index, word] of words.entries()) {
+    const joined = current === "" ? word : `${current} ${word}`;
+    if (joined.length <= maxChars) {
+      current = joined;
+      continue;
+    }
+    if (current !== "") {
+      lines.push(current);
+      if (lines.length === maxLines - 1) {
+        // The last line takes everything that is left, cut to fit.
+        return [...lines, truncateLabel(words.slice(index).join(" "), maxChars)];
+      }
+    }
+    current = word;
+  }
+  if (current !== "") lines.push(current);
+  return lines.map((line) => truncateLabel(line, maxChars)).slice(0, maxLines);
+};
+
 export type DonutInput = { key: string; value: number };
 
 /** Each part's size (zero for negative or non-finite values), its fraction of the whole, and the whole. */

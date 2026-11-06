@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { compareRows, donutShares, truncateLabel } from "./compare-rows.ts";
+import { compareRows, donutShares, truncateLabel, wrapLabel } from "./compare-rows.ts";
 
 describe("compareRows", () => {
   it("keys each series value by position and keeps the category label", () => {
@@ -29,6 +29,28 @@ describe("truncateLabel", () => {
     const cut = truncateLabel("Nhà thuốc Pharmacy Central Cầu Giấy", 12);
     expect(cut).toHaveLength(12);
     expect(cut.endsWith("…")).toBe(true);
+  });
+});
+
+describe("wrapLabel", () => {
+  it("keeps a short label on one line", () => {
+    expect(wrapLabel("Cầu Giấy", 20, 2)).toEqual(["Cầu Giấy"]);
+  });
+
+  it("wraps a long label at spaces", () => {
+    expect(wrapLabel("Nhà thuốc Pharmacy Central Đống Đa", 20, 2)).toEqual(["Nhà thuốc Pharmacy", "Central Đống Đa"]);
+  });
+
+  it("ends the last line with an ellipsis when text is left over", () => {
+    const lines = wrapLabel("Paracetamol 500mg hộp 100 viên nén bao phim", 14, 2);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe("Paracetamol");
+    expect(lines[1]?.length).toBeLessThanOrEqual(14);
+    expect(lines[1]?.endsWith("…")).toBe(true);
+  });
+
+  it("cuts a single word longer than a line", () => {
+    expect(wrapLabel("Pneumonoultramicroscopic", 10, 2)).toEqual(["Pneumonou…"]);
   });
 });
 

@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { cn } from "../cn.ts";
 import { toneColor, type ChartTone, type Tone } from "../charts/palette.ts";
-import { compareRows, truncateLabel, type CompareDatum } from "../charts/compare-rows.ts";
+import { compareRows, wrapLabel, type CompareDatum } from "../charts/compare-rows.ts";
 import { seriesDataKey } from "../charts/trend-rows.ts";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "./chart.tsx";
 import type { ChartConfig } from "./chart.tsx";
@@ -24,8 +24,40 @@ export type BarChartCompareProps = {
   className?: string | undefined;
 };
 
+// A category name wraps onto at most two lines, then ends in an ellipsis; the tooltip holds the whole name.
 const VERTICAL_LABEL_CHARS = 14;
-const HORIZONTAL_LABEL_CHARS = 22;
+const HORIZONTAL_LABEL_CHARS = 26;
+const LABEL_LINES = 2;
+const LINE_HEIGHT = 13;
+// About 6.2px per character at the axis font size, plus the gap to the bars.
+const sidewaysAxisWidth = (chars: number): number => Math.round(chars * 6.2 + 20);
+const UPRIGHT_AXIS_HEIGHT = 44;
+
+type CategoryTickProps = { x?: number | string; y?: number | string; payload?: { value?: unknown } };
+
+/** An axis label that wraps onto two lines instead of cutting at the first, so a long name stays readable. */
+const categoryTick =
+  (anchor: "end" | "middle", maxChars: number) =>
+  ({ x: rawX = 0, y: rawY = 0, payload }: CategoryTickProps): React.JSX.Element => {
+    const [x, y] = [Number(rawX), Number(rawY)];
+    const value = payload?.value;
+    const lines = wrapLabel(
+      typeof value === "string" || typeof value === "number" ? String(value) : "",
+      maxChars,
+      LABEL_LINES,
+    );
+    // Sideways, the lines centre on the bar; upright, they hang below the axis.
+    const first = anchor === "end" ? 4 - ((lines.length - 1) * LINE_HEIGHT) / 2 : 12;
+    return (
+      <text x={x} y={y} textAnchor={anchor}>
+        {lines.map((line, index) => (
+          <tspan key={`${index}-${line}`} x={x} dy={index === 0 ? first : LINE_HEIGHT}>
+            {line}
+          </tspan>
+        ))}
+      </text>
+    );
+  };
 
 const categoryLabel = (payload: readonly { payload?: unknown }[] | undefined): string => {
   const row: unknown = payload?.[0]?.payload;
@@ -91,9 +123,9 @@ export const BarChartCompare = ({
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              width={140}
+              width={sidewaysAxisWidth(HORIZONTAL_LABEL_CHARS)}
               interval={0}
-              tickFormatter={(value: string) => truncateLabel(value, HORIZONTAL_LABEL_CHARS)}
+              tick={categoryTick("end", HORIZONTAL_LABEL_CHARS)}
             />
           </>
         ) : (
@@ -105,7 +137,8 @@ export const BarChartCompare = ({
               axisLine={false}
               tickMargin={8}
               interval={0}
-              tickFormatter={(value: string) => truncateLabel(value, VERTICAL_LABEL_CHARS)}
+              height={UPRIGHT_AXIS_HEIGHT}
+              tick={categoryTick("middle", VERTICAL_LABEL_CHARS)}
             />
             <YAxis
               type="number"
