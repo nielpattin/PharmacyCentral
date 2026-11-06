@@ -70,6 +70,23 @@ describe("SalesPaymentEventConsumer", () => {
     await consumer.close();
   });
 
+  it("leaves the order alone for a partial refund and refunds it for the last one", async () => {
+    applyPaymentStatus.mockResolvedValue(undefined);
+    const refund = (fullyRefunded: boolean) =>
+      delivery(
+        JSON.stringify({ eventType: "payment.invoice.refunded.v1", payload: { orderId: "order-1", fullyRefunded } }),
+      );
+
+    const partial = refund(false);
+    broker.deliver?.(partial);
+    await vi.waitFor(() => expect(broker.ack).toHaveBeenCalledWith(partial));
+    expect(applyPaymentStatus).not.toHaveBeenCalled();
+
+    const last = refund(true);
+    broker.deliver?.(last);
+    await vi.waitFor(() => expect(applyPaymentStatus).toHaveBeenCalledWith("order-1", "Refunded"));
+  });
+
   it("returns a failed event to the queue while attempts remain", async () => {
     applyPaymentStatus.mockRejectedValue(new Error("database down"));
     const message = delivery(paid, 1);

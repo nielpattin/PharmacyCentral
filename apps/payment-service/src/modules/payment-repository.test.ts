@@ -228,4 +228,62 @@ describe("PaymentRepository provider transactions", () => {
       db.select().from(schema.paymentTransactions).where(eq(schema.paymentTransactions.paymentInvoiceId, racing)),
     ).resolves.toHaveLength(1);
   });
+
+  it("marks the reconciliation refunded and keeps the received amount when a paid invoice is refunded", async () => {
+    const refunded = await repository.refund(invoice, "Operational correction");
+
+    expect(refunded?.status).toBe("Refunded");
+    const [record] = await db
+      .select()
+      .from(schema.reconciliationRecords)
+      .where(eq(schema.reconciliationRecords.paymentInvoiceId, invoice));
+    expect(record?.state).toBe("Refunded");
+    expect(Number(record?.receivedAmount)).toBe(45000);
+    await expect(repository.refund(invoice, "again")).rejects.toThrow("Only paid invoices can be refunded");
+  });
+
+  it("keeps a partly refunded invoice paid and refuses more than what is left", async () => {
+    const partial = "00000000-0000-4000-8000-0000000000e2";
+    await db
+      .insert(schema.paymentInvoices)
+      .values({ id: partial, paymentCode: "PC-EEEE000000000103", amount: "1000", status: "Paid" });
+    await db
+      .insert(schema.reconciliationRecords)
+      .values({ paymentInvoiceId: partial, expectedAmount: "1000", receivedAmount: "1000", state: "Matched" });
+
+    const first = await repository.refund(partial, "Wrong size", undefined, 400);
+    expect(first?.status).toBe("Paid");
+    await expect(repository.refund(partial, "Too much", undefined, 700)).rejects.toMatchObject({
+      code: "refund_exceeds_remaining",
+    });
+    const [record] = await db
+      .select()
+      .from(schema.reconciliationRecords)
+      .where(eq(schema.reconciliationRecords.paymentInvoiceId, partial));
+    expect(record?.state).toBe("PartiallyRefunded");
+
+    const rest = await repository.refund(partial, "Rest");
+    expect(rest?.status).toBe("Refunded");
+    const events = await db
+      .select()
+      .from(schema.outboxMessages)
+      .where(eq(schema.outboxMessages.aggregateId, partial));
+    expect(events.map((event) => JSON.parse(event.payload).fullyRefunded)).toEqual([false, true]);
+  });
+
+  it("settles two racing refunds as one refund and one refusal", async () => {
+    const racing = "00000000-0000-4000-8000-0000000000e3";
+    await db
+      .insert(schema.paymentInvoices)
+      .values({ id: racing, paymentCode: "PC-FFFF000000000104", amount: "500", status: "Paid" });
+    await db.insert(schema.reconciliationRecords).values({ paymentInvoiceId: racing, expectedAmount: "500" });
+
+    const results = await Promise.allSettled([repository.refund(racing, "a"), repository.refund(racing, "b")]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    await expect(
+      db.select().from(schema.paymentRefunds).where(eq(schema.paymentRefunds.paymentInvoiceId, racing)),
+    ).resolves.toHaveLength(1);
+  });
 });

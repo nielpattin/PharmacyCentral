@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, getTableColumns, gte, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 
+import { InvoiceRefusal } from "./invoice-pricing.ts";
 import type { PaymentDatabase } from "../shared/infrastructure/database.ts";
 import type { PageCursor } from "./page-cursor.ts";
 import {
@@ -370,19 +371,42 @@ export class PaymentRepository {
     });
   }
 
-  public async refund(id: string, reason: string, actorId?: string) {
+  /**
+   * Pays back all of what is left of a paid invoice, or `amount` of it. The invoice row is locked first, so two refunds
+   * of one invoice run one after the other and the second sees what the first paid back. The invoice becomes Refunded
+   * once nothing is left; until then it stays Paid and its reconciliation reads PartiallyRefunded.
+   */
+  public async refund(id: string, reason: string, actorId?: string, amount?: number) {
     return this.database.db.transaction(async (transaction) => {
-      const invoice = (await transaction.select().from(paymentInvoices).where(eq(paymentInvoices.id, id)).limit(1))[0];
+      const invoice = (
+        await transaction.select().from(paymentInvoices).where(eq(paymentInvoices.id, id)).limit(1).for("update")
+      )[0];
       if (!invoice) return undefined;
-      if (invoice.status !== "Paid") throw new Error("Only paid invoices can be refunded");
+      if (invoice.status !== "Paid") throw new InvoiceRefusal(409, "invoice_not_paid", "Only paid invoices can be refunded");
+      const [totals] = await transaction
+        .select({ refundedTotal: sql<string>`coalesce(sum(${paymentRefunds.amount}), 0)` })
+        .from(paymentRefunds)
+        .where(eq(paymentRefunds.paymentInvoiceId, id));
+      const remaining = Number(invoice.amount) - Number(totals?.refundedTotal ?? 0);
+      const refunded = amount ?? remaining;
+      if (refunded <= 0 || refunded > remaining)
+        throw new InvoiceRefusal(409, "refund_exceeds_remaining", "The refund is more than what is left to pay back");
       await transaction
         .insert(paymentRefunds)
-        .values({ paymentInvoiceId: id, amount: invoice.amount, reason, createdBy: actorId ?? null });
-      const [updated] = await transaction
-        .update(paymentInvoices)
-        .set({ status: "Refunded", updatedAt: new Date() })
-        .where(and(eq(paymentInvoices.id, id), eq(paymentInvoices.status, "Paid")))
-        .returning();
+        .values({ paymentInvoiceId: id, amount: String(refunded), reason, createdBy: actorId ?? null });
+      const fullyRefunded = refunded === remaining;
+      const [updated] = fullyRefunded
+        ? await transaction
+            .update(paymentInvoices)
+            .set({ status: "Refunded", updatedAt: new Date() })
+            .where(eq(paymentInvoices.id, id))
+            .returning()
+        : [invoice];
+      // The money was received, so the received amount stays; the state says how much of it has been paid back.
+      await transaction
+        .update(reconciliationRecords)
+        .set({ state: fullyRefunded ? "Refunded" : "PartiallyRefunded", updatedAt: new Date() })
+        .where(eq(reconciliationRecords.paymentInvoiceId, id));
       await transaction.insert(outboxMessages).values({
         eventType: "payment.invoice.refunded.v1",
         aggregateId: id,
@@ -391,7 +415,8 @@ export class PaymentRepository {
           orderId: invoice.orderId,
           reason,
           actorId: actorId ?? null,
-          amount: Number(invoice.amount),
+          amount: refunded,
+          fullyRefunded,
           currency: invoice.currency,
         }),
       });

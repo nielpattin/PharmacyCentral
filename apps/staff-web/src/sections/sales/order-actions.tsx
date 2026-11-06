@@ -1,12 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@pharmacy/ui";
 
-import { useConfirm, usePrompt } from "../../components/confirm.tsx";
+import { useConfirm } from "../../components/confirm.tsx";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { useSession } from "../../auth.ts";
 import { canAtSite } from "../../permissions/staff-permissions.ts";
 import { translateText } from "../../i18n.ts";
+import { useRefundRequest } from "../finance/refund-request.ts";
 import { idOf, text, type JsonRecord } from "../../staff-api.ts";
 import { FINANCE_SUMMARY_KEY, INVOICES_KEY } from "../finance/query-keys.ts";
 import { canRecordOrderCash, canRefundOrder, orderFacts, orderMoves } from "./rules.ts";
@@ -39,7 +40,7 @@ export const OrderActions = ({ order }: { order: JsonRecord }): React.JSX.Elemen
   const run = useStaffAction();
   const queryClient = useQueryClient();
   const confirm = useConfirm();
-  const prompt = usePrompt();
+  const askRefund = useRefundRequest("Operational correction");
   if (!moveGate.allowed) return null;
 
   const facts = orderFacts(order);
@@ -90,17 +91,11 @@ export const OrderActions = ({ order }: { order: JsonRecord }): React.JSX.Elemen
 
   const refund = async (): Promise<void> => {
     if (!invoice) return;
-    const reason = await prompt({
-      title: "Refund payment",
-      label: "Refund reason:",
-      required: true,
-      defaultValue: translateText("Operational correction"),
-      confirmLabel: "Refund",
-    });
-    if (reason === null) return;
+    const request = await askRefund(invoice.amount);
+    if (request === null) return;
     const done = await run({
       path: `/api/payments/${encodeURIComponent(idOf(invoice))}/refund`,
-      body: { reason },
+      body: request,
       invalidate,
       success: "Payment refunded.",
     });

@@ -123,7 +123,7 @@ export class SalesPaymentEventConsumer {
     message: ConsumeMessage,
     setOutcome: (outcome: ConsumerOutcome) => void,
   ): Promise<void> {
-    let event: { eventType?: string; payload?: { orderId?: unknown; prescriptionId?: unknown } };
+    let event: { eventType?: string; payload?: { orderId?: unknown; prescriptionId?: unknown; fullyRefunded?: unknown } };
     try {
       event = JSON.parse(message.content.toString()) as typeof event;
     } catch {
@@ -135,8 +135,9 @@ export class SalesPaymentEventConsumer {
       const orderId = event.payload?.orderId;
       const prescriptionId = event.payload?.prescriptionId;
       const paid = event.eventType === "payment.invoice.paid.v1";
-      if (typeof orderId === "string" && (paid || event.eventType === "payment.invoice.refunded.v1")) {
-        const refunded = event.eventType === "payment.invoice.refunded.v1";
+      // A partial refund leaves the order as it was; only the last one (or an older event, which has no flag) pays it all back.
+      const refunded = event.eventType === "payment.invoice.refunded.v1" && event.payload?.fullyRefunded !== false;
+      if (typeof orderId === "string" && (paid || refunded)) {
         const order = await this.repository.applyPaymentStatus(orderId, refunded ? "Refunded" : "Paid");
         // An order that was not handed over will not happen once its money went back: cancel it and free its stock.
         if (order && refunded) await this.orderStock.cancelRefunded(order);

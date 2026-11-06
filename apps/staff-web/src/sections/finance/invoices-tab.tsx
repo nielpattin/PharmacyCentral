@@ -8,9 +8,9 @@ import {
   type DataColumn,
   type StatusTone,
 } from "@pharmacy/ui";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
-import { useConfirm, usePrompt } from "../../components/confirm.tsx";
+import { useConfirm } from "../../components/confirm.tsx";
 import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
@@ -24,6 +24,8 @@ import { translateText } from "../../i18n.ts";
 import { customerLabel, orderLabel, shortId } from "../procurement/labels.ts";
 import { formatDateTime, formatQuantity, idOf, text, type JsonRecord } from "../../staff-api.ts";
 import { isCounterInvoice } from "../sales/rules.ts";
+import { ReconciliationDrawer } from "./reconciliation-drawer.tsx";
+import { useRefundRequest } from "./refund-request.ts";
 import { FINANCE_SUMMARY_KEY, INVOICES_KEY } from "./query-keys.ts";
 
 const LIST_DEFAULTS = { q: "", status: "all" } as const;
@@ -38,9 +40,6 @@ const INVOICE_TONE: Readonly<Record<string, StatusTone | undefined>> = {
   Cancelled: "neutral",
 };
 
-const LINK_CLASS =
-  "inline-flex h-8 items-center rounded-md px-3 text-xs font-medium text-primary outline-none hover:bg-surface-soft focus-visible:ring-2 focus-visible:ring-primary/50";
-
 /**
  * Payment invoices, newest first. A Pharmacist confirms cash here. A Pharmacy Manager refunds the invoice of an online
  * order; a counter invoice is refunded by a Pharmacist from the counter payments list, so no refund shows for it here.
@@ -53,7 +52,7 @@ export const InvoicesTab = (): React.JSX.Element => {
   const list = useListUrlState(LIST_DEFAULTS);
   const run = useStaffAction();
   const confirm = useConfirm();
-  const prompt = usePrompt();
+  const askRefund = useRefundRequest("Operational correction");
   const listRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useSearchDraft(list.values.q, (value) => list.setValues({ q: value }));
 
@@ -103,18 +102,14 @@ export const InvoicesTab = (): React.JSX.Element => {
     });
   };
 
+  const [reconciling, setReconciling] = useState<JsonRecord>();
+
   const refund = async (row: JsonRecord): Promise<void> => {
-    const reason = await prompt({
-      title: "Refund payment",
-      label: "Refund reason:",
-      required: true,
-      defaultValue: translateText("Operational correction"),
-      confirmLabel: "Refund",
-    });
-    if (reason === null) return;
+    const request = await askRefund(row.amount);
+    if (request === null) return;
     await run({
       path: `/api/payments/${encodeURIComponent(idOf(row))}/refund`,
-      body: { reason },
+      body: request,
       invalidate: [INVOICES_KEY, FINANCE_SUMMARY_KEY],
       success: "Payment refunded.",
     });
@@ -171,14 +166,9 @@ export const InvoicesTab = (): React.JSX.Element => {
       pinned: "right",
       render: (row) => (
         <RowActions label={text(row.paymentCode, "") || shortId(row.id)}>
-          <a
-            className={LINK_CLASS}
-            href={`/api/payments/${encodeURIComponent(idOf(row))}/reconciliation`}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <Button size="sm" variant="ghost" onClick={() => setReconciling(row)}>
             {translateText("Reconciliation")}
-          </a>
+          </Button>
           {confirmGate.allowed && text(row.status, "") === "Pending" ? (
             <Button size="sm" onClick={() => void confirmCash(row)}>
               {translateText("Confirm cash")}
@@ -229,6 +219,14 @@ export const InvoicesTab = (): React.JSX.Element => {
         paging={invoices.paging}
         exportCsv={{ filename: "invoices.csv" }}
       />
+      {reconciling ? (
+        <ReconciliationDrawer
+          invoiceId={idOf(reconciling)}
+          title={text(reconciling.paymentCode, "") || shortId(reconciling.id)}
+          currency={text(reconciling.currency, "VND")}
+          onClose={() => setReconciling(undefined)}
+        />
+      ) : null}
     </div>
   );
 };

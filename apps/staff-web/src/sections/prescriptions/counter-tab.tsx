@@ -3,7 +3,7 @@ import { Alert, Button, RowActions, StatusCell } from "@pharmacy/ui";
 
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { withActionColumn } from "../../lib/action-column.ts";
-import { useConfirm, usePrompt } from "../../components/confirm.tsx";
+import { useConfirm } from "../../components/confirm.tsx";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
@@ -12,8 +12,9 @@ import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { translateText } from "../../i18n.ts";
+import { useRefundRequest } from "../finance/refund-request.ts";
 import { useCan } from "../../permissions/use-can.ts";
-import { formatDateTime, text, type JsonRecord } from "../../staff-api.ts";
+import { idOf, formatDateTime, text, type JsonRecord } from "../../staff-api.ts";
 import {
   ALL_STATUSES,
   activeStatus,
@@ -52,7 +53,7 @@ export const CounterTab = (): React.JSX.Element => {
   });
   const run = useStaffAction();
   const confirm = useConfirm();
-  const prompt = usePrompt();
+  const askRefund = useRefundRequest("Customer request");
   const rows = invoices.rows.filter(isCounterInvoice);
 
   const confirmCash = async (invoiceId: string): Promise<void> => {
@@ -69,18 +70,12 @@ export const CounterTab = (): React.JSX.Element => {
     });
   };
 
-  const refund = async (invoiceId: string): Promise<void> => {
-    const reason = await prompt({
-      title: "Refund payment",
-      label: "Refund reason",
-      required: true,
-      defaultValue: "Customer request",
-      confirmLabel: "Refund",
-    });
-    if (reason === null) return;
+  const refund = async (invoice: JsonRecord): Promise<void> => {
+    const request = await askRefund(invoice.amount);
+    if (request === null) return;
     await run({
-      path: `/api/payments/${encodeURIComponent(invoiceId)}/refund`,
-      body: { reason },
+      path: `/api/payments/${encodeURIComponent(idOf(invoice))}/refund`,
+      body: request,
       invalidate: [["staff-counter-invoices"]],
       success: "Payment refunded.",
     });
@@ -134,7 +129,7 @@ export const CounterTab = (): React.JSX.Element => {
               </Button>
             ) : null}
             {refundGate.allowed && canRefund(invoiceStatus) ? (
-              <Button variant="danger-ghost" size="sm" onClick={() => void refund(invoiceId)}>
+              <Button variant="danger-ghost" size="sm" onClick={() => void refund(row)}>
                 {translateText("Refund")}
               </Button>
             ) : null}

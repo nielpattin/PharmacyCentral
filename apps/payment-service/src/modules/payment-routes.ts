@@ -230,7 +230,9 @@ export const createPaymentRouter = (
   router.post("/payments/:id/refund", async (request, response, next) => {
     if (!repository) return unavailable(response);
     const id = idSchema.safeParse(request.params);
-    const parsed = z.object({ reason: z.string().trim().min(1).max(500) }).safeParse(request.body);
+    const parsed = z
+      .object({ reason: z.string().trim().min(1).max(500), amount: z.number().positive().optional() })
+      .safeParse(request.body);
     if (!id.success || !parsed.success) return invalid(response);
     try {
       const existing = await repository.getInvoice(id.data.id);
@@ -238,9 +240,11 @@ export const createPaymentRouter = (
       // The invoice kind decides the role, so the refusal is judged before the refund writes anything.
       const refusal = refundRefusal(existing, actorRoles(request));
       if (refusal) return response.status(refusal.status).json(refusal);
-      const invoice = await repository.refund(id.data.id, parsed.data.reason, actor(request));
+      const invoice = await repository.refund(id.data.id, parsed.data.reason, actor(request), parsed.data.amount);
       return invoice ? response.json(invoice) : response.status(404).json({ title: "Invoice not found", status: 404 });
     } catch (error) {
+      if (error instanceof InvoiceRefusal)
+        return response.status(error.status).json({ title: error.message, status: error.status, code: error.code });
       return next(error);
     }
   });
