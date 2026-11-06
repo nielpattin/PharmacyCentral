@@ -8,6 +8,7 @@ import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { translateText } from "../../i18n.ts";
 import { formatDateTime, formatQuantity, text } from "../../staff-api.ts";
 import { shortId } from "../procurement/labels.ts";
+import { reportDetails, reportTypeLabel } from "./report-text.ts";
 import { REPORTS_KEY } from "./query-keys.ts";
 
 const LIST_DEFAULTS = { reportType: "sales" } as const;
@@ -46,7 +47,12 @@ export const ReportsTab = (): React.JSX.Element => {
         labels={dataTableLabels()}
         rows={reports.rows}
         columns={[
-          { key: "reportType", label: translateText("Type") },
+          {
+            key: "reportType",
+            label: translateText("Type"),
+            text: (row) => reportTypeLabel(text(row.reportType, ""), translateText),
+            render: (row) => reportTypeLabel(text(row.reportType, ""), translateText),
+          },
           {
             key: "subjectId",
             label: translateText("Subject"),
@@ -56,14 +62,15 @@ export const ReportsTab = (): React.JSX.Element => {
             key: "value",
             label: translateText("Value"),
             align: "right",
-            render: (row) => formatQuantity(row.value),
+            // Events with no amount store 0, which would read as a real figure.
+            render: (row) => (Number(row.value) === 0 ? "-" : formatQuantity(row.value)),
           },
           { key: "occurredAt", label: translateText("Occurred"), render: (row) => formatDateTime(row.occurredAt) },
           {
             key: "payload",
             label: translateText("Details"),
-            render: (row) => <code>{text(row.payload)}</code>,
-            text: (row) => text(row.payload, ""),
+            render: (row) => reportDetails(row.payload, translateText).join(" · ") || "-",
+            text: (row) => reportDetails(row.payload, translateText).join(" · "),
             truncate: 60,
           },
         ]}
