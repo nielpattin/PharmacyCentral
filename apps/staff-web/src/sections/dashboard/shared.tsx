@@ -64,9 +64,21 @@ export const Change = ({
   );
 };
 
-export const SectionHeading = ({ title, note }: { title: string; note?: string | undefined }): React.JSX.Element => (
-  <h2 className="flex flex-wrap items-baseline gap-x-2 text-base font-semibold text-ink">
-    {translateText(title)}
-    {note ? <span className="text-sm font-normal text-muted">{note}</span> : null}
-  </h2>
+/** A section's title, with a control for the whole section (a filter) at the right end of the same row. */
+export const SectionHeading = ({
+  title,
+  note,
+  action,
+}: {
+  title: string;
+  note?: string | undefined;
+  action?: React.ReactNode;
+}): React.JSX.Element => (
+  <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+    <h2 className="flex flex-wrap items-baseline gap-x-2 text-base font-semibold text-ink">
+      {translateText(title)}
+      {note ? <span className="text-sm font-normal text-muted">{note}</span> : null}
+    </h2>
+    {action}
+  </div>
 );

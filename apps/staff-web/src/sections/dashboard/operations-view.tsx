@@ -73,6 +73,10 @@ export const OperationsView = ({
     retry: false,
   });
   const sales = salesQuery.data;
+  const revenueShown = showRevenue && !salesQuery.isError;
+  // The filter sits in the heading of the first section on the page, so it takes no row of its own.
+  const siteFilterControl =
+    siteOptions.length > 1 ? <SiteFilter value={siteFilter ?? "all"} options={siteOptions} onChange={setSite} /> : undefined;
   const locale = moneyLocale();
   const figures = figureFormat(text(sales?.currency, "VND"), locale);
 
@@ -114,17 +118,12 @@ export const OperationsView = ({
     <div className="grid gap-8">
       {error ? <Alert variant="danger">{translateText(error)}</Alert> : null}
 
-      {siteOptions.length > 1 ? (
-        <div className="flex justify-end">
-          <SiteFilter value={siteFilter ?? "all"} options={siteOptions} onChange={setSite} />
-        </div>
-      ) : null}
-
-      {showRevenue && !salesQuery.isError ? (
+      {revenueShown ? (
         <section className="grid gap-3">
           <SectionHeading
             title="Revenue and orders"
             note={`${formatDayLabel(range.fromDay, locale)} – ${formatDayLabel(range.toDay, locale)}`}
+            action={siteFilterControl}
           />
           <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
             {salesQuery.isPending ? (
@@ -160,7 +159,7 @@ export const OperationsView = ({
       ) : null}
 
       <section className="grid gap-3">
-        <SectionHeading title="Needs attention" />
+        <SectionHeading title="Needs attention" action={revenueShown ? undefined : siteFilterControl} />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           {pending
             ? tiles.map((tile) => <Skeleton key={tile.field} className="h-28 rounded-2xl" />)
