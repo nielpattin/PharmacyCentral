@@ -12,7 +12,7 @@ import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
-import { productLabel, productUnits, useProductLookup } from "../../hooks/useProductLookup.ts";
+import { loadProducts, productLabel, productUnits, useProductLookup } from "../../hooks/useProductLookup.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { getLanguage, translateText } from "../../i18n.ts";
@@ -82,6 +82,7 @@ export const PricingPage = (): React.JSX.Element => {
     path: "/api/pricing/prices",
     params: priceListParams(values),
     limit: 100,
+    prepareExport: (rows) => loadProducts(rows.map((row) => text(row.productId, ""))),
   });
   const products = useProductLookup(list.rows.map((row) => text(row.productId, "")));
 
@@ -221,7 +222,7 @@ export const PricingPage = (): React.JSX.Element => {
     {
       key: "status",
       label: translateText("Status"),
-      text: (row) => text(row.status, ""),
+      text: (row) => translateText(text(row.status, "")),
       render: (row) => {
         const status = text(row.status, "");
         return <StatusCell tone={STATUS_TONE[status] ?? "neutral"}>{translateText(status)}</StatusCell>;
@@ -318,7 +319,7 @@ export const PricingPage = (): React.JSX.Element => {
               </Button>
             </>
           }
-          paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+          paging={list.paging}
           exportCsv={{ filename: "prices.csv" }}
         />
       </div>

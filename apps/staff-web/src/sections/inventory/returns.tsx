@@ -172,7 +172,7 @@ export const ReturnsTab = (): React.JSX.Element => {
         columns={columns}
         loading={list.isLoading}
         getKey={(row) => text(row.id, "")}
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+        paging={list.paging}
         storageKey="staff:inventory:returns"
         exportCsv={{ filename: "inventory-returns.csv" }}
       />

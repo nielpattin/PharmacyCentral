@@ -10,6 +10,7 @@ import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
+import { loadProducts } from "../../hooks/useProductLookup.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { referenceOptions, useStaffReferences } from "../../hooks/useStaffReferences.ts";
@@ -312,6 +313,8 @@ export const DisposalsTab = (): React.JSX.Element => {
     path: "/api/inventory/disposals",
     params: { q: values.q.trim() || undefined, status: statusParam(values.status) },
     limit: PAGE_SIZE,
+    prepareExport: (rows) =>
+      loadProducts(rows.flatMap((row) => linesOf(row).map((line) => text(line.productId, "")))),
   });
   const labels = useInventoryLabels(list.rows.flatMap((row) => linesOf(row).map((line) => text(line.productId, ""))));
 
@@ -430,7 +433,7 @@ export const DisposalsTab = (): React.JSX.Element => {
           onChange: setDraft,
           placeholder: translateText("Search by reason, note or batch number"),
         }}
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+        paging={list.paging}
         storageKey="staff:inventory:disposals"
         exportCsv={{ filename: "inventory-disposals.csv" }}
       />

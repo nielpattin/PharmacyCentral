@@ -12,6 +12,7 @@ import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
+import { loadProducts } from "../../hooks/useProductLookup.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
@@ -185,6 +186,7 @@ export const AdjustmentsTab = (): React.JSX.Element => {
     path: "/api/inventory/adjustments",
     params: { q: values.q.trim() || undefined, status: statusParam(values.status) },
     limit: PAGE_SIZE,
+    prepareExport: (rows) => loadProducts(rows.map((row) => text(row.productId, ""))),
   });
   const labels = useInventoryLabels(list.rows.map((row) => text(row.productId, "")));
   const confirmedAction = useConfirmedAction();
@@ -312,7 +314,7 @@ export const AdjustmentsTab = (): React.JSX.Element => {
           onChange: setDraft,
           placeholder: translateText("Search by reason, notes or batch number"),
         }}
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+        paging={list.paging}
         selection={decideGate.allowed ? { keys: selected, onChange: setSelected } : undefined}
         bulkActions={
           <>

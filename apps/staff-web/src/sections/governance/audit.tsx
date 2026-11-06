@@ -184,7 +184,7 @@ export const AuditTab = (): React.JSX.Element => {
           },
           placeholder: translateText("Search by action, entity ID or actor ID"),
         }}
-        paging={{ hasMore: audit.hasMore, loadingMore: audit.isLoadingMore, onLoadMore: audit.loadMore }}
+        paging={audit.paging}
         storageKey="staff:governance:audit"
         exportCsv={{ filename: "audit-log.csv" }}
       />

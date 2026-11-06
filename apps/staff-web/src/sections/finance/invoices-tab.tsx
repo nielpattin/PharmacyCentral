@@ -16,7 +16,7 @@ import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
-import { useRecordLabels } from "../../hooks/useRecordLabels.ts";
+import { loadRecordLabels, useRecordLabels } from "../../hooks/useRecordLabels.ts";
 import { useCan } from "../../permissions/use-can.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
@@ -74,6 +74,13 @@ export const InvoicesTab = (): React.JSX.Element => {
       q: list.values.q || undefined,
     },
     limit: 100,
+    prepareExport: (rows) =>
+      customerGate.allowed
+        ? loadRecordLabels(
+            "/api/customers",
+            rows.map((row) => text(row.customerId, "")),
+          )
+        : Promise.resolve(),
   });
   // Customer names come from identity-service, which answers the counter roles only; other roles see the short id.
   const customers = useRecordLabels(
@@ -150,7 +157,7 @@ export const InvoicesTab = (): React.JSX.Element => {
           {translateText(text(row.status))}
         </StatusCell>
       ),
-      text: (row) => text(row.status, ""),
+      text: (row) => translateText(text(row.status, "")),
     },
     {
       key: "createdAt",
@@ -219,7 +226,7 @@ export const InvoicesTab = (): React.JSX.Element => {
           onChange: setSearch,
           placeholder: translateText("Search by invoice number, order ID or customer ID"),
         }}
-        paging={{ hasMore: invoices.hasMore, loadingMore: invoices.isLoadingMore, onLoadMore: invoices.loadMore }}
+        paging={invoices.paging}
         exportCsv={{ filename: "invoices.csv" }}
       />
     </div>

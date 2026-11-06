@@ -14,7 +14,7 @@ const LIST_DEFAULTS = { reportType: "sales" } as const;
 
 /**
  * Operational report rows, newest first, for the report type in the URL (`sales` by default, as before). Clearing the
- * field lists every event type. The list pages from the server; export covers the rows loaded so far.
+ * field lists every event type.
  */
 export const ReportsTab = (): React.JSX.Element => {
   const list = useListUrlState(LIST_DEFAULTS);
@@ -69,7 +69,7 @@ export const ReportsTab = (): React.JSX.Element => {
         ]}
         loading={reports.isLoading}
         empty={translateText("No records found")}
-        paging={{ hasMore: reports.hasMore, loadingMore: reports.isLoadingMore, onLoadMore: reports.loadMore }}
+        paging={reports.paging}
         exportCsv={{ filename: "reports.csv" }}
       />
     </div>

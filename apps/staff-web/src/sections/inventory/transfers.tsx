@@ -171,7 +171,7 @@ export const TransfersTab = (): React.JSX.Element => {
         loading={list.isLoading}
         getKey={(row) => text(row.id, "")}
         search={{ value: draft, onChange: setDraft, placeholder: translateText("Search by transfer number") }}
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+        paging={list.paging}
         storageKey="staff:inventory:transfers"
         exportCsv={{ filename: "inventory-transfers.csv" }}
       />

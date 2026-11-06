@@ -120,7 +120,7 @@ export const OrdersSection = (): React.JSX.Element => {
         loading={orders.isLoading}
         rows={orders.rows}
         columns={columns}
-        paging={{ hasMore: orders.hasMore, loadingMore: orders.isLoadingMore, onLoadMore: orders.loadMore }}
+        paging={orders.paging}
         exportCsv={{ filename: "online-orders.csv" }}
       />
       <EntityDrawer

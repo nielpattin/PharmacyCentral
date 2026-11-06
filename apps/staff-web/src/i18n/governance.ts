@@ -396,6 +396,7 @@ export const governanceLiterals: Record<string, string> = {
   Identity: "Danh tính",
   "Clear filters": "Xóa bộ lọc",
   "Export CSV": "Xuất CSV",
+  "Exporting…": "Đang xuất…",
   "Select an employee": "Chọn nhân viên",
   "Select an employee to edit their access.": "Chọn nhân viên để sửa quyền truy cập.",
   Roles: "Vai trò",

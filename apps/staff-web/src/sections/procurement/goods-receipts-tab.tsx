@@ -50,7 +50,7 @@ export const GoodsReceiptsTab = (): React.JSX.Element => {
       key: "status",
       label: translateText("Status"),
       render: (row) => <StatusCell tone="neutral">{translateText(text(row.status))}</StatusCell>,
-      text: (row) => text(row.status, ""),
+      text: (row) => translateText(text(row.status, "")),
     },
     {
       key: "siteId",
@@ -97,11 +97,7 @@ export const GoodsReceiptsTab = (): React.JSX.Element => {
           loading={receipts.isLoading}
           empty={translateText("No records found")}
           search={{ value: search, onChange: setSearch, placeholder: translateText("Search by receipt number") }}
-          paging={{
-            hasMore: receipts.hasMore,
-            loadingMore: receipts.isLoadingMore,
-            onLoadMore: receipts.loadMore,
-          }}
+          paging={receipts.paging}
           exportCsv={{ filename: "goods-receipts.csv" }}
         />
       </div>

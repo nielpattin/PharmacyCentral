@@ -18,6 +18,7 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import { cn } from "../cn.ts";
 import { downloadCsv, toCsv, type CsvColumn } from "../data-table/csv.ts";
 import { toPlainText } from "../data-table/plain-text.ts";
+import { renderedText } from "../data-table/rendered-text.ts";
 import {
   DEFAULT_TABLE_PREFERENCES,
   readTablePreferences,
@@ -45,7 +46,10 @@ export type DataColumn<T> = {
   hideable?: boolean | undefined;
   /** Sticks the column to the right edge, for row actions. */
   pinned?: "right" | undefined;
-  /** Ellipsis for long text with the full text in a title. `true` caps the width at 20rem; a number caps it in `ch`. */
+  /**
+   * Long text wraps onto two lines, then ends in an ellipsis, with the full text in a title. `true` caps the width at 20rem;
+   * a number caps it in `ch`, so the cell shows about twice that many characters.
+   */
   truncate?: boolean | number | undefined;
   align?: "left" | "right" | "center" | undefined;
   /** Pixels for a number, any CSS length for a string. */
@@ -83,6 +87,7 @@ const DEFAULT_LABELS = {
   clearSelection: "Clear selection",
   bulkActions: "Bulk actions",
   exportCsv: "Export CSV",
+  exportingCsv: "Exporting…",
   showingRows: "Showing {count} rows",
   showingOneRow: "Showing 1 row",
   showingOfTotal: "Showing {count} of {total} rows",
@@ -107,14 +112,19 @@ export type DataTableSearch = {
 };
 
 /** Cursor paging. The footer shows "Load more" while `hasMore` is true. */
-export type DataTablePaging = {
+export type DataTablePaging<T = unknown> = {
   hasMore: boolean;
   loadingMore?: boolean | undefined;
   onLoadMore: () => void;
   total?: number | undefined;
+  /** Loads every remaining page and resolves with all the rows. The CSV export waits for it while `hasMore` is true, so the file holds the whole list. */
+  loadAll: () => Promise<readonly T[]>;
 };
 
-/** Adds an "Export CSV" button that exports the table's filtered rows (all pages, not only the one on screen). */
+/**
+ * Adds an "Export CSV" button. A client-side table exports its filtered rows; a paged table exports every page, read
+ * through `paging.loadAll`.
+ */
 export type DataTableExport = {
   filename: string;
   /** Column keys to export, in this order. Defaults to the visible, non-pinned columns. */
@@ -142,7 +152,7 @@ export type DataTableProps<T> = {
   /** Server mode: the caller owns the filter. */
   search?: DataTableSearch | undefined;
   /** Server mode: the caller owns paging. */
-  paging?: DataTablePaging | undefined;
+  paging?: DataTablePaging<T> | undefined;
   exportCsv?: DataTableExport | undefined;
   /** Extra controls in the toolbar, before the density and column controls (for example a saved-views menu). */
   toolbarExtra?: ReactNode | undefined;
@@ -395,19 +405,26 @@ export const DataTable = <T,>({
               columnVisibility[column.key] !== false && column.pinned === undefined && column.key !== "actions",
           );
 
-  const exportCurrentRows = (): void => {
-    if (exportCsv === undefined) return;
+  const [exporting, setExporting] = useState(false);
+  const exportCurrentRows = async (): Promise<void> => {
+    if (exportCsv === undefined || exporting) return;
     const csvColumns: Array<CsvColumn<T>> = exportColumns.map((column) => ({
       label: column.label,
-      value: (row: T) => (column.text ? column.text(row) : readCell(row, column.key)),
+      value: (row: T) => {
+        if (column.text) return column.text(row);
+        // No plain-text form given: the file holds what the cell shows, and only falls back to the raw field when the cell has no text.
+        const shown = column.render ? renderedText(column.render(row)) : "";
+        return shown !== "" ? shown : readCell(row, column.key);
+      },
     }));
-    downloadCsv(
-      exportCsv.filename,
-      toCsv(
-        filteredRows.map((row) => row.original),
-        csvColumns,
-      ),
-    );
+    setExporting(true);
+    try {
+      // A paged list holds only the pages read so far, so the whole list is read first.
+      const exported = paging?.hasMore ? await paging.loadAll() : filteredRows.map((row) => row.original);
+      downloadCsv(exportCsv.filename, toCsv(exported, csvColumns));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const colSpan = visibleCount + (selection ? 1 : 0);
@@ -420,7 +437,7 @@ export const DataTable = <T,>({
     if (!column.truncate) return content;
     return (
       <span
-        className={cn("block truncate", column.truncate === true && "max-w-80")}
+        className={cn("line-clamp-2 break-words", column.truncate === true && "max-w-80")}
         style={typeof column.truncate === "number" ? { maxWidth: `${column.truncate}ch` } : undefined}
         title={toPlainText(column.text ? column.text(row.original) : value)}
       >
@@ -634,8 +651,13 @@ export const DataTable = <T,>({
             onToggle={toggleColumn}
           />
           {exportCsv ? (
-            <Button type="button" variant="secondary" onClick={exportCurrentRows}>
-              {text("exportCsv")}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={exporting}
+              onClick={() => void exportCurrentRows()}
+            >
+              {exporting ? text("exportingCsv") : text("exportCsv")}
             </Button>
           ) : null}
         </div>

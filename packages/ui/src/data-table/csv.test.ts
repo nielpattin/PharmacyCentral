@@ -59,4 +59,8 @@ describe("toCsv", () => {
       `${CSV_BYTE_ORDER_MARK}Name,Qty,Note\r\n'=SUM(A1),-5,\r\n'+1,0,\r\n'@SUM,1,\r\n'-cmd,2,\r\n'\tTab,3,\r\nParacetamol,4,\r\n`,
     );
   });
+
+  it("leaves a lone dash alone, since it is the table's empty mark and not a formula", () => {
+    expect(toCsv<Row>([{ name: "-", qty: 1 }], columns)).toBe(`${CSV_BYTE_ORDER_MARK}Name,Qty,Note\r\n-,1,\r\n`);
+  });
 });

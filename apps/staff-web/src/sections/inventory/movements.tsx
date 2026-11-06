@@ -7,6 +7,7 @@ import { ProductPicker } from "../../components/product-picker.tsx";
 import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
+import { loadProducts } from "../../hooks/useProductLookup.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { translateText } from "../../i18n.ts";
 import { formatDateTime, formatQuantity, text } from "../../staff-api.ts";
@@ -160,6 +161,7 @@ export const MovementsTab = (): React.JSX.Element => {
     key: ["staff-inventory", "movements"],
     path: "/api/inventory/movements",
     limit: PAGE_SIZE,
+    prepareExport: (rows) => loadProducts(rows.map((row) => text(row.productId, ""))),
   });
   const labels = useInventoryLabels(list.rows.map((row) => text(row.productId, "")));
   const createGate = useCan("inventory.movement.create");
@@ -187,7 +189,7 @@ export const MovementsTab = (): React.JSX.Element => {
         columns={columns}
         loading={list.isLoading}
         getKey={(row) => text(row.id, "")}
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+        paging={list.paging}
         storageKey="staff:inventory:movements"
         exportCsv={{ filename: "inventory-movements.csv" }}
       />

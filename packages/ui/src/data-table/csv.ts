@@ -14,8 +14,11 @@ export const toCsv = <T>(rows: readonly T[], columns: ReadonlyArray<CsvColumn<T>
     ...rows.map((row) =>
       columns.map((column) => {
         const value = column.value(row);
-        // A string that a spreadsheet would read as a formula gets a leading apostrophe. Numbers are left alone.
-        return typeof value === "string" && /^[=+\-@\t\r]/.test(value) ? `'${value}` : toPlainText(value);
+        // A string that a spreadsheet would read as a formula gets a leading apostrophe. Numbers are left alone, and so is
+        // a lone "-", the table's "no value" mark, which no spreadsheet reads as a formula.
+        return typeof value === "string" && value !== "-" && /^[=+\-@\t\r]/.test(value)
+          ? `'${value}`
+          : toPlainText(value);
       }),
     ),
   ];

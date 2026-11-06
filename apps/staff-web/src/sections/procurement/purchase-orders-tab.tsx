@@ -123,7 +123,7 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
       key: "status",
       label: translateText("Status"),
       render: (row) => <StatusCell tone={purchaseOrderTone(row.status)}>{translateText(text(row.status))}</StatusCell>,
-      text: (row) => text(row.status, ""),
+      text: (row) => translateText(text(row.status, "")),
     },
     {
       key: "siteId",
@@ -214,7 +214,7 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
             onChange: setSearch,
             placeholder: translateText("Search by purchase order number"),
           }}
-          paging={{ hasMore: orders.hasMore, loadingMore: orders.isLoadingMore, onLoadMore: orders.loadMore }}
+          paging={orders.paging}
           selection={approveGate.allowed ? { keys: selected, onChange: setSelected } : undefined}
           bulkActions={
             <GatedButton gate={approveGate} size="sm" disabled={bulkBusy} onClick={() => void approveSelected()}>

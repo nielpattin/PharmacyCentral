@@ -172,7 +172,7 @@ export const PrescriptionQueueTab = ({
         loading={queue.isLoading}
         rows={queue.rows}
         columns={columns}
-        paging={{ hasMore: queue.hasMore, loadingMore: queue.isLoadingMore, onLoadMore: queue.loadMore }}
+        paging={queue.paging}
         exportCsv={{ filename: "prescriptions.csv" }}
       />
       <EntityDrawer

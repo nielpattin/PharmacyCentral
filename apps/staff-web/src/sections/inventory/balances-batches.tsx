@@ -11,6 +11,7 @@ import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
+import { loadProducts } from "../../hooks/useProductLookup.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { useFocusSearchHotkey } from "../../hooks/useFocusSearchHotkey.ts";
@@ -32,6 +33,10 @@ import { CreateAction } from "../../components/form-parts.tsx";
 const BALANCE_DEFAULTS = { q: "" } as const;
 const BATCH_DEFAULTS = { q: "" } as const;
 
+// A balance row carries its batch fields alongside the balance, so both read from one object.
+const balanceRows = (rows: JsonRecord[]): JsonRecord[] =>
+  rows.map((row) => ({ ...asRecord(row.balance), ...asRecord(row.batch) }));
+
 export const BalancesTab = (): React.JSX.Element => {
   const rootRef = useRef<HTMLDivElement>(null);
   const { values, setValues } = useListUrlState(BALANCE_DEFAULTS);
@@ -42,12 +47,9 @@ export const BalancesTab = (): React.JSX.Element => {
     path: "/api/inventory/balances",
     params: { q: values.q.trim() || undefined },
     limit: PAGE_SIZE,
+    prepareExport: (rows) => loadProducts(balanceRows(rows).map((row) => text(row.productId, ""))),
   });
-  // A balance row carries its batch fields alongside the balance, so both read from one object.
-  const balances = useMemo(
-    () => list.rows.map((row) => ({ ...asRecord(row.balance), ...asRecord(row.batch) })),
-    [list.rows],
-  );
+  const balances = useMemo(() => balanceRows(list.rows), [list.rows]);
   const labels = useInventoryLabels(balances.map((row) => text(row.productId, "")));
   const planGate = useCan("actionPlan.create");
   const [planDraft, setPlanDraft] = useState<ActionPlanDraft>();
@@ -137,7 +139,7 @@ export const BalancesTab = (): React.JSX.Element => {
         loading={list.isLoading}
         getKey={(row) => `${text(row.id, "")}:${text(row.storageLocationId, "")}`}
         search={{ value: draft, onChange: setDraft, placeholder: translateText("Search by batch number") }}
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+        paging={list.pagingAs(balanceRows)}
         storageKey="staff:inventory:balances"
         exportCsv={{ filename: "inventory-balances.csv" }}
       />
@@ -171,7 +173,7 @@ const BatchHistory = ({ batchId }: { batchId: string }): React.JSX.Element => {
         empty="No movements for this batch"
         interactive={false}
         virtualize={false}
-        paging={{ hasMore: history.hasMore, loadingMore: history.isLoadingMore, onLoadMore: history.loadMore }}
+        paging={history.paging}
       />
     </div>
   );
@@ -286,7 +288,7 @@ export const BatchesTab = (): React.JSX.Element => {
         loading={list.isLoading}
         getKey={(row) => text(row.id, "")}
         search={{ value: draft, onChange: setDraft, placeholder: translateText("Search by batch number") }}
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+        paging={list.paging}
         storageKey="staff:inventory:batches"
       />
       {selected ? (

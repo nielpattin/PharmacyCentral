@@ -300,7 +300,7 @@ export const StocktakeTab = (): React.JSX.Element => {
         loading={list.isLoading}
         getKey={(row) => text(row.id, "")}
         search={{ value: draft, onChange: setDraft, placeholder: translateText("Search by notes or batch number") }}
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+        paging={list.paging}
         storageKey="staff:inventory:stocktakes"
         exportCsv={{ filename: "inventory-stocktakes.csv" }}
       />

@@ -124,7 +124,7 @@ export const SalesAuditHistory = ({
           { key: "action", label: "Action", truncate: true },
           { key: "actorId", label: "Actor", render: (row) => shortId(row.actorId) },
         ]}
-        paging={{ hasMore: history.hasMore, loadingMore: history.isLoadingMore, onLoadMore: history.loadMore }}
+        paging={history.paging}
       />
     </div>
   );

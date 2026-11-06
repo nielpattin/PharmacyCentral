@@ -311,7 +311,9 @@ const ActionPlansList = (): React.JSX.Element => {
         loading={plans.isLoading}
         empty={translateText("No records found")}
         search={{ value: search, onChange: setSearch, placeholder: translateText("Search by title") }}
-        paging={{ hasMore: plans.hasMore, loadingMore: plans.isLoadingMore, onLoadMore: plans.loadMore }}
+        paging={plans.pagingAs((all) =>
+          all.map(parseActionPlan).filter((plan): plan is ActionPlan => plan !== undefined),
+        )}
         exportCsv={{ filename: "action-plans.csv" }}
       />
       {planDetail ? (

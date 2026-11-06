@@ -91,7 +91,7 @@ export const ProductsPage = (): React.JSX.Element => {
     {
       key: "status",
       label: translateText("Status"),
-      text: (row) => text(row.status, ""),
+      text: (row) => translateText(text(row.status, "")),
       render: (row) => (
         <StatusCell tone={text(row.status, "") === "Active" ? "success" : "neutral"}>
           {translateText(text(row.status))}
@@ -169,7 +169,7 @@ export const ProductsPage = (): React.JSX.Element => {
           empty={translateText("No products match these filters.")}
           getKey={(row) => idOf(row)}
           storageKey="staff:catalog:products"
-          paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+          paging={list.paging}
           exportCsv={{ filename: "products.csv" }}
         />
       </div>

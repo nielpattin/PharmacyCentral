@@ -163,7 +163,7 @@ export const CounterTab = (): React.JSX.Element => {
         empty={
           invoices.hasMore ? "No counter payments on this page. Load more to keep looking." : "No counter payments."
         }
-        paging={{ hasMore: invoices.hasMore, loadingMore: invoices.isLoadingMore, onLoadMore: invoices.loadMore }}
+        paging={invoices.pagingAs((all) => all.filter(isCounterInvoice))}
         exportCsv={{ filename: "counter-payments.csv" }}
       />
     </div>

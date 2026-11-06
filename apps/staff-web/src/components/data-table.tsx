@@ -43,6 +43,7 @@ const translatedLabels = (): DataTableLabels => ({
   clearSelection: translateText("Clear selection"),
   bulkActions: translateText("Bulk actions"),
   exportCsv: translateText("Export CSV"),
+  exportingCsv: translateText("Exporting…"),
   showingRows: translateText("Showing {count} rows"),
   showingOneRow: translateText("Showing 1 row"),
   showingOfTotal: translateText("Showing {count} of {total} rows"),

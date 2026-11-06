@@ -12,6 +12,7 @@ import { FormDrawer } from "../../components/form-drawer.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
 import { useListUrlState } from "../../hooks/useListUrlState.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
+import { loadProducts } from "../../hooks/useProductLookup.ts";
 import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
@@ -202,6 +203,8 @@ export const ReplenishmentTab = (): React.JSX.Element => {
     path: "/api/inventory/replenishment",
     params: { q: values.q.trim() || undefined, status: statusParam(values.status) },
     limit: PAGE_SIZE,
+    prepareExport: (rows) =>
+      loadProducts(rows.flatMap((row) => linesOf(row).map((line) => text(line.productId, "")))),
   });
   const labels = useInventoryLabels(list.rows.flatMap((row) => linesOf(row).map((line) => text(line.productId, ""))));
   const productSummary = (row: JsonRecord): string => {
@@ -403,7 +406,7 @@ export const ReplenishmentTab = (): React.JSX.Element => {
         loading={list.isLoading}
         getKey={(row) => text(row.id, "")}
         search={{ value: draft, onChange: setDraft, placeholder: translateText("Search by notes or batch number") }}
-        paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+        paging={list.paging}
         selection={decideGate.allowed ? { keys: selected, onChange: setSelected } : undefined}
         bulkActions={
           <>

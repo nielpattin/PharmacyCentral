@@ -245,7 +245,7 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
             },
             placeholder: translateText(config.searchPlaceholder),
           }}
-          paging={{ hasMore: list.hasMore, loadingMore: list.isLoadingMore, onLoadMore: list.loadMore }}
+          paging={list.paging}
           exportCsv={{ filename: `${config.id}.csv` }}
           toolbarExtra={<SavedViewsMenu pageKey={`master-data-${config.id}`} defaults={LIST_DEFAULTS} />}
         />
