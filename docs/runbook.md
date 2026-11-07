@@ -137,7 +137,7 @@ docker compose ps     # every container must be healthy
 pnpm run local:down   # back to dev mode: stops gateway and the app containers, starts gateway-dev again
 ```
 
-`gateway` and `gateway-dev` share `GATEWAY_PORT` (8080), so only one runs at a time and the two scripts swap them. On a small machine, building all eight images at once can exhaust memory. Build them one at a time first with `docker compose build <name>`.
+`gateway` and `gateway-dev` share `GATEWAY_PORT` (8080), so only one runs at a time and the two scripts swap them. Each service image runs Nx's `prune` target of its project (build, pruned lockfile, workspace packages copied into `dist`) and installs the production dependencies from it. Each image copies only its own app, the workspace packages it imports and the manifests of every project, so an edit to one app rebuilds that app's image and leaves the others cached; only a change to a dependency, `pnpm-lock.yaml` or a shared package rebuilds more. On a small machine, building all eight images at once from cold can exhaust memory. Build them one at a time first with `docker compose build <name>`.
 
 ### Named local URLs
 

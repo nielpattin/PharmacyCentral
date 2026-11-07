@@ -53,6 +53,45 @@
     "tags": [
       "type:application",
       "scope:catalog-service"
-    ]
+    ],
+    "targets": {
+      "prune-lockfile": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:prune-lockfile",
+        "outputs": [
+          "{workspaceRoot}/apps/catalog-service/dist/package.json",
+          "{workspaceRoot}/apps/catalog-service/dist/pnpm-lock.yaml",
+          "{workspaceRoot}/apps/catalog-service/dist/pnpm-workspace.yaml"
+        ],
+        "options": {
+          "buildTarget": "build",
+          "outputPath": "apps/catalog-service/dist"
+        }
+      },
+      "copy-workspace-modules": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:copy-workspace-modules",
+        "outputs": [
+          "{workspaceRoot}/apps/catalog-service/dist/workspace_modules"
+        ],
+        "options": {
+          "buildTarget": "build",
+          "outputPath": "apps/catalog-service/dist"
+        }
+      },
+      "prune": {
+        "dependsOn": [
+          "prune-lockfile",
+          "copy-workspace-modules"
+        ],
+        "executor": "nx:noop"
+      }
+    }
   }
 }

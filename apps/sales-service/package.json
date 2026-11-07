@@ -57,6 +57,45 @@
     "tags": [
       "type:application",
       "scope:sales-service"
-    ]
+    ],
+    "targets": {
+      "prune-lockfile": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:prune-lockfile",
+        "outputs": [
+          "{workspaceRoot}/apps/sales-service/dist/package.json",
+          "{workspaceRoot}/apps/sales-service/dist/pnpm-lock.yaml",
+          "{workspaceRoot}/apps/sales-service/dist/pnpm-workspace.yaml"
+        ],
+        "options": {
+          "buildTarget": "build",
+          "outputPath": "apps/sales-service/dist"
+        }
+      },
+      "copy-workspace-modules": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:copy-workspace-modules",
+        "outputs": [
+          "{workspaceRoot}/apps/sales-service/dist/workspace_modules"
+        ],
+        "options": {
+          "buildTarget": "build",
+          "outputPath": "apps/sales-service/dist"
+        }
+      },
+      "prune": {
+        "dependsOn": [
+          "prune-lockfile",
+          "copy-workspace-modules"
+        ],
+        "executor": "nx:noop"
+      }
+    }
   }
 }

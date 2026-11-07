@@ -69,6 +69,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+**deploy, docs**
+
+- Docker images rebuild only for the app that changed. `apps/Dockerfile.service` and `apps/Dockerfile.web` used to `COPY apps`, `COPY packages` and `COPY tools` whole, so any edit rebuilt every image (about five minutes each). They now install from the manifests of every project (`COPY --parents apps/*/package.json packages/*/package.json`), then copy only the app being built and the workspace packages it imports (`auth` and `cache` for a service, `ui` for a web app). Editing `sales-service` leaves the `payment-service` build fully cached (1.5 s instead of minutes). The service image uses Nx's own prune flow from the Nx docs: each service has the `prune-lockfile`, `copy-workspace-modules` and `prune` targets, and `Dockerfile.service` runs `nx run <service>:prune` and then `pnpm install --prod --frozen-lockfile` in `dist` (this replaces `pnpm deploy`). Nx is now 24.0.4 (`@nx/js` comes from the catalog). `patches/nx@24.0.4.patch` fixes a Windows-only bug in Nx's pnpm lockfile pruning (`path.join` built importer keys with a backslash, so `@pharmacy/auth` never reached the pruned lockfile); drop the patch once Nx fixes it upstream. With it, `nx run <service>:prune` and a frozen `pnpm install --prod` work on Windows as they already did on Linux.
+
 **operations-query-service, docs**
 
 - The Analytics revenue breakdown's `topProducts` (the 10 best sellers) is now `products`: every product with goods revenue in the period, highest first, each with its `abcClass` (`A`, `B` or `C`, BR-REPORT-015), so the page can show which product is in which class. The `abc` class totals are unchanged. One helper classifies the ranked products and the class totals are summed from it. Documented in `docs/api-guide.md` and `docs/business-rules.md`.

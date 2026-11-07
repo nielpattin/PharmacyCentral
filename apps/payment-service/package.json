@@ -50,6 +50,45 @@
     "tags": [
       "type:application",
       "scope:payment-service"
-    ]
+    ],
+    "targets": {
+      "prune-lockfile": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:prune-lockfile",
+        "outputs": [
+          "{workspaceRoot}/apps/payment-service/dist/package.json",
+          "{workspaceRoot}/apps/payment-service/dist/pnpm-lock.yaml",
+          "{workspaceRoot}/apps/payment-service/dist/pnpm-workspace.yaml"
+        ],
+        "options": {
+          "buildTarget": "build",
+          "outputPath": "apps/payment-service/dist"
+        }
+      },
+      "copy-workspace-modules": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:copy-workspace-modules",
+        "outputs": [
+          "{workspaceRoot}/apps/payment-service/dist/workspace_modules"
+        ],
+        "options": {
+          "buildTarget": "build",
+          "outputPath": "apps/payment-service/dist"
+        }
+      },
+      "prune": {
+        "dependsOn": [
+          "prune-lockfile",
+          "copy-workspace-modules"
+        ],
+        "executor": "nx:noop"
+      }
+    }
   }
 }

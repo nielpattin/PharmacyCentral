@@ -1,0 +1,14 @@
+diff --git a/dist/src/plugins/js/lock-file/pnpm-parser.js b/dist/src/plugins/js/lock-file/pnpm-parser.js
+index e8f8fde091d66b2bfc3bbda139f6e2a33995b9cd..0aac98256849644626b462097f49608dff1f23e1 100644
+--- a/dist/src/plugins/js/lock-file/pnpm-parser.js
++++ b/dist/src/plugins/js/lock-file/pnpm-parser.js
+@@ -943,7 +943,8 @@ function mapRootSnapshot(packageJson, rootImporters, packages, packageIndex, gra
+                             (importerSnapshot.devDependencies &&
+                                 importerSnapshot.devDependencies[packageName]);
+                         if (workspaceDep) {
+-                            importerKeyForPackage = (0, path_1.join)(importerPath, workspaceDep.replace('link:', ''));
++                            // Lockfile importer keys always use '/', so join with posix on Windows too.
++                            importerKeyForPackage = path_1.posix.join(importerPath, workspaceDep.replace('link:', ''));
+                             break;
+                         }
+                     }

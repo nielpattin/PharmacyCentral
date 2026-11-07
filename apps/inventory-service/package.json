@@ -50,6 +50,45 @@
     "tags": [
       "type:application",
       "scope:inventory-service"
-    ]
+    ],
+    "targets": {
+      "prune-lockfile": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:prune-lockfile",
+        "outputs": [
+          "{workspaceRoot}/apps/inventory-service/dist/package.json",
+          "{workspaceRoot}/apps/inventory-service/dist/pnpm-lock.yaml",
+          "{workspaceRoot}/apps/inventory-service/dist/pnpm-workspace.yaml"
+        ],
+        "options": {
+          "buildTarget": "build",
+          "outputPath": "apps/inventory-service/dist"
+        }
+      },
+      "copy-workspace-modules": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:copy-workspace-modules",
+        "outputs": [
+          "{workspaceRoot}/apps/inventory-service/dist/workspace_modules"
+        ],
+        "options": {
+          "buildTarget": "build",
+          "outputPath": "apps/inventory-service/dist"
+        }
+      },
+      "prune": {
+        "dependsOn": [
+          "prune-lockfile",
+          "copy-workspace-modules"
+        ],
+        "executor": "nx:noop"
+      }
+    }
   }
 }

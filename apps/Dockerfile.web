@@ -7,6 +7,7 @@ RUN npm install --global pnpm@12.3.4
 # rebuilt only when the lockfile changes. Its store stays in the layer (no cache mount), so `install --offline` below
 # works even after the BuildKit cache is pruned. The ARGs come after it so their values do not change its cache key.
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 RUN pnpm fetch
 
 ARG APP_NAME
@@ -16,10 +17,13 @@ ARG APP_DIR
 ARG VITE_VIETMAP_TILEMAP_KEY
 ENV VITE_VIETMAP_TILEMAP_KEY=${VITE_VIETMAP_TILEMAP_KEY}
 COPY package.json tsconfig.base.json tsconfig.json nx.json ./
-COPY apps ./apps
-COPY packages ./packages
-COPY tools ./tools
+# The install layer sees only the manifests of every project, so it is rebuilt when a dependency changes and not when
+# source changes. Sources come after it, and only this app's own plus the workspace packages it imports, so an edit to
+# another app leaves this image's layers cached.
+COPY --parents apps/*/package.json packages/*/package.json ./
 RUN pnpm install --offline --frozen-lockfile
+COPY ${APP_DIR} ./${APP_DIR}
+COPY packages/ui ./packages/ui
 RUN pnpm exec nx run "${APP_NAME}:build"
 
 FROM nginx:1.31-alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606 AS runtime

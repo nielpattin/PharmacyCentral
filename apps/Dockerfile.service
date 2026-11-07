@@ -7,18 +7,25 @@ RUN npm install --global pnpm@12.3.4
 # rebuilt only when the lockfile changes. Its store stays in the layer (no cache mount), so `install --offline` below
 # works even after the BuildKit cache is pruned. The ARGs come after it so their values do not change its cache key.
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 RUN pnpm fetch
 
 ARG APP_NAME
 ARG APP_DIR
 COPY package.json tsconfig.base.json tsconfig.json nx.json ./
-COPY apps ./apps
-COPY packages ./packages
-COPY tools ./tools
+# The install layer sees only the manifests of every project, so it is rebuilt when a dependency changes and not when
+# source changes. Sources come after it, and only this app's own plus the workspace packages it imports, so an edit to
+# another app leaves this image's layers cached.
+COPY --parents apps/*/package.json packages/*/package.json ./
 RUN pnpm install --offline --frozen-lockfile
-RUN pnpm exec nx run "${APP_NAME}:build"
-RUN pnpm deploy --legacy --filter "${APP_NAME}" --prod /out
-RUN mkdir -p "/out/dist" && cp -R "/workspace/${APP_DIR}/dist/." "/out/dist/"
+COPY ${APP_DIR} ./${APP_DIR}
+COPY packages/auth ./packages/auth
+COPY packages/cache ./packages/cache
+# Nx's prune flow (nx.dev, "Pruning Projects for Deployment"): build, then write a pruned package.json and lockfile and
+# copy the workspace packages into dist. The production install runs here, on Linux, so native modules match the image.
+RUN pnpm exec nx run "${APP_NAME}:prune"
+RUN cd "${APP_DIR}/dist" && pnpm install --prod --frozen-lockfile
+RUN mkdir -p /out && cp -R "/workspace/${APP_DIR}/dist" /out/dist
 RUN if [ -d "/workspace/${APP_DIR}/drizzle/migrations" ]; then mkdir -p /out/drizzle/migrations && cp -R "/workspace/${APP_DIR}/drizzle/migrations/." /out/drizzle/migrations/; fi
 
 # The runtime is Alpine with only the Node binary: the official Node image adds npm, yarn and a Debian base the

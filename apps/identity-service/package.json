@@ -55,6 +55,45 @@
     "tags": [
       "type:application",
       "scope:identity-service"
-    ]
+    ],
+    "targets": {
+      "prune-lockfile": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:prune-lockfile",
+        "outputs": [
+          "{workspaceRoot}/apps/identity-service/dist/package.json",
+          "{workspaceRoot}/apps/identity-service/dist/pnpm-lock.yaml",
+          "{workspaceRoot}/apps/identity-service/dist/pnpm-workspace.yaml"
+        ],
+        "options": {
+          "buildTarget": "build",
+          "outputPath": "apps/identity-service/dist"
+        }
+      },
+      "copy-workspace-modules": {
+        "dependsOn": [
+          "build"
+        ],
+        "cache": true,
+        "executor": "@nx/js:copy-workspace-modules",
+        "outputs": [
+          "{workspaceRoot}/apps/identity-service/dist/workspace_modules"
+        ],
+        "options": {
+          "buildTarget": "build",
+          "outputPath": "apps/identity-service/dist"
+        }
+      },
+      "prune": {
+        "dependsOn": [
+          "prune-lockfile",
+          "copy-workspace-modules"
+        ],
+        "executor": "nx:noop"
+      }
+    }
   }
 }
