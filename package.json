@@ -17,6 +17,7 @@
     "cloud:deploy:fresh": "node tools/aws-deploy.mjs --fresh",
     "cloud:seed": "node tools/aws-seed.mjs",
     "cloud:reset": "node tools/aws-reset.mjs",
+    "cloud:reseed": "node tools/aws-reseed.mjs",
     "cloud:pause": "node tools/aws-down.mjs",
     "cloud:destroy": "node tools/aws-down.mjs --destroy",
     "db:migrate": "node --env-file=.env tools/migrate-all.mjs",
