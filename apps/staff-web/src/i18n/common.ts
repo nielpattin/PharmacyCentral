@@ -70,6 +70,7 @@ export const commonLiterals: Record<string, string> = {
   "Product unit": "Đơn vị sản phẩm",
   "Prescription line": "Dòng đơn thuốc",
   "Dispensed quantity": "Số lượng xuất",
+  "Prescribed medicines": "Thuốc được kê",
   "Refund reason:": "Lý do hoàn tiền:",
   "Customer request": "Yêu cầu của khách hàng",
   "Operational correction": "Điều chỉnh vận hành",

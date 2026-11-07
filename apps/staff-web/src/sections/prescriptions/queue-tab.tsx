@@ -196,6 +196,21 @@ export const PrescriptionQueueTab = ({
   );
 };
 
+/** The product's photo at thumbnail size. A product with no photo, or one that fails to load, shows nothing in its place. */
+const ProductThumb = ({ url, name }: { url: string; name: string }): React.JSX.Element | null => {
+  const [failedUrl, setFailedUrl] = useState<string>();
+  if (url === "" || url === failedUrl) return null;
+  return (
+    <img
+      src={url}
+      alt={name}
+      loading="lazy"
+      className="size-12 shrink-0 rounded-md border border-line bg-white object-contain"
+      onError={() => setFailedUrl(url)}
+    />
+  );
+};
+
 const PrescriptionDetails = ({ row }: { row: JsonRecord }): React.JSX.Element => {
   const references = useStaffReferences();
   const lines = recordList(row.lines);
@@ -212,22 +227,27 @@ const PrescriptionDetails = ({ row }: { row: JsonRecord }): React.JSX.Element =>
         <DetailField label="Notes" value={text(row.notes)} />
       </dl>
       <div className="grid gap-2">
-        <h3 className="text-sm font-semibold text-ink">{translateText("Lines")}</h3>
+        <h3 className="text-sm font-semibold text-ink">{translateText("Prescribed medicines")}</h3>
         {lines.map((line, index) => {
           const productId = text(line.productId, "");
+          const product = products.get(productId);
           const usage = [text(line.dosage, ""), text(line.frequency, ""), text(line.duration, "")]
             .filter((part) => part !== "")
             .join(" · ");
           return (
-            <div key={text(line.id, String(index))} className="grid gap-1 rounded-md border border-line p-3 text-sm">
-              <strong className="font-medium text-ink">
-                {productLabel(products.get(productId), shortId(productId))}
-              </strong>
-              <span className="text-xs text-muted">
-                {translateText("Prescribed")}: {formatQuantity(line.prescribedQuantity)} ·{" "}
-                {translateText("Dispensed quantity")}: {formatQuantity(line.dispensedQuantity)}
-              </span>
-              {usage ? <span className="text-xs text-muted">{usage}</span> : null}
+            <div
+              key={text(line.id, String(index))}
+              className="flex items-start gap-3 rounded-md border border-line p-3 text-sm"
+            >
+              <ProductThumb url={text(product?.imageUrl, "")} name={text(product?.name, "")} />
+              <div className="grid min-w-0 gap-1">
+                <strong className="font-medium text-ink">{productLabel(product, shortId(productId))}</strong>
+                <span className="text-xs text-muted">
+                  {translateText("Prescribed")}: {formatQuantity(line.prescribedQuantity)} ·{" "}
+                  {translateText("Dispensed quantity")}: {formatQuantity(line.dispensedQuantity)}
+                </span>
+                {usage ? <span className="text-xs text-muted">{usage}</span> : null}
+              </div>
             </div>
           );
         })}
