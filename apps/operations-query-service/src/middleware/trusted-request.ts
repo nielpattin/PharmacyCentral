@@ -55,7 +55,6 @@ export const DEFAULT_SITE_SCOPED_PREFIXES: readonly string[] = [
   "/operations/dashboard",
   "/finance/summary",
   "/operations/finance",
-  "/reports",
   "/audit/logs",
   "/operations/audit",
 ];
@@ -71,7 +70,6 @@ export const DEFAULT_EMPLOYEE_PREFIXES: readonly string[] = [
   "/dashboard",
   "/finance",
   "/audit",
-  "/reports",
   "/prescriptions",
   "/counter-transactions",
   "/admin",
@@ -193,7 +191,6 @@ const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/audit", roles: ["Platform Admin"] },
   { methods: ["*"], path: "/operations/finance", roles: ["Pharmacy Manager"], adminMayRead: false },
   { methods: ["*"], path: "/finance", roles: ["Pharmacy Manager"], adminMayRead: false },
-  { methods: ["*"], path: "/reports", roles: ["Pharmacy Manager"], adminMayRead: false },
   { methods: ["*"], path: "/operations/dashboard", roles: ["Pharmacy Manager", "Warehouse Staff"] },
   { methods: ["*"], path: "/dashboard/analytics", roles: ["Pharmacy Manager"], adminMayRead: false },
   { methods: ["*"], path: "/dashboard/sales-targets", roles: ["Pharmacy Manager"], adminMayRead: false },

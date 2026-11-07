@@ -181,62 +181,6 @@ describe("OperationsRepository dashboard site scope", () => {
     await expect(repository.dashboard(identity, [siteA])).rejects.toThrow(/Scoped read of \/inventory\/balances/);
     await expect(repository.dashboard(identity)).resolves.toBeDefined();
   });
-
-  it("values stock at the base-unit published price and lists a product without one as missing a price", async () => {
-    const priced = "00000000-0000-4000-8000-00000000003a";
-    const unpriced = "00000000-0000-4000-8000-00000000003b";
-    const stocked = (siteId: string, productId: string, quantityOnHand: string, quantityReserved = "0") => ({
-      balance: { siteId, quantityOnHand, quantityReserved },
-      batch: { id: batchA, productId, batchNumber: `LOT-${productId.slice(-2)}` },
-    });
-    stubLiveServices(
-      [
-        stocked(siteA, priced, "30.000000", "10.000000"),
-        stocked(siteA, unpriced, "5.000000"),
-        stocked(siteA, priced, "0.000000"),
-        // Another pharmacy's stock must never be valued for a reader scoped to site A.
-        stocked(siteB, priced, "1000.000000"),
-      ],
-      {
-        "/sites": [{ id: siteA, name: "Pharmacy A" }],
-        // The catalog answers today's base-unit price per product (null when none qualifies).
-        "/pricing/base-prices": [
-          { productId: priced, productName: "Paracetamol 500mg", unitPrice: 5_000 },
-          { productId: unpriced, productName: "Vitamin C", unitPrice: null },
-        ],
-        "/inventory/movements/summary": [
-          { movementType: "TransferOut", count: 1, quantityIn: 0, quantityOut: 4 },
-          { movementType: "TransferIn", count: 1, quantityIn: 2, quantityOut: 0 },
-          { movementType: "InventoryReturn", count: 1, quantityIn: 0, quantityOut: 1 },
-          { movementType: "StockAdjustment", count: 2, quantityIn: 1, quantityOut: 3 },
-          { movementType: "StocktakeAdjustment", count: 1, quantityIn: 5, quantityOut: 0 },
-        ],
-      },
-    );
-
-    const summary = await repository.financeSummary(identity, undefined, undefined, [siteA]);
-
-    expect(summary).toMatchObject({
-      inventoryValue: 150_000,
-      reservedValue: 50_000,
-      missingPriceCount: 1,
-      returnQuantity: 1,
-      adjustmentQuantity: 3,
-      transferOutQuantity: 4,
-      transferInQuantity: 2,
-    });
-    expect(summary.valuationLines).toEqual([
-      expect.objectContaining({
-        productName: "Paracetamol 500mg",
-        siteName: "Pharmacy A",
-        quantityOnHand: 30,
-        unitPrice: 5_000,
-        valueOnHand: 150_000,
-        priceStatus: "Priced",
-      }),
-      expect.objectContaining({ productName: "Vitamin C", valueOnHand: null, priceStatus: "Missing price" }),
-    ]);
-  });
 });
 
 /** The dashboard's recent activity: the caller's sites, the action families its roles may read, and a fixed size. */
@@ -342,5 +286,52 @@ describe("OperationsRepository dashboard recent activity", () => {
     expect(DASHBOARD_ACTIVITY_LIMIT).toBe(30);
     expect(answer.recentActivity).toHaveLength(30);
     expect(answer.recentActivity[0]).toMatchObject({ siteId: siteA, userId: null, entityId: null });
+  });
+});
+
+/** The finance summary: what was paid and what was given back, from the payment events the projection keeps. */
+describe("OperationsRepository finance summary", () => {
+  const client = new PGlite();
+  const db = drizzle({ client, schema });
+  const repository = new OperationsRepository({ db, pool: undefined } as unknown as OperationsDatabase, {
+    catalogUrl: "http://catalog.test",
+    inventoryUrl: "http://inventory.test",
+    salesUrl: "http://sales.test",
+  });
+  const entry = (n: number, entryType: string, amount: string, occurredAt: string) => ({
+    eventId: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    entryType,
+    amount,
+    payload: "{}",
+    occurredAt: new Date(occurredAt),
+  });
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder });
+    await db
+      .insert(schema.financeEntries)
+      .values([
+        entry(1, "Payment", "100000.00", "2026-03-10T00:00:00Z"),
+        entry(2, "Payment", "50000.00", "2026-03-20T00:00:00Z"),
+        entry(3, "Refund", "30000.00", "2026-03-25T00:00:00Z"),
+        entry(4, "Payment", "999.00", "2026-01-01T00:00:00Z"),
+      ]);
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it("sums payments and refunds, and nets them", async () => {
+    await expect(repository.financeSummary("2026-03-01T00:00:00Z", "2026-03-31T00:00:00Z")).resolves.toEqual({
+      currency: "VND",
+      paid: 150_000,
+      refunded: 30_000,
+      net: 120_000,
+    });
+  });
+
+  it("covers every entry when no period is given", async () => {
+    await expect(repository.financeSummary()).resolves.toMatchObject({ paid: 150_999, refunded: 30_000 });
   });
 });

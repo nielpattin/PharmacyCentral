@@ -24,7 +24,7 @@ deployment {
   local.edge.gateway -> local.apps.paymentTask "route /api/payments" {
     technology "HTTP"
   }
-  local.edge.gateway -> local.apps.operationsTask "route /api/dashboard, /api/finance, /api/reports" {
+  local.edge.gateway -> local.apps.operationsTask "route /api/dashboard, /api/finance" {
     technology "HTTP"
   }
   local.edge.gateway -> local.apps.chatbotTask "route /api/chatbot" {

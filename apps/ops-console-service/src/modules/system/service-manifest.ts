@@ -99,7 +99,7 @@ export const SERVICE_MANIFEST: readonly ServiceManifestEntry[] = [
   },
   {
     name: "operations-query-service",
-    description: "Read models for dashboards, operational reports, finance and the audit log.",
+    description: "Read models for dashboards, finance and the audit log.",
     port: 3007,
     database: "operations_query_service",
     dependsOn: ["catalog-service", "inventory-service", "sales-service"],

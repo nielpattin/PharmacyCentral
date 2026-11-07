@@ -9,19 +9,13 @@ import type { AuditFilters, OperationsRepository } from "./operations-repository
 
 const position = { sortAt: "2026-10-24T10:00:00.000001Z", id: "00000000-0000-4000-8000-0000000000aa" };
 
-describe("audit and report paging routes", () => {
+describe("audit paging routes", () => {
   const auditCalls: AuditFilters[] = [];
-  const reportCalls: Array<{ reportType: string | undefined; options: unknown }> = [];
   let auditPage: { rows: unknown[]; next: typeof position | undefined } = { rows: [], next: undefined };
-  let reportPage: { rows: unknown[]; next: typeof position | undefined } = { rows: [], next: undefined };
   const repository = {
     listAudit: (filters: AuditFilters) => {
       auditCalls.push(filters);
       return Promise.resolve(auditPage);
-    },
-    report: (reportType: string | undefined, options: unknown) => {
-      reportCalls.push({ reportType, options });
-      return Promise.resolve(reportPage);
     },
   } as unknown as OperationsRepository;
 
@@ -64,25 +58,5 @@ describe("audit and report paging routes", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ status: 400, code: "invalid_cursor" });
     expect(auditCalls).toHaveLength(0);
-  });
-
-  it("pages reports with the default size of 100 and answers 400 invalid_cursor for a bad cursor", async () => {
-    reportCalls.length = 0;
-    const managerHeaders = { headers: { "X-Actor-Type": "employee", "X-Actor-Roles": "Pharmacy Manager" } };
-    reportPage = { rows: [{ id: "r" }], next: position };
-    const response = await fetch(`${base}/reports?reportType=payment.invoice.paid.v1`, managerHeaders);
-    expect(response.headers.get("x-next-cursor")).toBe(encodePageCursor(position));
-    expect(reportCalls[0]).toStrictEqual({
-      reportType: "payment.invoice.paid.v1",
-      options: { limit: 100 },
-    });
-
-    const cursored = await fetch(`${base}/reports?cursor=${encodePageCursor(position)}&limit=10`, managerHeaders);
-    expect(cursored.status).toBe(200);
-    expect(reportCalls[1]).toMatchObject({ options: { limit: 10, cursor: position } });
-
-    const invalid = await fetch(`${base}/reports?cursor=0`, managerHeaders);
-    expect(invalid.status).toBe(400);
-    expect(await invalid.json()).toMatchObject({ code: "invalid_cursor" });
   });
 });

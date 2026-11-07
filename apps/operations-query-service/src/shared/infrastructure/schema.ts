@@ -41,21 +41,3 @@ export const financeEntries = pgTable(
     index("finance_entries_type_idx").on(table.entryType, table.occurredAt),
   ],
 );
-
-export const reportRows = pgTable(
-  "report_rows",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    eventId: uuid("event_id").notNull(),
-    reportType: varchar("report_type", { length: 80 }).notNull(),
-    subjectId: uuid("subject_id"),
-    value: numeric("value", { precision: 18, scale: 6 }).notNull().default("0"),
-    payload: text("payload").notNull(),
-    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-  },
-  (table) => [
-    index("report_rows_type_occurred_idx").on(table.reportType, table.occurredAt),
-    index("report_rows_subject_idx").on(table.subjectId, table.occurredAt),
-    index("report_rows_keyset_idx").on(table.occurredAt, table.id),
-  ],
-);

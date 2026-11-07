@@ -62,7 +62,7 @@ Sign in at `/tai-khoan` as `khachhang@pharmacycentral.vn`.
 4. **Đặt hàng**: the tab "Gợi ý đặt hàng" suggests quantities from sales speed, stock and supplier lead time. Create draft orders in bulk. Approve `PO-DEMO-002`, created by the second manager, as the second person.
 5. **Điều chuyển**: approve `TR-DEMO-001`. `TR-DEMO-002` is shipped and `TR-DEMO-003` received.
 6. **Điều chỉnh tồn kho**: approve or reject the pending adjustment "Hộp bị ẩm khi kiểm kệ".
-7. **Tài chính** and **Báo cáo**: payments, invoices and report rows across the 60 days.
+7. **Tài chính**: payments and invoices across the 60 days.
 
 ## 4. Warehouse Staff (Staff Web, `SITE-WH`)
 

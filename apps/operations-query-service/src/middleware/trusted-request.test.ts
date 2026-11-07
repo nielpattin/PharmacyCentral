@@ -97,13 +97,6 @@ describe("trusted request role restatement", () => {
     });
   };
 
-  it("admits Warehouse Staff to the dashboard and refuses them the reports", async () => {
-    expect((await callAs(["Warehouse Staff"], "/dashboard/summary")).status).toBe(200);
-    const refused = await callAs(["Warehouse Staff"], "/reports");
-    expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
-  });
-
   it("refuses a Pharmacy Manager the audit log, which only Platform Admin reads", async () => {
     const refused = await callAs(["Pharmacy Manager"], "/audit/logs");
     expect(refused.status).toBe(403);
@@ -119,8 +112,8 @@ describe("trusted request role restatement", () => {
     }
   });
 
-  it("keeps finance and reports to a Pharmacy Manager: Platform Admin is refused them", async () => {
-    for (const path of ["/finance/summary", "/operations/finance", "/reports"]) {
+  it("keeps finance to a Pharmacy Manager: Platform Admin is refused them", async () => {
+    for (const path of ["/finance/summary", "/operations/finance"]) {
       expect((await callAs(["Pharmacy Manager"], path)).status, path).toBe(200);
       expect((await callAs(["Platform Admin"], path)).status, path).toBe(403);
     }

@@ -1,4 +1,4 @@
-// Users and access, AI integrations, audit, finance, reporting, and system health.
+// Users and access, AI integrations, audit, finance, and system health.
 export const governanceLiterals: Record<string, string> = {
   "Provider, model, and API key for the AI features. A saved key is encrypted and never shown again.":
     "Nhà cung cấp, mô hình và khóa API cho các tính năng AI. Khóa đã lưu được mã hóa và không bao giờ hiển thị lại.",
@@ -57,9 +57,7 @@ export const governanceLiterals: Record<string, string> = {
   "API key removed.": "Đã xóa khóa API.",
   "Unable to save the settings": "Không lưu được cài đặt",
   "Unable to remove the API key": "Không xóa được khóa API",
-  "Finance and reporting": "Tài chính và báo cáo",
   Invoices: "Hóa đơn",
-  Reports: "Báo cáo",
   "Create user": "Tạo người dùng",
   "Edit access": "Sửa phân quyền",
   "Employee account created.": "Đã tạo tài khoản nhân viên.",
@@ -72,7 +70,6 @@ export const governanceLiterals: Record<string, string> = {
   "Warehouse Staff": "Nhân viên kho",
   Pharmacist: "Dược sĩ",
   "Password reset.": "Đã đặt lại mật khẩu.",
-  "Payment status, reconciliation, and operational reports.": "Trạng thái thanh toán, đối soát và báo cáo vận hành.",
   "Reset password": "Đặt lại mật khẩu",
   Deactivate: "Vô hiệu hóa",
   Reactivate: "Kích hoạt lại",
@@ -266,8 +263,8 @@ export const governanceLiterals: Record<string, string> = {
   "Invoices, payments and SePay webhook processing.": "Hóa đơn, thanh toán và xử lý webhook SePay.",
   "Customer consultation assistant that answers from catalog lookups.":
     "Trợ lý tư vấn khách hàng, trả lời dựa trên tra cứu danh mục.",
-  "Read models for dashboards, operational reports, finance and the audit log.":
-    "Mô hình đọc cho bảng điều khiển, báo cáo vận hành, tài chính và nhật ký kiểm toán.",
+  "Read models for dashboards, finance and the audit log.":
+    "Mô hình đọc cho bảng điều khiển, tài chính và nhật ký kiểm toán.",
   "Login, registration, email verification, setup status and Google sign-in are public.":
     "Đăng nhập, đăng ký, xác minh email, trạng thái thiết lập và đăng nhập Google là công khai.",
   "The product list. Other methods on this path go to catalog-service.":
@@ -344,23 +341,7 @@ export const governanceLiterals: Record<string, string> = {
   "Outbox backlog and lag, queue depth, consumers and dead letters.":
     "Tồn đọng và độ trễ outbox, độ sâu hàng đợi, consumer và dead letter.",
   Priced: "Đã có giá",
-  "Missing price": "Thiếu giá",
   Net: "Thực thu",
-  "Price status": "Trạng thái giá",
-  "Report type": "Loại báo cáo",
-  "Order placed": "Đặt hàng",
-  "Order status changed": "Đổi trạng thái đơn hàng",
-  "Prescription received": "Tiếp nhận đơn thuốc",
-  "Prescription dispensed": "Cấp phát đơn thuốc",
-  "Prescription cancelled": "Hủy đơn thuốc",
-  "Consultation requested": "Yêu cầu tư vấn",
-  "Consultation answered": "Đã trả lời tư vấn",
-  "Sales target set": "Đặt mục tiêu doanh thu",
-  "Invoice created": "Tạo hóa đơn",
-  "Invoice paid": "Hóa đơn đã thanh toán",
-  "Invoice refunded": "Hoàn tiền hóa đơn",
-  "Stock availability changed": "Tồn khả dụng thay đổi",
-  Subject: "Đối tượng",
   Reconciliation: "Đối soát",
   "Awaiting payment": "Chờ thanh toán",
   "Partly refunded": "Đã hoàn một phần",
@@ -371,7 +352,6 @@ export const governanceLiterals: Record<string, string> = {
   "Amount mismatch": "Lệch số tiền",
   "Expected amount": "Số tiền cần thu",
   "Received amount": "Số tiền đã nhận",
-  "Run report": "Chạy báo cáo",
   "Entity type": "Loại thực thể",
   "All entity types": "Tất cả loại thực thể",
   "All actors": "Tất cả người thực hiện",

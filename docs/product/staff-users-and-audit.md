@@ -156,7 +156,6 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 - Audit of shoppers' activity and of failed sign-ins (decision 13).
 - Editing sites. This page only chooses from the existing sites.
 - Staff MFA, the self-service password reset and the sign-in screen: see [staff-shell-sign-in-and-navigation.md](staff-shell-sign-in-and-navigation.md).
-- Reports built on audit rows: see [staff-dashboard-and-reporting.md](staff-dashboard-and-reporting.md).
 
 ## Rules and designs
 

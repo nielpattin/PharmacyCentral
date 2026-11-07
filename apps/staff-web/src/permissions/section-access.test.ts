@@ -27,7 +27,6 @@ const opens: Record<"Pharmacist" | "Pharmacy Manager" | "Warehouse Staff", reado
     "transfers",
     "replenishment",
     "procurement",
-    "reporting",
     "finance",
     "sites",
     "storageLocations",
@@ -83,9 +82,8 @@ describe("sidebar sections by role", () => {
       // administrator's.
       "analytics",
       "actionPlans",
-      // Money and reports are the Pharmacy Manager's too.
+      // Money is the Pharmacy Manager's too.
       "finance",
-      "reporting",
       // Orders and prescriptions hold customers' personal and health data.
       "orders",
       "prescriptions",
@@ -109,8 +107,7 @@ describe("sidebar sections by role", () => {
     }
   });
 
-  it("keeps Reporting away from Warehouse Staff and Pharmacist overview away from Pharmacy Manager", () => {
-    expect(canAccessSection("reporting", ["Warehouse Staff"])).toBe(false);
+  it("keeps Pharmacist overview away from Pharmacy Manager", () => {
     expect(canAccessSection("pharmacistOverview", ["Pharmacy Manager"])).toBe(false);
   });
 });

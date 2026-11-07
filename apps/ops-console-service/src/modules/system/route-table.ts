@@ -155,11 +155,6 @@ export const ROUTE_TABLE: readonly RouteRow[] = [
     service: "operations-query-service",
     access: { kind: "roles", roles: ["Pharmacy Manager"] },
   },
-  {
-    path: "/api/reports*",
-    service: "operations-query-service",
-    access: { kind: "roles", roles: ["Pharmacy Manager"] },
-  },
   { path: "/api/audit*", service: "operations-query-service", access: { kind: "platform-admin" } },
   { path: "/api/system*", service: "ops-console-service", access: { kind: "platform-admin" } },
 ];

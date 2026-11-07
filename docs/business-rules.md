@@ -67,7 +67,7 @@ Mỗi service kiểm tra role của access token bằng bảng role trong `src/m
 | --- | --- |
 | `/api/admin`, `/api/audit`, `/api/operations/audit`, `/api/system`, các đường dẫn cấu hình AI (`aiCredentialPaths`) | Platform Admin |
 | `/api/customers` (tra cứu khách) | Pharmacist |
-| `/api/finance`, `/api/operations/finance`, `/api/reports` | Pharmacy Manager |
+| `/api/finance`, `/api/operations/finance` | Pharmacy Manager |
 | `/api/dashboard`, `/api/operations/dashboard` | Pharmacy Manager, Warehouse Staff |
 | `POST /api/sites`, `DELETE /api/sites/*` | Platform Admin |
 | `/api/products/search-synonyms` | Pharmacist, Pharmacy Manager (Platform Admin chỉ đọc) |
@@ -137,7 +137,7 @@ Người tạo vẫn được hủy điều chuyển và yêu cầu bổ sung c�
 
 Platform Admin không làm thay Pharmacist, Pharmacy Manager hay Warehouse Staff. Ở từng service, Platform Admin:
 
-- Đọc được mọi đường dẫn nhân viên (dashboard, phân tích, tài chính, báo cáo, đơn online, đơn thuốc, hóa đơn, tồn kho, lô, biến động, nhận hàng, đơn mua, gợi ý bổ sung, điều chuyển, kiểm kê, trả hàng, điều chỉnh, kiểm định, danh mục, giá, nhà cung cấp, kho, site, từ đồng nghĩa) và không bị giới hạn theo site (BR-AUTH-003).
+- Đọc được mọi đường dẫn nhân viên (dashboard, phân tích, tài chính, đơn online, đơn thuốc, hóa đơn, tồn kho, lô, biến động, nhận hàng, đơn mua, gợi ý bổ sung, điều chuyển, kiểm kê, trả hàng, điều chỉnh, kiểm định, danh mục, giá, nhà cung cấp, kho, site, từ đồng nghĩa) và không bị giới hạn theo site (BR-AUTH-003).
 - Ghi được đúng các việc không role nào khác làm: quản lý người dùng, role và site access (`/api/admin`), audit, cấu hình AI (BR-AUTH-007), trang System, tạo và xóa site, và đổi chủ sở hữu, hạn và tiêu đề của kế hoạch hành động (BR-PLAN-002).
 - Bị từ chối mọi ghi còn lại với 403 `role_forbidden`: sửa danh mục, giá, nhà cung cấp, kho, sửa site, nhập dữ liệu, đơn mua và nhận hàng, mọi ghi tồn kho, duyệt hay từ chối bổ sung hàng, kiểm định lô, chuyển trạng thái và hoàn tiền đơn online, thao tác quầy, biên tập hay duyệt từ đồng nghĩa, đổi trạng thái kế hoạch hành động.
 
@@ -837,13 +837,13 @@ Khi thực hiện, batch phải thuộc sản phẩm của dòng ("Replenishment
 
 Pharmacist hoặc Pharmacy Manager tạo yêu cầu. Warehouse Staff duyệt, từ chối và thực hiện yêu cầu. Người yêu cầu không tự duyệt (BR-AUTH-009). Người yêu cầu hoặc Warehouse Staff được hủy (BR-AUTH-002).
 
-## 17. Quy tắc báo cáo, tài chính và audit
+## 17. Quy tắc dashboard, tài chính và audit
 
 ### BR-REPORT-001. Dashboard lọc theo site
 
 Dashboard lọc theo site được chọn (nếu có) hoặc theo site được gán cho nhân viên không phải Platform Admin.
 
-Dashboard mở cho Pharmacy Manager và Warehouse Staff; báo cáo và tài chính chỉ cho Pharmacy Manager (BR-AUTH-002).
+Dashboard mở cho Pharmacy Manager và Warehouse Staff; tài chính chỉ cho Pharmacy Manager (BR-AUTH-002).
 
 ### BR-REPORT-002. Lô tồn thấp là available từ 10 trở xuống
 

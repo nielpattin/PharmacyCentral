@@ -85,9 +85,6 @@ model {
   pharmacyCentral.services.operationsService.eventConsumer -> pharmacyCentral.services.operationsService.audit "Apply an audited change" {
     technology "in-process"
   }
-  pharmacyCentral.services.operationsService.eventConsumer -> pharmacyCentral.services.operationsService.reports "Apply a reported event" {
-    technology "in-process"
-  }
 
   // ── Inside chatbot-service ───────────────────────────────────────────────────────
   pharmacyCentral.services.chatbotService.chat -> pharmacyCentral.services.chatbotService.intentGate "Classify the question before any model call" {

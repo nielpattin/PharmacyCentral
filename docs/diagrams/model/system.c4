@@ -13,7 +13,7 @@ model {
 
       staffWeb = webapp "staff-web" {
         technology "React + Vite"
-        summary "Internal portal: dashboards, finance, audit, reports, master data, stock, procurement and imports."
+        summary "Internal portal: dashboards, finance, audit, master data, stock, procurement and imports."
         metadata { package "@pharmacy/staff-web" }
       }
     }
@@ -59,7 +59,7 @@ model {
           summary "Invoices, attempts, transactions, refunds, QR instructions, reconciliation."
         }
         operationsDb = database "operations_query_service" {
-          summary "Dashboard counters, finance entries, audit events, report rows."
+          summary "Dashboard counters, finance entries, audit events."
         }
         chatbotDb = database "chatbot_service" {
           summary "Chat sessions, chat messages, AI credentials."

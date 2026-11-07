@@ -30,12 +30,12 @@ The rule is stated in [AGENTS.md](../../AGENTS.md) and [architecture.md](../arch
 | receiptCount | goods-receipts count | audit only; no site lines or status | `procurement.goods-receipt.recorded.v1` |
 | openPrescriptionCount | prescriptions count | `sales.prescription.created.v1` has `siteId`; `dispensed.v1` has no `siteId` and cannot tell Partially from Dispensed; `cancelled.v1` has no `siteId` | additive fields |
 
-Two more facts constrain the design. The relay sorts by `occurredAt`, whose default is `now()`, the start of the transaction (`outbox_messages` in each owner's `schema.ts`), so publication order is not commit order; only `inventory_balances` has a `version` column. And the consumer writes a `report_rows` row for every non-audit event (`apply()`), so any new event type would reach `/api/reports` unless it is classified.
+One more fact constrains the design. The relay sorts by `occurredAt`, whose default is `now()`, the start of the transaction (`outbox_messages` in each owner's `schema.ts`), so publication order is not commit order; only `inventory_balances` has a `version` column.
 
 ## Goals
 
 - operations-query makes no HTTP call to catalog, inventory or sales: no `*_SERVICE_URL` in its code, Compose or Terraform, and no outbound `internalServiceHeaders()` use.
-- Every field of `GET /api/dashboard/summary` and `GET /api/finance/summary` equals the HTTP-based answer over the same data (reconciliation diff of zero), and the response shapes do not change.
+- Every field of `GET /api/dashboard/summary` and `GET /api/finance/summary` equals the HTTP-based answer over the same data (reconciliation diff of zero), and the response shapes do not change. (Later, the Finance summary was cut to `paid`, `refunded` and `net`; the other figures it held were stock value and movement totals, which Analytics and Inventory show.)
 - Counts are `COUNT(*)` over projection tables with no page limit, exact above 1,000 rows (tested).
 - Site scope per BR-REPORT-001 and BR-AUTH-004 holds for every figure.
 - The dashboard answers 200 while catalog, inventory or sales is stopped, and `projectionLag` shows the staleness.
@@ -43,7 +43,7 @@ Two more facts constrain the design. The relay sorts by `occurredAt`, whose defa
 
 ## Non-goals
 
-- No change to the audit path, `audit_events`, `report_rows` semantics, or finance entries (BR-FIN-001).
+- No change to the audit path, `audit_events`, or finance entries (BR-FIN-001).
 - No change to dashboard response fields, to owners' existing HTTP routes, or to existing event payloads beyond the additive fields below.
 - No change to staff-web or search-service. No cross-database reads, CDC or shared views ([ADR 0002](../adr/0002-service-owned-databases.md)).
 
@@ -60,7 +60,7 @@ Owners write state events in the same transaction as the change. operations-quer
 ### Data model
 
 - Owners, one Drizzle migration per service, run by the owning role: add `version integer not null default 1` to the tables `products`, `product_prices`, `sites`, `storage_locations` and `suppliers` in catalog-service's database; to `product_batches`, `transfer_orders`, `stocktakes` and `stock_adjustments` in inventory-service's; and to `prescriptions` in sales-service's. Every UPDATE sets `version = version + 1` in the same statement. `inventory_balances.version` already exists. A hard-deleted product (`deleteProduct`) emits a tombstone.
-- operations-query migration `0003_operations_projections.sql` (additive): `projected_products`, `projected_sites`, `projected_storage_locations`, `projected_suppliers`, `projected_product_prices`, `projected_batches`, `projected_balances`, `projected_ledger_entries` (indexed on `(site_id, movement_type, occurred_at)`), `projected_transfers`, `projected_stocktakes`, `projected_adjustments`, `projected_goods_receipts`, `projected_prescriptions`, and `projection_state` (family, last occurred at, last applied at, backfill complete). Every row keeps `version` and `removed`.
+- operations-query migration `0004_operations_projections.sql` (additive): `projected_products`, `projected_sites`, `projected_storage_locations`, `projected_suppliers`, `projected_product_prices`, `projected_batches`, `projected_balances`, `projected_ledger_entries` (indexed on `(site_id, movement_type, occurred_at)`), `projected_transfers`, `projected_stocktakes`, `projected_adjustments`, `projected_goods_receipts`, `projected_prescriptions`, and `projection_state` (family, last occurred at, last applied at, backfill complete). Every row keeps `version` and `removed`.
 - Counts use the owners' filters, per BR-REPORT-004 to 007: open prescriptions are status not in (Dispensed, Cancelled); pending transfers are status in (PendingApproval, Draft, Approved, InTransit), matched on source or destination site; open stocktakes are status not in (Completed, Cancelled); pending adjustments are status Pending; receipts are all rows in scope; products are `is_active AND NOT removed`.
 - Valuation ports `listBasePricesOn` ([drizzle-store-repository.ts](../../apps/catalog-service/src/modules/stores/infrastructure/drizzle-store-repository.ts), line 720) to SQL over `projected_product_prices`: Published, site-less, window contains the day, factor above zero, `DISTINCT ON` product, base unit first, then latest `effective_from`, then id. BR-PRICE-006 keeps windows from overlapping, so the choice is deterministic.
 
@@ -90,7 +90,7 @@ Additive fields on existing events; the current consumers ignore unknown fields:
 
 Emission sits in the same transaction as each write: catalog product, site, location, supplier and price writes, and the import transaction in `catalog-import-service.ts`; inventory's ten `stockLedgerEntries` inserts, twelve `inventoryBalances` updates (reservations change `quantityReserved` too), and batch, transfer, stocktake and adjustment writes; procurement's receive path; sales' prescription create (`sales-repository.ts`, line 601), cancel (line 727) and dispense (line 826). The existing availability event stays.
 
-Routing: the state and movement families write projection rows only, with no `audit_events`, `report_rows`, `finance_entries` or counter. Existing event types keep their current rows.
+Routing: the state and movement families write projection rows only, with no `audit_events`, `finance_entries` or counter. Existing event types keep their current rows.
 
 Backfill: a one-off owner command (`pnpm --dir apps/<service> backfill:operations-projection`, run as the owning role) reads each table by primary key in batches of 500, and inserts one `*.changed.v1` outbox row per record in each batch transaction, with `origin: "backfill"` in the payload. The relay publishes them like live rows. There is no cross-database read and no new route, and versions make live and backfilled events safe to interleave.
 
@@ -121,7 +121,7 @@ Backfill: a one-off owner command (`pnpm --dir apps/<service> backfill:operation
 ## Rollout and migration
 
 1. Owner migrations: add `version` (default 1) in catalog, inventory and sales, using `pnpm run db:migrate`. These are additive.
-2. operations-query release A: migration `0003`, the state-event consumer and routing, and `projection_state`. It still reads HTTP. It must ship before any producer emits a state event, because the current consumer would write those events into `report_rows`.
+2. operations-query release A: migration `0004`, the state-event consumer and routing, and `projection_state`. It still reads HTTP. It must ship before any producer emits a state event, because the current consumer would write those events into `report_rows`.
 3. Producer release for catalog, inventory (with procurement) and sales: emit the new events and additive fields in the same transactions.
 4. Backfill per owner, in order: catalog, then inventory, then sales. Each command runs once and logs its row counts. Watch `pharmacy_projection_backfill_rows`.
 5. Reconciliation gate: a throwaway script (deleted in step 7) compares projection counts with the owners' `/…/count` endpoints, and valuation with the HTTP answer, for the network and each site. Switch only after zero differences in two runs an hour apart.

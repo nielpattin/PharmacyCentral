@@ -104,17 +104,9 @@ A Pharmacy Manager sees the prescription, counter and consultation records as a 
 
 A Platform Admin sees the same records, and every other staff route, read-only: the actions are hidden, and the service refuses a write with `403 role_forbidden`.
 
-## Dashboard and Reporting
+## Dashboard
 
 **Dashboard** (Platform Admin, Pharmacy Manager, Warehouse Staff) shows summary cards: active sites and storage locations, product and supplier counts, quantity on hand and reserved, low-stock batches, expiring batches, pending transfers, open prescriptions, open stocktakes, pending adjustments, and a list of recent activity.
-
-**Reporting** (Pharmacy Manager) opens the Reports tab of the finance service:
-
-1. Enter a **Report type** (the default is `sales`).
-2. Choose **Run report**.
-3. Review the rows: type, subject, value, occurred time and details.
-
-Reporting does not show stock-risk summaries; low-stock and expiring batch counts are on the Dashboard.
 
 **Analytics** ("Phân tích", read by Pharmacy Manager only) is a workspace of five tabs — **Tổng quan**, **Doanh thu**, **Khách hàng**, **Tồn kho** and **Mục tiêu** — so a visit loads only the tab it opens, never the whole report.
 
@@ -290,11 +282,9 @@ Counter flow for a pharmacist:
 
 ## Finance
 
-**Finance** (Pharmacy Manager) has three tabs.
+**Finance** (Pharmacy Manager) shows the paid, refunded and net amounts, then the payment invoices. Stock value and products without a published price are in **Analytics**, on the **Tồn kho** tab.
 
-- **Summary**: paid, refunded and net amounts; inventory value and reserved value; the count of products missing a published price (**Missing prices**); receipt, dispensed and return quantities; an inventory activity table; and an inventory valuation table with each batch's price status. Stock is valued at the current published price per base unit, so a stocked product without a published price adds nothing to the value.
 - **Invoices**: payment invoices with payment code, prescription or order, status, amount and created time. A Pharmacy Manager can **Refund** a paid invoice with a reason; refunding an online order is theirs alone. Cash is confirmed, and a counter invoice refunded, by a Pharmacist in Counter transactions.
-- **Reports**: the reporting tab described under Dashboard and Reporting.
 
 External accounting ledger posting is outside the scope of these screens.
 

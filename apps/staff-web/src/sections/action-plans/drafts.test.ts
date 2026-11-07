@@ -6,8 +6,6 @@ import {
   expiringBatchDraft,
   expiryRef,
   fitText,
-  priceWarningDraft,
-  priceWarningRef,
   replenishmentDraft,
   replenishmentRef,
   TITLE_MAX_LENGTH,
@@ -18,7 +16,6 @@ describe("source references", () => {
     expect(replenishmentRef("site-1", "prod-2")).toBe("replenishment:site-1:prod-2");
     expect(expiryRef("site-1", "batch-3")).toBe("expiry:site-1:batch-3");
     expect(deadStockRef("site-1", "prod-2")).toBe("dead_stock:site-1:prod-2");
-    expect(priceWarningRef("prod-2")).toBe("price_warning:prod-2");
   });
 });
 
@@ -118,22 +115,5 @@ describe("expiringBatchDraft", () => {
 
   it("calls a batch past its expiry date an expired batch", () => {
     expect(expiringBatchDraft({ ...batch, expiryDate: "2026-10-01" }).title).toBe("Lô đã hết hạn: Amoxicillin");
-  });
-});
-
-describe("priceWarningDraft", () => {
-  it("names the product with no published price, at the line's site", () => {
-    expect(priceWarningDraft({ productId: "prod-9", productName: "Ibuprofen", siteId: "site-1" })).toEqual({
-      sourceType: "price_warning",
-      sourceRef: "price_warning:prod-9",
-      title: "Thiếu giá bán: Ibuprofen",
-      detail: "Chưa có giá bán công bố cho sản phẩm này, nên tồn chưa được định giá.",
-      siteId: "site-1",
-      productId: "prod-9",
-    });
-  });
-
-  it("leaves the plan without a site when the valuation line has none", () => {
-    expect(priceWarningDraft({ productId: "prod-9", productName: "Ibuprofen", siteId: null }).siteId).toBeUndefined();
   });
 });

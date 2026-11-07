@@ -112,9 +112,7 @@ const workspaceIcons: Record<WorkspaceId, React.JSX.Element> = {
 const defaultTabBySection: Partial<Record<Section, string>> = {
   pharmacistOverview: "Counter transactions",
   procurement: "Purchase orders",
-  finance: "Summary",
   receiving: "Goods receipts",
-  reporting: "Reports",
 };
 
 /** The tab each inventory route opens, so the breadcrumb names the view even before `?tab=` is written. */
@@ -405,10 +403,8 @@ const StaffApp = (): React.JSX.Element => {
         return <InventorySection key={activeSection} initialTab="Returns" />;
       case "quality":
         return <InventorySection key={activeSection} initialTab="Batches" />;
-      case "reporting":
-        return <FinanceSection key={activeSection} initialTab="Reports" />;
       case "finance":
-        return <FinanceSection key={activeSection} initialTab="Summary" />;
+        return <FinanceSection key={activeSection} />;
       case "users":
         return <GovernanceSection key={location.pathname} initialTab={governanceTab} />;
       case "audit":

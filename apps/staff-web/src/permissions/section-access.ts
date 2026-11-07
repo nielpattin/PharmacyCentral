@@ -16,7 +16,6 @@ export const sectionRoles: Record<Section, readonly string[]> = {
   transfers: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
   replenishment: ["Platform Admin", "Pharmacy Manager", "Pharmacist", "Warehouse Staff"],
   procurement: ["Platform Admin", "Pharmacy Manager"],
-  reporting: ["Pharmacy Manager"],
   finance: ["Pharmacy Manager"],
   sites: ["Platform Admin", "Pharmacy Manager"],
   storageLocations: ["Platform Admin", "Pharmacy Manager"],

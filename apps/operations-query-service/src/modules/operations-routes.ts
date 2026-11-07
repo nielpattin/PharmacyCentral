@@ -10,7 +10,6 @@ import {
   ANALYTICS_ROLES,
   DASHBOARD_ROLES,
   dashboardActionFamilies,
-  REPORT_ROLES,
   roleRefusal,
 } from "./operations-access.ts";
 import { decodePageCursor, encodePageCursor } from "./page-cursor.ts";
@@ -157,14 +156,7 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       return;
     }
     try {
-      response.json(
-        await repository.financeSummary(
-          () => callerAuthorization(request),
-          queryString(request.query.from),
-          queryString(request.query.to),
-          listSiteIds(request),
-        ),
-      );
+      response.json(await repository.financeSummary(queryString(request.query.from), queryString(request.query.to)));
     } catch (error) {
       next(error);
     }
@@ -265,34 +257,6 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
   router.get("/audit/logs", audit);
   router.get("/finance/summary", finance);
   router.get("/operations/finance", finance);
-  router.get("/reports", async (request, response, next) => {
-    if (!repository) {
-      unavailable(response);
-      return;
-    }
-    const refusal = roleRefusal(request, REPORT_ROLES, "Báo cáo chỉ dành cho Quản lý dược.");
-    if (refusal) {
-      response.status(refusal.status).json(refusal);
-      return;
-    }
-    const rawCursor = queryString(request.query.cursor);
-    const cursor = rawCursor === undefined ? undefined : decodePageCursor(rawCursor);
-    if (rawCursor !== undefined && cursor === undefined) {
-      invalidCursor(response);
-      return;
-    }
-    try {
-      const page = await repository.report(queryString(request.query.reportType), {
-        limit: queryNumber(request.query.limit) ?? 100,
-        ...(cursor ? { cursor } : {}),
-      });
-      // The body stays a plain array; the cursor of the next page travels in a header.
-      if (page.next) response.set("X-Next-Cursor", encodePageCursor(page.next));
-      response.json(page.rows);
-    } catch (error) {
-      next(error);
-    }
-  });
   router.post("/internal/events", async (request, response, next) => {
     if (!repository) {
       unavailable(response);

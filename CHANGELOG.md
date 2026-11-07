@@ -76,7 +76,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 **operations-query-service, docs**
 
-- The dashboard summary's `recentActivity` now lists the latest 30 audit events (was 10) and is filtered by role on the server: Warehouse Staff see only `inventory.*` and `procurement.*` actions, Platform Admin and Pharmacy Manager see all, and a person with several roles gets the widest set. Site scoping is unchanged. Spec: `docs/product/staff-dashboard-and-reporting.md` (US4, G10).
+- The dashboard summary's `recentActivity` now lists the latest 30 audit events (was 10) and is filtered by role on the server: Warehouse Staff see only `inventory.*` and `procurement.*` actions, Platform Admin and Pharmacy Manager see all, and a person with several roles gets the widest set. Site scoping is unchanged. Spec: `docs/product/staff-dashboard-and-counter-overview.md` (US4, G10).
 
 **staff-web, ui, docs**
 
@@ -93,6 +93,11 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Seed B no longer uses the administrator for business writes. The administrator creates the sites; the Pharmacy Manager imports the master data and proposes search synonyms, Warehouse Staff imports the opening stock and does the receiving, transfers, returns, stocktakes and adjustments. A second demo manager, `manager2@pharmacycentral.vn`, raises the purchase orders the first one approves. The managers now hold all four sites and the warehouse account the three that hold stock.
 
 ### Removed
+
+**operations-query-service, ops-console-service, staff-web, deploy, docs**
+
+- The Summary tab of Finance. Finance now shows the paid, refunded and net tiles above the invoice list; stock value and products without a price stay in Analytics (Tồn kho), and the inventory valuation table, the stock movement tiles and the **Create plan** action on a valuation line are gone. `GET /api/finance/summary` answers only `currency`, `paid`, `refunded` and `net`. Also removed: `priceWarningDraft` (staff-web; plans of source `price_warning` are still created by inventory-service) and the unused `finance.*` strings of `i18n.ts`.
+- The Reports tab of Finance, its `/reporting` route and sidebar entry, and the **Inventory activity** table of the Finance summary. The Reports tab was a raw feed of integration events that no decision depended on; revenue, invoices and stock movements have their own screens. `GET /api/reports`, the `report_rows` table (migration `0003_drop_report_rows.sql` drops it), the `/api/reports*` gateway, ALB and route-table entries, and `activityLines` in `GET /api/finance/summary` go with them. `docs/product/staff-dashboard-and-reporting.md` is now `staff-dashboard-and-counter-overview.md`.
 
 **payment-service**
 

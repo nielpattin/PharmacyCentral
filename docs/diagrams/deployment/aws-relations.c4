@@ -37,7 +37,7 @@ deployment {
   aws.edge.alb -> aws.compute.ecs.paymentTask "route /api/payments" {
     technology "HTTP"
   }
-  aws.edge.alb -> aws.compute.ecs.operationsTask "route /api/operations, /api/dashboard, /api/finance, /api/audit, /api/reports" {
+  aws.edge.alb -> aws.compute.ecs.operationsTask "route /api/operations, /api/dashboard, /api/finance, /api/audit" {
     technology "HTTP"
   }
   aws.edge.alb -> aws.compute.ecs.chatbotTask "route /api/chatbot" {

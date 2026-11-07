@@ -7,7 +7,7 @@ import { dashboardActionFamilies } from "./operations-access.ts";
 import { createOperationsRouter } from "./operations-routes.ts";
 import type { OperationsRepository } from "./operations-repository.ts";
 
-describe("dashboard and reports role gates", () => {
+describe("dashboard role gates", () => {
   const reads: string[] = [];
   const dashboardOptions: unknown[] = [];
   const repository = {
@@ -15,10 +15,6 @@ describe("dashboard and reports role gates", () => {
       reads.push("dashboard");
       dashboardOptions.push(options);
       return Promise.resolve({});
-    },
-    report: () => {
-      reads.push("report");
-      return Promise.resolve({ rows: [], next: undefined });
     },
   } as unknown as OperationsRepository;
 
@@ -89,21 +85,6 @@ describe("dashboard and reports role gates", () => {
     it("refuses a service caller even with a role header", async () => {
       const response = await get(path, "Platform Admin", "system");
       expect(response.status).toBe(403);
-      expect(reads).toStrictEqual([]);
-    });
-  });
-
-  describe("GET /reports", () => {
-    it("answers Pharmacy Manager", async () => {
-      const response = await get("/reports", "Pharmacy Manager");
-      expect(response.status).toBe(200);
-      expect(reads).toStrictEqual(["report"]);
-    });
-
-    it.each(["Platform Admin", "Warehouse Staff", "Pharmacist"])("refuses %s before reading anything", async (role) => {
-      const response = await get("/reports", role);
-      expect(response.status).toBe(403);
-      expect(await response.json()).toMatchObject({ code: "role_forbidden" });
       expect(reads).toStrictEqual([]);
     });
   });

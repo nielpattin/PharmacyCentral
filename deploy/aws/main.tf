@@ -76,7 +76,7 @@ locals {
     }
     operations = {
       priority = 70
-      paths    = ["/operations*", "/dashboard*", "/finance*", "/audit*", "/reports*"]
+      paths    = ["/operations*", "/dashboard*", "/finance*", "/audit*"]
       service  = "operations-query-service"
     }
     chatbot = {

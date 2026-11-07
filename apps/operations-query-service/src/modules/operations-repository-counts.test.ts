@@ -31,12 +31,10 @@ describe("OperationsRepository counts come from the owning services", () => {
 
   let counts: Record<string, number | "fail"> = {};
   let requests: Array<{ url: URL; scope: string | null }> = [];
-  let ledger: Array<Record<string, unknown>> = [];
 
   const answer = (input: string | URL | Request, init?: RequestInit): Response => {
     const url = new URL(String(input));
     requests.push({ url, scope: new Headers(init?.headers).get(scopeHeader) });
-    if (url.pathname === "/inventory/movements/summary") return json(ledger);
     if (url.pathname.endsWith("/count")) {
       const value = counts[url.pathname];
       if (counts[url.pathname] === "fail") return new Response("boom", { status: 500 });
@@ -59,7 +57,6 @@ describe("OperationsRepository counts come from the owning services", () => {
   beforeEach(() => {
     counts = {};
     requests = [];
-    ledger = [];
     vi.stubEnv("INTERNAL_SERVICE_SECRET", "test-internal-secret");
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => answer(input, init));
   });
@@ -122,22 +119,5 @@ describe("OperationsRepository counts come from the owning services", () => {
     await expect(repository.dashboard(identity, [siteA])).rejects.toThrow(
       /Scoped read of \/inventory\/transfers\/count/,
     );
-  });
-
-  it("answers the receipt and dispense quantities from the all-time stock ledger", async () => {
-    counts = { "/procurement/goods-receipts/count": 3 };
-    ledger = [
-      { movementType: "GoodsReceipt", count: 3, quantityIn: 40, quantityOut: 0 },
-      { movementType: "Dispense", count: 5, quantityIn: 0, quantityOut: 12 },
-    ];
-
-    await expect(repository.financeSummary(identity, undefined, undefined, [siteA])).resolves.toMatchObject({
-      receiptCount: 3,
-      receiptQuantity: 40,
-      dispensedQuantity: 12,
-    });
-    // The all-time ledger read carries no period, so it is not cut to the requested one.
-    const allTime = requested("/inventory/movements/summary").find((request) => !request.url.searchParams.has("from"));
-    expect(allTime?.scope).toBe(siteA);
   });
 });

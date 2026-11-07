@@ -9,9 +9,6 @@ import type { Request } from "express";
 /** The dashboard screen: attention tiles and recent activity. Pharmacist has no dashboard (staff-shell decision 14). */
 export const DASHBOARD_ROLES: readonly string[] = ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"];
 
-/** Reporting: the Pharmacy Manager only. Money is a business figure; Platform Admin and Warehouse Staff have no reporting screen. */
-export const REPORT_ROLES: readonly string[] = ["Pharmacy Manager"];
-
 /**
  * Period analytics (design 0007): business figures (revenue, orders, customers, gross profit, targets) for the Pharmacy
  * Manager alone. Platform Admin administers the system and has no business to read here; Warehouse Staff and Pharmacist

@@ -1,6 +1,6 @@
 /**
  * Pure figure rules for the Analytics screen: the change against the previous period, and the formatting of figures
- * that may be unanswered. A figure that is not a finite number shows "—"; it is never shown as 0 (reporting decision 4).
+ * that may be unanswered. A figure that is not a finite number shows "—"; it is never shown as 0 (dashboard decision 4).
  * No React or API imports, so node can test them.
  */
 import { formatAmount } from "../sales/rules.ts";

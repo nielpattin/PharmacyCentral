@@ -16,7 +16,7 @@ Tags: `[owner]` a recorded owner decision; `[observed]` read from the code; `[st
 
 - The system creates the plans. A Pharmacy Manager can also create one by hand and sees every plan of their sites; Platform Admin has no part in plans (they are the pharmacy's daily work, `[owner]` 2026-11-04) and is refused every read and write. A manager changes the owner, due date (not in the past) and title; the detail comes from the system and the status belongs to the owner. `[owner]` 2026-10-29
 - Pharmacist and Warehouse Staff see only the plans they own and may move those between open, in progress and done. A Pharmacist never creates a plan, and the system gives plans to Pharmacists first.
-- Manual override, kept on all four entry points because each is the only way to make a plan the system skipped (a plan done in the last 7 days, a site with no Pharmacist or Manager) or to choose the owner at creation. **Tạo kế hoạch** prefills a plan from: a reorder suggestion row (Procurement), a dead stock row (Analytics), an expired or soon expiring batch with stock (Inventory, Balances), a valuation line with a missing price (Finance summary). Only a Pharmacy Manager sees that action; Platform Admin does not.
+- Manual override, kept on all three entry points because each is the only way to make a plan the system skipped (a plan done in the last 7 days, a site with no Pharmacist or Manager) or to choose the owner at creation. **Tạo kế hoạch** prefills a plan from: a reorder suggestion row (Procurement), a dead stock row (Analytics), an expired or soon expiring batch with stock (Inventory, Balances). Only a Pharmacy Manager sees that action; Platform Admin does not.
 
 ## User stories and acceptance criteria
 
@@ -58,7 +58,7 @@ Tags: `[owner]` a recorded owner decision; `[observed]` read from the code; `[st
 
 ## Contents and behavior
 
-One list ([API guide](../api-guide.md)), a create drawer shared by the four entry points, a reassign drawer for managers (owner, due date and title), and a status control per row for the owner. A table row shows only the actions the user may take; with none, the Actions column is not shown. Plans are not events: no other service reads them.
+One list ([API guide](../api-guide.md)), a create drawer shared by the three entry points, a reassign drawer for managers (owner, due date and title), and a status control per row for the owner. A table row shows only the actions the user may take; with none, the Actions column is not shown. Plans are not events: no other service reads them.
 
 ## States
 

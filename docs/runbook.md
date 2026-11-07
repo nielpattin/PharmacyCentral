@@ -191,7 +191,7 @@ Both local gateways forward paths with identical patterns: `gateway` (container 
 - `/api/procurement*`, `/api/inventory*` -> `inventory-service:3004`
 - `/api/carts*`, `/api/orders*`, `/api/delivery*`, `/api/prescriptions*`, `/api/counter-transactions*`, `/api/sales-targets*` -> `sales-service:3005`
 - `/api/payments*` -> `payment-service:3006`
-- `/api/operations*`, `/api/dashboard*`, `/api/finance*`, `/api/audit*`, `/api/reports*` -> `operations-query-service:3007`
+- `/api/operations*`, `/api/dashboard*`, `/api/finance*`, `/api/audit*` -> `operations-query-service:3007`
 - `/api/system*` -> `ops-console-service:3010`
 
 Any other path, `/` included, returns a JSON 404. Either gateway strips `/api` before forwarding.

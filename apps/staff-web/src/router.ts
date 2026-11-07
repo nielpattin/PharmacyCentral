@@ -32,7 +32,6 @@ export type Section =
   | "adjustments"
   | "returns"
   | "quality"
-  | "reporting"
   | "finance"
   | "users"
   | "audit"
@@ -68,7 +67,6 @@ export const sectionPaths = {
   adjustments: "/adjustments",
   returns: "/returns",
   quality: "/quality",
-  reporting: "/reporting",
   finance: "/finance",
   users: "/users",
   audit: "/audit",
@@ -112,7 +110,6 @@ const sectionsByPath: Record<string, Section> = {
   "/adjustments": "adjustments",
   "/returns": "returns",
   "/quality": "quality",
-  "/reporting": "reporting",
   "/finance": "finance",
   "/users": "users",
   "/audit": "audit",
@@ -173,7 +170,6 @@ const inventoryRoute = sectionRoute("/inventory");
 const adjustmentsRoute = sectionRoute("/adjustments");
 const returnsRoute = sectionRoute("/returns");
 const qualityRoute = sectionRoute("/quality");
-const reportingRoute = sectionRoute("/reporting");
 const financeRoute = sectionRoute("/finance");
 const usersRoute = sectionRoute("/users");
 const auditRoute = sectionRoute("/audit");
@@ -209,7 +205,6 @@ const routeTree = rootRoute.addChildren([
   adjustmentsRoute,
   returnsRoute,
   qualityRoute,
-  reportingRoute,
   financeRoute,
   usersRoute,
   auditRoute,

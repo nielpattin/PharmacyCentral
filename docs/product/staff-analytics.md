@@ -11,7 +11,7 @@ Tags: `[owner]` a recorded owner decision; `[observed]` read from the code; `[st
 
 - `[owner]` 2026-10-28: managers and Platform Admin need a period view: revenue, order count, average order value and gross profit against the previous period, by site and channel, with the health of stock beside it.
 - `[standard]` 2026-10-30: the period also has to say where the revenue came from, so the page divides it across sites, products, categories and the prescription split.
-- `[standard]` The [dashboard](staff-dashboard-and-reporting.md) answers "what needs action now" with counts. This page answers "how did the period go", so the two stay separate. It reads only and changes no record.
+- `[standard]` The [dashboard](staff-dashboard-and-counter-overview.md) answers "what needs action now" with counts. This page answers "how did the period go", so the two stay separate. It reads only and changes no record.
 - `[standard]` 2026-10-30: the period report is long, so the page is a tabbed workspace of five tabs, and a tab reads its data when it is opened, the way an ERP splits a report into workspaces instead of one endless scroll. The four analytical tabs share one set of filters; the targets tab keeps its own month.
 
 ## Users and entry points

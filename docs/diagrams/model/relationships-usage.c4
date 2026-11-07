@@ -57,7 +57,7 @@ model {
   pharmacyCentral.web.staffWeb -> pharmacyCentral.services.paymentService "Payments and reconciliation (/api/payments)" {
     technology "HTTPS"
   }
-  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.operationsService "Dashboard, finance, audit, reports (/api/dashboard, /api/reports)" {
+  pharmacyCentral.web.staffWeb -> pharmacyCentral.services.operationsService "Dashboard, finance, audit (/api/dashboard, /api/finance, /api/audit)" {
     technology "HTTPS"
   }
 
@@ -123,7 +123,7 @@ model {
   pharmacyCentral.services.paymentService -> pharmacyCentral.data.postgres.paymentDb "Invoices, attempts, transactions, refunds" {
     technology "SQL"
   }
-  pharmacyCentral.services.operationsService -> pharmacyCentral.data.postgres.operationsDb "Projections, finance entries, audit events, report rows" {
+  pharmacyCentral.services.operationsService -> pharmacyCentral.data.postgres.operationsDb "Projections, finance entries, audit events" {
     technology "SQL"
   }
   pharmacyCentral.services.chatbotService -> pharmacyCentral.data.postgres.chatbotDb "Chat sessions and messages" {

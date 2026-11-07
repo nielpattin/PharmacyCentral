@@ -12,7 +12,7 @@ Services touched: `operations-query-service` (aggregation, read only), `sales-se
 
 ## Motivation
 
-The dashboard shows counts only ([staff dashboard spec](../product/staff-dashboard-and-reporting.md), "No charts" and "Financial values ... see Finance"). Managers have no period view of takings, no stock turnover figure, no list of what to reorder, and nowhere to record who will act on an alert. Reordering is done by eye from the low-stock tile.
+The dashboard shows counts only ([staff dashboard spec](../product/staff-dashboard-and-counter-overview.md), "No charts" and "Financial values ... see Finance"). Managers have no period view of takings, no stock turnover figure, no list of what to reorder, and nowhere to record who will act on an alert. Reordering is done by eye from the low-stock tile.
 
 ## Goals
 
@@ -88,7 +88,7 @@ The previous period is the same length ending at `from`. Answer:
 }
 ```
 
-A figure that cannot be answered is `null`, never 0 (reporting spec decision 4).
+A figure that cannot be answered is `null`, never 0 (dashboard spec decision 4).
 
 #### Purchase cost and gross profit
 
@@ -103,7 +103,7 @@ Definitions (also BR-REPORT-008 to 011):
 - **Turnover:** units dispensed in the period / average stock in units, where average stock = (opening + closing) / 2, closing is on hand now and opening is closing minus the net ledger change in the period. `null` when the average is 0. Days of inventory = period days / turnover.
 - **Dead stock:** on-hand stock of a product at a site whose last ledger movement is older than 90 days (or that has none). Value at today's published price.
 - **Stockout rate:** among the (site, product) pairs that have a balance row or a ledger entry, the share whose available quantity (on hand minus reserved) is 0 or less now. Point in time: the system keeps no daily stock snapshots, so this is not a rate over the period.
-- **Stock value:** on hand times today's published base-unit selling price (`GET /pricing/base-prices`), the same valuation as the Finance summary. A product with no published price adds nothing and is counted in `missingPriceCount`.
+- **Stock value:** on hand times today's published base-unit selling price (`GET /pricing/base-prices`), the only stock valuation (the Finance page no longer shows one). A product with no published price adds nothing and is counted in `missingPriceCount`.
 - **Expiry buckets:** on-hand quantity of batches that expire already (`expired`), in 0 to 30 days (`within30`), 31 to 60 (`within60`) and 61 to 90 days (`within90`) from today.
 - **Gross profit:** revenue less cost of goods, over the sales whose goods are all costed. A sale is *costed* when its dispense row exists, `quantity > 0` and `costedQuantity = quantity`. A partly costed or uncosted sale adds neither its revenue nor a guessed cost. `coverage` is the revenue of costed sales over the revenue of all sales of the period. With sales but none costed, gross profit is `null` (`reason: "no_cost_data"`); with no sale at all it is a true 0 and `coverage` is `null` (BR-REPORT-009).
 - **Channel** filters the sales KPIs only. Stock belongs to a site, not to a channel, so inventory health ignores it, and the page says so.

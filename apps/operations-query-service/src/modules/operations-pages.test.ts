@@ -74,15 +74,7 @@ const audits = [
   },
 ];
 
-/** Report rows 1-3 share one occurredAt; row 4 is an hour later. Newest first is 4, 3, 2, 1. */
-const reports = [
-  { n: 1, reportType: "payment.invoice.paid.v1", at: "2026-10-24T10:00:00.000000Z" },
-  { n: 2, reportType: "payment.invoice.paid.v1", at: "2026-10-24T10:00:00.000000Z" },
-  { n: 3, reportType: "payment.invoice.refunded.v1", at: "2026-10-24T10:00:00.000000Z" },
-  { n: 4, reportType: "payment.invoice.paid.v1", at: "2026-10-24T11:00:00.000000Z" },
-];
-
-describe("OperationsRepository audit and report pages", () => {
+describe("OperationsRepository audit pages", () => {
   const client = new PGlite();
   const db = drizzle({ client, schema });
   const repository = new OperationsRepository({ db } as unknown as OperationsDatabase);
@@ -99,17 +91,6 @@ describe("OperationsRepository audit and report pages", () => {
         siteId: audit.siteId,
         payload: "{}",
         occurredAt: sql`${audit.at}::timestamptz`,
-      });
-    }
-    for (const report of reports) {
-      await db.insert(schema.reportRows).values({
-        id: eventId(report.n),
-        eventId: eventId(100 + report.n),
-        reportType: report.reportType,
-        subjectId: null,
-        value: "1",
-        payload: "{}",
-        occurredAt: sql`${report.at}::timestamptz`,
       });
     }
   });
@@ -161,31 +142,5 @@ describe("OperationsRepository audit and report pages", () => {
     expect(first.rows.map((row) => row.eventId)).toStrictEqual([eventId(1)]);
     const rest = await repository.listAudit({ siteIds: [siteA], q: "order", limit: 5, cursor: cursorOf(first.next) });
     expect(rest.rows.map((row) => row.eventId)).toStrictEqual([eventId(5)]);
-  });
-
-  it("pages reports by (occurredAt, id) with no duplicate or missing row", async () => {
-    const first = await repository.report(undefined, { limit: 2 });
-    expect(first.rows.map((row) => row.id)).toStrictEqual([eventId(4), eventId(3)]);
-
-    const second = await repository.report(undefined, { limit: 2, cursor: cursorOf(first.next) });
-    expect(second.rows.map((row) => row.id)).toStrictEqual([eventId(2), eventId(1)]);
-    expect(second.next).toBeUndefined();
-  });
-
-  it("filters reports by type and pages within the filter", async () => {
-    const first = await repository.report("payment.invoice.paid.v1", { limit: 1 });
-    expect(first.rows.map((row) => row.id)).toStrictEqual([eventId(4)]);
-    const second = await repository.report("payment.invoice.paid.v1", { limit: 1, cursor: cursorOf(first.next) });
-    expect(second.rows.map((row) => row.id)).toStrictEqual([eventId(2)]);
-    const third = await repository.report("payment.invoice.paid.v1", { limit: 1, cursor: cursorOf(second.next) });
-    expect(third.rows.map((row) => row.id)).toStrictEqual([eventId(1)]);
-    expect(third.next).toBeUndefined();
-  });
-
-  it("treats a report type as the start of an event type, ignoring case and wildcards", async () => {
-    expect((await repository.report("PAYMENT.invoice")).rows).toHaveLength(4);
-    expect((await repository.report("payment.invoice.ref")).rows.map((row) => row.id)).toStrictEqual([eventId(3)]);
-    expect((await repository.report("%")).rows).toStrictEqual([]);
-    expect((await repository.report("sales")).rows).toStrictEqual([]);
   });
 });

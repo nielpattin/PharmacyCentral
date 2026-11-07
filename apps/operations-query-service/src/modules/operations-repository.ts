@@ -3,7 +3,7 @@ import { ACTOR_SITE_IDS_HEADER } from "../middleware/trusted-request.ts";
 import { internalServiceHeaders } from "../internal-service-headers.ts";
 
 import type { OperationsDatabase } from "../shared/infrastructure/database.ts";
-import { auditEvents, financeEntries, projectionCounters, reportRows } from "../shared/infrastructure/schema.ts";
+import { auditEvents, financeEntries, projectionCounters } from "../shared/infrastructure/schema.ts";
 import type { z } from "zod";
 import {
   basePricesAnswerSchema,
@@ -80,7 +80,6 @@ export type AuditFilters = {
 /** One keyset page: its rows, and the position after the last of them when another row follows. */
 export type KeysetPage<Row> = { rows: Row[]; next: PageCursor | undefined };
 
-export type ReportRow = typeof reportRows.$inferSelect;
 export type AuditRow = typeof auditEvents.$inferSelect & {
   userId: string | null;
   summary: null;
@@ -183,23 +182,6 @@ export class OperationsRepository {
           })
           .onConflictDoNothing();
       }
-      const subjectId =
-        firstUuid(event.payload.orderId) ??
-        firstUuid(event.payload.productId) ??
-        firstUuid(event.payload.prescriptionId);
-      // An audit event is a record of who did what, shown in the audit log; it is not a figure for a report.
-      if (!event.eventType.endsWith(".audit.v1"))
-        await transaction
-          .insert(reportRows)
-          .values({
-            eventId: event.eventId,
-            reportType: event.eventType,
-            subjectId,
-            value: Number.isFinite(amount) ? String(amount) : "0",
-            payload: payloadJson,
-            occurredAt: eventDate,
-          })
-          .onConflictDoNothing();
       return true;
     });
   }
@@ -323,82 +305,21 @@ export class OperationsRepository {
     };
   }
 
-  /**
-   * Stock is valued at today's published selling price, because the catalog keeps no purchase cost; a batch whose
-   * product has no published price is listed as missing a price and adds nothing to the value. The movement figures
-   * are the stock ledger of the period, summed by inventory-service.
-   */
-  public async financeSummary(catalogIdentity: CatalogIdentity, from?: string, to?: string, siteIds?: string[]) {
-    const fromDate = from ?? new Date(0).toISOString();
-    const toDate = to ?? new Date().toISOString();
-    const period = new URLSearchParams({
-      from: new Date(fromDate).toISOString(),
-      to: new Date(toDate).toISOString(),
-    });
-    const today = new Date().toISOString().slice(0, 10);
-    const [live, counts, movementSummary, allTimeMovements, prices] = await Promise.all([
-      this.loadLiveOperations(catalogIdentity, siteIds),
-      this.loadCounts(siteIds),
-      this.fetchRows(this.options.inventoryUrl, `/inventory/movements/summary?${period.toString()}`, siteIds),
-      this.fetchRows(this.options.inventoryUrl, "/inventory/movements/summary", siteIds),
-      this.fetchRows(this.options.catalogUrl, `/pricing/base-prices?day=${today}`),
-    ]);
+  /** Money taken and given back in the period, summed from the payment events the projection keeps. */
+  public async financeSummary(from?: string, to?: string) {
     const conditions = [
       from ? gte(financeEntries.occurredAt, new Date(from)) : undefined,
       to ? lte(financeEntries.occurredAt, new Date(to)) : undefined,
     ].filter((value): value is NonNullable<typeof value> => value !== undefined);
     const entries = await this.database.db
-      .select()
+      .select({ entryType: financeEntries.entryType, amount: financeEntries.amount })
       .from(financeEntries)
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(financeEntries.occurredAt));
-    const paid = entries
-      .filter((entry) => entry.entryType === "Payment")
-      .reduce((total, entry) => total + Number(entry.amount), 0);
-    const refunded = entries
-      .filter((entry) => entry.entryType === "Refund")
-      .reduce((total, entry) => total + Number(entry.amount), 0);
-    // The balances are today's stock, so they are valued at today's prices whatever period the money covers.
-    const valuationLines = valueBalances(live, prices);
-    const movements = new Map(movementSummary.map((row) => [String(row.movementType), row]));
-    const moved = (movementType: string, direction: "quantityIn" | "quantityOut"): number =>
-      Number(movements.get(movementType)?.[direction] ?? 0);
-    // Received and dispensed quantities are all-time figures, as they always were, read from the stock ledger.
-    const allTime = new Map(allTimeMovements.map((row) => [String(row.movementType), row]));
-    return {
-      currency: "VND",
-      paid,
-      refunded,
-      net: paid - refunded,
-      entries,
-      siteId: null,
-      from: fromDate,
-      to: toDate,
-      totalQuantityOnHand: live.balances.reduce((sum, row) => sum + rowQuantity(row, "quantityOnHand"), 0),
-      totalQuantityReserved: live.balances.reduce((sum, row) => sum + rowQuantity(row, "quantityReserved"), 0),
-      inventoryValue: Math.round(valuationLines.reduce((sum, line) => sum + (line.valueOnHand ?? 0), 0)),
-      reservedValue: Math.round(valuationLines.reduce((sum, line) => sum + (line.valueReserved ?? 0), 0)),
-      balanceCount: live.balances.length,
-      missingPriceCount: valuationLines.filter((line) => line.unitPrice === null).length,
-      receiptCount: counts.receipts ?? 0,
-      receiptQuantity: Number(allTime.get("GoodsReceipt")?.quantityIn ?? 0),
-      dispensedQuantity: Number(allTime.get("Dispense")?.quantityOut ?? 0),
-      returnQuantity: moved("InventoryReturn", "quantityOut"),
-      adjustmentQuantity: ["StockAdjustment", "StocktakeAdjustment", "Adjustment"].reduce(
-        (sum, movementType) => sum + moved(movementType, "quantityIn") - moved(movementType, "quantityOut"),
-        0,
-      ),
-      transferOutQuantity: moved("TransferOut", "quantityOut"),
-      transferInQuantity: moved("TransferIn", "quantityIn"),
-      valuationLines,
-      activityLines: movementSummary.map((row) => ({
-        activityType: row.movementType,
-        count: row.count,
-        quantityIn: row.quantityIn,
-        quantityOut: row.quantityOut,
-        latestActivityAtUtc: row.latestOccurredAt,
-      })),
-    };
+      .where(conditions.length ? and(...conditions) : undefined);
+    const total = (entryType: string): number =>
+      entries.filter((entry) => entry.entryType === entryType).reduce((sum, entry) => sum + Number(entry.amount), 0);
+    const paid = total("Payment");
+    const refunded = total("Refund");
+    return { currency: "VND", paid, refunded, net: paid - refunded };
   }
 
   /**
@@ -598,38 +519,6 @@ export class OperationsRepository {
     });
   }
 
-  /** Newest first by `(occurredAt, id)`: one keyset page of at most `limit` rows, the default 100. */
-  public async report(
-    reportType: string | undefined,
-    options: { limit?: number; cursor?: PageCursor } = {},
-  ): Promise<KeysetPage<ReportRow>> {
-    const limit = Math.min(Math.max(Math.floor(options.limit ?? DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE);
-    // A report type is an event type such as `sales.order.created.v1`; the start of one (`sales`) selects the family.
-    const conditions = [
-      reportType
-        ? ilike(reportRows.reportType, `${reportType.replace(/[\\%_]/g, (character) => `\\${character}`)}%`)
-        : undefined,
-      options.cursor
-        ? sql`(${reportRows.occurredAt}, ${reportRows.id}) < (${options.cursor.sortAt}::timestamptz, ${options.cursor.id}::uuid)`
-        : undefined,
-    ].filter((condition): condition is SQL => condition !== undefined);
-    const fetched = await this.database.db
-      .select({
-        ...getTableColumns(reportRows),
-        sortAt: sql<string>`to_char(${reportRows.occurredAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
-      })
-      .from(reportRows)
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(reportRows.occurredAt), desc(reportRows.id))
-      .limit(limit + 1);
-    const visible = fetched.slice(0, limit);
-    const last = visible.at(-1);
-    return {
-      rows: visible.map(({ sortAt: _sortAt, ...row }) => row),
-      next: fetched.length > limit && last ? { sortAt: last.sortAt, id: last.id } : undefined,
-    };
-  }
-
   /**
    * Reads the other services as the caller would: `siteIds` is forwarded as the actor's site scope, so every
    * site-bound list answers only those sites and the totals never count another pharmacy's stock.
@@ -817,54 +706,5 @@ const firstUuid = (value: unknown): string | null =>
     ? value
     : null;
 
-type ValuationLine = {
-  productId: string | null;
-  productName: string;
-  batchNumber: string | null;
-  siteId: string | null;
-  siteName: string;
-  quantityOnHand: number;
-  quantityReserved: number;
-  unitPrice: number | null;
-  valueOnHand: number | null;
-  valueReserved: number | null;
-  priceStatus: "Priced" | "Missing price";
-};
-
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-
-/**
- * One valuation line per stocked balance row; an empty row has nothing to value and is left out. `basePrices` is the
- * catalog's `GET /pricing/base-prices` answer: one row per active product, its base-unit price today (null when no
- * published price qualifies). A product the catalog no longer lists has no price and no name.
- */
-const valueBalances = (live: LiveOperations, basePrices: Array<Record<string, unknown>>): ValuationLine[] => {
-  const prices = new Map(basePrices.map((row) => [String(row.productId), row]));
-  const siteNames = new Map(live.sites.map((site) => [String(site.id), String(site.name)]));
-  return live.balances
-    .filter((row) => rowQuantity(row, "quantityOnHand") > 0)
-    .map((row) => {
-      const balance = asRecord(row.balance);
-      const batch = asRecord(row.batch);
-      const productId = typeof batch.productId === "string" ? batch.productId : null;
-      const siteId = typeof balance.siteId === "string" ? balance.siteId : null;
-      const price = productId === null ? undefined : prices.get(productId);
-      const unitPrice = typeof price?.unitPrice === "number" ? price.unitPrice : null;
-      const quantityOnHand = rowQuantity(row, "quantityOnHand");
-      const quantityReserved = rowQuantity(row, "quantityReserved");
-      return {
-        productId,
-        productName: (typeof price?.productName === "string" ? price.productName : undefined) ?? productId ?? "-",
-        batchNumber: typeof batch.batchNumber === "string" ? batch.batchNumber : null,
-        siteId,
-        siteName: (siteId === null ? undefined : siteNames.get(siteId)) ?? siteId ?? "-",
-        quantityOnHand,
-        quantityReserved,
-        unitPrice,
-        valueOnHand: unitPrice === null ? null : Math.round(quantityOnHand * unitPrice),
-        valueReserved: unitPrice === null ? null : Math.round(quantityReserved * unitPrice),
-        priceStatus: unitPrice === null ? "Missing price" : "Priced",
-      };
-    });
-};

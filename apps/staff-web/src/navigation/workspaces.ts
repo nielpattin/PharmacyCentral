@@ -92,7 +92,7 @@ export const WORKSPACES: readonly WorkspaceDefinition[] = [
   {
     id: "finance",
     label: "Finance",
-    pages: [{ id: "finance", label: "Finance", section: "finance", entries: ["finance", "reporting"] }],
+    pages: [{ id: "finance", label: "Finance", entries: ["finance"] }],
   },
   {
     id: "catalog",

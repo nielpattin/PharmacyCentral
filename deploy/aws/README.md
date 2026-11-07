@@ -102,7 +102,7 @@ The internal ALB sees paths without `/api`. Rules are evaluated by priority, low
 | 30, 40 | `/procurement*`, `/inventory*` | inventory-service |
 | 50 | `/carts*`, `/orders*`, `/delivery*`, `/prescriptions*`, `/counter-transactions*` | sales-service |
 | 60 | `/payments*` | payment-service |
-| 70 | `/operations*`, `/dashboard*`, `/finance*`, `/audit*`, `/reports*` | operations-query-service |
+| 70 | `/operations*`, `/dashboard*`, `/finance*`, `/audit*` | operations-query-service |
 | 80 | `/chatbot*` | chatbot-service |
 | 90 | `/system*` | ops-console-service |
 

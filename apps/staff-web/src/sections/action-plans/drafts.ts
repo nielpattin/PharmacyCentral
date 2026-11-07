@@ -24,8 +24,6 @@ export const expiryRef = (siteId: string, batchId: string): string => `expiry:${
 
 export const deadStockRef = (siteId: string, productId: string): string => `dead_stock:${siteId}:${productId}`;
 
-export const priceWarningRef = (productId: string): string => `price_warning:${productId}`;
-
 export type ReplenishmentSource = {
   siteId: string;
   productId: string;
@@ -96,19 +94,3 @@ export const expiringBatchDraft = (source: ExpiringBatchSource): ActionPlanDraft
     productId: source.productId,
   };
 };
-
-export type PriceWarningSource = {
-  productId: string;
-  productName: string;
-  /** The site of the valuation line, or `null` when the line has none. */
-  siteId: string | null;
-};
-
-export const priceWarningDraft = (source: PriceWarningSource): ActionPlanDraft => ({
-  sourceType: "price_warning",
-  sourceRef: priceWarningRef(source.productId),
-  title: fitText(`Thiếu giá bán: ${source.productName}`, TITLE_MAX_LENGTH),
-  detail: "Chưa có giá bán công bố cho sản phẩm này, nên tồn chưa được định giá.",
-  siteId: source.siteId ?? undefined,
-  productId: source.productId,
-});

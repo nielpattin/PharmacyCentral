@@ -67,19 +67,6 @@ describe("audit entries from the services' events", () => {
     expect(row?.actorId).toBeNull();
   });
 
-  it("keeps audit events out of the report rows, which are figures rather than a record of who did what", async () => {
-    await apply({
-      eventId: eventId(5),
-      eventType: "catalog.audit.v1",
-      actorId: actor,
-      payload: { action: "catalog.site.created", entityType: "site", entityId: entity },
-    });
-    await apply({ eventId: eventId(6), eventType: "payment.invoice.paid.v1", payload: { amount: 5 } });
-    const types = (await repository.report(undefined)).rows.map((row) => row.reportType);
-    expect(types).toContain("payment.invoice.paid.v1");
-    expect(types.some((type) => type.endsWith(".audit.v1"))).toBe(false);
-  });
-
   it("ignores an actor that is not a UUID", async () => {
     await apply({
       eventId: eventId(4),

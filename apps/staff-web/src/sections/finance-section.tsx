@@ -1,49 +1,49 @@
-import { useSession } from "../auth.ts";
-import { SubTabs } from "../components/forms.tsx";
-import { useListUrlState } from "../hooks/useListUrlState.ts";
-import { tabGate, type StaffAction } from "../permissions/staff-permissions.ts";
+import { useQuery } from "@tanstack/react-query";
+import { Alert, StatTile } from "@pharmacy/ui";
+
+import { translateText } from "../i18n.ts";
+import { useCan } from "../permissions/use-can.ts";
+import { formatQuantity, readOne, text, type JsonRecord } from "../staff-api.ts";
+import { FINANCE_SUMMARY_KEY } from "./finance/query-keys.ts";
 import { InvoicesTab } from "./finance/invoices-tab.tsx";
-import { ReportsTab } from "./finance/reports-tab.tsx";
-import { SummaryTab } from "./finance/summary-tab.tsx";
 
-const FINANCE_TABS = ["Summary", "Invoices", "Reports"] as const;
-
-/** Reports has no action; the other tabs need the role that reads them. */
-const FINANCE_TAB_ACTIONS: Record<(typeof FINANCE_TABS)[number], StaffAction | undefined> = {
-  Summary: "finance.summary.view",
-  Invoices: "payment.invoices.view",
-  Reports: undefined,
+/** Money taken, given back and kept, from `/api/finance/summary`. Only a Pharmacy Manager reads it. */
+const PaymentTotals = (): React.JSX.Element => {
+  const summaryQuery = useQuery({
+    queryKey: FINANCE_SUMMARY_KEY,
+    queryFn: () => readOne<JsonRecord>("/api/finance/summary"),
+  });
+  const summary = summaryQuery.data;
+  const currency = text(summary?.currency, "VND");
+  return (
+    <div className="grid gap-2.5">
+      {summaryQuery.error ? <Alert variant="danger">{translateText(summaryQuery.error.message)}</Alert> : null}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2.5">
+        {(
+          [
+            ["Paid", "paid"],
+            ["Refunded", "refunded"],
+            ["Net", "net"],
+          ] as const
+        ).map(([label, field]) => (
+          <StatTile
+            key={label}
+            label={translateText(label)}
+            value={`${formatQuantity(summary?.[field] ?? 0)} ${currency}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
 };
 
-/**
- * Payment status, inventory valuation and operational reports. The active tab lives in the URL (`?tab=`); the list
- * filters of the invoice tab are URL-held too. Only the tabs the signed-in role may read are listed.
- */
-export const FinanceSection = ({
-  initialTab = "Summary",
-}: {
-  initialTab?: "Summary" | "Reports";
-}): React.JSX.Element => {
-  const list = useListUrlState({ q: "", status: "all", tab: initialTab });
-  const session = useSession();
-  // `/reporting` opens Reports only, whatever `?tab=` says (reporting Decision 8); `/finance` also shows the others.
-  const reportsOnly = initialTab === "Reports";
-  const visibleTabs = FINANCE_TABS.filter(
-    (item) => (!reportsOnly || item === "Reports") && tabGate(FINANCE_TAB_ACTIONS[item], session).allowed,
-  );
-  const requestedTab = (FINANCE_TABS as readonly string[]).includes(list.values.tab) ? list.values.tab : initialTab;
-  const tab = (visibleTabs as readonly string[]).includes(requestedTab) ? requestedTab : (visibleTabs[0] ?? initialTab);
-
+/** Payment invoices, with the payment totals above them for a Pharmacy Manager. */
+export const FinanceSection = (): React.JSX.Element => {
+  const totalsGate = useCan("finance.summary.view");
   return (
     <div className="grid gap-4">
-      <SubTabs
-        tabs={visibleTabs}
-        active={tab}
-        onChange={(next) => list.setValues({ tab: next, q: "", status: "all" }, { history: "push" })}
-      />
-      {tab === "Summary" ? <SummaryTab /> : null}
-      {tab === "Invoices" ? <InvoicesTab /> : null}
-      {tab === "Reports" ? <ReportsTab /> : null}
+      {totalsGate.allowed ? <PaymentTotals /> : null}
+      <InvoicesTab />
     </div>
   );
 };

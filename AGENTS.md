@@ -104,7 +104,7 @@ The local gateway and AWS ALB forward traffic with identical path patterns. The 
 - `/api/payments*` -> `payment-service:3006`
 - `/api/chatbot*` -> `chatbot-service:3008`
 - `/api/system*` -> `ops-console-service:3010` (Platform Admin only)
-- `/api/operations*`, `/api/dashboard*`, `/api/finance*`, `/api/audit*`, `/api/reports*` -> `operations-query-service:3007`
+- `/api/operations*`, `/api/dashboard*`, `/api/finance*`, `/api/audit*` -> `operations-query-service:3007`
 - Any other path, `/` included, returns a JSON 404.
 
 ## Database migrations and seeds

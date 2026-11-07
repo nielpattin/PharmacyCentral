@@ -71,7 +71,7 @@ views {
 
   view operationsDetail {
     title "operations-query-service"
-    description "The read model: dashboards, finance, audit and reports, fed by the events."
+    description "The read model: dashboards, finance and audit, fed by the events."
     include pharmacyCentral.services.operationsService
     include pharmacyCentral.services.operationsService.*
     include pharmacyCentral.data.postgres.operationsDb

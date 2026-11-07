@@ -13,7 +13,6 @@ export const shellLiterals: Record<string, string> = {
   Transfers: "Điều chuyển",
   Replenishment: "Bổ sung hàng",
   Procurement: "Đặt hàng",
-  Reporting: "Báo cáo",
   Finance: "Tài chính",
   "Master data": "Danh mục",
   Sites: "Cơ sở",
