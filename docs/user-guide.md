@@ -284,7 +284,10 @@ Counter flow for a pharmacist:
 
 **Finance** (Pharmacy Manager) shows the paid, refunded and net amounts, then the payment invoices. Stock value and products without a published price are in **Analytics**, on the **Tồn kho** tab.
 
-- **Invoices**: payment invoices with payment code, prescription or order, status, amount and created time. A Pharmacy Manager can **Refund** a paid invoice with a reason; refunding an online order is theirs alone. Cash is confirmed, and a counter invoice refunded, by a Pharmacist in Counter transactions.
+- **Totals**: **Paid**, **Refunded** and **Net**, with the time they were read and a **Làm mới** button. A tile shows `…` while it loads and `–` if the read fails.
+- **Invoices**: payment invoices with payment code, order, status, amount and created time. Select a code, or **Chi tiết**, to open the invoice panel: its payment and transfer content, invoice lines, reconciliation (expected against received amount), bank transactions and refunds, and a **Lịch sử** tab with the invoice's timeline.
+- **Refund**: a Pharmacy Manager can refund a paid online-order invoice. The first step asks for the amount (the whole invoice by default), the second for a reason of up to 500 characters, which starts empty. Cash is confirmed, and a counter invoice refunded, by a Pharmacist in Counter transactions; Finance has no **Confirm cash**.
+- Times on staff screens are in the Asia/Ho_Chi_Minh time zone.
 
 External accounting ledger posting is outside the scope of these screens.
 
@@ -398,7 +401,7 @@ For a per-role script over the full demo dataset, see [Demo walkthrough](demo-wa
 4. **Warehouse Staff**: open **Purchasing > Goods receipts** and record the goods receipt against that order. **Pharmacist** then opens **Inventory > Batches** and releases the new batch.
 5. **Warehouse Staff**: open **Inventory** to see balances and movements. Use the **Transfers** tab to create and ship a transfer, the **Returns** and **Stocktake** tabs, and the **Adjustments** tab to submit an adjustment for a Pharmacy Manager to approve.
 6. **Pharmacist**: sign in, open **Pharmacy counter > Prescriptions**, choose **Create prescription**, then **Dispense** on its row. Open the **Counter transactions** tab, create the invoice and confirm cash.
-7. **Pharmacy Manager**: open **Finance** and review the **Summary**, **Invoices** and **Reports** tabs, and refund a paid online order in **Invoices**.
+7. **Pharmacy Manager**: open **Finance**, read the totals, open an invoice to see its lines and history, and refund a paid online order.
 8. **Pharmacist**: open **Search synonyms**, submit a group, then sign in as another Pharmacist or the Pharmacy Manager to approve it; the proposer can never approve. Platform Admin only reads the list.
 9. **Customer**: open Customer Web at `http://customer.pharmacy.localhost/`, search for a product, add it to the cart, sign in, and check out with pickup or delivery. Open **Đơn hàng** (`/don-hang`) and the **Đơn của tôi** tab to track it, and try **Gửi đơn thuốc** and the shopping assistant.
 

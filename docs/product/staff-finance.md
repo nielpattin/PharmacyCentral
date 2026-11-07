@@ -3,7 +3,7 @@
 - **Status:** Current
 - **App and route:** staff-web, `/finance` (payment totals above the invoice list).
 - **Owner:** @nielpattin
-- **Last reviewed:** 2026-11-07
+- **Last reviewed:** 2026-11-07 (invoice panel, refresh, refund reason and time zone built)
 
 Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from industry practice, listed under Decisions; `[owner]` a recorded owner decision (none for this section yet). `(gap Gn)` marks target behavior the code does not meet yet, listed under Gaps. See [README](README.md).
 
@@ -32,7 +32,7 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 - Source: `[standard]` role definition and site scope; `[observed]` the current page.
 - Accepted when:
   - Signed in as Pharmacy Manager, `/finance` shows the payment totals and **Invoices**.
-  - No row in **Invoices** shows **Confirm cash**, for any role (gap G2).
+  - No row in **Invoices** shows **Confirm cash**, for any role. The control and its code were removed from this section; the service route stays for Counter transactions.
   - The invoice list and the totals include only invoices and money of my assigned sites (gap G7, G8).
   - The Customer column shows the short id, not a name (Decision 14).
 - Rules: [BR-PAY-009](../business-rules.md), [BR-AUTH-004](../business-rules.md).
@@ -41,9 +41,10 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 
 - Source: `[standard]` Decisions 6, 7 and 13.
 - Accepted when:
-  - A `Paid` row shows **Hoàn tiền** to a Pharmacy Manager, never to a Platform Admin (gap G1). A Pharmacist sees no refund control on this section.
-  - The dialog "Hoàn tiền thanh toán" has an empty, required field "Lý do hoàn tiền" with an "n/500" counter. **Hoàn tiền** stays disabled while the reason is empty or longer than 500 characters (gap G4).
-  - A confirmed refund calls `POST /api/payments/{id}/refund` with `{ "reason" }`. The toast "Đã hoàn tiền." shows, and the invoice list and totals refresh.
+  - A `Paid` online-order row shows **Hoàn tiền** to a Pharmacy Manager, never to a Platform Admin (gap G1). A counter invoice shows none. A Pharmacist sees no refund control on this section.
+  - The first dialog asks "Số tiền hoàn", pre-filled with the invoice amount; the whole amount refunds the invoice, a smaller one is a partial refund.
+  - The second dialog has an empty, required field "Lý do hoàn tiền" with an "n/500" counter. **Hoàn tiền** stays disabled while the reason is empty or longer than 500 characters, and the field accepts no more than 500.
+  - A confirmed refund calls `POST /api/payments/{id}/refund` with `{ "reason" }` and, for a partial refund, `"amount"`. The toast "Đã hoàn tiền." shows, and the invoice list and totals refresh.
   - A refused refund shows the server's Vietnamese message and keeps the dialog open with the reason typed.
   - `Pending`, `Failed`, `Refunded` and `Cancelled` rows show no refund control.
 - Rules: [BR-PAY-003](../business-rules.md) (the role in it is gap G1), [BR-ORD-010](../business-rules.md).
@@ -52,9 +53,10 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 
 - Source: `[standard]` Decisions 2, 3 and 19.
 - Accepted when:
-  - Selecting an invoice's code opens a detail panel in the page, not a JSON tab (gap G5).
-  - The panel shows: lines (product, quantity, unit price, amount); payment (code, method, amount, status, and for a `Pending` QR invoice the transfer content); provider transactions (reference, amount, time, outcome); reconciliation (expected amount, received amount, state); refunds (reason, time, actor); and a **History** tab (gap G6).
-  - Reconciliation reads `Open` (no money received), `Matched` (received equals the invoice amount), or `AmountMismatch` (received differs; the invoice stays unpaid; both amounts show in the danger tone).
+  - Selecting an invoice's code, or **Chi tiết** in its row, opens a side panel in the page, not a JSON tab.
+  - The **Chi tiết** tab shows: payment (code, method, amount, order, created time, and for a `Pending` QR invoice the transfer content); invoice lines (product, quantity, unit price, amount); reconciliation (state, expected amount, received amount, updated time); bank transactions (reference, amount, time); and refunds (amount, time, reason, actor). The header shows the invoice status.
+  - The **Lịch sử** tab is a timeline, newest first, of the invoice's own record: created, each payment attempt, each amount the bank reported, each refund with its reason. It comes from the same invoice read, so it needs no audit-log access.
+  - Reconciliation reads `Open` (no money received), `Matched` (received equals the invoice amount), `AmountMismatch` (received differs; the invoice stays unpaid; the received amount shows in the danger tone), `PartiallyRefunded` or `Refunded`.
   - Raw webhook bodies and signatures are never shown.
 - Rules: [BR-PAY-007](../business-rules.md), [BR-PAY-006](../business-rules.md) (signature data stays out of the UI).
 
@@ -63,7 +65,7 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 - Accepted when:
   - The status select offers **All statuses**, `Pending`, `Paid`, `Failed`, `Refunded`, `Cancelled`. The search (placeholder "Tìm theo số hóa đơn, mã đơn hoặc mã khách hàng") commits after a pause; `/` focuses it.
   - Rows are newest first, 25 to a page with numbered page buttons, **Trước** and **Sau**, and a "Trang N trong M" label; the next 100-row cursor page is read when the reader is one page from the end of what is loaded. The list never caps silently.
-  - **Created** and every other time shows in Asia/Ho_Chi_Minh (gap G14).
+  - **Created** and every other time on a staff screen shows in Asia/Ho_Chi_Minh (`formatDateTime`, `formatDate`).
   - **Export** downloads `invoices.csv` with every row of the current filter. It loads the remaining pages first; if a page fails it downloads nothing and shows the error (gap G15).
   - Filters and search survive a reload (URL state). Saved views are stored under `finance-invoices`.
 - Rules: [api-guide, Payments](../api-guide.md) (`GET /api/payments/invoices`).
@@ -73,15 +75,15 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 - Source: `[standard]` error and time rules, dashboard rules; `[observed]` the three tiles.
 - Accepted when:
   - Three tiles in this order: **Paid**, **Refunded**, **Net** (VND). Figures cover all time (Decision 17).
-  - While loading, tiles show a loading state, not `0`. On error the danger alert shows and tiles show no number (gap G11).
-  - A **Làm mới** control and an updated-at time sit above the tiles (gap G12).
+  - While loading, tiles show `…`, not `0`. On error the danger alert shows and tiles show `–`.
+  - A **Làm mới** control and an updated-at time sit above the tiles; the control is disabled while the read runs.
 - Rules: [api-guide](../api-guide.md) (`GET /api/finance/summary`); [BR-FIN-001](../business-rules.md).
 
 ## Contents and behavior
 
 - `[observed]` **Payment totals:** the three tiles (US5). Money shows the summary's currency.
-- `[observed]` **Invoices:** toolbar with the status select, saved views and search. Columns: Invoice (payment code, else short id), Order (hidden below the large breakpoint), Customer (hidden below the extra-large breakpoint), Amount (with currency; `VND` when the invoice has none), Status, Created (hidden below the large breakpoint), and pinned Actions. Status tones: `Pending` warning, `Paid` success, `Failed` danger, `Refunded` info, `Cancelled` neutral. Today the row actions are **Đối soát** (raw JSON in a new tab), **Confirm cash** and **Refund** (gaps G2, G5).
-- `[standard]` **Invoice detail:** the panel and History tab of US3, opened from the row.
+- `[observed]` **Invoices:** toolbar with the status select, saved views and search. Columns: Invoice (payment code, else short id), Order (hidden below the large breakpoint), Customer (hidden below the extra-large breakpoint), Amount (with currency; `VND` when the invoice has none), Status, Created (hidden below the large breakpoint), and pinned Actions. Status tones: `Pending` warning, `Paid` success, `Failed` danger, `Refunded` info, `Cancelled` neutral. The invoice code opens the panel. The row actions are **Chi tiết** and **Refund** (online-order `Paid` rows only).
+- `[observed]` **Invoice detail:** the panel and History tab of US3, opened from the row. `apps/staff-web/src/sections/finance/invoice-drawer.tsx` renders it; `invoice-detail.ts` builds the timeline.
 - `[observed]` Invoice amounts are not converted. Only VND is accepted ([BR-PAY-004](../business-rules.md)).
 
 ## States
@@ -97,7 +99,7 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 - `[standard]` Posting to an accounting ledger ([BR-FIN-001](../business-rules.md)).
 - `[standard]` Creating invoices. Counter invoices are created from prescriptions by a Pharmacist.
 - `[standard]` Any cash confirmation on this section. Counter cash is in Counter transactions. Online cash on delivery is confirmed at handover, on the order ([staff-online-orders.md](staff-online-orders.md); Decision 21).
-- `[standard]` Partial refunds and editing an invoice or an amount ([BR-PAY-003](../business-rules.md)).
+- `[standard]` Editing an invoice or an amount. A refund of part of an invoice exists in the API and the dialog ([BR-PAY-003](../business-rules.md)); there is no refund of more than what is left.
 - `[standard]` A period filter on the totals (Decision 17).
 - `[standard]` Stock value, reserved value, missing prices, the inventory valuation table and stock movement totals. They were on a Summary tab and were removed: Analytics (Inventory tab) shows stock value and missing prices, and Inventory shows balances and movements.
 - `[standard]` The QR image and transfer content at the counter (see the prescriptions spec). Webhook administration.
@@ -117,7 +119,7 @@ Decisions 8 and 16 belonged to the Reports tab, 9 and 20 to the unused strings a
 | # | Question | Decision | Why |
 | --- | --- | --- | --- |
 | 1 | What does Finance hold? | Payments only: the invoice list with its refund, and the paid, refunded and net totals. Stock value and stock movements are not Finance (Analytics and Inventory hold them). `[standard]` | Shopify's Finance holds balance, payouts and payments; its sales and inventory reports sit under Analytics. A figure shown in two places drifts. |
-| 2 | The reconciliation link opens raw JSON. What should it show? | A panel with expected amount, received amount and state (`Open`, `Matched`, `AmountMismatch`). No raw JSON. `[standard]` | BR-PAY-007 defines the states. Counter and payment rule: reconciliation is rendered in the page. |
+| 2 | The reconciliation link opens raw JSON. What should it show? | A panel with expected amount, received amount and state (`Open`, `Matched`, `AmountMismatch`, and after a refund `PartiallyRefunded` or `Refunded`), inside the invoice panel. No raw JSON. `[standard]` | BR-PAY-007 defines the states. Counter and payment rule: reconciliation is rendered in the page. |
 | 3 | SePay: should staff see the payment code and webhook status? | Yes, per invoice: payment code, transfer content for a `Pending` QR invoice, and provider transactions (reference, amount, time, outcome). Raw webhook bodies and signatures are never shown. The QR image stays at the counter. `[standard]` | Finance has to match money to invoices. Signatures and raw bodies are security data. Common practice. |
 | 4 | The refund reason has no shown limit. | The field shows "n/500". Empty or over 500 blocks submit. The server limit (1 to 500) stays. `[standard]` | BR-PAY-003 range. Counter and payment rule: the limit is shown in the form. |
 | 5 | Pharmacist access: the Pharmacist cannot open Finance, yet cash and refunds are Pharmacist actions. | The Pharmacist has no Finance section. Counter cash and counter refunds stay in Counter transactions. `[standard]` | Whoever takes the cash does not review the totals (segregation of duties). Owner may change (role policy). |
@@ -131,24 +133,17 @@ Decisions 8 and 16 belonged to the Reports tab, 9 and 20 to the unused strings a
 | 15 | Which sites do these figures cover? | Invoices and the totals cover the user's assigned sites; Platform Admin sees all. `[standard]` | BR-AUTH-004 and the site scope rule. |
 | 17 | Do the summary totals have a period? | All time, with no period filter in this section. `[standard]` | Keeps one figure per tile, as the API answers. A period filter is a later change. Owner may change (reporting period). |
 | 18 | How do the totals show they are current? | A **Làm mới** control and an updated-at time. `[standard]` | Dashboard rule: manual refresh next to the data, and the age of the numbers shown. |
-| 19 | Who sees the history of an invoice? | A **History** tab in the invoice detail, from an entity-scoped read. Shown to the users who see the invoice. `[standard]` | Entity history rule. The full audit log stays Platform Admin only (BR-AUDIT-004). |
+| 19 | Who sees the history of an invoice? | A **History** tab in the invoice detail: a timeline built from the invoice's own attempts, bank transactions and refunds, from the same read as the panel. Shown to the users who see the invoice. `[standard]` | Entity history rule. The full audit log stays Platform Admin only (BR-AUDIT-004). |
 | 21 | Who confirms cash for an online cash-on-delivery order? | The Pharmacist confirms it at handover, on the online order. Not on this section. `[standard]` | Cash changes hands at handover. Role definition: the Pharmacist hands over online orders. |
 
-## Gaps against the code (2026-10-26)
+## Gaps against the code (2026-11-07)
 
-Gaps G9, G10, G16 and G17 belonged to the Reports tab, G13 to the valuation and G18 to the unused strings, and were removed with them.
+Gaps G9, G10, G16 and G17 belonged to the Reports tab, G13 to the valuation and G18 to the unused strings, and were removed with them. G2 (cash control), G4 (refund reason), G5 (invoice panel), G6 (history), G11 and G12 (tiles), and G14 (time zone) were closed on 2026-11-07; the numbers stay so that citations still resolve.
 
 | ID | The spec requires | The code does today | Where |
 | --- | --- | --- | --- |
-| G1 | A Pharmacy Manager refunds an online-order `Paid` invoice here (Decision 6). | The service admits Pharmacist and Pharmacy Manager on the refund route, and `refundRefusal` admits only Pharmacy Manager for an online-order invoice, only Pharmacist for a counter invoice, so a Platform Admin is refused both. The **Refund** button shows to a Pharmacy Manager on every `Paid` row, so **Refund** on a counter row fails with "Chỉ Dược sĩ được hoàn tiền hóa đơn tại quầy." | `apps/payment-service/src/modules/payment-access.ts` (`refundRefusal`); `invoices-tab.tsx`; `docs/business-rules.md` BR-PAY-003 |
-| G2 | No cash confirmation on Finance; Platform Admin does not confirm cash (Decision 6). | **Confirm cash** stays in `invoices-tab.tsx`, behind `payment.confirmCash` (Pharmacist only). The service admits `confirm-counter` to Pharmacist only. No role that opens Finance passes the gate, so no row shows the button, but the code remains. | `invoices-tab.tsx`; the `trusted-request.ts` of each service |
+| G1 | A Pharmacy Manager refunds an online-order `Paid` invoice here (Decision 6). | The service admits Pharmacist and Pharmacy Manager on the refund route, and `refundRefusal` admits only Pharmacy Manager for an online-order invoice and only Pharmacist for a counter invoice, so a Platform Admin is refused both. The **Refund** button already hides on counter invoices (`isCounterInvoice`). `docs/business-rules.md` BR-PAY-003 still says the whole invoice is refunded, while the route takes an optional `amount`. | `apps/payment-service/src/modules/payment-access.ts` (`refundRefusal`); `invoices-tab.tsx`; `docs/business-rules.md` BR-PAY-003 |
 | G3 | Online cash on delivery is confirmed by a Pharmacist at handover (Decision 21). | No staff control does it. Finance is closed to the Pharmacist. Counter transactions leaves out order invoices (`isCounterInvoice`). The online orders screen is view-only and shows only the payment status. | `apps/staff-web/src/sections/orders-section.tsx`; `sections/sales/rules.ts`; `sections/prescriptions/counter-tab.tsx` |
-| G4 | Empty required refund reason with an "n/500" counter, no default (Decisions 4 and 7). | Pre-filled "Điều chỉnh vận hành" and label "Lý do hoàn tiền:"; no counter. The server enforces 1 to 500. The counter tab pre-fills "Customer request" (its spec owns that row). | `invoices-tab.tsx` (`refund`); `counter-tab.tsx` (`refund`); `payment-routes.ts` (refund schema) |
-| G5 | Invoice detail panel with reconciliation and provider transactions in the page (Decisions 2 and 3). | **Đối soát** opens `/api/payments/{id}/reconciliation` as raw JSON in a new tab. The record holds only expected amount, received amount and state. No detail view exists. | `invoices-tab.tsx`; `payment-routes.ts` (reconciliation route); `payment-repository.ts` (`reconciliationRecords`) |
-| G6 | **History** tab on the invoice from an entity-scoped read (Decision 19). | No invoice history exists. The audit log is Platform Admin only, so a Pharmacy Manager has no history. | `trusted-request.ts`; `docs/business-rules.md` BR-AUDIT-004; payment-service (no entity history read) |
 | G7 | Invoices narrowed to the user's assigned sites (Decision 15). | `/api/payments/invoices` is not in `DEFAULT_SITE_SCOPED_PREFIXES`. `payment_invoices` has no site column (customer, order and prescription only). A Pharmacy Manager sees every site. The counter tab has the same gap. | `trusted-request.ts`; `apps/payment-service/src/modules/payments/infrastructure/schema.ts`; `payment-repository.ts` (`listInvoices`) |
 | G8 | Paid, Refunded and Net for the user's assigned sites (Decision 15). | Paid, Refunded and Net read `finance_entries` with no site filter, and that table has no site column. | `apps/operations-query-service/src/modules/operations-repository.ts` (`financeSummary`); `shared/infrastructure/schema.ts` (`financeEntries`) |
-| G11 | Tiles show a loading state or the error, never `0` as data (US5). | `summary?.[field] ?? 0`: tiles show `0` while the summary loads and when it fails. | `apps/staff-web/src/sections/finance-section.tsx` |
-| G12 | **Làm mới** control and updated-at time (Decision 18). | Neither exists. | `finance-section.tsx` |
-| G14 | Times in Asia/Ho_Chi_Minh (Decision 20). | `formatDateTime` uses the browser's time zone. | `apps/staff-web/src/staff-api.ts` (`formatDateTime`) |
 | G15 | Exports cover every row of the filter; a failed load writes no file (Decision 11). | The table export writes the loaded rows only, through the visible columns. A failed page load leaves the rows loaded so far exportable. | `apps/staff-web/src/components/data-table.tsx` (`exportCurrentRows`); `invoices-tab.tsx` |

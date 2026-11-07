@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+**staff-web, docs**
+
+- Finance's invoice panel replaces the raw-JSON **Đối soát** link. Selecting an invoice code, or **Chi tiết**, opens a side panel with the payment and transfer content, the invoice lines, reconciliation, bank transactions and refunds, and a **Lịch sử** tab with the invoice's timeline. It reads `GET /api/payments/{id}`, so no API changed. The Finance totals have a **Làm mới** button and an updated-at time, and show `…` while loading and `–` on failure instead of `0`. The refund reason starts empty with an `n/500` counter, and staff dates and times read in Asia/Ho_Chi_Minh. The `verify-pharmacy-central` skill has a `staff-finance` feature file.
+
 **deploy, docs**
 
 - CI audits production dependencies (`pnpm audit --prod --audit-level=high`), scans the history for committed secrets with gitleaks, and runs CodeQL on JavaScript and TypeScript for each pull request into `main` and weekly (`.github/workflows/codeql.yml`). Dependabot proposes weekly npm, GitHub Actions, Docker and Compose updates (`.github/dependabot.yml`). The `seroval` override in `pnpm-workspace.yaml` (`>=1.6.11`) closes three high and two moderate advisories that came in through `@tanstack/react-router`.
@@ -101,6 +105,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Seed B no longer uses the administrator for business writes. The administrator creates the sites; the Pharmacy Manager imports the master data and proposes search synonyms, Warehouse Staff imports the opening stock and does the receiving, transfers, returns, stocktakes and adjustments. A second demo manager, `manager2@pharmacycentral.vn`, raises the purchase orders the first one approves. The managers now hold all four sites and the warehouse account the three that hold stock.
 
 ### Removed
+
+**staff-web, docs**
+
+- The **Confirm cash** control and code are gone from Finance; cash is confirmed in Counter transactions and at handover. The Finance refund no longer pre-fills "Điều chỉnh vận hành" as the reason. `docs/business-rules.md` BR-PAY-003 and the Finance user guide now describe the partial refund the API and the dialog already had.
 
 **operations-query-service, ops-console-service, staff-web, deploy, docs**
 

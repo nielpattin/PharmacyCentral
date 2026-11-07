@@ -549,9 +549,9 @@ Danh sách đơn thuốc cho khách chỉ trả đơn gắn `customerId` là tà
 
 Thanh toán tại quầy bằng tiền mặt hoặc chuyển khoản đã nhận được ghi nhận qua `POST /payments/:id/confirm-counter`. Chỉ hóa đơn `Pending` được xác nhận; người xác nhận lấy từ `X-Actor-Id`; quyền Pharmacist (role khác, kể cả Platform Admin, bị từ chối, BR-AUTH-010).
 
-### BR-PAY-003. Hoàn tiền yêu cầu lý do và hoàn toàn bộ hóa đơn
+### BR-PAY-003. Hoàn tiền yêu cầu lý do và không vượt quá số tiền còn lại
 
-`POST /payments/:id/refund` cần `reason` (1–500 ký tự). Chỉ hóa đơn `Paid` được hoàn ("Only paid invoices can be refunded"). Số tiền hoàn bằng số tiền hóa đơn; trạng thái thành `Refunded` và phát `payment.invoice.refunded.v1`. Quyền theo loại hóa đơn: hóa đơn tại quầy (có đơn thuốc) chỉ Pharmacist; hóa đơn đơn online chỉ Pharmacy Manager. Sai quyền: 403 `role_forbidden`.
+`POST /payments/:id/refund` cần `reason` (1–500 ký tự). Chỉ hóa đơn `Paid` được hoàn ("Only paid invoices can be refunded"). `amount` là tùy chọn: bỏ trống là hoàn toàn bộ số tiền còn lại; nhập nhỏ hơn là hoàn một phần (đối soát `PartiallyRefunded`, hóa đơn giữ `Paid`); lớn hơn số còn lại bị từ chối 409 `refund_exceeds_remaining`. Khi hoàn hết, trạng thái thành `Refunded` và phát `payment.invoice.refunded.v1`. Quyền theo loại hóa đơn: hóa đơn tại quầy (có đơn thuốc) chỉ Pharmacist; hóa đơn đơn online chỉ Pharmacy Manager. Sai quyền: 403 `role_forbidden`.
 
 ### BR-PAY-004. Hóa đơn chỉ dùng VND
 

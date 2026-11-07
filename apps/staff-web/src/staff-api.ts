@@ -132,10 +132,13 @@ export const numberValue = (value: unknown, fallback = 0): number => {
  */
 type Formatters = { quantity: Intl.NumberFormat; dateTime: Intl.DateTimeFormat; date: Intl.DateTimeFormat };
 
+/** Every time on a staff screen reads in the pharmacy's time zone, whatever the browser's. */
+export const DISPLAY_TIME_ZONE = "Asia/Ho_Chi_Minh";
+
 const createFormatters = (locale: string): Formatters => ({
   quantity: new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
-  dateTime: new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }),
-  date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }),
+  dateTime: new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: DISPLAY_TIME_ZONE }),
+  date: new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: DISPLAY_TIME_ZONE }),
 });
 const FORMATTERS: Record<Language, Formatters> = { en: createFormatters("en-US"), vi: createFormatters("vi-VN") };
 

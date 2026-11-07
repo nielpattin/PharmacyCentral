@@ -15,8 +15,10 @@ export const refundAmount = (typed: string, invoiceAmount: unknown): number | un
  * Asks how much to pay back (the whole invoice by default), then why. Resolves with null when either question is
  * cancelled. A typed amount the server cannot accept (not a number, more than what is left) is refused there and shown.
  */
+export const REFUND_REASON_MAX = 500;
+
 export const useRefundRequest = (
-  defaultReason: string,
+  defaultReason?: string,
 ): ((invoiceAmount: unknown) => Promise<RefundRequest | null>) => {
   const prompt = usePrompt();
   return async (invoiceAmount) => {
@@ -33,7 +35,8 @@ export const useRefundRequest = (
       title: "Refund payment",
       label: "Refund reason",
       required: true,
-      defaultValue: translateText(defaultReason),
+      maxLength: REFUND_REASON_MAX,
+      ...(defaultReason ? { defaultValue: translateText(defaultReason) } : {}),
       confirmLabel: "Refund",
     });
     if (reason === null) return null;

@@ -1,16 +1,6 @@
-import {
-  Alert,
-  Button,
-  DataTable,
-  RowActions,
-  Select,
-  StatusBadge,
-  type DataColumn,
-  type StatusTone,
-} from "@pharmacy/ui";
+import { Alert, Button, DataTable, RowActions, Select, StatusBadge, type DataColumn } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
-import { useConfirm } from "../../components/confirm.tsx";
 import { dataTableLabels } from "../../components/data-table-labels.ts";
 import { SavedViewsMenu } from "../../components/saved-views-menu.tsx";
 import { useHotkey } from "../../hooks/useHotkey.ts";
@@ -25,7 +15,8 @@ import { customerLabel, orderLabel, shortId } from "../procurement/labels.ts";
 import { formatDateTime, idOf, text, type JsonRecord } from "../../staff-api.ts";
 import { formatAmount, isCounterInvoice } from "../sales/rules.ts";
 import { moneyLocale } from "../sales/shared.tsx";
-import { ReconciliationDrawer } from "./reconciliation-drawer.tsx";
+import { INVOICE_TONE } from "./invoice-detail.ts";
+import { InvoiceDrawer } from "./invoice-drawer.tsx";
 import { useRefundRequest } from "./refund-request.ts";
 import { FINANCE_SUMMARY_KEY, INVOICES_KEY } from "./query-keys.ts";
 
@@ -33,27 +24,18 @@ const LIST_DEFAULTS = { q: "", status: "all" } as const;
 
 const INVOICE_STATUSES = ["Pending", "Paid", "Failed", "Refunded", "Cancelled"] as const;
 
-const INVOICE_TONE: Readonly<Record<string, StatusTone | undefined>> = {
-  Pending: "warning",
-  Paid: "success",
-  Failed: "danger",
-  Refunded: "info",
-  Cancelled: "neutral",
-};
-
 /**
- * Payment invoices, newest first. A Pharmacist confirms cash here. A Pharmacy Manager refunds the invoice of an online
- * order; a counter invoice is refunded by a Pharmacist from the counter payments list, so no refund shows for it here.
+ * Payment invoices, newest first. Opening a row shows the invoice in a side panel. A Pharmacy Manager refunds the
+ * invoice of an online order, with a reason typed from empty; a counter invoice is refunded by a Pharmacist from the
+ * counter payments list, so no refund shows for it here. Cash is confirmed at the counter or at handover, never here.
  * Platform Admin reads the list and acts on nothing, as the payment routes allow.
  */
 export const InvoicesTab = (): React.JSX.Element => {
-  const confirmGate = useCan("payment.confirmCash");
   const refundGate = useCan("payment.refund");
   const customerGate = useCan("customer.lookup");
   const list = useListUrlState(LIST_DEFAULTS);
   const run = useStaffAction();
-  const confirm = useConfirm();
-  const askRefund = useRefundRequest("Operational correction");
+  const askRefund = useRefundRequest();
   const listRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useSearchDraft(list.values.q, (value) => list.setValues({ q: value }));
 
@@ -89,21 +71,7 @@ export const InvoicesTab = (): React.JSX.Element => {
     customerLabel,
   );
 
-  const confirmCash = async (row: JsonRecord): Promise<void> => {
-    const accepted = await confirm({
-      title: "Confirm cash payment?",
-      description: "The invoice will be marked as paid.",
-      confirmLabel: "Confirm cash",
-    });
-    if (!accepted) return;
-    await run({
-      path: `/api/payments/${encodeURIComponent(idOf(row))}/confirm-counter`,
-      invalidate: [INVOICES_KEY, FINANCE_SUMMARY_KEY],
-      success: "Cash payment confirmed.",
-    });
-  };
-
-  const [reconciling, setReconciling] = useState<JsonRecord>();
+  const [opened, setOpened] = useState<JsonRecord>();
 
   const refund = async (row: JsonRecord): Promise<void> => {
     const request = await askRefund(row.amount);
@@ -120,7 +88,16 @@ export const InvoicesTab = (): React.JSX.Element => {
     {
       key: "paymentCode",
       label: translateText("Invoice"),
-      render: (row) => text(row.paymentCode, "") || shortId(row.id),
+      render: (row) => (
+        <button
+          type="button"
+          className="cursor-pointer text-left font-medium text-ink underline-offset-2 hover:underline"
+          onClick={() => setOpened(row)}
+        >
+          {text(row.paymentCode, "") || shortId(row.id)}
+        </button>
+      ),
+      text: (row) => text(row.paymentCode, "") || shortId(row.id),
       truncate: 24,
     },
     {
@@ -167,14 +144,9 @@ export const InvoicesTab = (): React.JSX.Element => {
       pinned: "right",
       render: (row) => (
         <RowActions label={text(row.paymentCode, "") || shortId(row.id)}>
-          <Button size="sm" variant="ghost" onClick={() => setReconciling(row)}>
-            {translateText("Reconciliation")}
+          <Button size="sm" variant="ghost" onClick={() => setOpened(row)}>
+            {translateText("Details")}
           </Button>
-          {confirmGate.allowed && text(row.status, "") === "Pending" ? (
-            <Button size="sm" onClick={() => void confirmCash(row)}>
-              {translateText("Confirm cash")}
-            </Button>
-          ) : null}
           {refundGate.allowed && !isCounterInvoice(row) && text(row.status, "") === "Paid" ? (
             <Button size="sm" variant="danger-ghost" onClick={() => void refund(row)}>
               {translateText("Refund")}
@@ -220,12 +192,11 @@ export const InvoicesTab = (): React.JSX.Element => {
         paging={{ ...invoices.paging, pages: true }}
         exportCsv={{ filename: "invoices.csv" }}
       />
-      {reconciling ? (
-        <ReconciliationDrawer
-          invoiceId={idOf(reconciling)}
-          title={text(reconciling.paymentCode, "") || shortId(reconciling.id)}
-          currency={text(reconciling.currency, "VND")}
-          onClose={() => setReconciling(undefined)}
+      {opened ? (
+        <InvoiceDrawer
+          invoiceId={idOf(opened)}
+          title={text(opened.paymentCode, "") || shortId(opened.id)}
+          onClose={() => setOpened(undefined)}
         />
       ) : null}
     </div>

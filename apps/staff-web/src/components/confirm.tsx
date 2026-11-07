@@ -50,6 +50,8 @@ export type PromptOptions = {
   required?: boolean;
   type?: "text" | "password";
   minLength?: number;
+  /** Shows an "n/max" counter and refuses a longer answer. */
+  maxLength?: number;
   defaultValue?: string;
 };
 
@@ -198,7 +200,10 @@ const PromptDialog = ({
 }): React.JSX.Element => {
   const [value, setValue] = useState(options.defaultValue ?? "");
   const required = options.required ?? false;
-  const valid = (!required || value.trim() !== "") && value.length >= (options.minLength ?? 0);
+  const valid =
+    (!required || value.trim() !== "") &&
+    value.length >= (options.minLength ?? 0) &&
+    (options.maxLength === undefined || value.length <= options.maxLength);
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     if (valid) onAnswer(value);
@@ -209,12 +214,17 @@ const PromptDialog = ({
         {options.description ? <p className="text-sm text-muted">{translateText(options.description)}</p> : null}
         <Field
           label={translateText(options.label)}
-          {...(options.minLength ? { hint: `${translateText("Minimum length")}: ${options.minLength}` } : {})}
+          {...(options.maxLength
+            ? { hint: `${value.length}/${options.maxLength}` }
+            : options.minLength
+              ? { hint: `${translateText("Minimum length")}: ${options.minLength}` }
+              : {})}
         >
           <Input
             type={options.type ?? "text"}
             value={value}
             required={required}
+            {...(options.maxLength ? { maxLength: options.maxLength } : {})}
             onChange={(event) => setValue(event.target.value)}
           />
         </Field>
