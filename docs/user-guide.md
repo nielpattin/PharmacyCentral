@@ -138,7 +138,7 @@ A figure that could not be read shows "—", never 0. A sale counts once its inv
 The **Catalog** workspace holds Products, Units, Pricing, Search synonyms, Sites, Storage locations and Suppliers. Platform Admin reads each page; a Pharmacy Manager writes it.
 
 - **Catalog** lists products (SKU, name, category, manufacturer). **Create product** and the edit action take SKU, barcode, name, category, manufacturer, generic name, active ingredient, indications, strength, dosage form, package description, registration number, prescription-required flag (`true`/`false`), image URL or uploaded image, status, notes and active flag. A product can be deleted after confirmation.
-- **Units** lists the units of a selected product. **Add product unit** sets the unit name, barcode, conversion factor to the base unit, and the base, default sale and default purchase flags (`true`/`false`).
+- **Units** lists the units of a selected product. **Add product unit** sets the unit name, barcode, conversion factor to the base unit, and the base, default sale and default purchase flags (`true`/`false`). The table shows the conversion factor without trailing zeros (10, not 10.000000) and one **Vai trò** column that lists the roles of each unit: Lưu kho (base), Bán mặc định and Mua mặc định.
 - **Pricing** lists price records with **Publish** and **Archive** actions. **Create price draft** takes the product and product unit, unit price, currency, effective-from date, optional effective-to date and notes. The form has no site field. Publishing is refused when the price window overlaps another published price.
 
 Prices are recorded per product unit in the catalog service.

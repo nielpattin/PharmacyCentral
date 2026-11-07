@@ -316,7 +316,7 @@ There are two seeds. They are separate commands with separate code, and neither 
 | --- | --- | --- |
 | Command | `pnpm run seed:default` | `pnpm run seed:demo` |
 | Code | `apps/identity-service/seed.mjs` | `tools/seed-demo.mjs` and `apps/identity-service/seed-demo.mjs` |
-| Creates | Exactly one account: the Platform Admin `admin@pharmacycentral.vn`. Nothing else. | Product images, sites, demo accounts (two managers, pharmacist, warehouse staff, shoppers), storage locations (warehouses), suppliers, products with their units of measure, opening balances, search synonyms, demo activity and 60 days of backdated sales history. |
+| Creates | Exactly one account: the Platform Admin `admin@pharmacycentral.vn`. Nothing else. | Product images, sites, demo accounts (two managers, pharmacist, warehouse staff, shoppers), storage locations (warehouses), suppliers, products with their units of measure (the base unit from `products.csv` plus the pack units derived from each package description, such as Viên, Vỉ, Hộp and Thùng, a sample barcode per pack unit in the 29x in-store range, and Hộp as the default purchase unit; `tools/lib/demo-units.mjs`), opening balances, search synonyms, demo activity and 60 days of backdated sales history. |
 | Password | `ADMIN_PASSWORD` in `.env` | `DEMO_ACCOUNT_PASSWORD` in `.env` |
 | When | Always: on every start and release. It updates the admin by id, so repeating it is safe. | Opt-in, after A. Every step skips what exists, so repeating it is safe. |
 | Needs | The migrated identity database | A, the running stack, and the sites created before the accounts (the script keeps that order). |

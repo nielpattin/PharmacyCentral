@@ -14,7 +14,7 @@ import { translateText } from "../../i18n.ts";
 import { withActionColumn } from "../../lib/action-column.ts";
 import { can } from "../../permissions/staff-permissions.ts";
 import { idOf, readRows, text, type JsonRecord } from "../../staff-api.ts";
-import { yesNo } from "./catalog-fields.tsx";
+import { formatFactor, unitRoles } from "./catalog-fields.tsx";
 import { unitQueryKey } from "./catalog-keys.ts";
 import { UnitDrawer } from "./unit-drawer.tsx";
 
@@ -61,24 +61,17 @@ export const UnitsPage = (): React.JSX.Element => {
 
   const columns: Column[] = [
     { key: "unitName", label: translateText("Unit name"), truncate: 24 },
-    { key: "conversionFactorToBaseUnit", label: translateText("Conversion factor") },
     {
-      key: "isBaseUnit",
-      label: translateText("Base unit"),
-      text: (row) => yesNo(row.isBaseUnit),
-      render: (row) => yesNo(row.isBaseUnit),
+      key: "conversionFactorToBaseUnit",
+      label: translateText("Conversion factor"),
+      text: (row) => formatFactor(row.conversionFactorToBaseUnit),
+      render: (row) => formatFactor(row.conversionFactorToBaseUnit),
     },
     {
-      key: "isDefaultSaleUnit",
-      label: translateText("Default sale unit"),
-      text: (row) => yesNo(row.isDefaultSaleUnit),
-      render: (row) => yesNo(row.isDefaultSaleUnit),
-    },
-    {
-      key: "isDefaultPurchaseUnit",
-      label: translateText("Default purchase unit"),
-      text: (row) => yesNo(row.isDefaultPurchaseUnit),
-      render: (row) => yesNo(row.isDefaultPurchaseUnit),
+      key: "roles",
+      label: translateText("Unit roles"),
+      text: (row) => unitRoles(row),
+      render: (row) => unitRoles(row) || "-",
     },
     { key: "barcode", label: translateText("Barcode"), truncate: 20 },
     {

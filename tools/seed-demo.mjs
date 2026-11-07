@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { datasets, csvRows } from "../apps/staff-web/src/import-datasets.ts";
 import { uploadProductImages } from "../apps/catalog-service/scripts/upload-product-images.mjs";
 import { seedHistory, seedWarehouseActivity } from "./seed-demo-history.mjs";
+import { seedDemoUnits } from "./lib/demo-units.mjs";
 import { pendingSynonymGroup, searchSynonymGroups } from "./lib/demo-synonyms.mjs";
 import { awsSqlRunner, runOpsTask } from "./lib/aws-ops.mjs";
 import { localSqlRunner } from "./lib/sql-batch.mjs";
@@ -235,6 +236,8 @@ for (const id of order) {
     continue;
   }
   console.log(`${dataset.label}: ${JSON.stringify(result?.summary ?? result)}`);
+  if (id === "catalog")
+    console.log(`Pack units, barcodes and purchase unit: ${await seedDemoUnits({ manager: importer, admin })} changes`);
 }
 // After the accounts, so the pharmacist's session carries SITE-RTL access when it approves.
 console.log("Seeding search synonyms...");

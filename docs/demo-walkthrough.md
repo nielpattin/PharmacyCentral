@@ -26,7 +26,7 @@ Every date in the dataset is relative to the day it is seeded: batch expiries, t
 
 | Area | Content |
 | --- | --- |
-| Catalog | 54 products with photos: 36 medicines, 18 supplies and devices. 14 are prescription-only. 7 have no price (shown as "Liên hệ báo giá"). |
+| Catalog | 54 products with photos: 36 medicines, 18 supplies and devices. 14 are prescription-only. 7 have no price (shown as "Liên hệ báo giá"). Most carry several units of measure: a tablet product has Viên, Vỉ, Hộp and Thùng, with Viên the stock and default sale unit and Hộp the default purchase unit; see the Đơn vị page. |
 | Sales | About 200 sales over the last 60 days (208 in the last run; the seed prints the exact count): counter prescriptions paid in cash, online orders paid by SePay QR or cash on delivery, pickup and delivery, a few cancelled and refunded. Volume grows over the period, higher on weekends. |
 | Purchasing | 25 approved orders (`PO-HIST-001` to `025`) received in full with a unit cost per line. `PO-DEMO-001` is partly received, `PO-DEMO-002` and `PO-WH-001` wait for approval, `PO-DEMO-003` is cancelled. |
 | Expiry | Batches that expire in 6, 12, 20, 27 and 45 days, and one already expired. |

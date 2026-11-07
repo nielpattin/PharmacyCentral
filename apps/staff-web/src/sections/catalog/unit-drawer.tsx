@@ -10,7 +10,7 @@ import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard.ts";
 import { translateText } from "../../i18n.ts";
 import { idOf, text, type JsonRecord } from "../../staff-api.ts";
-import { CheckboxField, firstError, requiredText } from "./catalog-fields.tsx";
+import { CheckboxField, firstError, formatFactor, requiredText } from "./catalog-fields.tsx";
 import { orNull } from "./catalog-format.ts";
 import { unitQueryKey } from "./catalog-keys.ts";
 
@@ -26,7 +26,7 @@ type UnitFormValues = {
 const toUnitFormValues = (unit: JsonRecord | undefined): UnitFormValues => ({
   unitName: text(unit?.unitName, ""),
   barcode: text(unit?.barcode, ""),
-  conversionFactorToBaseUnit: text(unit?.conversionFactorToBaseUnit, "1"),
+  conversionFactorToBaseUnit: unit ? formatFactor(unit.conversionFactorToBaseUnit) : "1",
   isBaseUnit: unit?.isBaseUnit === true,
   isDefaultSaleUnit: unit?.isDefaultSaleUnit === true,
   isDefaultPurchaseUnit: unit?.isDefaultPurchaseUnit === true,
