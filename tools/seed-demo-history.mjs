@@ -710,7 +710,6 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
   await cartOf("khachhang@pharmacycentral.vn", [
     ["THU-0010", 4, true],
     ["VTYT-005", 1, false],
-    ["THU-0003", 20, false],
   ]);
   await cartOf("nguyen.lan@example.com", [
     ["VTYT-001", 2, true],
@@ -798,9 +797,7 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
         database: "operations_query_service",
         script: `${shiftTable(shiftsWithInvoices)}
        update audit_events a set occurred_at = a.occurred_at - s.d from s where a.entity_id = s.id;
-       update finance_entries f set occurred_at = f.occurred_at - s.d from s where f.payload like '%' || s.id::text || '%';
-       update report_rows r set occurred_at = r.occurred_at - s.d
-         from s where r.subject_id = s.id or r.payload like '%' || s.id::text || '%';`,
+       update finance_entries f set occurred_at = f.occurred_at - s.d from s where f.payload like '%' || s.id::text || '%';`,
       },
     );
   }
@@ -830,12 +827,23 @@ export async function seedHistory({ baseUrl, admin, signIn, requireEnv, runSql }
       database: "operations_query_service",
       script: `update audit_events set occurred_at = ${stamp(now - 60 * DAY)} where entity_id in (${uuidList(purchaseIds)});`,
     },
+    // The last statement works each entry's running balance out again: the dates above moved entries past each other, and
+    // the last entry of a batch at a location must equal its balance.
     {
       database: "inventory_service",
       script: `update stock_ledger_entries set occurred_at = ${stamp(now - 130 * DAY)}, created_at = ${stamp(now - 130 * DAY)}
        where movement_type = 'OpeningBalance' and product_id in (${uuidList(deadIds)});
      update stock_ledger_entries set occurred_at = ${stamp(now - 78 * DAY)}, created_at = ${stamp(now - 78 * DAY)}
-       where movement_type = 'OpeningBalance' and product_id not in (${uuidList(deadIds)});`,
+       where movement_type = 'OpeningBalance' and product_id not in (${uuidList(deadIds)});
+     update stock_ledger_entries e set quantity_after = r.running
+       from (
+         select id, sum(quantity_delta) over (
+           partition by product_batch_id, site_id, storage_location_id
+           order by occurred_at, created_at, id
+         ) as running
+         from stock_ledger_entries
+       ) r
+       where e.id = r.id and e.quantity_after is distinct from r.running;`,
     },
     // Expiry dates last, so the sales above never ran into a batch that was about to be unavailable.
     {

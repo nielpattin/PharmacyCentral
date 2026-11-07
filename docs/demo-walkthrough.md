@@ -27,13 +27,13 @@ Every date in the dataset is relative to the day it is seeded: batch expiries, t
 | Area | Content |
 | --- | --- |
 | Catalog | 54 products with photos: 36 medicines, 18 supplies and devices. 14 are prescription-only. 7 have no price (shown as "Liên hệ báo giá"). |
-| Sales | About 200 sales over the last 60 days (206 in the last run; the seed prints the exact count): counter prescriptions paid in cash, online orders paid by SePay QR or cash on delivery, pickup and delivery, a few cancelled and refunded. Volume grows over the period, higher on weekends. |
-| Purchasing | 5 approved orders (`PO-HIST-001` to `005`) received in full with a unit cost per line. `PO-DEMO-001` is partly received, `PO-DEMO-002` and `PO-WH-001` wait for approval, `PO-DEMO-003` is cancelled. |
+| Sales | About 200 sales over the last 60 days (208 in the last run; the seed prints the exact count): counter prescriptions paid in cash, online orders paid by SePay QR or cash on delivery, pickup and delivery, a few cancelled and refunded. Volume grows over the period, higher on weekends. |
+| Purchasing | 25 approved orders (`PO-HIST-001` to `025`) received in full with a unit cost per line. `PO-DEMO-001` is partly received, `PO-DEMO-002` and `PO-WH-001` wait for approval, `PO-DEMO-003` is cancelled. |
 | Expiry | Batches that expire in 6, 12, 20, 27 and 45 days, and one already expired. |
 | Stock health | Dead stock (no movement for over 90 days), five shop products that end the period short against their sales, 7 products with stock but no price. |
 | Warehouse | Goods receipts `GR-WH-001` to `003`, replenishment, returns, a posted and an open stocktake, adjustments, all in several states. |
-| Action plans | 29 open plans raised by the system (the last run): 5 expiry, 10 dead stock, 7 price warnings, 7 replenishment. |
-| Customer | The demo shopper has dozens of orders in every state, one out for delivery, and a cart with one ticked and two unticked lines. |
+| Action plans | 58 open plans raised by the system (the last run, five pharmacies and two warehouses): 5 expiry, 26 dead stock, 7 price warnings, 20 replenishment. |
+| Customer | The demo shopper has dozens of orders in every state, one out for delivery, and a cart with one ticked and one unticked line. |
 | Search | Six approved synonym groups and one (`ho khan, ho không đờm, ho rát cổ`) waiting for approval. |
 
 ## 1. Customer (Customer Web)
@@ -41,7 +41,7 @@ Every date in the dataset is relative to the day it is seeded: batch expiries, t
 Sign in at `/tai-khoan` as `khachhang@pharmacycentral.vn`.
 
 1. **Home and catalog**: the menu groups products (Thuốc, Thực phẩm chức năng, Thiết bị y tế). Every product has a photo. A prescription-only product shows a disabled "Cần đơn thuốc" button; an unpriced one shows "Liên hệ báo giá".
-2. **Cart (`/don-hang`, tab "Đặt hàng")**: the cart already has three lines, only the first ticked. Tick another, reload the page, and the ticks stay. Only ticked lines go into the order.
+2. **Cart (`/don-hang`, tab "Đặt hàng")**: the cart already has two lines, only the first ticked. Tick another, reload the page, and the ticks stay. Only ticked lines go into the order.
 3. **Place an order**: pick pickup at the shop, or delivery to an address in Kim Mã or Chùa Láng (the fee comes from the server). Pay by SePay QR or cash. If the browser has no WebGL the map shows an unavailable notice and the rest still works.
 4. **Track it (tab "Đơn của tôi")**: the featured card is the order that is out for delivery, with the stepper. Below it are the other states, filterable by "Đang xử lý", "Hoàn tất", "Đã huỷ".
 5. **Shopping assistant and "Gửi đơn thuốc"**: they need an AI provider set up (see Platform Admin, step 4). Without one they answer that the assistant is unavailable.
@@ -57,7 +57,7 @@ Sign in at `/tai-khoan` as `khachhang@pharmacycentral.vn`.
 ## 3. Pharmacy Manager (Staff Web)
 
 1. **Bảng điều khiển**: shop figures for today.
-2. **Phân tích**: pick the last 30 or 60 days. Revenue, orders and average order value against the previous period, the counter and online split, and gross profit with the share of revenue it covers (about two thirds, because opening stock carries no cost). Below: stock turnover, days of inventory, stock value (with the count of products missing a price), expiry buckets, and dead stock.
+2. **Phân tích**: pick the last 30 or 60 days. Revenue, orders and average order value against the previous period, the counter and online split, and gross profit with the share of revenue it covers (about 28% in the last run, because opening stock carries no cost and most sales ship from it; say so rather than quote a margin). Below: stock turnover, days of inventory, stock value (with the count of products missing a price), expiry buckets, and dead stock.
 3. **Kế hoạch hành động**: the manager reassigns (**Giao lại**: owner, due date, title), never changes the status. Pick a plan and give it to another pharmacist.
 4. **Đặt hàng**: the tab "Gợi ý đặt hàng" suggests quantities from sales speed, stock and supplier lead time. Create draft orders in bulk. Approve `PO-DEMO-002`, created by the second manager, as the second person.
 5. **Điều chuyển**: approve `TR-DEMO-001`. `TR-DEMO-002` is shipped and `TR-DEMO-003` received.
@@ -75,7 +75,7 @@ Sign in at `/tai-khoan` as `khachhang@pharmacycentral.vn`.
 ## 5. Platform Admin (Staff Web)
 
 1. **Người dùng**: accounts, roles and site access.
-2. **Kiểm toán**: the activity log with 60 days of events; filter by action or entity.
+2. **Nhật ký hoạt động**: the activity log with 60 days of events; filter by action or entity.
 3. **Hệ thống**: service health, metrics, queues and the search index. Admin only.
 4. **Tích hợp AI**: the four AI feature cards. Set a provider here to turn the assistant and prescription reader on.
 5. The admin has no Phân tích page and no revenue anywhere: sales figures are the manager's. It reads every other page and changes nothing there: no write buttons show. It has no Kế hoạch hành động, Tài chính, Đơn thuốc or Đơn hàng online page either: plans and money are the pharmacy's work, and orders and prescriptions hold customers' personal and health data. Everything else is the job of the manager, the pharmacist and the warehouse account.
