@@ -635,6 +635,8 @@ services:
     restart: unless-stopped
     environment:
       API_BASE_URL: http://gateway:8080
+      # Its origin joins the image sources of the Content-Security-Policy, so the photos Floci serves over http show.
+      PUBLIC_MEDIA_URL: ${PUBLIC_MEDIA_URL}
     depends_on:
       gateway:
         condition: service_healthy
@@ -657,6 +659,7 @@ services:
     restart: unless-stopped
     environment:
       API_BASE_URL: http://gateway:8080
+      PUBLIC_MEDIA_URL: ${PUBLIC_MEDIA_URL}
     depends_on:
       gateway:
         condition: service_healthy

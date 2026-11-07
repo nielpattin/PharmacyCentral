@@ -7,7 +7,14 @@ set -e
 #   from any https origin because product photos are stored wherever the catalog points; inline styles are allowed
 #   because the UI libraries set style attributes.
 #   HSTS: sent only when the request reached the ALB over https (X-Forwarded-Proto), never over plain http.
-SECURITY_HEADERS="add_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.vietmap.vn; worker-src 'self' blob:; child-src blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'\" always;
+#   Local Floci serves the photos over plain http (http://localhost:4566), which `https:` does not cover, so when
+#   PUBLIC_MEDIA_URL is set its origin is allowed too. On AWS the variable is empty and S3 is https.
+IMG_SRC="'self' data: blob: https:"
+if [ -n "$PUBLIC_MEDIA_URL" ]; then
+  MEDIA_ORIGIN=$(printf '%s' "$PUBLIC_MEDIA_URL" | sed -E 's|^([A-Za-z][A-Za-z0-9+.-]*://[^/]+).*|\1|')
+  IMG_SRC="$IMG_SRC $MEDIA_ORIGIN"
+fi
+SECURITY_HEADERS="add_header Content-Security-Policy \"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src $IMG_SRC; font-src 'self' data:; connect-src 'self' https://*.vietmap.vn; worker-src 'self' blob:; child-src blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'\" always;
         add_header X-Content-Type-Options \"nosniff\" always;
         add_header X-Frame-Options \"DENY\" always;
         add_header Referrer-Policy \"strict-origin-when-cross-origin\" always;
