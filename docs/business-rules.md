@@ -1054,7 +1054,7 @@ Tài khoản được tạo với `roles = [Platform Admin]` và `siteIds = []`.
 `phoneNumber` gồm chữ số và các ký tự `+ ( ) -` và khoảng trắng, độ dài 8–20.
 
 - Khách hàng có thể để trống hoặc xóa số điện thoại.
-- Platform Admin sửa tên và số điện thoại của nhân viên khác qua `PUT /api/admin/users/{id}/profile` (cả hai bắt buộc, không tự sửa mình: 403 `self_change_forbidden`); bản ghi kiểm toán `identity.user.profile-updated` chỉ ghi tên các trường đã đổi.
+- Platform Admin sửa tên và số điện thoại của nhân viên khác qua `PUT /api/admin/users/{id}/profile` (cả hai bắt buộc, không tự sửa mình: 403 `self_change_forbidden`); bản ghi nhật ký hoạt động `identity.user.profile-updated` chỉ ghi tên các trường đã đổi.
 - Nhân viên luôn có số điện thoại: `PATCH /api/auth/me` cho đổi sang số khác nhưng từ chối số rỗng hoặc `null` (400 `phone_required`).
 
 ### BR-USER-011. Tra cứu khách chỉ cho Pharmacist và Platform Admin

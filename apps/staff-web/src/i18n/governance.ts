@@ -264,7 +264,7 @@ export const governanceLiterals: Record<string, string> = {
   "Customer consultation assistant that answers from catalog lookups.":
     "Trợ lý tư vấn khách hàng, trả lời dựa trên tra cứu danh mục.",
   "Read models for dashboards, finance and the audit log.":
-    "Mô hình đọc cho bảng điều khiển, tài chính và nhật ký kiểm toán.",
+    "Mô hình đọc cho bảng điều khiển, tài chính và nhật ký hoạt động.",
   "Login, registration, email verification, setup status and Google sign-in are public.":
     "Đăng nhập, đăng ký, xác minh email, trạng thái thiết lập và đăng nhập Google là công khai.",
   "The product list. Other methods on this path go to catalog-service.":
@@ -409,6 +409,7 @@ export const governanceLiterals: Record<string, string> = {
   "AI credential": "Khóa AI",
   Movement: "Biến động kho",
   "Inventory import": "Nhập tồn kho",
+  "Action plan": "Kế hoạch hành động",
   Sales: "Bán hàng",
   Identity: "Danh tính",
   "Clear filters": "Xóa bộ lọc",
@@ -476,5 +477,5 @@ export const governanceLiterals: Record<string, string> = {
   "Failed sign-ins": "Đăng nhập thất bại",
   "Failed sign-in": "Đăng nhập thất bại",
   "Last 24 hours": "24 giờ qua",
-  "Recent audit activity": "Hoạt động kiểm toán gần đây",
+  "Recent audit activity": "Hoạt động gần đây",
 };

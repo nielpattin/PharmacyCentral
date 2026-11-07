@@ -42,6 +42,7 @@ export const AUDIT_ENTITY_GROUPS: ReadonlyArray<{ label: string; types: readonly
       { value: "stocktake-line", label: "Stocktake line" },
       { value: "return", label: "Return" },
       { value: "replenishment", label: "Replenishment" },
+      { value: "action-plan", label: "Action plan" },
       { value: "inventory-import", label: "Inventory import" },
     ],
   },
