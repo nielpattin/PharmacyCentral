@@ -77,7 +77,7 @@ Two seeds create these accounts. The default seed (A, `pnpm run seed:default`) c
 
 Site access uses the site codes from `data/import-samples/sites.csv`. The demo seed creates the sites before it creates the accounts, so each account gets its site access in one pass, and it stops if a site is missing. Each run resets the roles and site access of the accounts it seeds to the table above.
 
-Seed B works the way the app does, with the working roles doing the work. Platform Admin only creates the sites, one by one, because the import belongs to a Pharmacy Manager. The first Pharmacy Manager imports the storage locations, the suppliers and the products and prices, and proposes the search synonym groups. Warehouse Staff import the opening balances, receive goods, create transfers, adjustments, returns and stocktakes. The second Pharmacy Manager raises the purchase orders the first one approves, because nobody approves their own record.
+Seed B works the way the app does, with the working roles doing the work. Platform Admin creates the sites one by one and imports the storage locations and the suppliers, because they own that data. The first Pharmacy Manager imports the products and prices, and proposes the search synonym groups. Warehouse Staff import the opening balances, receive goods, create transfers, adjustments, returns and stocktakes. The second Pharmacy Manager raises the purchase orders the first one approves, because nobody approves their own record.
 
 The demo accounts are for local development and demonstration only. The default admin is the one account a real deployment starts with.
 
@@ -126,16 +126,16 @@ A figure that could not be read shows "—", never 0. A sale counts once its inv
 
 ### Sites and storage locations
 
-- **Sites** (Platform Admin, Pharmacy Manager) lists sites with code, name, type and address. Use **Create site** to add one. Platform Admin creates and deletes a site; editing an existing site is a Pharmacy Manager's.
-- **Storage locations** (Platform Admin, Pharmacy Manager) lists storage locations per site. Use **Create location** to add one; only a Pharmacy Manager writes a storage location.
+- **Sites** (Platform Admin, Pharmacy Manager) lists sites with code, name, type and address. Only Platform Admin creates, edits or deletes a site; a Pharmacy Manager reads the list.
+- **Storage locations** (Platform Admin, Pharmacy Manager) lists storage locations per site. Use **Create location** to add one; only Platform Admin writes a storage location.
 
 ### Suppliers
 
-**Suppliers** (Platform Admin, Pharmacy Manager) lists approved vendors. Use **Create supplier** to add one; only a Pharmacy Manager writes a supplier.
+**Suppliers** (Platform Admin, Pharmacy Manager) lists approved vendors. Use **Create supplier** to add one; only Platform Admin writes a supplier.
 
 ### Catalog, units and pricing
 
-The **Catalog** workspace holds Products, Units, Pricing, Search synonyms, Sites, Storage locations and Suppliers. Platform Admin reads each page; a Pharmacy Manager writes it.
+The **Catalog** workspace holds Products, Units, Pricing, Search synonyms, Sites, Storage locations and Suppliers. A Pharmacy Manager writes Products, Units and Pricing and reads the rest; Platform Admin writes Sites, Storage locations and Suppliers and reads the rest.
 
 - **Catalog** lists products (SKU, name, category, manufacturer). **Create product** and the edit action take SKU, barcode, name, category, manufacturer, generic name, active ingredient, indications, strength, dosage form, package description, registration number, prescription-required flag (`true`/`false`), image URL or uploaded image, status, notes and active flag. A product can be deleted after confirmation.
 - **Units** lists the units of a selected product. **Add product unit** sets the unit name, barcode, conversion factor to the base unit, and the base, default sale and default purchase flags (`true`/`false`). The table shows the conversion factor without trailing zeros (10, not 10.000000) and one **Vai trò** column that lists the roles of each unit: Lưu kho (base), Bán mặc định and Mua mặc định.
@@ -158,7 +158,7 @@ Prices are recorded per product unit in the catalog service.
 
 ### Data import
 
-**Data import** is not a sidebar group. A Pharmacy Manager gets **Import** on **Sites**, **Storage locations**, **Suppliers** and **Products**; Warehouse Staff get **Import opening balances** on **Inventory**. Platform Admin has no import action and creates sites one at a time in **Sites**. The datasets keep this dependency order:
+**Data import** is not a sidebar group. Platform Admin gets **Import** on **Sites**, **Storage locations** and **Suppliers**; a Pharmacy Manager gets **Import** on **Products**; Warehouse Staff get **Import opening balances** on **Inventory**. The datasets keep this dependency order:
 
 1. **Sites**
 2. **Storage locations**

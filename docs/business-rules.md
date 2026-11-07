@@ -52,8 +52,8 @@ Quy tắc được lấy từ code trong `apps/*-service/src` (contracts, routes
 
 | Role | Ý nghĩa nghiệp vụ |
 | --- | --- |
-| Platform Admin | Quản trị nền tảng: người dùng, role, site access, audit, cấu hình AI, trang System, tạo và xóa site, đổi chủ sở hữu, hạn và tiêu đề của kế hoạch hành động. Xem được (chỉ đọc) mọi màn hình vận hành; không ghi gì thuộc ba role còn lại (BR-AUTH-010) |
-| Pharmacy Manager | Dữ liệu nền, giá, đơn mua, tài chính; duyệt điều chỉnh, điều chuyển, kiểm kê; xem (chỉ đọc) các dữ liệu quầy; duyệt và hoàn tiền đơn online |
+| Platform Admin | Quản trị nền tảng: người dùng, role, site access, audit, cấu hình AI, trang System, tạo, sửa, xóa và nhập site, vị trí lưu trữ và nhà cung cấp, đổi chủ sở hữu, hạn và tiêu đề của kế hoạch hành động. Xem được (chỉ đọc) mọi màn hình vận hành; không ghi gì thuộc ba role còn lại (BR-AUTH-010) |
+| Pharmacy Manager | Xem (chỉ đọc) site, vị trí lưu trữ và nhà cung cấp; sản phẩm, đơn vị, giá, đơn mua, tài chính; duyệt điều chỉnh, điều chuyển, kiểm kê; xem (chỉ đọc) các dữ liệu quầy; duyệt và hoàn tiền đơn online |
 | Pharmacist | Làm việc tại quầy: tạo và cấp phát đơn thuốc, thanh toán tại quầy, trả lời tư vấn, tra cứu khách, kiểm định batch, gửi yêu cầu bổ sung hàng, biên tập từ đồng nghĩa |
 | Warehouse Staff | Nhận hàng, điều chuyển, trả hàng/loại khỏi tồn, kiểm kê (đếm), đề xuất điều chỉnh, duyệt và thực hiện bổ sung hàng, nhập số dư đầu kỳ |
 
@@ -79,7 +79,8 @@ Mỗi service kiểm tra role của access token bằng bảng role trong `src/m
 | `GET /api/procurement/purchase-orders` | Pharmacy Manager, Warehouse Staff |
 | Ghi `/api/procurement/purchase-orders` | Pharmacy Manager |
 | `/api/procurement/goods-receipts` | Warehouse Staff |
-| Ghi `/api/sites`, `/api/storage-locations`, `/api/suppliers`, `/api/products`, `/api/pricing/prices` (kể cả nhập dữ liệu) | Pharmacy Manager (tạo và xóa site: Platform Admin) |
+| Ghi `/api/sites`, `/api/storage-locations`, `/api/suppliers` (kể cả nhập dữ liệu của ba loại này) | Platform Admin |
+| Ghi `/api/products`, `/api/pricing/prices` (kể cả nhập sản phẩm và giá) | Pharmacy Manager |
 | `/api/inventory/imports/opening-balances` | Warehouse Staff |
 | `GET /api/inventory/replenishment`, `GET /api/inventory/batches` | Pharmacist, Pharmacy Manager, Warehouse Staff |
 | `POST /api/inventory/replenishment` | Pharmacist, Pharmacy Manager |
@@ -139,8 +140,8 @@ Người tạo vẫn được hủy điều chuyển và yêu cầu bổ sung c�
 Platform Admin không làm thay Pharmacist, Pharmacy Manager hay Warehouse Staff. Ở từng service, Platform Admin:
 
 - Đọc được mọi đường dẫn nhân viên (dashboard, phân tích, tài chính, đơn online, đơn thuốc, hóa đơn, tồn kho, lô, biến động, nhận hàng, đơn mua, gợi ý bổ sung, điều chuyển, kiểm kê, trả hàng, điều chỉnh, kiểm định, danh mục, giá, nhà cung cấp, kho, site, từ đồng nghĩa) và không bị giới hạn theo site (BR-AUTH-003).
-- Ghi được đúng các việc không role nào khác làm: quản lý người dùng, role và site access (`/api/admin`), audit, cấu hình AI (BR-AUTH-007), trang System, tạo và xóa site, và đổi chủ sở hữu, hạn và tiêu đề của kế hoạch hành động (BR-PLAN-002).
-- Bị từ chối mọi ghi còn lại với 403 `role_forbidden`: sửa danh mục, giá, nhà cung cấp, kho, sửa site, nhập dữ liệu, đơn mua và nhận hàng, mọi ghi tồn kho, duyệt hay từ chối bổ sung hàng, kiểm định lô, chuyển trạng thái và hoàn tiền đơn online, thao tác quầy, biên tập hay duyệt từ đồng nghĩa, đổi trạng thái kế hoạch hành động.
+- Ghi được đúng các việc không role nào khác làm: quản lý người dùng, role và site access (`/api/admin`), audit, cấu hình AI (BR-AUTH-007), trang System, tạo, sửa, xóa và nhập site, vị trí lưu trữ và nhà cung cấp, và đổi chủ sở hữu, hạn và tiêu đề của kế hoạch hành động (BR-PLAN-002).
+- Bị từ chối mọi ghi còn lại với 403 `role_forbidden`: sửa danh mục và giá, nhập sản phẩm, đơn mua và nhận hàng, mọi ghi tồn kho, duyệt hay từ chối bổ sung hàng, kiểm định lô, chuyển trạng thái và hoàn tiền đơn online, thao tác quầy, biên tập hay duyệt từ đồng nghĩa, đổi trạng thái kế hoạch hành động.
 
 Quy tắc nằm ở `roleRefusal` của mỗi service, và được giữ giống nhau ở mọi service (ADR 0017, ADR 0019). Tài khoản vừa có Platform Admin vừa có role khác vẫn dùng được quyền của role khác.
 

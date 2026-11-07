@@ -44,19 +44,19 @@ export const ROUTE_TABLE: readonly RouteRow[] = [
     path: "/api/sites*",
     service: "catalog-service",
     access: { kind: "roles", roles: STAFF_ROLES },
-    note: "Reads are staff reads. Create and delete need Platform Admin; edits need the Pharmacy Manager role.",
+    note: "Reads are staff reads. Writes need Platform Admin.",
   },
   {
     path: "/api/storage-locations*",
     service: "catalog-service",
     access: { kind: "roles", roles: STAFF_ROLES },
-    note: "Writes need the Pharmacy Manager role.",
+    note: "Reads are staff reads. Writes need Platform Admin.",
   },
   {
     path: "/api/suppliers*",
     service: "catalog-service",
     access: { kind: "roles", roles: STAFF_ROLES },
-    note: "Writes need the Pharmacy Manager role.",
+    note: "Reads are staff reads. Writes need Platform Admin.",
   },
   {
     path: "/api/pricing*",

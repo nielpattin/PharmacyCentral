@@ -12,6 +12,7 @@ const signedHeaders = (roles: string[]): Promise<Record<string, string>> =>
   bearerHeaders({ actorType: "employee", actorId: "66666666-6666-4666-8666-666666666666", roles });
 
 const MANAGER = await signedHeaders(["Pharmacy Manager"]);
+const ADMIN = await signedHeaders(["Platform Admin"]);
 
 const createTestServer = async (importService: CatalogImportService | undefined) => {
   const app = express();
@@ -122,7 +123,7 @@ describe("catalog import API", () => {
 
     const response = await fetch(`${testServer.url}/products/imports`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...MANAGER },
+      headers: { "content-type": "application/json", ...ADMIN },
       body: JSON.stringify({
         schemaVersion: 1,
         storageLocations: [{ siteCode: "SITE-WH", code: "WH-A", name: "A", locationType: "Warehouse" }],
@@ -142,10 +143,41 @@ describe("catalog import API", () => {
 
     const response = await fetch(`${testServer.url}/products/imports`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...MANAGER },
+      headers: { "content-type": "application/json", ...ADMIN },
       body: JSON.stringify({ schemaVersion: 1, suppliers: [{ code: "SUP", name: "Supplier" }] }),
     });
 
     expect(response.status).toBe(503);
+  });
+
+  it("keeps the master data in an import to Platform Admin and the products to the Pharmacy Manager", async () => {
+    const importCatalog = vi.fn<(input: unknown) => Promise<unknown>>().mockResolvedValue({});
+    const testServer = await createTestServer({ import: importCatalog } as unknown as CatalogImportService);
+    server = testServer.server;
+    const post = async (headers: Record<string, string>, body: unknown): Promise<Response> =>
+      fetch(`${testServer.url}/products/imports`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify(body),
+      });
+    const master = { schemaVersion: 1, suppliers: [{ code: "SUP", name: "Supplier" }] };
+    const catalog = {
+      schemaVersion: 1,
+      products: [
+        {
+          sku: "SKU-001",
+          name: "Product",
+          units: [{ unitName: "Box", conversionFactorToBaseUnit: 1, isBaseUnit: true }],
+          price: { unitPrice: 12000, effectiveFrom: "2025-01-01" },
+        },
+      ],
+    };
+
+    expect((await post(MANAGER, master)).status).toBe(403);
+    expect((await post(ADMIN, catalog)).status).toBe(403);
+    expect(importCatalog).not.toHaveBeenCalled();
+    expect((await post(ADMIN, master)).status).toBe(200);
+    expect((await post(MANAGER, catalog)).status).toBe(200);
+    expect(importCatalog).toHaveBeenCalledTimes(2);
   });
 });

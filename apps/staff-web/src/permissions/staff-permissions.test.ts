@@ -70,8 +70,8 @@ const admitted: Record<StaffAction, readonly StaffRole[]> = {
   "salesTarget.set": [PM],
   "actionPlan.reassign": [PM],
   "catalog.write": [PM],
-  "catalog.site.create": [],
-  "catalog.site.delete": [],
+  "masterdata.write": [],
+  "masterdata.import": [],
   "catalog.import": [PM],
   "stock.import": [WAREHOUSE],
   "synonym.write": [PHARMACIST, PM],
@@ -97,8 +97,8 @@ const platformAdminActions: readonly StaffAction[] = [
   "inventory.returns.view",
   "replenishment.view",
   "actionPlan.reassign",
-  "catalog.site.create",
-  "catalog.site.delete",
+  "masterdata.write",
+  "masterdata.import",
   "governance.user.write",
   "ai.credential.write",
 ];
@@ -258,7 +258,7 @@ describe("site scope", () => {
   it("reports the role before the site when the role is refused", () => {
     expect(canAtSite("catalog.write", { roles: [WAREHOUSE], userId: "u", siteIds: ["site-a"] }, "site-a")).toEqual({
       allowed: false,
-      reason: "Chỉ Quản lý nhà thuốc được thay đổi danh mục và dữ liệu nền.",
+      reason: "Chỉ Quản lý nhà thuốc được thay đổi danh mục, đơn vị và giá.",
     });
   });
 });

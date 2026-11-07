@@ -229,7 +229,7 @@ export const createCatalogRouter = (
     }
   });
 
-  router.put("/sites/:id", managers, async (request, response) => {
+  router.put("/sites/:id", platformAdminOnly, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     const parsed = siteInputSchema.partial().safeParse(request.body);
@@ -283,7 +283,7 @@ export const createCatalogRouter = (
     response.json(location);
   });
 
-  router.post("/storage-locations", managers, async (request, response) => {
+  router.post("/storage-locations", platformAdminOnly, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = storageLocationInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidRequest(response);
@@ -295,7 +295,7 @@ export const createCatalogRouter = (
     }
   });
 
-  router.put("/storage-locations/:id", managers, async (request, response) => {
+  router.put("/storage-locations/:id", platformAdminOnly, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     const parsed = storageLocationUpdateSchema.safeParse(request.body);
@@ -316,7 +316,7 @@ export const createCatalogRouter = (
     }
   });
 
-  router.delete("/storage-locations/:id", managers, async (request, response) => {
+  router.delete("/storage-locations/:id", platformAdminOnly, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);
@@ -344,7 +344,7 @@ export const createCatalogRouter = (
     response.json(supplier);
   });
 
-  router.post("/suppliers", managers, async (request, response) => {
+  router.post("/suppliers", platformAdminOnly, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const parsed = supplierInputSchema.safeParse(request.body);
     if (!parsed.success) return invalidRequest(response);
@@ -355,7 +355,7 @@ export const createCatalogRouter = (
     }
   });
 
-  router.put("/suppliers/:id", managers, async (request, response) => {
+  router.put("/suppliers/:id", platformAdminOnly, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     const parsed = supplierInputSchema.partial().safeParse(request.body);
@@ -369,7 +369,7 @@ export const createCatalogRouter = (
     }
   });
 
-  router.delete("/suppliers/:id", managers, async (request, response) => {
+  router.delete("/suppliers/:id", platformAdminOnly, async (request, response) => {
     if (!repository) return databaseUnavailable(response);
     const id = idParamSchema.safeParse(request.params);
     if (!id.success) return invalidRequest(response);

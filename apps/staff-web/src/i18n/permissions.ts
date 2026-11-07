@@ -67,11 +67,13 @@ export const permissionLiterals: Record<string, string> = {
     "Chỉ Nhân viên kho được duyệt, từ chối hoặc hoàn tất yêu cầu bổ sung hàng.",
   "Only Warehouse Staff or the person who requested it can cancel a replenishment request.":
     "Chỉ Nhân viên kho hoặc người tạo yêu cầu mới được hủy yêu cầu bổ sung hàng.",
-  "Only a Pharmacy Manager can change the catalog and master data.":
-    "Chỉ Quản lý nhà thuốc được thay đổi danh mục và dữ liệu nền.",
-  "Only a Platform Admin can create or delete a site.": "Chỉ Quản trị nền tảng được tạo hoặc xóa cơ sở.",
-  "Only a Pharmacy Manager can import products, sites, storage locations or suppliers.":
-    "Chỉ Quản lý nhà thuốc được nhập sản phẩm, cơ sở, vị trí lưu trữ hoặc nhà cung cấp.",
+  "Only a Pharmacy Manager can change the catalog, units and prices.":
+    "Chỉ Quản lý nhà thuốc được thay đổi danh mục, đơn vị và giá.",
+  "Only a Platform Admin can create, edit or delete sites, storage locations and suppliers.":
+    "Chỉ Quản trị nền tảng được tạo, sửa hoặc xóa cơ sở, vị trí lưu trữ và nhà cung cấp.",
+  "Only a Platform Admin can import sites, storage locations or suppliers.":
+    "Chỉ Quản trị nền tảng được nhập cơ sở, vị trí lưu trữ hoặc nhà cung cấp.",
+  "Only a Pharmacy Manager can import products.": "Chỉ Quản lý nhà thuốc được nhập sản phẩm.",
   "Only Warehouse Staff can import opening balances.": "Chỉ Nhân viên kho được nhập tồn đầu kỳ.",
   "Only a Pharmacist or Pharmacy Manager can change search synonyms.":
     "Chỉ Dược sĩ hoặc Quản lý nhà thuốc được sửa từ đồng nghĩa tìm kiếm.",

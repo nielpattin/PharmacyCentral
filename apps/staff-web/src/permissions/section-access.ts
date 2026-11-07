@@ -4,7 +4,8 @@ import { hasStaffRole } from "./staff-permissions.ts";
 /**
  * Which roles may open each sidebar section. This is the role-by-section table of
  * `docs/product/staff-shell-sign-in-and-navigation.md`, listed in table order. Platform Admin opens the read screens of
- * every operation and the four admin sections, and none of the work screens: the pharmacist overview and the imports.
+ * every operation, the four admin sections and the imports of sites, storage locations and suppliers, and none of the
+ * work screens: the pharmacist overview and the product and stock imports.
  */
 export const sectionRoles: Record<Section, readonly string[]> = {
   dashboard: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],
@@ -25,9 +26,9 @@ export const sectionRoles: Record<Section, readonly string[]> = {
   pricing: ["Platform Admin", "Pharmacy Manager"],
   supplier: ["Platform Admin", "Pharmacy Manager"],
   importProducts: ["Pharmacy Manager"],
-  importSites: ["Pharmacy Manager"],
-  importLocations: ["Pharmacy Manager"],
-  importSuppliers: ["Pharmacy Manager"],
+  importSites: ["Platform Admin"],
+  importLocations: ["Platform Admin"],
+  importSuppliers: ["Platform Admin"],
   importStock: ["Warehouse Staff"],
   receiving: ["Platform Admin", "Warehouse Staff"],
   stocktake: ["Platform Admin", "Pharmacy Manager", "Warehouse Staff"],

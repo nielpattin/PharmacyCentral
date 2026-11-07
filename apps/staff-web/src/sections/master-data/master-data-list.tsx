@@ -18,7 +18,7 @@ import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { useUnsavedChangesGuard } from "../../hooks/useUnsavedChangesGuard.ts";
 import { translateText } from "../../i18n.ts";
 import { useSession } from "../../auth.ts";
-import { can, canAtSite, type AccessResult } from "../../permissions/staff-permissions.ts";
+import { can } from "../../permissions/staff-permissions.ts";
 import { idOf, readRows, text, type JsonRecord } from "../../staff-api.ts";
 import { sameValues, type MasterDataConfig, type RecordValues } from "./master-data-config.ts";
 import { MasterRecordForm } from "./master-record-form.tsx";
@@ -66,15 +66,8 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
 
   const [editor, setEditor] = useState<Editor>();
   const session = useSession();
-  const isSiteRecord = config.id === "sites";
-  // Site create and delete are Platform Admin only (master-data Decision 11); other records need `catalog.write`.
-  const createGate = isSiteRecord ? can("catalog.site.create", session) : can("catalog.write", session);
-  // Edit and delete on a record of one site need `catalog.write` and that site in scope (master-data Decision 10).
-  // A site is its own scope, so a Pharmacy Manager edits only assigned sites. A record with no site needs the role.
-  const siteOf = (row: JsonRecord): string | undefined => {
-    const id = isSiteRecord ? text(row.id, "") : text(row.siteId, "");
-    return id === "" ? undefined : id;
-  };
+  // Sites, storage locations and suppliers are written by Platform Admin only; the Pharmacy Manager reads them.
+  const writeGate = can("masterdata.write", session);
   const dirty = editor !== undefined && !sameValues(editor.values, editor.baseline);
   useUnsavedChangesGuard(dirty, "Your changes have not been saved.");
 
@@ -145,7 +138,7 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
     },
     { label: "Focus search" },
   );
-  useHotkey("n", openCreate, { label: "Create new", when: editor === undefined && createGate.allowed });
+  useHotkey("n", openCreate, { label: "Create new", when: editor === undefined && writeGate.allowed });
   useHotkey(
     "mod+s",
     (event) => {
@@ -154,16 +147,6 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
     },
     { label: "Save", allowWhileEditing: true, when: editor !== undefined },
   );
-
-  const gatesFor = (row: JsonRecord): { editGate: AccessResult; deleteGate: AccessResult } => {
-    const siteId = siteOf(row);
-    const editGate = siteId === undefined ? can("catalog.write", session) : canAtSite("catalog.write", session, siteId);
-    return { editGate, deleteGate: isSiteRecord ? can("catalog.site.delete", session) : editGate };
-  };
-  const hasRowAction = (row: JsonRecord): boolean => {
-    const { editGate, deleteGate } = gatesFor(row);
-    return editGate.allowed || deleteGate.allowed;
-  };
 
   const columns: Column[] = [
     ...config.columns.map((column): Column => {
@@ -191,15 +174,14 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
       align: "right",
       width: 170,
       render: (row) => {
-        const { editGate, deleteGate } = gatesFor(row);
         return (
           <RowActions label={translateText("Actions")}>
-            {editGate.allowed ? (
+            {writeGate.allowed ? (
               <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>
                 {translateText("Edit")}
               </Button>
             ) : null}
-            {deleteGate.allowed ? (
+            {writeGate.allowed ? (
               <Button variant="danger-ghost" size="sm" onClick={() => void remove(row)}>
                 {translateText("Delete")}
               </Button>
@@ -214,7 +196,7 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
     <>
       <PageActions>
         <ImportAction {...importByKind[config.id]} />
-        {createGate.allowed ? (
+        {writeGate.allowed ? (
           <Button size="sm" onClick={openCreate}>
             {translateText(config.createLabel)}
           </Button>
@@ -234,7 +216,7 @@ export const MasterDataList = ({ config }: { config: MasterDataConfig }): React.
         <DataTable
           storageKey={`staff:master-data:${config.id}`}
           rows={list.rows}
-          columns={withActionColumn(columns, list.rows.some(hasRowAction))}
+          columns={withActionColumn(columns, writeGate.allowed)}
           getKey={(row) => idOf(row)}
           loading={list.isLoading}
           search={{

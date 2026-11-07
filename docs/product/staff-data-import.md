@@ -15,7 +15,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
 
 ## Users and entry points
 
-- `[standard]` Pharmacy Manager: the four catalog pages (Products and prices, Sites, Storage locations, Suppliers). Warehouse Staff: **Stock** only. Pharmacist and customers: no import page. Platform Admin: none of the five pages, and every import write is refused (BR-AUTH-010). Gates are in [Rules and designs](#rules-and-designs).
+- `[owner]` 2026-11-07: Platform Admin imports Sites, Storage locations and Suppliers; Pharmacy Manager imports **Products and prices** only (the manager reads the three master data lists and no longer writes them). Warehouse Staff: **Stock** only. Pharmacist and customers: no import page. Platform Admin has no product or stock import, and every other import write is refused (BR-AUTH-010). Gates are in [Rules and designs](#rules-and-designs).
 - `[observed]` Entry: the **Data import** group in the staff-web sidebar (`apps/staff-web/src/App.tsx`), one item per dataset.
 - `[standard]` Signed-in staff only. A customer has no staff role (BR-AUTH-006). A session that ends mid-page follows D6: a visible notice, then sign-in, then return to the page.
 - `[standard]` Every row must name sites the actor is assigned to (BR-AUTH-004).
@@ -40,7 +40,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
   - Re-importing an unchanged file creates no duplicate and reports every row as **unchanged**. (gap G6)
 - Rules: BR-MASTER-004, BR-MASTER-004A, BR-MASTER-006, BR-PRICE-004, BR-PRICE-005, BR-ORD-011, [ADR 0016](../adr/0016-prescription-only-products-are-not-sold-online.md).
 
-### US2. As a Pharmacy Manager, I import sites, storage locations and suppliers from CSV files, so that stock can reference them
+### US2. As a Platform Admin, I import sites, storage locations and suppliers from CSV files, so that stock can reference them
 
 - Source: `[observed]` 2026-10-26; targets `[standard]`.
 - Accepted when:
@@ -50,7 +50,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
   - `status` is `Active` or `Inactive`, and `isActive` (when given) must agree with it. (gap G9)
   - Latitude and longitude are both given or both blank. (gap G9)
   - A storage location whose `siteCode` matches no site refuses the file, names the row, and shows a Vietnamese message. (gaps G5, G19)
-  - A Pharmacy Manager assigned to some sites cannot create or change a storage location at another site; that row is refused. (gap G15)
+  - Platform Admin has no site limit, so no row is refused for its site. A Pharmacy Manager posting a file with sites, storage locations or suppliers is refused with 403 `role_forbidden`, and Platform Admin posting products is refused the same way (the one route `POST /api/products/imports` asks for the role of each section it carries). (gap G15)
   - A blank `isActive` or `isCustomerFacing` on a re-import keeps the stored value. A site is hidden from shoppers unless `isCustomerFacing` is explicitly `true` (BR-MASTER-002). (gap G7)
   - The marker `__XOA__` clears `address` on a site, and `contactName`, `email`, `phone` or `address` on a supplier. A storage location has no clearable field, so the marker on any of its cells refuses its row with the row number. (gap G24)
 - Rules: BR-MASTER-001, BR-MASTER-002, BR-MASTER-003, BR-MASTER-005, BR-AUTH-004.
@@ -136,7 +136,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
 ## Rules and designs
 
 - Business rules: [BR-AUTH-001](../business-rules.md) to [BR-AUTH-004](../business-rules.md), [BR-AUTH-006](../business-rules.md) (roles, site scope, customers); [BR-MASTER-001 to 006](../business-rules.md) including 004A (master-data uniqueness); [BR-PRICE-004 to 006](../business-rules.md) (price status and overlap); [BR-INV-001](../business-rules.md), [BR-INV-005](../business-rules.md), [BR-INV-010](../business-rules.md), [BR-INV-012](../business-rules.md) (opening balances never overwrite stock); [BR-RECV-008](../business-rules.md) (new batches await QC); [BR-QUALITY-003](../business-rules.md), [BR-QUALITY-004](../business-rules.md); [BR-ORD-011](../business-rules.md).
-- Gates: `catalog.import` and `stock.import` in `apps/staff-web/src/permissions/staff-permissions.ts`; sidebar and route roles in `apps/staff-web/src/permissions/section-access.ts`; roles in the `trusted-request.ts` of each service (the `/api/products` write rule, Pharmacy Manager only, covers `POST /api/products/imports`; `POST /api/inventory/imports/opening-balances` is Warehouse Staff only).
+- Gates: `masterdata.import`, `catalog.import` and `stock.import` in `apps/staff-web/src/permissions/staff-permissions.ts`; sidebar and route roles in `apps/staff-web/src/permissions/section-access.ts`; roles in the `trusted-request.ts` of each service (`POST /api/products/imports` admits Platform Admin and Pharmacy Manager, and `catalog-import-routes.ts` then requires Platform Admin for `sites`, `storageLocations` and `suppliers` and Pharmacy Manager for `products`; `POST /api/inventory/imports/opening-balances` is Warehouse Staff only).
 - [ADR 0004](../adr/0004-server-authoritative-pricing-stock-and-fees.md): prices and stock are written by the server; the browser only previews.
 - [ADR 0016](../adr/0016-prescription-only-products-are-not-sold-online.md): the prescription flag decides what is sold online.
 - [User guide, Data import](../user-guide.md#data-import) and [API guide](../api-guide.md): the steps and the endpoints.
@@ -146,7 +146,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[standard]` a decision from 
 
 | # | Question | Decision | Why |
 | --- | --- | --- | --- |
-| 1 | Is Pharmacist meant to import stock? Why is Stock open to Warehouse Staff and not the other four pages? | Pharmacist has no import page. Stock is for Warehouse Staff. Pharmacy Manager imports the four catalog pages only. Platform Admin imports nothing (BR-AUTH-010). [standard] | D2: Pharmacist works at the counter and reads stock; stock is warehouse work, and BR-AUTH-002 already puts inventory writes under Warehouse Staff. Owner may change who writes stock. |
+| 1 | Is Pharmacist meant to import stock? Why is Stock open to Warehouse Staff and not the other four pages? | Pharmacist has no import page. Stock is for Warehouse Staff. Platform Admin imports sites, storage locations and suppliers; Pharmacy Manager imports products and prices only (BR-AUTH-010). [owner] 2026-11-07 | D2: Pharmacist works at the counter and reads stock; stock is warehouse work, and BR-AUTH-002 already puts inventory writes under Warehouse Staff. Owner may change who writes stock. |
 | 2 | Why a separate screen per dataset rather than one wizard? | Keep one page per dataset. [standard] | Each dataset has its own key, template and place in the order sites, locations, suppliers, products, stock. One wizard would hide that order. |
 | 3 | Is a server validate-only call wanted? | Yes. The same endpoint with `dryRun: true` runs every check and writes nothing. **Import now** validates, then confirms, then commits in one transaction. [standard] | D11: preview, then commit. The browser cannot test uniqueness, references or site scope. Gap G4. |
 | 4 | Should conflicts carry row numbers in an `errors` array? | Yes. Every refusal, 400 or 409, carries `errors` with a `path` such as `products.3.sku`, and the page shows the row. [standard] | D11. A 409 that names no row sends staff searching the file. Gaps G5, G12. |

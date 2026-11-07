@@ -128,18 +128,18 @@ describe("catalog authorization", () => {
     const writes: Array<{ name: string; method: string; path: string; body?: unknown; rule: "admin" | "manager" }> = [
       { name: "create a site", method: "POST", path: "/sites", body: siteBody, rule: "admin" },
       { name: "delete a site", method: "DELETE", path: `/sites/${SITE_A}`, rule: "admin" },
-      { name: "edit a site", method: "PUT", path: `/sites/${SITE_A}`, body: { name: "Renamed" }, rule: "manager" },
-      { name: "create a location", method: "POST", path: "/storage-locations", body: locationBody, rule: "manager" },
+      { name: "edit a site", method: "PUT", path: `/sites/${SITE_A}`, body: { name: "Renamed" }, rule: "admin" },
+      { name: "create a location", method: "POST", path: "/storage-locations", body: locationBody, rule: "admin" },
       {
         name: "edit a location",
         method: "PUT",
         path: `/storage-locations/${LOCATION_B}`,
         body: { name: "x" },
-        rule: "manager",
+        rule: "admin",
       },
-      { name: "delete a location", method: "DELETE", path: `/storage-locations/${LOCATION_B}`, rule: "manager" },
-      { name: "create a supplier", method: "POST", path: "/suppliers", body: supplierBody, rule: "manager" },
-      { name: "delete a supplier", method: "DELETE", path: `/suppliers/${SUPPLIER}`, rule: "manager" },
+      { name: "delete a location", method: "DELETE", path: `/storage-locations/${LOCATION_B}`, rule: "admin" },
+      { name: "create a supplier", method: "POST", path: "/suppliers", body: supplierBody, rule: "admin" },
+      { name: "delete a supplier", method: "DELETE", path: `/suppliers/${SUPPLIER}`, rule: "admin" },
       { name: "create a product", method: "POST", path: "/products", body: productBody, rule: "manager" },
       { name: "delete a product", method: "DELETE", path: `/products/${PRODUCT}`, rule: "manager" },
       { name: "create a price draft", method: "POST", path: "/pricing/prices", body: priceBody, rule: "manager" },
@@ -168,20 +168,25 @@ describe("catalog authorization", () => {
       }
     });
 
-    it("refuses a Pharmacy Manager the site create and delete, which only Platform Admin may do", async () => {
+    it("refuses a Pharmacy Manager every write to sites, storage locations and suppliers, before any write", async () => {
       const base = await start();
       const manager = employee(["Pharmacy Manager"], [SITE_A]);
 
-      const created = await call(base, "POST", "/sites", manager, siteBody);
-      const deleted = await call(base, "DELETE", `/sites/${SITE_A}`, manager);
-
-      expect(created.json).toMatchObject({ code: "role_forbidden" });
-      expect(deleted.json).toMatchObject({ code: "role_forbidden" });
+      for (const write of writes.filter((candidate) => candidate.rule === "admin")) {
+        const result = await call(base, write.method, write.path, manager, write.body);
+        expect(result.status, write.name).toBe(403);
+        expect(result.json, write.name).toMatchObject({ code: "role_forbidden" });
+      }
       expect(repository.createSite).not.toHaveBeenCalled();
+      expect(repository.updateSite).not.toHaveBeenCalled();
       expect(repository.deleteSite).not.toHaveBeenCalled();
+      expect(repository.createStorageLocation).not.toHaveBeenCalled();
+      expect(repository.deleteStorageLocation).not.toHaveBeenCalled();
+      expect(repository.createSupplier).not.toHaveBeenCalled();
+      expect(repository.deleteSupplier).not.toHaveBeenCalled();
     });
 
-    it("lets Platform Admin through the site create and delete only, and Pharmacy Manager through the other writes", async () => {
+    it("lets Platform Admin through the writes to sites, storage locations and suppliers only, and Pharmacy Manager through the product and price writes", async () => {
       const base = await start();
       for (const write of writes) {
         const admin = await call(base, write.method, write.path, employee(["Platform Admin"], []), write.body);
@@ -229,52 +234,7 @@ describe("catalog authorization", () => {
     });
   });
 
-  describe("site scope before a write", () => {
-    it("refuses a site-scoped manager an edit of a site outside their sites, before any write", async () => {
-      const base = await start();
-
-      const result = await call(base, "PUT", `/sites/${SITE_B}`, employee(["Pharmacy Manager"], [SITE_A]), {
-        name: "Renamed",
-      });
-
-      expect(result.status).toBe(403);
-      expect(result.json).toMatchObject({ code: "site_access_denied" });
-      expect(repository.updateSite).not.toHaveBeenCalled();
-    });
-
-    it("refuses a site-scoped manager a delete of a location outside their sites, before any write", async () => {
-      const base = await start();
-      repository.getStorageLocation.mockResolvedValueOnce({ id: LOCATION_B, siteId: SITE_B, code: "LOC" } as never);
-
-      const result = await call(
-        base,
-        "DELETE",
-        `/storage-locations/${LOCATION_B}`,
-        employee(["Pharmacy Manager"], [SITE_A]),
-      );
-
-      expect(result.json).toMatchObject({ code: "site_access_denied" });
-      expect(repository.deleteStorageLocation).not.toHaveBeenCalled();
-    });
-
-    it("refuses a site-scoped manager an edit of a location outside their sites, before any write", async () => {
-      const base = await start();
-      repository.getStorageLocation.mockResolvedValueOnce({ id: LOCATION_B, siteId: SITE_B, code: "LOC" } as never);
-
-      const result = await call(
-        base,
-        "PUT",
-        `/storage-locations/${LOCATION_B}`,
-        employee(["Pharmacy Manager"], [SITE_A]),
-        {
-          name: "Renamed",
-        },
-      );
-
-      expect(result.json).toMatchObject({ code: "site_access_denied" });
-      expect(repository.updateStorageLocation).not.toHaveBeenCalled();
-    });
-
+  describe("site scope of reads", () => {
     it("refuses a by-id read of a site outside the reader's sites", async () => {
       const base = await start();
 
@@ -311,18 +271,6 @@ describe("catalog authorization", () => {
       expect(result.json).toMatchObject({ code: "site_access_denied" });
       expect(repository.listStorageLocations).not.toHaveBeenCalled();
     });
-
-    it("refuses a location created at a site outside the manager's sites", async () => {
-      const base = await start();
-
-      const result = await call(base, "POST", "/storage-locations", employee(["Pharmacy Manager"], [SITE_A]), {
-        ...locationBody,
-        siteId: SITE_B,
-      });
-
-      expect(result.json).toMatchObject({ code: "site_access_denied" });
-      expect(repository.createStorageLocation).not.toHaveBeenCalled();
-    });
   });
 
   describe("fixed location site and in-use refusals", () => {
@@ -334,7 +282,7 @@ describe("catalog authorization", () => {
         base,
         "PUT",
         `/storage-locations/${LOCATION_B}`,
-        employee(["Pharmacy Manager"], [SITE_A, SITE_B]),
+        employee(["Platform Admin"], []),
         { siteId: SITE_B, name: "Moved" },
       );
 
@@ -350,7 +298,7 @@ describe("catalog authorization", () => {
         base,
         "PUT",
         `/storage-locations/${LOCATION_B}`,
-        employee(["Pharmacy Manager"], [SITE_A]),
+        employee(["Platform Admin"], []),
         {
           siteId: SITE_A,
           name: "Same site",

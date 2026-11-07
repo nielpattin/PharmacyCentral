@@ -85,9 +85,10 @@ describe("workspace navigation", () => {
     const manager = paletteEntries(["Pharmacy Manager"]);
     const sections = manager.map((entry) => entry.section);
     expect(new Set(sections).size).toBe(sections.length);
-    expect(sections).toEqual(
-      expect.arrayContaining(["importProducts", "importSites", "importLocations", "importSuppliers", "account"]),
-    );
+    expect(sections).toEqual(expect.arrayContaining(["importProducts", "account"]));
+    expect(sections).not.toContain("importSites");
+    expect(sections).not.toContain("importLocations");
+    expect(sections).not.toContain("importSuppliers");
     expect(sections).not.toContain("importStock");
     expect(sections).not.toContain("users");
 
@@ -97,6 +98,7 @@ describe("workspace navigation", () => {
 
     const admin = paletteEntries(["Platform Admin"]).map((entry) => entry.section);
     expect(admin).toContain("users");
+    expect(admin).toContain("importSites");
     expect(admin).not.toContain("importProducts");
   });
 

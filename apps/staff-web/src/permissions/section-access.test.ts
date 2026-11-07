@@ -36,9 +36,6 @@ const opens: Record<"Pharmacist" | "Pharmacy Manager" | "Warehouse Staff", reado
     "pricing",
     "supplier",
     "importProducts",
-    "importSites",
-    "importLocations",
-    "importSuppliers",
     "inventory",
     "adjustments",
     "stocktake",
@@ -74,9 +71,6 @@ describe("sidebar sections by role", () => {
     const closed: readonly Section[] = [
       "pharmacistOverview",
       "importProducts",
-      "importSites",
-      "importLocations",
-      "importSuppliers",
       "importStock",
       // The period analytics are business figures, and action plans are the pharmacy's daily work: neither is the
       // administrator's.

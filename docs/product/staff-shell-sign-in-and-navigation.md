@@ -102,7 +102,7 @@ The workspace and page structure. The role table below is per section; a section
 | Catalog | Products, Units, Pricing, Search synonyms, Sites, Storage locations, Suppliers | — | Platform Admin, Pharmacy Manager; Pharmacist only Search synonyms |
 | Administration (pinned) | Users & audit, AI integrations, System | Users / Audit | Platform Admin |
 
-**Data import** has no sidebar entry. Each list that owns a dataset shows an **Import** action to the role that may import it: Products, Sites, Storage locations and Suppliers for a Pharmacy Manager, and **Import opening balances** on Inventory for Warehouse Staff. The `/imports/...` URLs remain direct links. **Account settings** opens from the profile menu and is also in **Search pages**.
+**Data import** has no sidebar entry. Each list that owns a dataset shows an **Import** action to the role that may import it: Products for a Pharmacy Manager, Sites, Storage locations and Suppliers for a Platform Admin, and **Import opening balances** on Inventory for Warehouse Staff. The `/imports/...` URLs remain direct links. **Account settings** opens from the profile menu and is also in **Search pages**.
 
 ### Role-by-section access
 
@@ -120,17 +120,17 @@ The target access for each role, per D1 to D4. Other staff specs link to this ta
 | Inventory | Replenishment (`replenishment`) | Read | — | Request | ✓ (approve, fulfil) | G6, G24 |
 | Purchasing | Procurement (`procurement`) | Read | ✓ (approver is not creator) | — | — | — |
 | Finance | Finance (`finance`) | Read | ✓ | — | — | — |
-| Catalog | Sites (`sites`) | Read (create, delete) | ✓ | — | — | — |
-| Catalog | Storage locations (`storageLocations`) | Read | ✓ | — | — | — |
+| Catalog | Sites (`sites`) | ✓ (create, edit, delete) | Read | — | — | — |
+| Catalog | Storage locations (`storageLocations`) | ✓ | Read | — | — | — |
 | Catalog | Catalog (`catalog`) | Read | ✓ | — | — | — |
 | Catalog | Search synonyms (`searchSynonyms`) | Read | ✓ (approves another's) | ✓ (approves another's) | — | — |
 | Catalog | Units (`units`) | Read | ✓ | — | — | — |
 | Catalog | Pricing (`pricing`) | Read | ✓ | — | — | — |
-| Catalog | Suppliers (`supplier`) | Read | ✓ | — | — | — |
+| Catalog | Suppliers (`supplier`) | ✓ | Read | — | — | — |
 | Data import | Products (`importProducts`) | — | ✓ | — | — | — |
-| Data import | Sites (`importSites`) | — | ✓ | — | — | — |
-| Data import | Storage locations (`importLocations`) | — | ✓ | — | — | — |
-| Data import | Suppliers (`importSuppliers`) | — | ✓ | — | — | — |
+| Data import | Sites (`importSites`) | ✓ | — | — | — | — |
+| Data import | Storage locations (`importLocations`) | ✓ | — | — | — | — |
+| Data import | Suppliers (`importSuppliers`) | ✓ | — | — | — | — |
 | Data import | Opening balances (`importStock`) | — | — | — | ✓ | — |
 | Purchasing | Receiving (`receiving`) | Read | — | — | ✓ | — |
 | Inventory | Stocktake (`stocktake`) | Read | — | — | ✓ (posting makes Pending adjustments) | G10, G24 |
@@ -143,7 +143,7 @@ The target access for each role, per D1 to D4. Other staff specs link to this ta
 | Administration | AI integrations (`aiIntegrations`) | ✓ | — | — | — | — |
 | Administration | System (`system`) | ✓ | — | — | — | — |
 
-- Platform Admin manages and views only what no other staff role touches (BR-AUTH-010). It opens every section except Pharmacist overview, the five imports, Analytics, Action plans, Finance, Reports, Prescriptions and Online orders (business figures, money, daily pharmacy work and customers' personal and health data), and reads them without a write control. It writes only users, roles and site access (Users), audit, AI integrations, System and creating and deleting a site. Every other write is refused with `role_forbidden`, and `canAccessSection` with `staffActions` shows the same to the page. An account that also holds another role keeps that role's rights.
+- Platform Admin manages and views only what no other staff role touches (BR-AUTH-010). It opens every section except Pharmacist overview, the product and stock imports, Analytics, Action plans, Finance, Reports, Prescriptions and Online orders (business figures, money, daily pharmacy work and customers' personal and health data), and reads them without a write control. It writes only users, roles and site access (Users), audit, AI integrations, System, and creating, editing, deleting and importing sites, storage locations and suppliers. Every other write is refused with `role_forbidden`, and `canAccessSection` with `staffActions` shows the same to the page. An account that also holds another role keeps that role's rights.
 - Users, Audit, AI integrations and System are Platform Admin only; Audit is read-only for everyone (D10).
 - The History tab on a record shows to whoever can see that record (D4); it is not a row here. Tabs inside Inventory and Finance follow these roles at tab level; see [inventory operations](staff-inventory-operations.md) and [finance](staff-finance.md).
 

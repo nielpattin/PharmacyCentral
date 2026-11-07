@@ -188,9 +188,12 @@ const ROLE_RULES: readonly RoleRule[] = [
   { methods: ["*"], path: "/products/search-synonyms", roles: ["Pharmacist", "Pharmacy Manager"] },
   { methods: ["POST"], path: "/sites", exact: true, roles: ["Platform Admin"] },
   { methods: ["DELETE"], path: "/sites/*", exact: true, roles: ["Platform Admin"] },
-  { methods: ["WRITE"], path: "/sites", roles: ["Pharmacy Manager"] },
-  { methods: ["WRITE"], path: "/storage-locations", roles: ["Pharmacy Manager"] },
-  { methods: ["WRITE"], path: "/suppliers", roles: ["Pharmacy Manager"] },
+  { methods: ["WRITE"], path: "/sites", roles: ["Platform Admin"] },
+  { methods: ["WRITE"], path: "/storage-locations", roles: ["Platform Admin"] },
+  { methods: ["WRITE"], path: "/suppliers", roles: ["Platform Admin"] },
+  // One import route carries both kinds of data; the route itself asks Platform Admin for sites, storage locations and
+  // suppliers and the Pharmacy Manager for products.
+  { methods: ["POST"], path: "/products/imports", exact: true, roles: ["Platform Admin", "Pharmacy Manager"] },
   { methods: ["WRITE"], path: "/products", roles: ["Pharmacy Manager"] },
   { methods: ["WRITE"], path: "/pricing/prices", roles: ["Pharmacy Manager"] },
 ];

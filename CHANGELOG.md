@@ -84,6 +84,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+**catalog-service, staff-web, ops-console-service, docs**
+
+- Sites, storage locations and suppliers are written by Platform Admin only: create, edit, delete and the CSV imports of the three. A Pharmacy Manager reads them, sees no write or import control, and gets 403 `role_forbidden` from the API. Products, units, prices and the product import stay with the Pharmacy Manager. `POST /api/products/imports` asks for Platform Admin when a file carries sites, storage locations or suppliers and for the Pharmacy Manager when it carries products. The demo seed imports the storage locations and suppliers as Platform Admin (ADR 0019, BR-AUTH-010, master data Decision 11).
+
 **staff-web, customer-web, docs**
 
 - `Button` in `@pharmacy/ui` follows Ant Design's Button: 32px default height with a 6px radius (24 to 28px small, 40px large), a neutral 1px border and a faint bottom shadow on the default and primary types, a hover that lifts the colour, and a new `link` variant; `outline` is Ant's default type and `ghost` its text type. `Input` and `Select` are 32px high to match. Finance shows its amounts through `formatAmount` ("36.981.380 ₫") like Analytics, instead of the number followed by `VND`: the three tiles, the invoice Amount column and the reconciliation drawer. `StatusBadge` follows the Ant Design Tag solid variant (4px radius, 12px text, no border) in the theme's own status colours, and `StatusCell`, which showed success and neutral as plain text, is gone: every status in every table is a tag. Table columns pinned to the right (the row actions) align their header to the right edge with the actions. The Finance invoice list pages with numbered page buttons and Previous and Next, 25 rows to a page, instead of "Load more": `DataTable` takes `paging.pages`, which pages over the loaded rows and reads the next cursor page when the reader is one page from the end.

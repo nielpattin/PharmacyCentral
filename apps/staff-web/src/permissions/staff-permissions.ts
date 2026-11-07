@@ -208,13 +208,16 @@ export const staffActions = {
     roles: ["Platform Admin", "Pharmacy Manager"],
     reason: "Only a Pharmacy Manager or Platform Admin can reassign an action plan.",
   },
-  "catalog.write": { roles: manager, reason: "Only a Pharmacy Manager can change the catalog and master data." },
-  "catalog.site.create": { roles: platformAdmin, reason: "Only a Platform Admin can create or delete a site." },
-  "catalog.site.delete": { roles: platformAdmin, reason: "Only a Platform Admin can create or delete a site." },
-  "catalog.import": {
-    roles: manager,
-    reason: "Only a Pharmacy Manager can import products, sites, storage locations or suppliers.",
+  "catalog.write": { roles: manager, reason: "Only a Pharmacy Manager can change the catalog, units and prices." },
+  "masterdata.write": {
+    roles: platformAdmin,
+    reason: "Only a Platform Admin can create, edit or delete sites, storage locations and suppliers.",
   },
+  "masterdata.import": {
+    roles: platformAdmin,
+    reason: "Only a Platform Admin can import sites, storage locations or suppliers.",
+  },
+  "catalog.import": { roles: manager, reason: "Only a Pharmacy Manager can import products." },
   "stock.import": { roles: warehouse, reason: "Only Warehouse Staff can import opening balances." },
   "synonym.write": {
     roles: ["Pharmacist", "Pharmacy Manager"],

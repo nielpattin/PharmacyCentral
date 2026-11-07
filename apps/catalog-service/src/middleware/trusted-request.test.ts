@@ -146,10 +146,21 @@ describe("trusted request role restatement", () => {
     expect(await response.json()).toMatchObject({ code: "role_forbidden" });
   });
 
-  it("lets a Pharmacy Manager edit a site", async () => {
+  it("refuses a Pharmacy Manager editing a site, which only Platform Admin may do", async () => {
     const response = await callAs(
       "employee",
       ["Pharmacy Manager"],
+      "/sites/00000000-0000-4000-8000-000000000010",
+      "PUT",
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "role_forbidden" });
+  });
+
+  it("lets Platform Admin edit a site", async () => {
+    const response = await callAs(
+      "employee",
+      ["Platform Admin"],
       "/sites/00000000-0000-4000-8000-000000000010",
       "PUT",
     );

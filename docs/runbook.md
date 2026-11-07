@@ -387,7 +387,7 @@ pnpm run seed:demo      # B: the demo dataset, in another terminal
 2. **Upload the product images** to Floci S3.
 3. **Create the sites** one at a time as the admin (`POST /api/sites`, because the site import is a Pharmacy Manager's).
 4. **Create the demo accounts** (`apps/identity-service/seed-demo.mjs`), so the managers, pharmacist and warehouse accounts get their site access in one pass.
-5. **Import the sample CSVs** from `data/import-samples/` through the same endpoints as the Data import screen, each as the role that owns it: a Pharmacy Manager imports the storage locations, the suppliers, and the products with their prices; Warehouse Staff import the opening balances. It reuses the screen's CSV mapping from `apps/staff-web/src/import-datasets.ts`, so the two cannot drift.
+5. **Import the sample CSVs** from `data/import-samples/` through the same endpoints as the Data import screen, each as the role that owns it: Platform Admin imports the storage locations and the suppliers, and a Pharmacy Manager imports the products with their prices; Warehouse Staff import the opening balances. It reuses the screen's CSV mapping from `apps/staff-web/src/import-datasets.ts`, so the two cannot drift.
 6. **Create and approve the six search synonym groups**, such as `tiêu chảy, đi ngoài, đi lỏng`. The first Pharmacy Manager proposes them and the pharmacist approves them, so live search uses them from the start. One more group (`ho khan, ho không đờm, ho rát cổ`) is left waiting for approval. Production starts with no synonym groups; staff add them in staff-web under Search synonyms.
 7. **Add demo activity** through the same APIs, so every list screen has rows in every state: three transfers (waiting, in transit, received), three stock adjustments (pending, approved, rejected), three purchase orders (waiting, approved, cancelled) and fifteen orders at `SITE-RTL`.
 8. **Add the sales history** (`tools/seed-demo-history.mjs`, below).
@@ -417,7 +417,7 @@ Notes on the steps:
 - It refuses to run with `NODE_ENV=production`. It accepts only an `API_BASE_URL` of `localhost`, `127.0.0.1` or `[::1]`, or the cloud target set by `pnpm run cloud:seed`.
 - The sample files are fabricated coursework data. Production data is imported by an operator on the staff-web Data import screen with a real account, from the operator's own files.
 
-**Without the script**, run `pnpm run seed:default`, then upload the same files by hand at `http://127.0.0.1:5302/imports` as a Pharmacy Manager, in this order: `sites.csv`, `storage-locations.csv`, `suppliers.csv`, `products.csv`. Right after `sites.csv`, run `pnpm --dir apps/identity-service seed:demo` to create the demo accounts with their site access. Then sign in as Warehouse Staff and import `opening-balances.csv`.
+**Without the script**, run `pnpm run seed:default`, then upload the same files by hand at `http://127.0.0.1:5302/imports`, in this order: `sites.csv`, `storage-locations.csv` and `suppliers.csv` as Platform Admin, then `products.csv` as a Pharmacy Manager. Right after `sites.csv`, run `pnpm --dir apps/identity-service seed:demo` to create the demo accounts with their site access. Then sign in as Warehouse Staff and import `opening-balances.csv`.
 
 ### Reset the demo data (`pnpm run demo:reset`)
 

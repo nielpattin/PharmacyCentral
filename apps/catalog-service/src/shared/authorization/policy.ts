@@ -12,9 +12,9 @@ export type RoleRule = {
 };
 
 export const ROLE_RULES = {
-  /** Creating or deleting a site: Platform Admin only. */
+  /** Writes to sites, storage locations and suppliers: Platform Admin only. The Pharmacy Manager reads them. */
   platformAdminOnly: { roles: [PLATFORM_ADMIN] },
-  /** Catalog, reference data and price writes: Pharmacy Manager. */
+  /** Product, unit and price writes: Pharmacy Manager. */
   pharmacyManager: { roles: [PHARMACY_MANAGER] },
   /** Search synonym proposals, edits and deletes: Pharmacist and Pharmacy Manager. */
   searchSynonymEditor: { roles: [PHARMACIST, PHARMACY_MANAGER] },

@@ -163,11 +163,12 @@ ${upload.stdout}${upload.stderr}`);
 }
 const runSql = remote ? awsSqlRunner() : localSqlRunner({ postgresUser: requireEnv("POSTGRES_USER") });
 
-// Who imports each dataset, as in the app: Platform Admin only creates the sites (it has no import), the Pharmacy
-// Manager imports master data and Warehouse Staff imports opening stock. The two accounts exist once the sites do.
+// Who imports each dataset, as in the app: Platform Admin owns sites, storage locations and suppliers (it creates the
+// sites by hand, then imports the other two), the Pharmacy Manager imports products and Warehouse Staff imports
+// opening stock. The two accounts exist once the sites do.
 const importers = { sites: admin };
 
-// Platform Admin creates a site by hand, one at a time, because the import is the manager's.
+// Sites are created by hand, one at a time, so the accounts can be created with their site access right after.
 const createSites = async (sites) => {
   const known = new Set((await admin.call("/api/sites?limit=100")).map((row) => row.code));
   const missing = sites.filter((site) => !known.has(site.code));
@@ -213,7 +214,8 @@ for (const id of order) {
     // Right after the sites exist, so each account is created with its site access in one pass.
     console.log("Seeding demo accounts...");
     await seedAccounts({ show: true });
-    importers.storageLocations = importers.suppliers = importers.catalog = await signIn({ email: managerEmail });
+    importers.storageLocations = importers.suppliers = admin;
+    importers.catalog = await signIn({ email: managerEmail });
     importers.openingBalances = await signIn({ email: warehouseEmail });
     continue;
   }

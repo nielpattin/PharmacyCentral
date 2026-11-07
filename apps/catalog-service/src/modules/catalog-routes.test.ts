@@ -183,7 +183,7 @@ describe("catalog API", () => {
     });
     const supplierResponse = await fetch(`${testServer.url}/suppliers`, {
       method: "POST",
-      headers: { ...JSON_HEADERS, ...actors.manager.headers },
+      headers: { ...JSON_HEADERS, ...actors.admin.headers },
       body: JSON.stringify({
         code: "SUP-001",
         name: "Supplier",

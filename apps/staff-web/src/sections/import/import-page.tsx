@@ -123,9 +123,16 @@ export const ImportPage = ({ dataset }: { dataset: ImportDataset }): React.JSX.E
   const references = useStaffReferences();
   const confirm = useConfirm();
   const session = useSession();
-  // Opening balances are open to any signed-in staff; products, sites, storage locations and suppliers are Pharmacy
-  // Manager writes on the edge (POST /api/products/imports), so the other roles see the file but not the import.
-  const importGate = can(dataset.id === "openingBalances" ? "stock.import" : "catalog.import", session);
+  // Each dataset has one importing role, whatever the shared edge route (POST /api/products/imports): opening
+  // balances Warehouse Staff, products the Pharmacy Manager, sites, storage locations and suppliers the Platform Admin.
+  const importGate = can(
+    dataset.id === "openingBalances"
+      ? "stock.import"
+      : dataset.id === "catalog"
+        ? "catalog.import"
+        : "masterdata.import",
+    session,
+  );
 
   useUnsavedChangesGuard(selected !== undefined && !busy, "The selected file has not been imported.");
   useHotkey(

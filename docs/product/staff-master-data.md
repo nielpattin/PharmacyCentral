@@ -15,7 +15,7 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 
 ## Users and entry points
 
-- `[observed]` Staff only. Platform Admin (read only) and Pharmacy Manager see the **Master data** group (`sectionRoles` in `apps/staff-web/src/permissions/section-access.ts`); Platform Admin writes only the creation and deletion of a site here, and gets no other create, edit or delete control (BR-AUTH-010).
+- `[observed]` Staff only. Platform Admin and Pharmacy Manager see the **Master data** group (`sectionRoles` in `apps/staff-web/src/permissions/section-access.ts`). Platform Admin writes these three lists: create, edit and delete. Pharmacy Manager reads them and gets no create, edit, delete or import control (Decision 11, BR-AUTH-010).
 - `[standard]` Pharmacist and Warehouse Staff do not open these screens. They read the same records as pickers, limited to their sites (Decision 12).
 - `[observed]` Bulk creation is on `/imports/sites`, `/imports/storage-locations` and `/imports/suppliers`. This spec covers the one-record drawer only.
 
@@ -35,24 +35,24 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 
 - Source: `[observed]` drawer; target per Decisions 2, 3, 6, 11 and 16.
 - Accepted when:
-  - **Tạo cơ sở** opens the drawer. A Pharmacy Manager does not see the button.
+  - **Tạo cơ sở** opens the drawer. A Pharmacy Manager does not see the button, and does not see it on the storage location and supplier lists either.
   - **Mã** and **Tên** are required. A blank one is blocked in the browser and refused by the server with 400 `invalid_request`.
   - Defaults: type "Cửa hàng bán lẻ", status "Hoạt động", **Hiển thị với khách hàng** "Không" (gap G5).
   - Latitude and longitude are both given or both blank. One alone returns 400 `coordinates_incomplete` (gap G7).
   - A duplicate code returns 409 `duplicate_code`. The drawer stays open with its values and shows "Mã đã tồn tại. Hãy dùng mã khác." (gap G15).
   - Success shows "Đã tạo cơ sở." and the row appears. The write is audited as `catalog.site.created` `[observed]`.
 
-### US3. As a Pharmacy Manager, I maintain the records of my sites, so that their details stay current
+### US3. As a Platform Admin, I maintain the records of every site, so that their details stay current
 
 - Source: `[observed]` edit drawer; target per Decisions 5, 10, 13 and 16.
 - Accepted when:
   - **Sửa** opens the drawer with the saved values. The code cannot be changed (gap G18).
-  - A Pharmacy Manager edits a site or a storage location only when the site is one of their assigned sites. Any other record, by id or in a body, is refused with 403 `site_access_denied`.
+  - Only Platform Admin edits a site, a storage location or a supplier. A Pharmacy Manager sees no **Sửa** button, and a PUT from one is refused with 403 `role_forbidden`.
   - On a storage location, **Cơ sở** is text on edit. A PUT naming another site returns 400 `location_site_fixed` (gap G6).
   - Closing a changed drawer asks **Bỏ thay đổi?** and keeps the values if the user stays `[observed]` (gap G16 for the translated buttons).
   - Ctrl/Cmd+S submits the open drawer `[observed]`.
 
-### US4. As a Pharmacy Manager, I set a site or location to Inactive, so that it stops being used without losing its history
+### US4. As a Platform Admin, I set a site or location to Inactive, so that it stops being used without losing its history
 
 - Source: `[observed]` Status field; target per Decisions 4, 8 and 18.
 - Accepted when:
@@ -61,16 +61,16 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
   - An Inactive site or location cannot be chosen for a new purchase order, goods receipt, transfer, stock movement, prescription or counter sale. Existing documents keep it (gap G10).
   - Its row stays in the list with the Vietnamese status label (gap G16).
 
-### US5. As a Platform Admin or Pharmacy Manager, I delete a record entered by mistake, so that the list stays clean
+### US5. As a Platform Admin, I delete a record entered by mistake, so that the list stays clean
 
 - Source: `[observed]` typed confirmation; target per Decisions 4 and 11.
 - Accepted when:
   - **Xóa** opens a confirmation that needs the record's code typed; the confirm button stays disabled until it matches `[observed]`.
-  - Platform Admin deletes a site. Pharmacy Manager deletes a storage location or supplier, and a site delete by Pharmacy Manager is refused with 403.
+  - Platform Admin deletes a site, a storage location or a supplier. A delete by any other role, Pharmacy Manager included, is refused with 403 `role_forbidden`.
   - A record that stock, a document, a prescription, a sale or a staff account's site access refers to is not deleted. The answer is 409 `in_use` with "Không thể xóa vì đang được sử dụng. Hãy chuyển sang Ngừng hoạt động.", and the row stays (gap G9).
   - A successful delete shows "Đã xóa cơ sở." (or the matching text) and writes an audit event `[observed]`.
 
-### US6. As a Pharmacy Manager, I make a site a store and give it coordinates, so that shoppers can find it
+### US6. As a Platform Admin, I make a site a store and give it coordinates, so that shoppers can find it
 
 - Source: `[observed]` BR-MASTER-002; target per Decisions 3, 6 and 19.
 - Accepted when:
@@ -150,8 +150,8 @@ Tags: `[observed]` a code fact read on 2026-10-26; `[owner]` a recorded owner de
 | 7 | Which location types are meant? The field is free text. | Five values: `Warehouse` "Kho" (default), `Counter` "Quầy", `Cold` "Tủ mát 2–8 °C", `Quarantine` "Biệt trữ", `Controlled` "Tủ kiểm soát đặc biệt". Others get 400. [standard] | Storage conditions and segregation are checked by type, and free text cannot be checked. Controlled substances need a separate, locked, recorded place (common practice). |
 | 8 | Should the server limit Status to two values? | Yes: `Active` ("Hoạt động") and `Inactive` ("Ngừng hoạt động"). The server takes `isActive` from `status`, so the two cannot disagree. [standard] | Retirement needs two states. One field removes conflicting flags. |
 | 9 | Are site create and update audited? | Yes, already. `audit-rules.ts` has rules for site create, update and delete, and for storage location and supplier writes. Every master data write must produce an audit event (BR-AUDIT-002). [observed] | The question's premise was wrong: the rules exist. Keep them. |
-| 10 | Should the UI check `catalog.write`? Is the server rule real? | Yes. Create, Edit and Delete show only with `catalog.write` (Pharmacy Manager) and when the record is in the user's scope; site create and delete need `catalog.site.create` and `catalog.site.delete` (Platform Admin). The server enforces the same rule: the service limits non-GET writes to Pharmacy Manager, except site create and delete (BR-AUTH-002, BR-AUTH-010). [standard] | The screen shows what the user can do. The server stays the control. |
-| 11 | Who may create and delete a site? | Platform Admin only. Pharmacy Manager edits assigned sites: name, type, address, notes, customer facing, coordinates and status. [standard] | A site sets the access boundary (BR-AUTH-004). Creating or deleting one changes who sees what, and the same role grants access (BR-USER-004). A manager must not create a site and grant it to themselves. Owner may change. |
+| 10 | Should the UI check the role? Is the server rule real? | Yes. Create, Edit and Delete show only with `masterdata.write` (Platform Admin); `catalog.write` (Pharmacy Manager) still guards products, units and prices. The server enforces the same rule: the service limits non-GET writes on `/sites`, `/storage-locations` and `/suppliers` to Platform Admin (BR-AUTH-002, BR-AUTH-010). [standard] | The screen shows what the user can do. The server stays the control. |
+| 11 | Who may write sites, storage locations and suppliers? | Platform Admin only: create, edit, delete and import. Pharmacy Manager reads them to run and watch the pharmacy and edits none of them. [owner] 2026-11-07 (earlier: Pharmacy Manager edited assigned sites, locations and suppliers) | These records set the access boundary (BR-AUTH-004) and the lists every other screen picks from. A manager runs the pharmacy and follows it; the structure belongs to the administrator, as in Shopify, where locations and vendors sit under store settings and not under daily operations. |
 | 12 | Who may read these records? | Platform Admin: all sites. Other staff: the sites and storage locations of their assigned sites, and suppliers (company-wide) to any signed-in staff. Shoppers and anonymous visitors: no direct read; `GET /api/stores` is the only public view. [standard] | Least privilege (BR-AUTH-004). Warehouse Staff need supplier names for receiving, and Pharmacists need location names for dispensing. Pickers stay open to staff, narrowed by site. |
 | 13 | Can a code change after create? | No, for any role. A wrong code: create the right record and deactivate the wrong one. [standard] | Staff search, import files and reports use the code, and delete asks for it. Changing it breaks them without a trace. |
 | 14 | How should long lists load? | 100 rows a page with `cursor` and `X-Next-Cursor`, as `GET /api/pricing/prices` does. No silent cap. [standard] | A full-list answer grows without bound, and the UI already asks for pages. |
