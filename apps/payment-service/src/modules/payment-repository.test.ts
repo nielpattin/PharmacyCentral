@@ -264,10 +264,7 @@ describe("PaymentRepository provider transactions", () => {
 
     const rest = await repository.refund(partial, "Rest");
     expect(rest?.status).toBe("Refunded");
-    const events = await db
-      .select()
-      .from(schema.outboxMessages)
-      .where(eq(schema.outboxMessages.aggregateId, partial));
+    const events = await db.select().from(schema.outboxMessages).where(eq(schema.outboxMessages.aggregateId, partial));
     expect(events.map((event) => JSON.parse(event.payload).fullyRefunded)).toEqual([false, true]);
   });
 

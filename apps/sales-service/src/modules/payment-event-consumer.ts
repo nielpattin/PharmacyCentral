@@ -123,7 +123,10 @@ export class SalesPaymentEventConsumer {
     message: ConsumeMessage,
     setOutcome: (outcome: ConsumerOutcome) => void,
   ): Promise<void> {
-    let event: { eventType?: string; payload?: { orderId?: unknown; prescriptionId?: unknown; fullyRefunded?: unknown } };
+    let event: {
+      eventType?: string;
+      payload?: { orderId?: unknown; prescriptionId?: unknown; fullyRefunded?: unknown };
+    };
     try {
       event = JSON.parse(message.content.toString()) as typeof event;
     } catch {

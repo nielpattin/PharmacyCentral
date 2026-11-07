@@ -382,7 +382,8 @@ export class PaymentRepository {
         await transaction.select().from(paymentInvoices).where(eq(paymentInvoices.id, id)).limit(1).for("update")
       )[0];
       if (!invoice) return undefined;
-      if (invoice.status !== "Paid") throw new InvoiceRefusal(409, "invoice_not_paid", "Only paid invoices can be refunded");
+      if (invoice.status !== "Paid")
+        throw new InvoiceRefusal(409, "invoice_not_paid", "Only paid invoices can be refunded");
       const [totals] = await transaction
         .select({ refundedTotal: sql<string>`coalesce(sum(${paymentRefunds.amount}), 0)` })
         .from(paymentRefunds)

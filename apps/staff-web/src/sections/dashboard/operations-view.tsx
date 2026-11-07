@@ -76,7 +76,9 @@ export const OperationsView = ({
   const revenueShown = showRevenue && !salesQuery.isError;
   // The filter sits in the heading of the first section on the page, so it takes no row of its own.
   const siteFilterControl =
-    siteOptions.length > 1 ? <SiteFilter value={siteFilter ?? "all"} options={siteOptions} onChange={setSite} /> : undefined;
+    siteOptions.length > 1 ? (
+      <SiteFilter value={siteFilter ?? "all"} options={siteOptions} onChange={setSite} />
+    ) : undefined;
   const locale = moneyLocale();
   const figures = figureFormat(text(sales?.currency, "VND"), locale);
 

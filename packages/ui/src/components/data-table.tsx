@@ -651,12 +651,7 @@ export const DataTable = <T,>({
             onToggle={toggleColumn}
           />
           {exportCsv ? (
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={exporting}
-              onClick={() => void exportCurrentRows()}
-            >
+            <Button type="button" variant="secondary" disabled={exporting} onClick={() => void exportCurrentRows()}>
               {exporting ? text("exportingCsv") : text("exportCsv")}
             </Button>
           ) : null}

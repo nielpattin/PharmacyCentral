@@ -65,7 +65,7 @@ export const usePagedList = ({ key, path, params = {}, limit = 100, prepareExpor
     await prepareExport?.(all);
     return all;
   };
-  const pagingAs = <T,>(shape: (all: JsonRecord[]) => T[]): DataTablePaging<T> => ({
+  const pagingAs = <T>(shape: (all: JsonRecord[]) => T[]): DataTablePaging<T> => ({
     hasMore: query.hasNextPage,
     loadingMore: query.isFetchingNextPage,
     onLoadMore: loadMore,

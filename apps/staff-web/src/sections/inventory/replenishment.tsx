@@ -203,8 +203,7 @@ export const ReplenishmentTab = (): React.JSX.Element => {
     path: "/api/inventory/replenishment",
     params: { q: values.q.trim() || undefined, status: statusParam(values.status) },
     limit: PAGE_SIZE,
-    prepareExport: (rows) =>
-      loadProducts(rows.flatMap((row) => linesOf(row).map((line) => text(line.productId, "")))),
+    prepareExport: (rows) => loadProducts(rows.flatMap((row) => linesOf(row).map((line) => text(line.productId, "")))),
   });
   const labels = useInventoryLabels(list.rows.flatMap((row) => linesOf(row).map((line) => text(line.productId, ""))));
   const productSummary = (row: JsonRecord): string => {
