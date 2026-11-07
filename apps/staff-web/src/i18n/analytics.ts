@@ -127,8 +127,14 @@ export const analyticsLiterals: Record<string, string> = {
   "Total stock value": "Tổng giá trị tồn",
   "Products without a published price": "Sản phẩm chưa có giá bán công bố",
   "Stock value by site": "Giá trị tồn theo cơ sở",
+  "Stock on hand today at each site, largest value first. Value is quantity times the published price.":
+    "Tồn kho hiện tại của từng cơ sở, xếp theo giá trị giảm dần. Giá trị = số lượng × giá bán công bố.",
   "Expiring in 30 / 60 / 90 days": "Sắp hết hạn trong 30 / 60 / 90 ngày",
   "Expiry group": "Nhóm hạn dùng",
+  "Expiring stock": "Hàng sắp hết hạn",
+  "Product count": "Số sản phẩm",
+  "Stock on hand today, grouped by the days left to each batch's expiry date. Value is quantity times the published price. Expired batches are still in the warehouse and cannot be sold.":
+    "Tồn kho hiện tại, nhóm theo số ngày còn lại đến hạn dùng của từng lô. Giá trị = số lượng × giá bán công bố. Lô đã hết hạn vẫn nằm trong kho và không được bán.",
   Expired: "Đã hết hạn",
   "Within 30 days": "Trong 30 ngày tới",
   "31 to 60 days": "31–60 ngày tới",

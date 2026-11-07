@@ -164,10 +164,15 @@ export const InventoryTab = ({
         )}
       </section>
 
-      <div className="grid items-start gap-3 lg:grid-cols-2">
+      <div className="grid items-start gap-3">
         <Card variant="soft">
           <CardHeader>
             <CardTitle>{translateText("Stock value by site")}</CardTitle>
+            <p className="text-xs text-muted">
+              {translateText(
+                "Stock on hand today at each site, largest value first. Value is quantity times the published price.",
+              )}
+            </p>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -195,12 +200,6 @@ export const InventoryTab = ({
                       columns={[
                         { key: "siteName", label: translateText("Site") },
                         {
-                          key: "quantity",
-                          label: translateText("Quantity"),
-                          align: "right",
-                          render: (row) => format.count(row.quantity),
-                        },
-                        {
                           key: "value",
                           label: translateText("Value"),
                           align: "right",
@@ -209,39 +208,30 @@ export const InventoryTab = ({
                       ]}
                     />
                   </div>
-                ) : (
-                  <ul className="mt-3 grid gap-0.5 text-xs text-muted">
-                    {siteStockRows.map((row) => (
-                      <li key={row.siteId}>
-                        {row.siteName}: {translateText("Quantity")} {format.count(row.quantity)}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                ) : null}
               </>
-            )}
-          </CardContent>
-        </Card>
-        <Card variant="soft">
-          <CardHeader>
-            <CardTitle>{translateText("Expiring in 30 / 60 / 90 days")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-32" />
-            ) : (
-              <BarChartCompare
-                height={Math.max(220, siteStockBars.length * 56 + 40)}
-                data={expiryChartRows(expiryRows.map((row) => ({ ...row, label: translateText(row.label) })))}
-                series={[{ label: translateText("Value"), tone: "chart-3" }]}
-                formatValue={(value) => compactNumber(value, locale)}
-              />
             )}
           </CardContent>
         </Card>
       </div>
 
-      <section aria-label={translateText("Expiring in 30 / 60 / 90 days")} className="grid gap-2">
+      <section className="grid gap-3">
+        <Heading>Expiring stock</Heading>
+        <p className="text-xs text-muted">
+          {translateText(
+            "Stock on hand today, grouped by the days left to each batch's expiry date. Value is quantity times the published price. Expired batches are still in the warehouse and cannot be sold.",
+          )}
+        </p>
+        {loading ? (
+          <Skeleton className="h-32" />
+        ) : (
+          <BarChartCompare
+            height={220}
+            data={expiryChartRows(expiryRows.map((row) => ({ ...row, label: translateText(row.label) })))}
+            series={[{ label: translateText("Value"), tone: "chart-3" }]}
+            formatValue={(value) => compactNumber(value, locale)}
+          />
+        )}
         <DataTable<ExpiryRow>
           storageKey="staff:analytics:expiry"
           labels={dataTableLabels()}
@@ -253,7 +243,7 @@ export const InventoryTab = ({
             { key: "label", label: translateText("Expiry group"), render: (row) => translateText(row.label) },
             {
               key: "productCount",
-              label: translateText("Products"),
+              label: translateText("Product count"),
               align: "right",
               render: (row) => format.count(row.bucket?.productCount),
             },
