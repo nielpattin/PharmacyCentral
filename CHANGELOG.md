@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Fixed
+
+**staff-web, ui, docs**
+
+- The **Làm mới** button in the page header now spins and is disabled until the open page has read its data again, so a press visibly does something and cannot stack.
+- The Prescriptions page no longer shows the banner "Chỉ xem: xuất thuốc, thanh toán và trả lời tư vấn cần vai trò Dược sĩ." to a Pharmacy Manager; the controls a manager may not use were already hidden. A panel opened from a table's **Hiển thị** button inside a side drawer (the column and density menu) is no longer cut off at the drawer's left edge: `Popover` aligns to the button's left edge when it would run past the drawer or scroll area it sits in, not only the window.
+
+**operations-query-service, docs**
+
+- The **Lịch sử** tab of an online order or a prescription no longer shows "Vai trò của tài khoản này không được thực hiện thao tác này." to a Pharmacy Manager or Pharmacist. `GET /api/audit/logs` now answers those two roles when the request names `entityType` (`order` or `prescription`) and `entityId`; every other read of the log, and `/api/operations/audit`, stays Platform Admin only. Order events carry no site, so this read is scoped by the record id. Rules: BR-AUDIT-004 and the BR-AUTH-002 matrix. The same tab now reads "Đổi trạng thái đơn hàng: Đang giao" and "Tạo đơn hàng" instead of `sales.order.status-changed.v1`, and an event with no person behind it shows **Hệ thống**. The actor column shows the employee's name: `GET /api/audit/logs` adds `actorName` to each row when the request names an `entityId`, read from identity-service's `/internal/employees/:id` (`IDENTITY_SERVICE_URL` is now set for `operations-query-service` in `docker-compose.yml`; without it the tab shows id prefixes). The shopper who placed an order shows **Khách hàng**.
+
 ### Added
 
 **staff-web, docs**

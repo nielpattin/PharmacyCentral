@@ -5,11 +5,13 @@ import { listSiteIds } from "../middleware/trusted-request.ts";
 import { callerAuthorization } from "./catalog-identity.ts";
 import { analyticsQuerySchema, pageRevenueAnswer, salesTargetQuerySchema } from "./analytics.ts";
 import { AnalyticsCache } from "./analytics-cache.ts";
+import type { EmployeeNames } from "./employee-names.ts";
 import {
   actorRoles,
   ANALYTICS_ROLES,
   DASHBOARD_ROLES,
   dashboardActionFamilies,
+  mayReadAuditFilters,
   roleRefusal,
 } from "./operations-access.ts";
 import { decodePageCursor, encodePageCursor } from "./page-cursor.ts";
@@ -54,7 +56,10 @@ const eventSchema = z.object({
   payload: z.record(z.string(), z.unknown()),
 });
 
-export const createOperationsRouter = (repository: OperationsRepository | undefined): Router => {
+export const createOperationsRouter = (
+  repository: OperationsRepository | undefined,
+  employeeNames?: EmployeeNames,
+): Router => {
   const router = Router();
   // One cache per router: a restart or a second task starts cold, and a stale row lives at most the TTL.
   const analyticsCache = new AnalyticsCache({
@@ -122,6 +127,18 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       const from = queryString(request.query.from);
       const to = queryString(request.query.to);
       const q = queryString(request.query.q);
+      if (
+        request.header("x-actor-type") === "employee" &&
+        !mayReadAuditFilters(actorRoles(request), { entityType, entityId })
+      ) {
+        response.status(403).json({
+          title: "Role not allowed",
+          status: 403,
+          code: "role_forbidden",
+          detail: "Vai trò của tài khoản này chỉ xem được lịch sử của một đơn hàng hoặc một đơn thuốc.",
+        });
+        return;
+      }
       const rawCursor = queryString(request.query.cursor);
       const cursor = rawCursor === undefined ? undefined : decodePageCursor(rawCursor);
       if (rawCursor !== undefined && cursor === undefined) {
@@ -132,7 +149,10 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       if (cursor) filters.cursor = cursor;
       if (q) filters.q = q;
       if (actorId) filters.actorId = actorId;
-      if (siteIds) filters.siteIds = siteIds;
+      // A history read is for one record id the caller opened from a site-scoped list. The order and status events carry
+      // no siteId, so a site filter would hide the whole history; the id itself is the scope.
+      const recordHistory = request.header("x-actor-type") === "employee" && !actorRoles(request).includes("Platform Admin");
+      if (siteIds && !recordHistory) filters.siteIds = siteIds;
       if (action) filters.action = action;
       if (entityType) filters.entityType = entityType;
       if (entityId) filters.entityId = entityId;
@@ -141,7 +161,20 @@ export const createOperationsRouter = (repository: OperationsRepository | undefi
       const page = await repository.listAudit(filters);
       // The body stays a plain array; the cursor of the next page travels in a header.
       if (page.next) response.set("X-Next-Cursor", encodePageCursor(page.next));
-      response.json(page.rows);
+      // The history of one record names the people behind it. identity-service answers the names; one it cannot name
+      // has no `actorName`, and the page shows what it knows.
+      const actorIds = entityId
+        ? page.rows.map((row) => row.actorId).filter((id): id is string => typeof id === "string")
+        : [];
+      const names = employeeNames && actorIds.length > 0 ? await employeeNames.namesOf(actorIds) : undefined;
+      response.json(
+        names
+          ? page.rows.map((row) => {
+              const actorName = typeof row.actorId === "string" ? names.get(row.actorId) : undefined;
+              return actorName === undefined ? row : { ...row, actorName };
+            })
+          : page.rows,
+      );
     } catch (error) {
       next(error);
     }

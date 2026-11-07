@@ -10,7 +10,8 @@ import { useHotkey } from "../../hooks/useHotkey.ts";
 import { usePagedList } from "../../hooks/usePagedList.ts";
 import { translateText } from "../../i18n.ts";
 import type { ListDefaults } from "../../lib/list-url-state.ts";
-import { formatDateTime } from "../../staff-api.ts";
+import { formatDateTime, text } from "../../staff-api.ts";
+import { auditActionLabel } from "../governance/audit-query.ts";
 import { getLanguage } from "../../i18n.ts";
 import { shortId, type SalesEntityType } from "./rules.ts";
 
@@ -97,6 +98,35 @@ export const DetailField = ({ label, value }: { label: string; value: React.Reac
   </div>
 );
 
+const NIL_ACTOR = /^0{8}-0{4}-0{4}-0{4}-0{12}$/;
+
+/**
+ * The person behind an event: the name the audit API resolves, else the id prefix when identity-service has none (a
+ * deactivated account). A change with no person behind it (the expiry sweep, the payment webhook) reads System.
+ */
+const historyActorText = (row: Readonly<Record<string, unknown>>, entityType: string): string => {
+  const id = text(row.actorId, "");
+  if (id === "" || NIL_ACTOR.test(id)) return translateText("System");
+  const name = text(row.actorName, "");
+  if (name) return name;
+  // An online order is placed by the shopper, and identity-service names employees only.
+  if (entityType === "order" && text(row.action, "").startsWith("sales.order.created")) return translateText("Customer");
+  return shortId(id);
+};
+
+/** A readable action ("Đổi trạng thái đơn hàng"), followed by the status the event set when its payload names one. */
+const historyActionText = (row: Readonly<Record<string, unknown>>, entityType: string): string => {
+  const label = auditActionLabel(text(row.action, ""), entityType, translateText);
+  let status = "";
+  try {
+    const payload: unknown = JSON.parse(text(row.payload, "{}"));
+    if (payload && typeof payload === "object" && "status" in payload) status = text(payload.status, "");
+  } catch {
+    // A payload that is not JSON adds nothing to the label.
+  }
+  return status === "" ? label : `${label}: ${translateText(status)}`;
+};
+
 /** Audit history of one order, prescription, or consultation: the events the audit log holds for that entity. */
 export const SalesAuditHistory = ({
   entityType,
@@ -121,8 +151,19 @@ export const SalesAuditHistory = ({
         empty="No history yet."
         columns={[
           { key: "occurredAt", label: "Occurred", render: (row) => formatDateTime(row.occurredAt) },
-          { key: "action", label: "Action", truncate: true },
-          { key: "actorId", label: "Actor", render: (row) => shortId(row.actorId) },
+          {
+            key: "action",
+            label: "Action",
+            truncate: false,
+            render: (row) => historyActionText(row, entityType),
+            text: (row) => historyActionText(row, entityType),
+          },
+          {
+            key: "actorId",
+            label: "Actor",
+            render: (row) => historyActorText(row, entityType),
+            text: (row) => historyActorText(row, entityType),
+          },
         ]}
         paging={history.paging}
       />

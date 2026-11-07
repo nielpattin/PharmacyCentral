@@ -76,7 +76,7 @@ Signed-in staff only. Sign-in and the sidebar are in the [shell spec](staff-shel
   - `/pharmacist-overview` opens the tab "Giao dịch tại quầy" by default; the tab and the search are in the URL.
   - The list shows counter invoices only; online-order invoices are left out on every page. The search "Tìm theo số hóa đơn" filters by invoice number.
   - "Confirm cash" and "Refund" appear only for a Pharmacist and only in states that allow them (`canConfirmCash`, `canRefund`).
-  - A Pharmacy Manager sees "Chỉ xem: xuất thuốc, thanh toán và trả lời tư vấn cần vai trò Dược sĩ." above the tabs, on every tab (gap G25). Platform Admin does not open this page (BR-AUTH-010).
+  - A Pharmacy Manager sees the tabs read-only, with no banner above them and no Create, Dispense or reply control (gap G25). Platform Admin does not open this page (BR-AUTH-010).
 - Rules: [BR-RX-000](../business-rules.md), BR-AUTH-004.
 
 ### US7. As any user of these screens, I never read a failed or unanswered figure as zero

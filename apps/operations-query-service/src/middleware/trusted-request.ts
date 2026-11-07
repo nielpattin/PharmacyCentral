@@ -187,6 +187,9 @@ type RoleRule = Route & {
 };
 
 const ROLE_RULES: readonly RoleRule[] = [
+  // The History tab of an order or a prescription reads one record's events. The handler narrows these two roles to that
+  // (`ENTITY_HISTORY_TYPES` and an entity id); the full log stays Platform Admin only.
+  { methods: ["READ"], path: "/audit/logs", exact: true, roles: ["Platform Admin", "Pharmacy Manager", "Pharmacist"] },
   { methods: ["*"], path: "/operations/audit", roles: ["Platform Admin"] },
   { methods: ["*"], path: "/audit", roles: ["Platform Admin"] },
   { methods: ["*"], path: "/operations/finance", roles: ["Pharmacy Manager"], adminMayRead: false },

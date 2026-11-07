@@ -142,6 +142,13 @@ const StaffApp = (): React.JSX.Element => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  // Refresh shows that it is working: it spins and is disabled until the active queries have been read again, so a press
+  // cannot stack. Only this press counts; the System page's background polling does not make the button flicker.
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = (): void => {
+    setRefreshing(true);
+    void queryClient.invalidateQueries().finally(() => setRefreshing(false));
+  };
   const roles = session.roles ?? [];
   const workspaces = visibleWorkspaces(roles);
   const requestedSection = sectionFromPath(location.pathname);
@@ -638,8 +645,19 @@ const StaffApp = (): React.JSX.Element => {
                 actions={
                   <>
                     <div ref={setActionsTarget} className="flex flex-wrap items-center gap-2" />
-                    <Button variant="secondary" size="sm" onClick={() => void queryClient.invalidateQueries()}>
-                      <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={refreshing}
+                      aria-busy={refreshing}
+                      onClick={refresh}
+                    >
+                      <RefreshCw
+                        size={14}
+                        strokeWidth={2}
+                        aria-hidden="true"
+                        className={refreshing ? "animate-spin motion-reduce:animate-none" : undefined}
+                      />
                       {translateText("Refresh")}
                     </Button>
                   </>

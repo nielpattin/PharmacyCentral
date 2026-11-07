@@ -52,6 +52,57 @@ describe("audit paging routes", () => {
     expect(response.headers.get("x-next-cursor")).toBeNull();
   });
 
+  it("limits a Pharmacy Manager and a Pharmacist to the history of one order or prescription", async () => {
+    auditCalls.length = 0;
+    auditPage = { rows: [], next: undefined };
+    const entityId = "00000000-0000-4000-8000-0000000000bb";
+    const as = (roles: string) => ({ headers: { "x-actor-type": "employee", "x-actor-roles": roles } });
+    for (const roles of ["Pharmacy Manager", "Pharmacist"]) {
+      expect((await fetch(`${base}/audit/logs?entityType=order&entityId=${entityId}`, as(roles))).status).toBe(200);
+      expect((await fetch(`${base}/audit/logs?entityType=prescription&entityId=${entityId}`, as(roles))).status).toBe(
+        200,
+      );
+      // The whole log, another entity, or a record type with no id is refused.
+      for (const query of ["", "?entityType=order", `?entityType=user&entityId=${entityId}`, `?entityId=${entityId}`]) {
+        const refused = await fetch(`${base}/audit/logs${query}`, as(roles));
+        expect(refused.status, `${roles} ${query}`).toBe(403);
+        expect(await refused.json()).toMatchObject({ code: "role_forbidden" });
+      }
+    }
+    expect(auditCalls).toHaveLength(4);
+    // Platform Admin still reads the whole log.
+    expect((await fetch(`${base}/audit/logs`, as("Platform Admin"))).status).toBe(200);
+  });
+
+  it("adds the actor's name to the history of one record, and only for a record", async () => {
+    const actorId = "00000000-0000-4000-8000-000000000003";
+    const entityId = "00000000-0000-4000-8000-0000000000bb";
+    auditPage = { rows: [{ eventId: "x", actorId }, { eventId: "y", actorId: null }], next: undefined };
+    const named = express();
+    named.use(
+      createOperationsRouter(repository, {
+        namesOf: (ids) => Promise.resolve(new Map(ids.map((id) => [id, "Dược sĩ A"]))),
+      }),
+    );
+    const namedServer = named.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => namedServer.once("listening", () => resolve()));
+    const url = `http://127.0.0.1:${(namedServer.address() as AddressInfo).port}`;
+    try {
+      const forRecord = await (await fetch(`${url}/audit/logs?entityType=order&entityId=${entityId}`)).json();
+      expect(forRecord).toStrictEqual([
+        { eventId: "x", actorId, actorName: "Dược sĩ A" },
+        { eventId: "y", actorId: null },
+      ]);
+      const wholeLog = await (await fetch(`${url}/audit/logs`)).json();
+      expect(wholeLog).toStrictEqual([
+        { eventId: "x", actorId },
+        { eventId: "y", actorId: null },
+      ]);
+    } finally {
+      await new Promise<void>((resolve) => namedServer.close(() => resolve()));
+    }
+  });
+
   it("answers 400 invalid_cursor for a tampered audit cursor", async () => {
     auditCalls.length = 0;
     const response = await fetch(`${base}/audit/logs?cursor=abc`);

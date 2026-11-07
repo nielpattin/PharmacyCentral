@@ -101,7 +101,7 @@ Code: `apps/staff-web/src/sections/prescriptions-section.tsx`, `sections/prescri
 - Source: `[observed]` BR-AUTH-002, BR-RX-000; `[standard]` Decision 10.
 - Accepted when:
   - The queue, counter transactions and consultations load.
-  - "Chỉ xem: xuất thuốc, thanh toán và trả lời tư vấn cần vai trò Dược sĩ." shows. No Create, Dispense, Cancel, Create invoice, Confirm cash, Refund or Send reply control is rendered; **N** does nothing; the customer lookup is not offered.
+  - No banner shows above the tabs. No Create, Dispense, Cancel, Create invoice, Confirm cash, Refund or Send reply control is rendered; **N** does nothing; the customer lookup is not offered.
 
 ## Contents and behavior
 
@@ -175,7 +175,7 @@ Code: `apps/staff-web/src/sections/prescriptions-section.tsx`, `sections/prescri
 | --- | --- | --- | --- |
 | G1 | Batch picker: Released, unexpired, stock at the prescription's location, FEFO. | Keeps Released, unexpired batches of the product. Location and stock are ignored, and no batch is pre-selected (`openDispenseLines` leaves `productBatchId` empty). The server returns batches in expiry order. | `sections/sales/rules.ts` (`dispensableBatches`); `hooks/useStaffReferences.ts` |
 | G3 | Refusals in Vietnamese; the English reason stays in logs. | Dispense 409 `detail` and stock 409 `detail` carry English inventory text; the drawer and create form show it unchanged. | `sales-routes.ts` (dispense route, `reservePrescriptionStock`); `staff-api.ts` |
-| G4 | History of a record for its readers, from a record-scoped history; the Audit page stays Platform Admin only (Decision 2). | History calls `/api/audit/logs`, Platform Admin only; Pharmacist and Pharmacy Manager get an error. BR-AUDIT-004 has no record-scoped rule. | `sections/sales/shared.tsx` (`SalesAuditHistory`); `trusted-request.ts`; `business-rules.md` BR-AUDIT-004 |
+| G4 | History of a record for its readers, from a record-scoped history; the Audit page stays Platform Admin only (Decision 2). | Closed: History calls `/api/audit/logs` with `entityType=prescription` and the record id, which Pharmacist and Pharmacy Manager may read; BR-AUDIT-004 now has that record-scoped rule. | `sections/sales/shared.tsx` (`SalesAuditHistory`); `trusted-request.ts`; `business-rules.md` BR-AUDIT-004 |
 | G5 | Consultation History tab (Decision 12). | No consultation drawer or History. The user guide's "Details drawer" bullet says consultations have one; build it or correct the guide. | `consultations-tab.tsx`; `user-guide.md` "Working with lists" |
 | G6 | Site and location selectors list assigned sites only. | `/api/sites` is not site-scoped (catalog-service `DEFAULT_SITE_SCOPED_PREFIXES` has no `/sites`); the create form lists every site. Locations are scoped. | `sections/prescriptions/create-drawer.tsx`; catalog-service `trusted-request.ts` |
 | G8 | Draft retired (Decision 8). | Draft is valid in `prescriptionStatuses`, `canCancelPrescription`, BR-RX-008 and BR-RX-014; nothing creates it. | `sales-routes.ts`; `sections/sales/rules.ts`; `business-rules.md` BR-RX-008, BR-RX-014 |

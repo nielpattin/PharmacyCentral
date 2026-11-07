@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { createLogger } from "./logger.ts";
 import { createTrustedRequestMiddleware } from "./middleware/trusted-request.ts";
 
+import { IdentityEmployeeNames } from "./modules/employee-names.ts";
 import { RabbitMqEventConsumer } from "./modules/rabbitmq-event-consumer.ts";
 import { createOperationsRouter } from "./modules/operations-routes.ts";
 import { OperationsRepository } from "./modules/operations-repository.ts";
@@ -54,7 +55,11 @@ app.get("/health/live", (_request, response) => response.json({ status: "ok", se
 app.get("/health/ready", (_request, response) =>
   response.status(database ? 200 : 503).json({ status: database ? "ok" : "degraded", service: serviceName }),
 );
-app.use(createOperationsRouter(repository));
+// Names for the History tab of an order or prescription. Without IDENTITY_SERVICE_URL the tab shows ids, as before.
+const identityServiceUrl = process.env.IDENTITY_SERVICE_URL;
+app.use(
+  createOperationsRouter(repository, identityServiceUrl ? new IdentityEmployeeNames(identityServiceUrl) : undefined),
+);
 app.use((_request, response) => response.status(404).json({ title: "Not Found", status: 404 }));
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   logger.error({ error }, "unhandled request error");

@@ -66,6 +66,7 @@ Mỗi service kiểm tra role của access token bằng bảng role trong `src/m
 | Đường dẫn | Role yêu cầu |
 | --- | --- |
 | `/api/admin`, `/api/audit`, `/api/operations/audit`, `/api/system`, các đường dẫn cấu hình AI (`aiCredentialPaths`) | Platform Admin |
+| `GET /api/audit/logs` với `entityType` là `order` hoặc `prescription` và có `entityId` (BR-AUDIT-004) | Platform Admin, Pharmacy Manager, Pharmacist |
 | `/api/customers` (tra cứu khách) | Pharmacist |
 | `/api/finance`, `/api/operations/finance` | Pharmacy Manager |
 | `/api/dashboard`, `/api/operations/dashboard` | Pharmacy Manager, Warehouse Staff |
@@ -998,9 +999,9 @@ Operations-query-service ghi `audit_events` từ sự kiện có `eventType` k�
 
 Lọc theo `actorId`, site, `action` (chứa chuỗi), `entityType`, `entityId`, khoảng thời gian.
 
-### BR-AUDIT-004. Audit chỉ dành cho Platform Admin
+### BR-AUDIT-004. Audit đầy đủ chỉ dành cho Platform Admin; lịch sử một bản ghi dành cho người mở được bản ghi đó
 
-`/api/audit` thuộc `platformAdminPaths` (BR-AUTH-002).
+`/api/audit` thuộc `platformAdminPaths` (BR-AUTH-002), trừ một ngoại lệ: `GET /api/audit/logs` cho Pharmacy Manager và Pharmacist khi có cả `entityType` là `order` hoặc `prescription` và `entityId`. Đó là tab Lịch sử của một đơn hàng online hoặc một đơn thuốc. Thiếu `entityId`, hoặc `entityType` khác, trả 403 `role_forbidden`. `/api/operations/audit` vẫn chỉ dành cho Platform Admin. Sự kiện đơn hàng không mang `siteId`, nên các lần đọc này không lọc theo site: mã bản ghi là phạm vi, và người dùng chỉ có mã từ danh sách đã giới hạn theo site của họ.
 
 ## 18. Quy tắc người dùng và phiên đăng nhập
 

@@ -620,6 +620,7 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:3004
       SALES_SERVICE_URL: http://sales-service:3005
       PAYMENT_SERVICE_URL: http://payment-service:3006
+      IDENTITY_SERVICE_URL: http://identity-service:3001
     ports:
       - "${OPERATIONS_QUERY_PORT}:3007"
 

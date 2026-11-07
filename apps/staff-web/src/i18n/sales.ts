@@ -122,8 +122,6 @@ export const salesLiterals: Record<string, string> = {
   "Consultation answered.": "Đã gửi câu trả lời.",
   "Another pharmacist already answered this request.": "Dược sĩ khác đã trả lời yêu cầu này.",
   "Unable to answer the consultation request": "Không gửi được câu trả lời",
-  "View only: dispensing, payments and consultation replies need the Pharmacist role.":
-    "Chỉ xem: xuất thuốc, thanh toán và trả lời tư vấn cần vai trò Dược sĩ.",
   "Waiting for a pharmacist to reply.": "Đang chờ dược sĩ trả lời.",
   "No history yet.": "Chưa có lịch sử.",
   "No counter payments.": "Chưa có thanh toán tại quầy.",

@@ -97,10 +97,15 @@ describe("trusted request role restatement", () => {
     });
   };
 
-  it("refuses a Pharmacy Manager the audit log, which only Platform Admin reads", async () => {
-    const refused = await callAs(["Pharmacy Manager"], "/audit/logs");
-    expect(refused.status).toBe(403);
-    expect((await callAs(["Platform Admin"], "/audit/logs")).status).toBe(200);
+  it("lets a Pharmacy Manager and a Pharmacist reach the audit log, and only Platform Admin the other audit routes", async () => {
+    for (const role of ["Platform Admin", "Pharmacy Manager", "Pharmacist"]) {
+      expect((await callAs([role], "/audit/logs")).status, role).toBe(200);
+    }
+    expect((await callAs(["Warehouse Staff"], "/audit/logs")).status).toBe(403);
+    for (const role of ["Pharmacy Manager", "Pharmacist"]) {
+      expect((await callAs([role], "/operations/audit")).status, role).toBe(403);
+    }
+    expect((await callAs(["Platform Admin"], "/operations/audit")).status).toBe(200);
   });
 
   it("admits only a Pharmacy Manager to the analytics: business figures are not the administrator's to read", async () => {

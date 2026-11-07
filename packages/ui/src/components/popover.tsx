@@ -21,9 +21,21 @@ const PANEL_CLASS =
   "absolute right-0 z-40 mt-1 max-w-[calc(100vw-1rem)] rounded-md border border-line bg-surface shadow-lg outline-none";
 
 /**
+ * The left edge the panel is cut at: the window's, or that of the innermost scrolling or clipping ancestor, such as the
+ * body of a sheet. A panel that runs past a sheet's edge is hidden behind it, so the sheet's edge is the one that counts.
+ */
+const clippingLeft = (element: HTMLElement): number => {
+  let left = 0;
+  for (let node = element.parentElement; node !== null; node = node.parentElement) {
+    if (getComputedStyle(node).overflowX !== "visible") left = Math.max(left, node.getBoundingClientRect().left);
+  }
+  return left;
+};
+
+/**
  * A button that opens a floating panel under it. At most one stays open: the panel closes when focus or a click moves
  * anywhere outside it, and on Escape, which returns focus to the button. If the panel would run past the left edge of
- * the window it aligns to the button's left edge instead.
+ * the window, or of the sheet or scroll area it sits in, it aligns to the button's left edge instead.
  */
 export const Popover = ({
   buttonLabel,
@@ -72,7 +84,7 @@ export const Popover = ({
           tabIndex={-1}
           ref={(element) => {
             presence.ref(element);
-            if (element !== null && element.getBoundingClientRect().left < 8) {
+            if (element !== null && element.getBoundingClientRect().left < clippingLeft(element) + 8) {
               element.style.right = "auto";
               element.style.left = "0";
             }

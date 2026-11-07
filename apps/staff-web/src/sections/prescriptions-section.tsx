@@ -1,4 +1,3 @@
-import { Alert } from "@pharmacy/ui";
 import { useState } from "react";
 
 import { CreateAction } from "../components/form-parts.tsx";
@@ -6,7 +5,6 @@ import { SubTabs } from "../components/forms.tsx";
 import { useHotkey } from "../hooks/useHotkey.ts";
 import { useListUrlState } from "../hooks/useListUrlState.ts";
 import { useCan } from "../permissions/use-can.ts";
-import { translateText } from "../i18n.ts";
 import { ConsultationsTab } from "./prescriptions/consultations-tab.tsx";
 import { CounterTab } from "./prescriptions/counter-tab.tsx";
 import { CreatePrescriptionDrawer } from "./prescriptions/create-drawer.tsx";
@@ -46,11 +44,6 @@ export const PrescriptionsSection = ({
 
   return (
     <section className="grid gap-3">
-      {canOperateCounter ? null : (
-        <Alert variant="info">
-          {translateText("View only: dispensing, payments and consultation replies need the Pharmacist role.")}
-        </Alert>
-      )}
       <SubTabs
         tabs={[...TABS]}
         active={activeTab}

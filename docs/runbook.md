@@ -124,6 +124,7 @@ Which service needs which URL, and why:
 | `payment-service` | `SALES_SERVICE_URL` | It reads the order behind an invoice. |
 | `operations-query-service` | `SALES_SERVICE_URL` | It reads the dashboard's prescription figures. |
 | `operations-query-service` | `PAYMENT_SERVICE_URL` | Period analytics read paid invoices from `GET /internal/analytics/paid-invoices`. It also reads sales documents and stock health from `/internal/analytics/*` of `sales-service` and `inventory-service`. |
+| `operations-query-service` | `IDENTITY_SERVICE_URL` | Optional. The History tab of an order or prescription reads the actors' names from `GET /internal/employees/{id}`. Without it the tab shows id prefixes. |
 | `inventory-service` | `IDENTITY_SERVICE_URL` | It checks the owner of an action plan against `GET /internal/employees/{id}`. |
 
 Gross profit on the Analytics page shows "—" for sales whose goods have no recorded unit cost. Opening balances carry none, so `seed:demo` receives the shop's stock again through goods receipts with a cost (the demo history step). Your own receipts need a **Giá nhập**. The read behind it is `GET /internal/analytics/dispense-costs` of `inventory-service`.

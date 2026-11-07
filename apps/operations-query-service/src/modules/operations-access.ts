@@ -31,6 +31,22 @@ export const dashboardActionFamilies = (roles: readonly string[]): readonly stri
 
 const WAREHOUSE_ACTION_FAMILIES: readonly string[] = ["inventory", "procurement"];
 
+/**
+ * What a Pharmacy Manager or Pharmacist may read from the audit log: the history of one order or one prescription, which
+ * they can already open. Any other entity, or a read with no entity id, stays Platform Admin only. The record id is the
+ * scope: order events carry no siteId, so the site filter is not applied to these reads.
+ */
+export const ENTITY_HISTORY_TYPES: readonly string[] = ["order", "prescription"];
+
+export const mayReadAuditFilters = (
+  roles: readonly string[],
+  filters: { entityType: string | undefined; entityId: string | undefined },
+): boolean =>
+  roles.includes("Platform Admin") ||
+  (filters.entityId !== undefined &&
+    filters.entityType !== undefined &&
+    ENTITY_HISTORY_TYPES.includes(filters.entityType));
+
 export type RoleRefusal = {
   status: 403;
   title: string;
