@@ -1,4 +1,4 @@
-import { ActionMenu, Alert, Button, RowActions, Select, StatusCell, type ActionMenuItem } from "@pharmacy/ui";
+import { ActionMenu, Alert, Button, RowActions, Select, StatusBadge, type ActionMenuItem } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { useSession } from "../../auth.ts";
@@ -116,9 +116,9 @@ export const UsersTab = (): React.JSX.Element => {
       label: "Status",
       render: (row) =>
         toEmployeeAccount(row).isActive ? (
-          <StatusCell tone="success">{translateText("Active")}</StatusCell>
+          <StatusBadge tone="success">{translateText("Active")}</StatusBadge>
         ) : (
-          <StatusCell tone="neutral">{translateText("Deactivated")}</StatusCell>
+          <StatusBadge tone="neutral">{translateText("Deactivated")}</StatusBadge>
         ),
       text: (row) => (toEmployeeAccount(row).isActive ? "Active" : "Deactivated"),
     },

@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Input, RowActions, Select, StatusCell, useToast, type StatusTone } from "@pharmacy/ui";
+import { Alert, Button, Input, RowActions, Select, StatusBadge, useToast, type StatusTone } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { useConfirm } from "../../components/confirm.tsx";
@@ -225,7 +225,7 @@ export const PricingPage = (): React.JSX.Element => {
       text: (row) => translateText(text(row.status, "")),
       render: (row) => {
         const status = text(row.status, "");
-        return <StatusCell tone={STATUS_TONE[status] ?? "neutral"}>{translateText(status)}</StatusCell>;
+        return <StatusBadge tone={STATUS_TONE[status] ?? "neutral"}>{translateText(status)}</StatusBadge>;
       },
     },
     {

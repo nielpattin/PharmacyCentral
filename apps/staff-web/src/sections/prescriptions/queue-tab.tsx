@@ -1,4 +1,4 @@
-import { ActionMenu, Alert, Button, RowActions, StatusCell, type ActionMenuItem } from "@pharmacy/ui";
+import { ActionMenu, Alert, Button, RowActions, StatusBadge, type ActionMenuItem } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { DataTable, type Column } from "../../components/data-table.tsx";
@@ -124,7 +124,7 @@ export const PrescriptionQueueTab = ({
       key: "status",
       label: "Status",
       render: (row) => (
-        <StatusCell tone={prescriptionTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusCell>
+        <StatusBadge tone={prescriptionTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusBadge>
       ),
     },
     {

@@ -4,7 +4,7 @@ import {
   DataTable,
   RowActions,
   Select,
-  StatusCell,
+  StatusBadge,
   type DataColumn,
   type StatusTone,
 } from "@pharmacy/ui";
@@ -22,8 +22,9 @@ import { useSearchDraft } from "../../hooks/useSearchDraft.ts";
 import { useStaffAction } from "../../hooks/useStaffAction.ts";
 import { translateText } from "../../i18n.ts";
 import { customerLabel, orderLabel, shortId } from "../procurement/labels.ts";
-import { formatDateTime, formatQuantity, idOf, text, type JsonRecord } from "../../staff-api.ts";
-import { isCounterInvoice } from "../sales/rules.ts";
+import { formatDateTime, idOf, text, type JsonRecord } from "../../staff-api.ts";
+import { formatAmount, isCounterInvoice } from "../sales/rules.ts";
+import { moneyLocale } from "../sales/shared.tsx";
 import { ReconciliationDrawer } from "./reconciliation-drawer.tsx";
 import { useRefundRequest } from "./refund-request.ts";
 import { FINANCE_SUMMARY_KEY, INVOICES_KEY } from "./query-keys.ts";
@@ -141,16 +142,16 @@ export const InvoicesTab = (): React.JSX.Element => {
       key: "amount",
       label: translateText("Amount"),
       align: "right",
-      render: (row) => `${formatQuantity(row.amount)} ${text(row.currency, "VND")}`,
+      render: (row) => formatAmount(row.amount, text(row.currency, "VND"), moneyLocale()),
       text: (row) => text(row.amount, ""),
     },
     {
       key: "status",
       label: translateText("Status"),
       render: (row) => (
-        <StatusCell tone={INVOICE_TONE[text(row.status, "")] ?? "neutral"}>
+        <StatusBadge tone={INVOICE_TONE[text(row.status, "")] ?? "neutral"}>
           {translateText(text(row.status))}
-        </StatusCell>
+        </StatusBadge>
       ),
       text: (row) => translateText(text(row.status, "")),
     },
@@ -216,7 +217,7 @@ export const InvoicesTab = (): React.JSX.Element => {
           onChange: setSearch,
           placeholder: translateText("Search by invoice number, order ID or customer ID"),
         }}
-        paging={invoices.paging}
+        paging={{ ...invoices.paging, pages: true }}
         exportCsv={{ filename: "invoices.csv" }}
       />
       {reconciling ? (

@@ -7,7 +7,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  StatusCell,
+  StatusBadge,
   Textarea,
   useToast,
 } from "@pharmacy/ui";
@@ -164,9 +164,9 @@ export const ConsultationsTab = ({ canOperateCounter }: { canOperateCounter: boo
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <StatusCell tone={consultationTone(text(consultation.status, ""))}>
+                  <StatusBadge tone={consultationTone(text(consultation.status, ""))}>
                     {translateText(text(consultation.status, "-"))}
-                  </StatusCell>
+                  </StatusBadge>
                   <span className="text-sm text-muted">
                     {translateText(consultation.source === "qr" ? "QR code" : "Photo")}
                   </span>

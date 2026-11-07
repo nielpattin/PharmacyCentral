@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, StatusCell } from "@pharmacy/ui";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, StatusBadge } from "@pharmacy/ui";
 
 import type { PrescriptionConsultation } from "../../customer-api.ts";
 import { formatDateTime } from "../../storefront/format.ts";
@@ -38,9 +38,9 @@ export const PrescriptionConsultationsCard = ({
               <li key={consultation.id} className="rounded-lg border border-line p-4">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
                   {consultation.prescription.code ? `Đơn ${consultation.prescription.code}` : "Đơn thuốc đã gửi"}
-                  <StatusCell tone={consultation.status === "Answered" ? "success" : "warning"}>
+                  <StatusBadge tone={consultation.status === "Answered" ? "success" : "warning"}>
                     {consultation.status === "Answered" ? "Dược sĩ đã trả lời" : "Đang chờ dược sĩ"}
-                  </StatusCell>
+                  </StatusBadge>
                 </p>
                 <p className="mt-1 text-xs text-muted-soft">
                   Gửi lúc: {formatDateTime(consultation.createdAt)} · {consultation.lines.length} thuốc

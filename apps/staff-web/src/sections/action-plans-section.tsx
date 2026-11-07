@@ -1,15 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Alert,
-  Button,
-  DataTable,
-  RowActions,
-  Select,
-  StatusBadge,
-  StatusCell,
-  useToast,
-  type DataColumn,
-} from "@pharmacy/ui";
+import { Alert, Button, DataTable, RowActions, Select, StatusBadge, useToast, type DataColumn } from "@pharmacy/ui";
 import { useMemo, useState } from "react";
 
 import { useSession } from "../auth.ts";
@@ -176,7 +166,7 @@ const ActionPlansList = (): React.JSX.Element => {
       key: "status",
       label: translateText("Status"),
       render: (row) => (
-        <StatusCell tone={STATUS_TONES[row.status]}>{translateText(STATUS_LABELS[row.status])}</StatusCell>
+        <StatusBadge tone={STATUS_TONES[row.status]}>{translateText(STATUS_LABELS[row.status])}</StatusBadge>
       ),
       text: (row) => translateText(STATUS_LABELS[row.status]),
     },

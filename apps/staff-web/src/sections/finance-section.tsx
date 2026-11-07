@@ -3,8 +3,10 @@ import { Alert, StatTile } from "@pharmacy/ui";
 
 import { translateText } from "../i18n.ts";
 import { useCan } from "../permissions/use-can.ts";
-import { formatQuantity, readOne, text, type JsonRecord } from "../staff-api.ts";
+import { readOne, text, type JsonRecord } from "../staff-api.ts";
 import { FINANCE_SUMMARY_KEY } from "./finance/query-keys.ts";
+import { formatAmount } from "./sales/rules.ts";
+import { moneyLocale } from "./sales/shared.tsx";
 import { InvoicesTab } from "./finance/invoices-tab.tsx";
 
 /** Money taken, given back and kept, from `/api/finance/summary`. Only a Pharmacy Manager reads it. */
@@ -18,7 +20,7 @@ const PaymentTotals = (): React.JSX.Element => {
   return (
     <div className="grid gap-2.5">
       {summaryQuery.error ? <Alert variant="danger">{translateText(summaryQuery.error.message)}</Alert> : null}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2.5">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2.5">
         {(
           [
             ["Paid", "paid"],
@@ -29,7 +31,7 @@ const PaymentTotals = (): React.JSX.Element => {
           <StatTile
             key={label}
             label={translateText(label)}
-            value={`${formatQuantity(summary?.[field] ?? 0)} ${currency}`}
+            value={formatAmount(summary?.[field] ?? 0, currency, moneyLocale())}
           />
         ))}
       </div>

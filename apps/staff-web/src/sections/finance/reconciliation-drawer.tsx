@@ -4,7 +4,9 @@ import type { StatusTone } from "@pharmacy/ui";
 
 import { EntityDrawer } from "../../components/entity-drawer.tsx";
 import { translateText } from "../../i18n.ts";
-import { formatDateTime, formatQuantity, readOne, text, type JsonRecord } from "../../staff-api.ts";
+import { formatDateTime, readOne, text, type JsonRecord } from "../../staff-api.ts";
+import { formatAmount } from "../sales/rules.ts";
+import { moneyLocale } from "../sales/shared.tsx";
 import { Fact, FactList } from "../inventory/shared.tsx";
 
 const STATES: Readonly<Record<string, { label: string; tone: StatusTone }>> = {
@@ -33,7 +35,7 @@ export const ReconciliationDrawer = ({
   });
   const record = query.data;
   const state = STATES[text(record?.state, "")];
-  const money = (value: unknown): string => `${formatQuantity(value)} ${currency}`;
+  const money = (value: unknown): string => formatAmount(value, currency, moneyLocale());
   return (
     <EntityDrawer
       open

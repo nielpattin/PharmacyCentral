@@ -1,5 +1,5 @@
 import {
-  StatusCell,
+  StatusBadge,
   Card,
   CardContent,
   CardDescription,
@@ -45,9 +45,9 @@ const ServiceRow = ({ row, onOpen }: { row: ServiceTableRow; onOpen: (name: stri
     </TableCell>
     <TableCell>
       {/* One state per service: not ready beats not live, and a healthy service reads as plain "Ready". */}
-      <StatusCell tone={row.status === "up" && row.liveStatus === "up" ? "success" : "danger"}>
+      <StatusBadge tone={row.status === "up" && row.liveStatus === "up" ? "success" : "danger"}>
         {translateText(row.status !== "up" ? "Down" : row.liveStatus !== "up" ? "Live down" : "Ready")}
-      </StatusCell>
+      </StatusBadge>
     </TableCell>
     <TableCell className="tabular-nums">{formatMillicores(row.cpuCores)}</TableCell>
     <TableCell className="tabular-nums">{formatMebibytes(row.memoryBytes)}</TableCell>

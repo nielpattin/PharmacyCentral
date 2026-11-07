@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, StatusCell, type StatusTone } from "@pharmacy/ui";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, StatusBadge, type StatusTone } from "@pharmacy/ui";
 
 import type { CustomerPrescription } from "../../customer-api.ts";
 import { formatDateTime } from "../../storefront/format.ts";
@@ -54,9 +54,9 @@ export const PrescriptionsCard = ({ prescriptions }: PrescriptionsCardProps): Re
                   <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
                     <IconShield className="size-4 text-primary" />
                     {prescription.prescriptionNumber}
-                    <StatusCell tone={statusTone(prescription.status)}>
+                    <StatusBadge tone={statusTone(prescription.status)}>
                       {STATUS_LABELS[prescription.status] ?? prescription.status}
-                    </StatusCell>
+                    </StatusBadge>
                   </p>
                   <p className="mt-1 text-xs text-muted-soft">
                     Ngày ghi: {formatDateTime(prescription.createdAt)}

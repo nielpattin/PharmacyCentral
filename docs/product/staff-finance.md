@@ -62,7 +62,7 @@ Tags: `[observed]` a code fact, read on 2026-10-26; `[standard]` a decision from
 
 - Accepted when:
   - The status select offers **All statuses**, `Pending`, `Paid`, `Failed`, `Refunded`, `Cancelled`. The search (placeholder "Tìm theo số hóa đơn, mã đơn hoặc mã khách hàng") commits after a pause; `/` focuses it.
-  - Rows are newest first, 100 per page with **Load more**. The list never caps silently.
+  - Rows are newest first, 25 to a page with numbered page buttons, **Trước** and **Sau**, and a "Trang N trong M" label; the next 100-row cursor page is read when the reader is one page from the end of what is loaded. The list never caps silently.
   - **Created** and every other time shows in Asia/Ho_Chi_Minh (gap G14).
   - **Export** downloads `invoices.csv` with every row of the current filter. It loads the remaining pages first; if a page fails it downloads nothing and shows the error (gap G15).
   - Filters and search survive a reload (URL state). Saved views are stored under `finance-invoices`.

@@ -13,7 +13,7 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "../cn.ts";
 import { downloadCsv, toCsv, type CsvColumn } from "../data-table/csv.ts";
@@ -111,8 +111,12 @@ export type DataTableSearch = {
   placeholder?: string | undefined;
 };
 
-/** Cursor paging. The footer shows "Load more" while `hasMore` is true. */
+/**
+ * Cursor paging. The footer shows "Load more" while `hasMore` is true, or, with `pages`, page numbers over the loaded rows.
+ */
 export type DataTablePaging<T = unknown> = {
+  /** Shows Previous and Next over the loaded rows, 25 to a page, instead of "Load more". The next cursor page is read when the reader is one page from the end of what is loaded. */
+  pages?: boolean | undefined;
   hasMore: boolean;
   loadingMore?: boolean | undefined;
   onLoadMore: () => void;
@@ -158,6 +162,26 @@ export type DataTableProps<T> = {
   toolbarExtra?: ReactNode | undefined;
   /** Filter controls at the start of the toolbar, so a page's filters and the table controls share one row. */
   toolbarStart?: ReactNode | undefined;
+};
+
+/** A column keeps its own alignment; a column pinned to the right holds row actions, so its header and cells sit at the right edge like the actions do. */
+const alignClass = (column: Pick<DataColumn<unknown>, "align" | "pinned"> | undefined): string | undefined => {
+  const align = column?.align ?? (column?.pinned === "right" ? "right" : undefined);
+  return align === undefined ? undefined : ALIGN_CLASS[align];
+};
+
+/** The page buttons: first, last and the pages around the current one, with a gap where pages are skipped, and a trailing gap while more pages can still load. */
+const pageNumbers = (current: number, count: number, more: boolean): Array<number | "gap"> => {
+  const shown = new Set([0, count - 1, current - 1, current, current + 1].filter((page) => page >= 0 && page < count));
+  const entries: Array<number | "gap"> = [];
+  let previous = -1;
+  for (const page of [...shown].sort((a, b) => a - b)) {
+    if (page - previous > 1) entries.push("gap");
+    entries.push(page);
+    previous = page;
+  }
+  if (more) entries.push("gap");
+  return entries;
 };
 
 type ColumnLayout = Pick<DataColumn<unknown>, "align" | "pinned" | "width" | "hideBelow">;
@@ -312,6 +336,9 @@ export const DataTable = <T,>({
   // Server mode: search or paging is owned by the caller, so the client filter and pagination step aside.
   const serverMode = search !== undefined || paging !== undefined;
   const clientMode = interactive && !serverMode;
+  // Page numbers: a client-side slice of the rows passed in, for a client table or a cursor-paged one that asks for it.
+  const numbered = paging?.pages === true;
+  const pagedLocally = clientMode || numbered;
   const sortingEnabled = interactive || serverMode;
 
   const [preferences, updatePreferences] = useTablePreferences(storageKey);
@@ -360,7 +387,9 @@ export const DataTable = <T,>({
     onPaginationChange: setPagination,
     onSortingChange: setSorting,
     manualFiltering: !clientMode,
-    manualPagination: !clientMode,
+    manualPagination: !pagedLocally,
+    // Reading the next cursor page adds rows; it must not send the reader back to page 1.
+    autoResetPageIndex: !numbered,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -370,6 +399,14 @@ export const DataTable = <T,>({
   const filteredRows = table.getPrePaginationRowModel().rows;
   const pageRows = table.getRowModel().rows;
   const visibleCount = table.getVisibleLeafColumns().length;
+  const pageCount = table.getPageCount();
+  const pageIndex = pagination.pageIndex;
+  const loadNextCursorPage = paging?.hasMore && !paging.loadingMore ? paging.onLoadMore : undefined;
+  useEffect(() => {
+    if (!numbered) return;
+    if (pageIndex > 0 && pageIndex >= pageCount) table.setPageIndex(Math.max(pageCount - 1, 0));
+    else if (pageIndex + 2 >= pageCount) loadNextCursorPage?.();
+  }, [numbered, pageIndex, pageCount, loadNextCursorPage, table]);
   const density = preferences.density;
   const pageKeys = pageRows.map((row) => row.id);
   const selectedKeys = selection?.keys ?? EMPTY_KEYS;
@@ -473,7 +510,7 @@ export const DataTable = <T,>({
               key={cell.id}
               className={cn(
                 DENSITY_CELL[density],
-                column?.align !== undefined && ALIGN_CLASS[column.align],
+                alignClass(column),
                 column?.pinned === "right" && cn(PINNED_CELL, scrollsSideways && PINNED_EDGE),
                 column?.hideBelow && HIDE_BELOW_CLASS[column.hideBelow],
               )}
@@ -516,7 +553,7 @@ export const DataTable = <T,>({
             className={cn(
               "whitespace-nowrap bg-surface",
               stickyHeaderClass,
-              column?.align !== undefined && ALIGN_CLASS[column.align],
+              alignClass(column),
               column?.pinned === "right" && cn("sticky right-0 z-20", scrollsSideways && PINNED_EDGE),
               column?.hideBelow && HIDE_BELOW_CLASS[column.hideBelow],
             )}
@@ -682,12 +719,12 @@ export const DataTable = <T,>({
     ) : null;
 
   const clientFooter =
-    clientMode && filteredRows.length > 0 ? (
+    pagedLocally && filteredRows.length > 0 ? (
       <div className="mt-3 flex items-center justify-between gap-3 text-sm text-muted">
         <span>
-          {`${text("page")} ${pagination.pageIndex + 1} ${text("pageOf")} ${Math.max(table.getPageCount(), 1)}`}
+          {`${text("page")} ${pageIndex + 1} ${text("pageOf")} ${Math.max(pageCount, 1)}${paging?.hasMore ? "+" : ""}`}
         </span>
-        <div className="flex gap-2">
+        <nav className="flex items-center gap-1" aria-label={text("page")}>
           <Button
             type="button"
             variant="ghost"
@@ -697,6 +734,26 @@ export const DataTable = <T,>({
           >
             {text("previous")}
           </Button>
+          {pageNumbers(pageIndex, Math.max(pageCount, 1), paging?.hasMore === true).map((entry, position) =>
+            entry === "gap" ? (
+              <span key={`gap-${position}`} aria-hidden="true" className="px-1">
+                …
+              </span>
+            ) : (
+              <Button
+                key={entry}
+                type="button"
+                size="sm"
+                variant={entry === pageIndex ? "outline" : "ghost"}
+                className={cn("min-w-7 px-1.5", entry === pageIndex && "border-primary text-primary")}
+                aria-label={`${text("page")} ${entry + 1}`}
+                aria-current={entry === pageIndex ? "page" : undefined}
+                onClick={() => table.setPageIndex(entry)}
+              >
+                {entry + 1}
+              </Button>
+            ),
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -706,35 +763,38 @@ export const DataTable = <T,>({
           >
             {text("next")}
           </Button>
-        </div>
+        </nav>
       </div>
     ) : null;
 
-  const serverFooter = paging ? (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
-      <span aria-live="polite">
-        {rows.length === 1 && (paging.total === undefined || paging.total === 1)
-          ? text("showingOneRow")
-          : paging.total !== undefined
-            ? fill(text("showingOfTotal"), { count: rows.length, total: paging.total })
-            : fill(text("showingRows"), { count: rows.length })}
-      </span>
-      <div className="flex items-center gap-2">
-        {paging.hasMore ? <span className="text-xs font-medium text-primary-dark">{text("moreAvailable")}</span> : null}
-        {paging.hasMore ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={paging.loadingMore ?? false}
-            onClick={paging.onLoadMore}
-          >
-            {paging.loadingMore ? text("loadingMore") : text("loadMore")}
-          </Button>
-        ) : null}
+  const serverFooter =
+    paging && !numbered ? (
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+        <span aria-live="polite">
+          {rows.length === 1 && (paging.total === undefined || paging.total === 1)
+            ? text("showingOneRow")
+            : paging.total !== undefined
+              ? fill(text("showingOfTotal"), { count: rows.length, total: paging.total })
+              : fill(text("showingRows"), { count: rows.length })}
+        </span>
+        <div className="flex items-center gap-2">
+          {paging.hasMore ? (
+            <span className="text-xs font-medium text-primary-dark">{text("moreAvailable")}</span>
+          ) : null}
+          {paging.hasMore ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={paging.loadingMore ?? false}
+              onClick={paging.onLoadMore}
+            >
+              {paging.loadingMore ? text("loadingMore") : text("loadMore")}
+            </Button>
+          ) : null}
+        </div>
       </div>
-    </div>
-  ) : null;
+    ) : null;
 
   return (
     <>

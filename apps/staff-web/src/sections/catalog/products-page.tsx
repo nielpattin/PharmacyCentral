@@ -1,4 +1,4 @@
-import { Alert, Button, Input, RowActions, Select, StatusCell } from "@pharmacy/ui";
+import { Alert, Button, Input, RowActions, Select, StatusBadge } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { useSession } from "../../auth.ts";
@@ -93,9 +93,9 @@ export const ProductsPage = (): React.JSX.Element => {
       label: translateText("Status"),
       text: (row) => translateText(text(row.status, "")),
       render: (row) => (
-        <StatusCell tone={text(row.status, "") === "Active" ? "success" : "neutral"}>
+        <StatusBadge tone={text(row.status, "") === "Active" ? "success" : "neutral"}>
           {translateText(text(row.status))}
-        </StatusCell>
+        </StatusBadge>
       ),
     },
     {

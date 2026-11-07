@@ -59,7 +59,7 @@ export { ShareBar, type ShareBarProps, type SharePart } from "./components/share
 export { Sheet } from "./components/sheet.tsx";
 export { Skeleton } from "./components/skeleton.tsx";
 export { StatTile, type StatTileProps } from "./components/stat-tile.tsx";
-export { StatusBadge, StatusCell, type StatusBadgeProps, type StatusTone } from "./components/status-badge.tsx";
+export { StatusBadge, type StatusBadgeProps, type StatusTone } from "./components/status-badge.tsx";
 export { StatusDot } from "./components/status-dot.tsx";
 export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/table.tsx";
 export { ToastProvider, useToast, type ToastApi, type ToastLabels } from "./components/toast.tsx";

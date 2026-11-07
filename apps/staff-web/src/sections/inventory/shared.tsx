@@ -1,5 +1,5 @@
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { Alert, Select, StatusCell, useToast, type ToastApi } from "@pharmacy/ui";
+import { Alert, Select, StatusBadge, useToast, type ToastApi } from "@pharmacy/ui";
 import { type ReactNode } from "react";
 
 import { useConfirm } from "../../components/confirm.tsx";
@@ -43,7 +43,7 @@ export const StatusFilter = ({
 );
 
 export const statusBadge = (status: string): React.JSX.Element => (
-  <StatusCell tone={statusTone(status)}>{translateText(status)}</StatusCell>
+  <StatusBadge tone={statusTone(status)}>{translateText(status)}</StatusBadge>
 );
 
 export const Fact = ({ label, children }: { label: string; children: ReactNode }): React.JSX.Element => (

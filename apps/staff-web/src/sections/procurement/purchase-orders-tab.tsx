@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, DataTable, RowActions, Select, StatusCell, useToast, type DataColumn } from "@pharmacy/ui";
+import { Alert, Button, DataTable, RowActions, Select, StatusBadge, useToast, type DataColumn } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { useConfirm } from "../../components/confirm.tsx";
@@ -122,7 +122,9 @@ export const PurchaseOrdersTab = (): React.JSX.Element => {
     {
       key: "status",
       label: translateText("Status"),
-      render: (row) => <StatusCell tone={purchaseOrderTone(row.status)}>{translateText(text(row.status))}</StatusCell>,
+      render: (row) => (
+        <StatusBadge tone={purchaseOrderTone(row.status)}>{translateText(text(row.status))}</StatusBadge>
+      ),
       text: (row) => translateText(text(row.status, "")),
     },
     {

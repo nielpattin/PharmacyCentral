@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Alert, Button, RowActions, StatusCell } from "@pharmacy/ui";
+import { Alert, Button, RowActions, StatusBadge } from "@pharmacy/ui";
 
 import { DataTable, type Column } from "../../components/data-table.tsx";
 import { withActionColumn } from "../../lib/action-column.ts";
@@ -103,7 +103,7 @@ export const CounterTab = (): React.JSX.Element => {
       key: "status",
       label: "Payment",
       render: (row) => (
-        <StatusCell tone={paymentTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusCell>
+        <StatusBadge tone={paymentTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusBadge>
       ),
     },
     {

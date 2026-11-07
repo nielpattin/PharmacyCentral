@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-import { Alert, Button, RowActions, StatusCell } from "@pharmacy/ui";
+import { Alert, Button, RowActions, StatusBadge } from "@pharmacy/ui";
 
 import { DataTable, type Column } from "../components/data-table.tsx";
 import { EntityDrawer } from "../components/entity-drawer.tsx";
@@ -74,7 +74,7 @@ export const OrdersSection = (): React.JSX.Element => {
       key: "status",
       label: "Status",
       render: (row) => (
-        <StatusCell tone={orderTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusCell>
+        <StatusBadge tone={orderTone(text(row.status, ""))}>{translateText(text(row.status, "-"))}</StatusBadge>
       ),
     },
     {

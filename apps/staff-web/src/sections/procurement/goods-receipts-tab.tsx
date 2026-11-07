@@ -1,4 +1,4 @@
-import { Alert, Button, DataTable, RowActions, StatusCell, type DataColumn } from "@pharmacy/ui";
+import { Alert, Button, DataTable, RowActions, StatusBadge, type DataColumn } from "@pharmacy/ui";
 import { useRef, useState } from "react";
 
 import { dataTableLabels } from "../../components/data-table-labels.ts";
@@ -49,7 +49,7 @@ export const GoodsReceiptsTab = (): React.JSX.Element => {
     {
       key: "status",
       label: translateText("Status"),
-      render: (row) => <StatusCell tone="neutral">{translateText(text(row.status))}</StatusCell>,
+      render: (row) => <StatusBadge tone="neutral">{translateText(text(row.status))}</StatusBadge>,
       text: (row) => translateText(text(row.status, "")),
     },
     {
