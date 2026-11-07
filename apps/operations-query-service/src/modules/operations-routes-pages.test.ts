@@ -77,7 +77,13 @@ describe("audit paging routes", () => {
   it("adds the actor's name to the history of one record, and only for a record", async () => {
     const actorId = "00000000-0000-4000-8000-000000000003";
     const entityId = "00000000-0000-4000-8000-0000000000bb";
-    auditPage = { rows: [{ eventId: "x", actorId }, { eventId: "y", actorId: null }], next: undefined };
+    auditPage = {
+      rows: [
+        { eventId: "x", actorId },
+        { eventId: "y", actorId: null },
+      ],
+      next: undefined,
+    };
     const named = express();
     named.use(
       createOperationsRouter(repository, {

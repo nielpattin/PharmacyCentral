@@ -278,13 +278,10 @@ describe("catalog authorization", () => {
       const base = await start();
       repository.getStorageLocation.mockResolvedValueOnce({ id: LOCATION_B, siteId: SITE_A, code: "LOC" } as never);
 
-      const result = await call(
-        base,
-        "PUT",
-        `/storage-locations/${LOCATION_B}`,
-        employee(["Platform Admin"], []),
-        { siteId: SITE_B, name: "Moved" },
-      );
+      const result = await call(base, "PUT", `/storage-locations/${LOCATION_B}`, employee(["Platform Admin"], []), {
+        siteId: SITE_B,
+        name: "Moved",
+      });
 
       expect(result.status).toBe(400);
       expect(result.json).toMatchObject({ code: "location_site_fixed", status: 400 });
@@ -294,16 +291,10 @@ describe("catalog authorization", () => {
     it("accepts an edit that names the location's own site", async () => {
       const base = await start();
 
-      const result = await call(
-        base,
-        "PUT",
-        `/storage-locations/${LOCATION_B}`,
-        employee(["Platform Admin"], []),
-        {
-          siteId: SITE_A,
-          name: "Same site",
-        },
-      );
+      const result = await call(base, "PUT", `/storage-locations/${LOCATION_B}`, employee(["Platform Admin"], []), {
+        siteId: SITE_A,
+        name: "Same site",
+      });
 
       expect(result.status).toBe(200);
       expect(repository.updateStorageLocation).toHaveBeenCalledWith(LOCATION_B, { name: "Same site" });

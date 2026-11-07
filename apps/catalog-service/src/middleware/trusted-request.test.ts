@@ -158,12 +158,7 @@ describe("trusted request role restatement", () => {
   });
 
   it("lets Platform Admin edit a site", async () => {
-    const response = await callAs(
-      "employee",
-      ["Platform Admin"],
-      "/sites/00000000-0000-4000-8000-000000000010",
-      "PUT",
-    );
+    const response = await callAs("employee", ["Platform Admin"], "/sites/00000000-0000-4000-8000-000000000010", "PUT");
     expect(response.status).toBe(200);
   });
 

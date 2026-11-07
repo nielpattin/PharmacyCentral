@@ -34,7 +34,10 @@ export const createCatalogImportRouter = (
     const { roles } = staffActorOf(response);
     const data = parsed.data;
     const needsAdmin = data.sites.length + data.storageLocations.length + data.suppliers.length > 0;
-    if ((needsAdmin && !roles.includes(PLATFORM_ADMIN)) || (data.products.length > 0 && !roles.includes(PHARMACY_MANAGER)))
+    if (
+      (needsAdmin && !roles.includes(PLATFORM_ADMIN)) ||
+      (data.products.length > 0 && !roles.includes(PHARMACY_MANAGER))
+    )
       return refuse(response, ROLE_FORBIDDEN);
     try {
       const summary = await importService.import(parsed.data);

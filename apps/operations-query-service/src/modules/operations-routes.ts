@@ -151,7 +151,8 @@ export const createOperationsRouter = (
       if (actorId) filters.actorId = actorId;
       // A history read is for one record id the caller opened from a site-scoped list. The order and status events carry
       // no siteId, so a site filter would hide the whole history; the id itself is the scope.
-      const recordHistory = request.header("x-actor-type") === "employee" && !actorRoles(request).includes("Platform Admin");
+      const recordHistory =
+        request.header("x-actor-type") === "employee" && !actorRoles(request).includes("Platform Admin");
       if (siteIds && !recordHistory) filters.siteIds = siteIds;
       if (action) filters.action = action;
       if (entityType) filters.entityType = entityType;

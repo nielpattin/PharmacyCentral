@@ -110,7 +110,8 @@ const historyActorText = (row: Readonly<Record<string, unknown>>, entityType: st
   const name = text(row.actorName, "");
   if (name) return name;
   // An online order is placed by the shopper, and identity-service names employees only.
-  if (entityType === "order" && text(row.action, "").startsWith("sales.order.created")) return translateText("Customer");
+  if (entityType === "order" && text(row.action, "").startsWith("sales.order.created"))
+    return translateText("Customer");
   return shortId(id);
 };
 
