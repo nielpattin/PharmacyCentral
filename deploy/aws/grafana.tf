@@ -180,7 +180,7 @@ resource "aws_ecs_service" "grafana" {
   name             = "${local.environment_name}-grafana"
   cluster          = aws_ecs_cluster.this.id
   task_definition  = aws_ecs_task_definition.grafana[0].arn
-  desired_count    = 1
+  desired_count    = lookup(var.service_desired_count, "grafana", 1)
   launch_type      = "FARGATE"
   platform_version = "1.4.0"
   # Stop the old task before starting the new one, so a rolling deploy never exceeds the Fargate vCPU quota.

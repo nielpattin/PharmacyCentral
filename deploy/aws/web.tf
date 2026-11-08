@@ -279,7 +279,7 @@ resource "aws_ecs_service" "web" {
   name             = "${local.environment_name}-${each.key}"
   cluster          = aws_ecs_cluster.this.id
   task_definition  = aws_ecs_task_definition.web[each.key].arn
-  desired_count    = var.desired_count
+  desired_count    = lookup(var.service_desired_count, each.key, var.desired_count)
   launch_type      = "FARGATE"
   platform_version = "1.4.0"
   # Stop the old task before starting the new one, so a rolling deploy never exceeds the Fargate vCPU quota.

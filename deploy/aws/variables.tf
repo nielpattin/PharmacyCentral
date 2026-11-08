@@ -95,13 +95,13 @@ variable "desired_count" {
 }
 
 variable "service_desired_count" {
-  description = "Optional per-service task count overrides, keyed by service name. Services not listed use desired_count (1). Applied on every apply while autoscaling_enabled is false. Each backend task is 0.5 vCPU against the Fargate vCPU quota."
+  description = "Optional per-service task count overrides, keyed by service name (backend and web). 0 stops the service. Services not listed use desired_count (1). Applied on every apply while autoscaling_enabled is false. Each backend task is 0.5 vCPU against the Fargate vCPU quota."
   type        = map(number)
   default     = {}
 
   validation {
-    condition     = alltrue([for count in values(var.service_desired_count) : count >= 1])
-    error_message = "Each service in service_desired_count must keep at least one task running."
+    condition     = alltrue([for count in values(var.service_desired_count) : count >= 0])
+    error_message = "Each service in service_desired_count must be 0 (stopped) or more."
   }
 }
 
