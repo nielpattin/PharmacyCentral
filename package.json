@@ -42,10 +42,10 @@
   "devDependencies": {
     "@nx/js": "catalog:",
     "@typescript/native": "npm:typescript@7.0.2",
-    "nx": "24.0.4",
-    "oxfmt": "0.75.0",
-    "oxlint": "1.79.0",
-    "oxlint-tsgolint": "7.0.2005",
+    "nx": "24.0.6",
+    "oxfmt": "0.78.0",
+    "oxlint": "1.93.0",
+    "oxlint-tsgolint": "7.0.2007",
     "pg": "catalog:",
     "portless": "catalog:",
     "typescript": "npm:@typescript/typescript6@6.0.2"
