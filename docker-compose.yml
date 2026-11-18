@@ -677,7 +677,7 @@ services:
   # It sits on the compose network to write results to Prometheus, and reaches the gateway at LOAD_TARGET_URL:
   # http://host.docker.internal:${GATEWAY_PORT} against `pnpm dev`, http://gateway:8080 against `pnpm run local:up`, or at the public URL of the cloud stack.
   k6:
-    image: grafana/k6:2.3.0@sha256:9c2dee7f8ed74d317e4027c06a10f169b625638189de8d4555d0b3486a5aeb34
+    image: grafana/k6:2.4.0@sha256:d41bb79cd8de5a7ad619b53570e3712633e8bff0937010a5c6c57a4747e7a276
     profiles: ["loadtest"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
